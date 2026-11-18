@@ -271,7 +271,7 @@ onUnmounted(() => {
           <p>{{ copy.subtitle }}</p>
         </div>
         <div class="vpd-workspace-actions">
-          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins?tab=installed&plugin=video-parser-download')">
+          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins')">
             <ChevronLeft class="icon" />
             {{ copy.back }}
           </button>
@@ -457,17 +457,17 @@ onUnmounted(() => {
 .vpd-page {
   display: grid;
   gap: 16px;
-  color: #eef2ff;
+  color: var(--theme-text);
 }
 
 .vpd-hero,
 .vpd-workspace,
 .vpd-empty {
-  border: 1px solid rgba(82, 102, 176, 0.24);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
   border-radius: 24px;
   background:
-    radial-gradient(circle at top left, rgba(96, 78, 255, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(18, 26, 48, 0.98), rgba(11, 17, 31, 0.98));
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 14%, transparent), transparent 30%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 10px 20px rgba(4, 10, 24, 0.24);
@@ -489,7 +489,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: rgba(226, 232, 255, 0.86);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -501,7 +501,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.92), rgba(62, 127, 255, 0.84));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-blue) 84%, transparent));
 }
 
 .vpd-hero h1,
@@ -519,7 +519,7 @@ onUnmounted(() => {
   max-width: 760px;
   font-size: 13px;
   line-height: 1.7;
-  color: rgba(226, 232, 255, 0.72);
+  color: var(--theme-text);
 }
 
 .vpd-hero__stats {
@@ -534,8 +534,8 @@ onUnmounted(() => {
   align-content: center;
   padding: 12px 14px;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(22, 31, 55, 0.88), rgba(11, 18, 32, 0.88));
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 88%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
+  border: 1px solid var(--theme-border);
 }
 
 .vpd-stat strong {
@@ -544,7 +544,7 @@ onUnmounted(() => {
 
 .vpd-stat span {
   font-size: 11px;
-  color: rgba(226, 232, 255, 0.7);
+  color: var(--theme-text);
 }
 
 .vpd-notice {
@@ -554,13 +554,13 @@ onUnmounted(() => {
 }
 
 .vpd-notice--success {
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.24);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 24%, transparent);
 }
 
 .vpd-notice--danger {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.24);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 24%, transparent);
 }
 
 .vpd-empty {
@@ -577,7 +577,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.9), rgba(52, 120, 255, 0.75));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 90%, transparent), color-mix(in srgb, var(--theme-tone-blue) 75%, transparent));
 }
 
 .vpd-empty__content {
@@ -592,7 +592,7 @@ onUnmounted(() => {
 }
 
 .vpd-empty__content p {
-  color: rgba(224, 231, 255, 0.72);
+  color: var(--theme-text);
   font-size: 13px;
 }
 
@@ -632,13 +632,13 @@ onUnmounted(() => {
   min-height: 42px;
   padding: 0 16px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(224, 231, 255, 0.74);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 
 .vpd-tab-button.active {
-  background: linear-gradient(135deg, rgba(106, 82, 255, 0.32), rgba(62, 127, 255, 0.24));
-  color: #ffffff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 32%, transparent), color-mix(in srgb, var(--theme-tone-blue) 24%, transparent));
+  color: var(--theme-text);
 }
 
 .vpd-tab-badge {
@@ -649,7 +649,7 @@ onUnmounted(() => {
   justify-content: center;
   padding: 0 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--theme-text) 10%, transparent);
   font-size: 11px;
 }
 
@@ -664,10 +664,10 @@ onUnmounted(() => {
   gap: 12px;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(20, 29, 50, 0.92), rgba(10, 17, 31, 0.92)),
-    rgba(12, 18, 33, 0.95);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent)),
+    color-mix(in srgb, var(--theme-panel) 95%, transparent);
 }
 
 .vpd-panel--side {
@@ -693,7 +693,7 @@ onUnmounted(() => {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.65;
-  color: rgba(224, 231, 255, 0.72);
+  color: var(--theme-text);
 }
 
 .vpd-section-head__badge {
@@ -704,8 +704,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(106, 82, 255, 0.92), rgba(62, 127, 255, 0.9));
-  color: #ffffff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-blue) 90%, transparent));
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -717,7 +717,7 @@ onUnmounted(() => {
 
 .vpd-field span {
   font-size: 13px;
-  color: rgba(226, 232, 255, 0.84);
+  color: var(--theme-text);
 }
 
 .vpd-textarea {
@@ -725,9 +725,9 @@ onUnmounted(() => {
   min-height: 280px;
   resize: vertical;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(8, 13, 24, 0.86);
-  color: #eef2ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
+  color: var(--theme-text);
   padding: 14px;
   font: inherit;
 }
@@ -738,7 +738,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   font-size: 12px;
-  color: rgba(224, 231, 255, 0.68);
+  color: var(--theme-text);
 }
 
 .vpd-tip-card {
@@ -746,8 +746,8 @@ onUnmounted(() => {
   gap: 8px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .vpd-tip-card strong {
@@ -758,7 +758,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 12px;
   line-height: 1.7;
-  color: rgba(224, 231, 255, 0.72);
+  color: var(--theme-text);
 }
 
 .vpd-library {
@@ -778,7 +778,7 @@ onUnmounted(() => {
 .vpd-library__intro span {
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(224, 231, 255, 0.68);
+  color: var(--theme-text);
 }
 
 .vpd-album-grid {
@@ -791,10 +791,10 @@ onUnmounted(() => {
   min-width: 0;
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid rgba(82, 102, 176, 0.24);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
   background:
-    linear-gradient(180deg, rgba(24, 34, 61, 0.98), rgba(17, 24, 44, 0.98)),
-    rgba(12, 18, 33, 0.95);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel-soft) 98%, transparent)),
+    color-mix(in srgb, var(--theme-panel) 95%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 10px 20px rgba(4, 10, 24, 0.24);
@@ -807,8 +807,8 @@ onUnmounted(() => {
   padding: 0;
   overflow: hidden;
   aspect-ratio: 0.84 / 1;
-  border-bottom: 1px solid rgba(88, 108, 186, 0.16);
-  background: linear-gradient(180deg, rgba(16, 22, 39, 0.98), rgba(9, 14, 26, 0.98));
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .vpd-album-card__media:disabled {
@@ -837,7 +837,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: rgba(227, 233, 255, 0.52);
+  color: color-mix(in srgb, var(--theme-text) 52%, transparent);
   font-size: 11px;
   letter-spacing: 0.08em;
 }
@@ -854,7 +854,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  background: linear-gradient(180deg, rgba(7, 11, 20, 0.54), rgba(7, 11, 20, 0.02) 42%, rgba(7, 11, 20, 0.3));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 54%, transparent), color-mix(in srgb, var(--theme-panel) 2%, transparent) 42%, color-mix(in srgb, var(--theme-panel) 30%, transparent));
 }
 
 .vpd-album-card__actions-top {
@@ -888,7 +888,7 @@ onUnmounted(() => {
 
 .vpd-album-card__topline span,
 .vpd-album-card__meta span {
-  color: rgba(224, 231, 255, 0.72);
+  color: var(--theme-text);
   font-size: 11px;
 }
 
@@ -905,13 +905,13 @@ onUnmounted(() => {
 
 .vpd-album-card__time {
   font-size: 10px;
-  color: rgba(224, 231, 255, 0.56);
+  color: color-mix(in srgb, var(--theme-text) 56%, transparent);
 }
 
 .vpd-album-card__error {
   font-size: 11px;
   line-height: 1.55;
-  color: #fecaca;
+  color: var(--theme-tone-red);
 }
 
 .vpd-album-card__footer {
@@ -947,13 +947,13 @@ onUnmounted(() => {
 }
 
 .vpd-ghost-button {
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef2ff;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 
 .vpd-primary-button {
-  background: linear-gradient(135deg, #6558ff, #3478ff);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--theme-tone-blue), var(--theme-tone-blue));
+  color: var(--theme-text);
   box-shadow: 0 14px 30px rgba(52, 120, 255, 0.26);
 }
 
@@ -963,9 +963,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(26, 18, 33, 0.34);
-  color: #f8fbff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 34%, transparent);
+  color: var(--theme-text);
 }
 
 .vpd-icon-action {
@@ -975,9 +975,9 @@ onUnmounted(() => {
 }
 
 .vpd-icon-action--danger {
-  background: rgba(255, 94, 94, 0.18);
-  border-color: rgba(255, 94, 94, 0.28);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
+  color: var(--theme-tone-red);
 }
 
 .vpd-ghost-chip {
@@ -989,39 +989,39 @@ onUnmounted(() => {
 .vpd-ghost-chip--mini {
   min-height: 24px;
   padding: 0 8px;
-  color: rgba(225, 231, 255, 0.78);
+  color: var(--theme-text);
 }
 
 .vpd-ghost-chip--danger {
-  background: rgba(255, 94, 94, 0.18);
-  border-color: rgba(255, 94, 94, 0.28);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
+  color: var(--theme-tone-red);
 }
 
 .vpd-empty-copy {
   padding: 24px 12px;
   text-align: center;
-  color: rgba(224, 231, 255, 0.64);
+  color: var(--theme-text);
 }
 
 .is-success {
-  background: rgba(34, 197, 94, 0.18);
-  color: #bbf7d0;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: var(--theme-accent);
 }
 
 .is-warning {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
+  background: color-mix(in srgb, var(--theme-tone-amber) 18%, transparent);
+  color: var(--theme-tone-amber);
 }
 
 .is-danger {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 20%, transparent);
+  color: var(--theme-tone-red);
 }
 
 .is-info {
-  background: rgba(59, 130, 246, 0.18);
-  color: #bfdbfe;
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  color: var(--theme-tone-blue);
 }
 
 .vpd-ghost-button:disabled,

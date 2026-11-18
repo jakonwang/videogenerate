@@ -1,0 +1,91 @@
+{
+  "login": {
+    "title": "Đăng nhập TiktokCut",
+    "subtitle": "Đăng nhập để dùng mọi tính năng trong gói của bạn",
+    "registerTitle": "Tạo tài khoản",
+    "registerSubtitle": "Sau khi đăng ký, mua gói hoặc dùng mã đổi để bắt đầu",
+    "account": "Số điện thoại hoặc email",
+    "password": "Mật khẩu",
+    "passwordHint": "Ít nhất 8 ký tự",
+    "displayName": "Biệt danh (không bắt buộc)",
+    "submitLogin": "Đăng nhập",
+    "submitRegister": "Đăng ký và đăng nhập",
+    "toRegister": "Chưa có tài khoản? Đăng ký",
+    "toLogin": "Đã có tài khoản? Đăng nhập",
+    "loggingIn": "Đang đăng nhập…",
+    "registering": "Đang đăng ký…",
+    "server": "Dịch vụ đám mây: {url}"
+  },
+  "reason": {
+    "ok": "Bản quyền hợp lệ",
+    "not_logged_in": "Vui lòng đăng nhập",
+    "no_entitlement": "Tài khoản chưa có gói hợp lệ. Hãy mua gói hoặc dùng mã đổi.",
+    "device_limit": "Đã đạt giới hạn thiết bị của gói. Hãy hủy liên kết thiết bị khác trước.",
+    "expired": "Bản quyền ngoại tuyến đã hết hạn. Hãy kết nối mạng để làm mới.",
+    "invalid_token": "Bản quyền không hợp lệ. Vui lòng đăng nhập lại.",
+    "clock_rollback": "Thời gian hệ thống bất thường. Hãy chỉnh giờ rồi làm mới khi có mạng.",
+    "account_disabled": "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ."
+  },
+  "membership": {
+    "title": "Tài khoản & gói",
+    "desc": "Trạng thái gói, thiết bị, mua gói và mã đổi",
+    "account": "Tài khoản",
+    "plan": "Gói",
+    "expires": "Hết hạn",
+    "unlimited": "Không giới hạn",
+    "permanent": "Vĩnh viễn",
+    "none": "Chưa có",
+    "refresh": "Làm mới",
+    "logout": "Đăng xuất",
+    "logoutConfirm": "Thiết bị này sẽ cần đăng nhập lại. Đăng xuất?",
+    "offline": "Đang ngoại tuyến – dùng bản quyền cục bộ (hiệu lực đến {time})",
+    "internalBuild": "Bản nội bộ: không giới hạn",
+    "devices": "Thiết bị",
+    "devicesDesc": "Tối đa {max} máy tính · {mobile} điện thoại",
+    "devicesUnlimited": "Không giới hạn thiết bị",
+    "thisDevice": "Thiết bị này",
+    "lastSeen": "Dùng lần cuối {time}",
+    "unbind": "Hủy liên kết",
+    "unbindConfirm": "Thiết bị sẽ phải đăng nhập lại và số lần tự hủy liên kết trong 30 ngày có giới hạn. Tiếp tục?",
+    "buyTitle": "Mua gói",
+    "buyDesc": "Quét mã thanh toán, tự động kích hoạt và cộng dồn thời hạn",
+    "days": "{count} ngày",
+    "forever": "Vĩnh viễn",
+    "deviceCount": "{count} máy tính + {mobile} điện thoại",
+    "deviceUnlimited": "Không giới hạn máy tính + {mobile} điện thoại",
+    "buy": "Mua",
+    "noChannels": "Chưa hỗ trợ thanh toán trực tuyến. Hãy liên hệ hỗ trợ hoặc dùng mã đổi.",
+    "scanTitle": "Quét mã thanh toán {amount}",
+    "scanHint": "Quét bằng {channel}. Gói sẽ tự kích hoạt sau khi thanh toán.",
+    "waiting": "Đang chờ thanh toán…",
+    "paid": "Thanh toán thành công. Gói đã được kích hoạt.",
+    "closed": "Đơn hàng đã hết hạn. Vui lòng đặt lại.",
+    "mockPay": "Giả lập thanh toán (thử nghiệm)",
+    "cancel": "Đóng",
+    "redeemTitle": "Mã đổi",
+    "redeemPlaceholder": "Nhập mã, ví dụ ABCD-EFGH-JKLM-NPQR",
+    "redeem": "Đổi mã",
+    "redeemed": "Đổi mã thành công. Gói đã được kích hoạt.",
+    "ordersTitle": "Đơn hàng của tôi",
+    "noOrders": "Chưa có đơn hàng",
+    "featureLocked": "Gói hiện tại không bao gồm tính năng này. Vui lòng nâng cấp.",
+    "support": "Hỗ trợ: {contact}"
+  },
+  "channel": {
+    "wechat": "WeChat Pay",
+    "alipay": "Alipay",
+    "mock": "Thanh toán thử"
+  },
+  "orderStatus": {
+    "paid": "Đã thanh toán",
+    "pending": "Chờ thanh toán",
+    "closed": "Đã đóng",
+    "refunded": "Đã hoàn tiền"
+  },
+  "settings": {
+    "managedNotice": "Các cài đặt này do quản trị viên cấu hình và tự động đồng bộ về máy. Vui lòng liên hệ quản trị viên để thay đổi."
+  },
+  "banner": {
+    "updateRequired": "Phiên bản này đã cũ. Vui lòng cập nhật lên {version} hoặc mới hơn."
+  }
+}

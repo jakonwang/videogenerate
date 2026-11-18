@@ -58,7 +58,7 @@ export async function createCapcutDraft(
   input: { projectName: string; width?: number; height?: number },
 ) {
   return await requestJson<{ draft_url?: string; draftId?: string; id?: string }>(config, '/create_draft', {
-    project_name: String(input.projectName || 'VideoGenerate 字幕任务'),
+    project_name: String(input.projectName || 'TiktokCut 字幕任务'),
     width: String(Math.max(1, Number(input.width || 1080))),
     height: String(Math.max(1, Number(input.height || 1920))),
     draft_root: String(config.draftRoot || ''),

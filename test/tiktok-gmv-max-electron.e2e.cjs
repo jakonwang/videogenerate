@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { mkdir, writeFile } = require('node:fs/promises')
 const { _electron: electron } = require('playwright')
+const { prepareGmvProfile } = require('./gmv-profile-copy.cjs')
 
 async function captureWindow(electronApp, outputPath, clip) {
   const base64 = await electronApp.evaluate(async ({ BrowserWindow }, targetClip) => {
@@ -20,12 +21,22 @@ async function captureWindow(electronApp, outputPath, clip) {
   await writeFile(outputPath, Buffer.from(base64, 'base64'))
 }
 
+// v2 keeps the global filter bar (search / store / dates) collapsed behind the scope toggle.
+async function ensureGlobalFilters(page) {
+  const filters = page.locator('[data-testid="gmv-global-filters"]')
+  if (await filters.isVisible().catch(() => false)) return
+  await page.locator('[data-testid="gmv-global-filter-toggle"]').click()
+  await filters.waitFor({ state: 'visible' })
+}
+
 async function main() {
   const root = path.resolve(__dirname, '..')
   const artifacts = path.join(root, 'test-artifacts', 'tiktok-gmv-max')
   await mkdir(artifacts, { recursive: true })
 
-  const electronApp = await electron.launch({ args: ['.'], cwd: root })
+  const profile = await prepareGmvProfile('gmv-e2e')
+  console.log(`GMV profile: ${profile.describe}`)
+  const electronApp = await electron.launch({ args: ['.'], cwd: root, env: profile.env })
   const page = await electronApp.firstWindow()
   page.setDefaultTimeout(60_000)
   const pageErrors = []
@@ -77,10 +88,11 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.waitForTimeout(500)
     assert.equal(await page.locator('.gmv-alert--danger').count(), 0)
-    assert.equal(await page.locator('.gmv-commandbar').isVisible(), true)
+    // v2 replaced the command bar with the control strip.
+    assert.equal(await page.locator('[data-testid="gmv-control-strip"]').isVisible(), true)
     const featureNav = page.locator('[data-testid="gmv-feature-nav"]')
     const featureNavToggle = page.locator('[data-testid="gmv-feature-nav-toggle"]')
-    assert.equal(await featureNav.locator('.gmv-tab').count(), 10)
+    assert.equal(await featureNav.locator('[data-testid^="gmv-tab-"]:not([data-testid="gmv-tab-help"])').count(), 10)
     assert.ok((await featureNav.boundingBox())?.width >= 200)
     await captureWindow(electronApp, path.join(artifacts, 'feature-navigation.png'))
     await featureNavToggle.click()
@@ -90,7 +102,7 @@ async function main() {
     await featureNavToggle.click()
     await page.waitForFunction(() => document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().width >= 200)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:gmv-max:nav-collapsed:v1')), 'false')
-    const appSidebar = page.locator('.ds-sidebar')
+    const appSidebar = page.locator('[data-testid="app-sidebar"]')
     const appSidebarToggle = page.locator('[data-testid="app-sidebar-toggle"]')
     assert.ok((await appSidebar.boundingBox())?.width >= 180)
     await appSidebarToggle.click()
@@ -98,10 +110,10 @@ async function main() {
       localStorage.getItem('videogenerate:app-sidebar-collapsed:v1') === 'true'
       && document.querySelector('.app-shell')?.classList.contains('is-sidebar-collapsed')
     ))
-    await page.waitForFunction(() => document.querySelector('.ds-sidebar')?.getBoundingClientRect().width <= 74)
+    await page.waitForFunction(() => document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width <= 74)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:app-sidebar-collapsed:v1')), 'true')
     const collapsedMainNavFit = await page.evaluate(() => {
-      const button = document.querySelector('.app-sidebar-footer-action')
+      const button = document.querySelector('[data-testid="app-settings-button"]')
       const icon = button?.querySelector('svg')
       if (!button || !icon) return { centeredSettingsIcon: false, containedSettingsIcon: false }
       const buttonBox = button.getBoundingClientRect()
@@ -125,7 +137,7 @@ async function main() {
       localStorage.getItem('videogenerate:app-sidebar-collapsed:v1') === 'false'
       && !document.querySelector('.app-shell')?.classList.contains('is-sidebar-collapsed')
     ))
-    await page.waitForFunction(() => document.querySelector('.ds-sidebar')?.getBoundingClientRect().width >= 180)
+    await page.waitForFunction(() => document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width >= 180)
     assert.equal(await page.evaluate(() => localStorage.getItem('videogenerate:app-sidebar-collapsed:v1')), 'false')
     assert.equal(await page.evaluate(() => typeof window.api.tiktokGmvMax.approveBatch), 'function')
     assert.equal(await page.evaluate(() => typeof window.api.tiktokGmvMax.setEmergencyStop), 'function')
@@ -155,7 +167,10 @@ async function main() {
     assert.equal(lazyDashboard.catalogProducts >= 0, true)
     assert.equal(lazyDashboard.catalogIdentities >= 0, true)
     assert.equal(lazyDashboard.catalogVideos >= 0, true)
-    assert.equal(await page.locator('[data-testid="gmv-catalog-strip"]').isVisible(), true)
+    // Since v5.0.74 the catalog details live in the settings tab (connected accounts only).
+    await page.locator('[data-testid="gmv-tab-settings"]').click()
+    await page.locator('[data-testid="gmv-catalog-strip"]').waitFor({ state: 'visible' })
+    await page.locator('[data-testid="gmv-tab-overview"]').click()
     assert.equal(lazyDashboard.creativeItems <= 25, true)
     assert.equal(lazyDashboard.productItems <= 25, true)
     assert.equal(lazyDashboard.productTotal >= lazyDashboard.productItems, true)
@@ -240,10 +255,13 @@ async function main() {
 
     await page.locator('[data-testid="gmv-tab-growth"]').click()
     assert.equal(await page.locator('[data-testid="gmv-growth-workspace"]').isVisible(), true)
+    // GMV v2 folds the product filters into a collapsed <details> panel.
+    await page.locator('[data-testid="gmv-product-lab"] .gmv-advanced-details > summary').click()
     await page.locator('.gmv-filter-panel--product').waitFor({ state: 'visible' })
-    const analyzeGrowthButton = page.locator('[data-testid="gmv-growth-workspace"] > .gmv-section__heading .gmv-button--primary')
-    await analyzeGrowthButton.click()
-    await page.waitForFunction(() => !document.querySelector('[data-testid="gmv-growth-workspace"] > .gmv-section__heading .gmv-button--primary')?.disabled)
+    // The growth tab no longer has its own "analyze" button; recompute through the API (local only).
+    await page.evaluate(() => window.api.tiktokGmvMax.analyzeGrowth())
+    await page.locator('[data-testid="gmv-refresh-workspace"]').click()
+    await page.waitForFunction(() => !document.querySelector('[data-testid="gmv-refresh-workspace"]')?.disabled)
     assert.equal(await page.locator('.gmv-alert--danger').count(), 0)
     assert.equal(await page.locator('[data-testid="gmv-strategy-calibrations"]').isVisible(), true)
     assert.ok(await page.locator('[data-testid="gmv-strategy-calibrations"] tbody tr').count() > 0)
@@ -261,7 +279,6 @@ async function main() {
     const productLabFit = await productLab.evaluate((element) => ({
       width: element.getBoundingClientRect().width,
       tableScrollable: Boolean(element.querySelector('.gmv-table-wrap')),
-      statsVisible: Boolean(element.querySelector('.gmv-product-lab__stats')),
       productColumnWidth: element.querySelector('.gmv-table--products tbody td:first-child')?.getBoundingClientRect().width || 0,
       campaignColumnWidth: element.querySelector('.gmv-table--products tbody td:nth-child(2)')?.getBoundingClientRect().width || 0,
       nextActionColumnWidth: element.querySelector('.gmv-table--products tbody td:nth-child(11)')?.getBoundingClientRect().width || 0,
@@ -269,7 +286,6 @@ async function main() {
       productRowHeight: element.querySelector('.gmv-table--products tbody tr')?.getBoundingClientRect().height || 0,
     }))
     assert.equal(productLabFit.tableScrollable, true)
-    assert.equal(productLabFit.statsVisible, true)
     assert.ok(productLabFit.productColumnWidth >= 290 && productLabFit.productColumnWidth <= 310)
     assert.ok(productLabFit.campaignColumnWidth >= 210 && productLabFit.campaignColumnWidth <= 230)
     assert.ok(productLabFit.nextActionColumnWidth >= 190 && productLabFit.nextActionColumnWidth <= 210)
@@ -299,6 +315,8 @@ async function main() {
 
     await page.locator('[data-testid="gmv-tab-rules"]').click()
     assert.equal(await page.locator('[data-testid="gmv-backtest-results"]').count(), 1)
+    // GMV v2 collapses the backtest table into a <details> panel.
+    await page.locator('[data-testid="gmv-backtest-results"] > summary').click()
     assert.equal(await page.locator('[data-testid="gmv-backtest-results"]').getByText('\u5546\u54c1\u8bc1\u636e\u5929\u6570', { exact: true }).isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-backtest-results"]').getByText('\u4e0d\u5b89\u5168\u6269\u91cf\u963b\u65ad', { exact: true }).isVisible(), true)
     await page.locator('[data-testid="gmv-run-backtest"]').click()
@@ -339,9 +357,12 @@ async function main() {
     if (await healthList.count()) assert.doesNotMatch(await healthList.innerText(), /\broi_guard\b/)
 
     await page.locator('[data-testid="gmv-tab-campaigns"]').click()
+    await ensureGlobalFilters(page)
     assert.equal(await page.locator('[data-testid="gmv-pacing-overview"]').isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-pacing-overview"] article').count(), 4)
     assert.equal(await page.locator('.gmv-date-field input[type="date"]').count(), 2)
+    // GMV v2 collapses the campaign metric filters into a <details> toggle.
+    await page.locator('.gmv-campaign-filter-toggle > summary').click()
     assert.equal(await page.locator('.gmv-filter-panel select').count() >= 2, true)
     assert.equal(await page.locator('.gmv-filter-panel input[type="number"]').count() >= 4, true)
     assert.match(await page.locator('.gmv-filter-panel').innerText(), /\u4eba\u6c11\u5e01/)
@@ -376,6 +397,8 @@ async function main() {
       await campaignWorkspaceButtons.first().click()
       const campaignWorkspace = page.locator('[data-testid="gmv-campaign-workspace"]')
       await campaignWorkspace.waitFor({ state: 'visible' })
+      // The drawer opens with a loading placeholder before the workspace data arrives.
+      await campaignWorkspace.locator('.gmv-workspace-tabs').waitFor({ state: 'visible' })
       assert.equal(await campaignWorkspace.locator('.gmv-workspace-tabs button').count(), 4)
       assert.equal(await campaignWorkspace.locator('.gmv-workspace-kpis article').count(), 6)
       await campaignWorkspace.locator('.gmv-workspace-tabs button').nth(1).click()
@@ -405,6 +428,7 @@ async function main() {
       assert.equal(await experimentBoard.locator('.gmv-experiment-outcomes').isVisible(), true)
       await captureWindow(electronApp, path.join(artifacts, 'creative-experiment.png'))
       const scopedStoreId = await page.evaluate(async (campaignId) => (await window.api.tiktokGmvMax.getCampaignWorkspace({ campaignId })).campaign.storeId, firstCampaignId)
+      await ensureGlobalFilters(page)
       const alternateStoreId = await page.locator('.gmv-commandbar > select').locator('option').evaluateAll((options, currentStoreId) => options.map((option) => option.value).find((value) => value !== 'all' && value !== currentStoreId) || '', scopedStoreId)
       if (alternateStoreId) {
         await page.locator('.gmv-commandbar > select').selectOption(alternateStoreId)
@@ -499,28 +523,31 @@ async function main() {
     await page.locator('[data-testid="gmv-tab-creatives"]').click()
     await page.waitForFunction(() => !document.querySelector('.gmv-filter-panel--creative .gmv-button--primary')?.disabled)
     await captureWindow(electronApp, path.join(artifacts, 'creatives.png'))
-    const optimizeCreativesButton = page.locator('[data-testid="gmv-optimize-creatives"]')
-    assert.equal(await optimizeCreativesButton.isVisible(), true)
+    // At-a-glance layout: top earners / no-order spenders, data-based segment chips, a 6-column list; the rest under "advanced".
     assert.equal(await page.evaluate(() => typeof window.api.tiktokGmvMax.evaluate), 'function')
-    const creativeHeadingFit = await optimizeCreativesButton.evaluate((button) => {
-      const heading = button.closest('.gmv-section__heading')
-      const headingBox = heading?.getBoundingClientRect()
-      const buttonBox = button.getBoundingClientRect()
-      return Boolean(headingBox && buttonBox.left >= headingBox.left && buttonBox.right <= headingBox.right)
-    })
-    assert.equal(creativeHeadingFit, true)
+    const optimizeCreativesButton = page.locator('[data-testid="gmv-creative-review-suggestions"], [data-testid="gmv-optimize-creatives"]').first()
+    assert.equal(await optimizeCreativesButton.isVisible(), true)
+    assert.equal(await page.locator('[data-testid="gmv-task-summary"]').count(), 0)
+    assert.equal(await page.locator('[data-testid="gmv-creative-top-earners"]').isVisible(), true)
+    assert.equal(await page.locator('[data-testid="gmv-creative-top-wasters"]').isVisible(), true)
+    assert.equal(await page.locator('[data-testid="gmv-creative-status-tabs"] button').count(), 5)
+    assert.equal(await page.locator('.gmv-cx-table thead th').count(), 7)
+    assert.equal(await page.locator('.gmv-cx-table .gmv-sort-button').count(), 4)
+    assert.equal(await page.locator('.gmv-cx-table tbody tr').count() <= 25, true)
+    const advancedCreatives = page.locator('[data-testid="gmv-creative-advanced"]')
+    assert.equal(await advancedCreatives.evaluate((element) => element.open), false)
+    assert.equal(await page.locator('[data-testid="gmv-creative-queue"]').isVisible(), false)
+    await advancedCreatives.locator('summary').click()
     assert.equal(await page.locator('[data-testid="gmv-creative-queue"]').isVisible(), true)
     assert.equal(await page.locator('[data-testid="gmv-list-entry-page"]').isVisible(), true)
-    assert.equal(await page.getByText('\u75b2\u52b3\u7d20\u6750', { exact: true }).count() > 0, true)
-    assert.equal(await page.getByText('\u5b66\u4e60\u72b6\u6001', { exact: true }).count() > 0, true)
-    assert.equal(await page.locator('.gmv-filter-panel--creative select').count(), 2)
-    assert.equal(await page.locator('.gmv-table--creatives .gmv-sort-button').count() >= 8, true)
-    assert.equal(await page.locator('.gmv-table--creatives tbody tr').count() <= 25, true)
-    const creativeViewTabs = page.locator('.gmv-view-tabs button')
-    assert.equal(await creativeViewTabs.count(), 2)
-    await creativeViewTabs.nth(1).click()
-    assert.equal(await creativeViewTabs.nth(1).evaluate((element) => element.classList.contains('is-active')), true)
-    await creativeViewTabs.nth(0).click()
+    assert.equal(await page.locator('.gmv-filter-panel--creative select').count(), 1)
+    await advancedCreatives.locator('summary').click()
+    for (const segment of ['earning', 'no_orders', 'new', 'all']) {
+      const started = Date.now()
+      await page.locator(`[data-testid="gmv-creative-tab-${segment}"]`).click()
+      await page.waitForFunction((key) => document.querySelector(`[data-testid="gmv-creative-tab-${key}"]`)?.classList.contains('is-active') && !document.querySelector('.gmv-table-wrap.is-loading'), segment)
+      assert.ok(Date.now() - started < 5000, `segment ${segment} should switch within 5s`)
+    }
     await page.setViewportSize({ width: 900, height: 700 })
     await optimizeCreativesButton.scrollIntoViewIfNeeded()
     assert.equal(await optimizeCreativesButton.isVisible(), true)
@@ -706,6 +733,8 @@ async function main() {
     await page.locator('[data-testid="gmv-drawer"] > header .gmv-icon-button').click()
 
     await page.locator('[data-testid="gmv-tab-actions"]').click()
+    // GMV v2 folds the action filters into a collapsed <details> panel.
+    await page.locator('.gmv-advanced-details:has(.gmv-filter-panel--action) > summary').click()
     await page.locator('.gmv-filter-panel--action').waitFor({ state: 'visible' })
     assert.equal(await page.locator('.gmv-filter-panel--action select').count(), 3)
     const actionTypeOptions = await page.locator('.gmv-filter-panel--action select').nth(1).locator('option').allTextContents()
@@ -737,6 +766,10 @@ async function main() {
     }
 
     await page.locator('[data-testid="gmv-tab-audit"]').click()
+    // GMV v2: audit has execution/results/exceptions views; filters and capabilities are collapsed.
+    await page.locator('.gmv-v2-view-tabs button').first().click()
+    await page.locator('.gmv-advanced-details:has(.gmv-filter-panel--audit) > summary').click()
+    await page.locator('.gmv-advanced-details:has(.gmv-capabilities) > summary').click()
     await page.locator('.gmv-filter-panel--audit').waitFor({ state: 'visible' })
     assert.equal(await page.locator('.gmv-filter-panel--audit select').count(), 2)
     assert.equal(await page.locator('.gmv-capabilities article').count(), 8)
@@ -751,11 +784,11 @@ async function main() {
 
     await page.locator('[data-testid="gmv-tab-overview"]').click()
     const themeColors = []
-    for (const theme of ['dark-teal', 'soft-mint', 'warm-paper', 'clear-sky']) {
+    for (const theme of ['dark-teal', 'light-teal', 'mono']) {
       const colors = await page.evaluate((value) => {
         document.documentElement.dataset.appTheme = value
         const workspace = document.querySelector('[data-testid="gmv-max-workspace"]')
-        const panel = document.querySelector('.gmv-metrics article')
+        const panel = document.querySelector('[data-testid="gmv-max-workspace"] .gmv-panel')
         return {
           workspace: workspace ? getComputedStyle(workspace).backgroundColor : '',
           panel: panel ? getComputedStyle(panel).backgroundColor : '',
@@ -769,7 +802,7 @@ async function main() {
       await page.waitForTimeout(120)
       await captureWindow(electronApp, path.join(artifacts, `theme-${theme}.png`))
     }
-    assert.equal(new Set(themeColors).size, 4)
+    assert.equal(new Set(themeColors).size, 3)
     await page.evaluate(() => { document.documentElement.dataset.appTheme = 'dark-teal' })
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.evaluate(() => document.querySelector('.ds-workspace')?.scrollTo(0, 0))
@@ -790,14 +823,14 @@ async function main() {
     const compactFit = await page.evaluate(() => ({
       horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       headerVisible: document.querySelector('.gmv-header')?.getBoundingClientRect().bottom > 0,
-      tabsVisible: document.querySelector('.gmv-tabs')?.getBoundingClientRect().bottom > 0,
+      tabsVisible: document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().bottom > 0,
       featureNavWidth: document.querySelector('[data-testid="gmv-feature-nav"]')?.getBoundingClientRect().width || 0,
-      appSidebarWidth: document.querySelector('.ds-sidebar')?.getBoundingClientRect().width || 0,
-      visibleSidebarLabels: Array.from(document.querySelectorAll('.ds-sidebar__item span, .ds-sidebar__section-title, .app-sidebar-footer-action span, .app-sidebar-user .min-w-0, .app-sidebar-collapse span')).filter((item) => {
+      appSidebarWidth: document.querySelector('[data-testid="app-sidebar"]')?.getBoundingClientRect().width || 0,
+      visibleSidebarLabels: Array.from(document.querySelectorAll('.vg-nav__label, .vg-nav__section-title, .shell-foot__label, .shell-foot__user-copy')).filter((item) => {
         const style = getComputedStyle(item)
         return style.display !== 'none' && item.getBoundingClientRect().width > 0
       }).length,
-      centeredSidebarIcons: Array.from(document.querySelectorAll('.ds-sidebar__item')).every((item) => {
+      centeredSidebarIcons: Array.from(document.querySelectorAll('.vg-nav__item')).every((item) => {
         const icon = item.querySelector('svg')
         if (!icon) return true
         const itemBox = item.getBoundingClientRect()
@@ -805,7 +838,7 @@ async function main() {
         return Math.abs((itemBox.left + itemBox.width / 2) - (iconBox.left + iconBox.width / 2)) <= 1
       }),
       centeredSettingsIcon: (() => {
-        const button = document.querySelector('.app-sidebar-footer-action')
+        const button = document.querySelector('[data-testid="app-settings-button"]')
         const icon = button?.querySelector('svg')
         if (!button || !icon) return false
         const buttonBox = button.getBoundingClientRect()
@@ -837,6 +870,7 @@ async function main() {
       }, seededOutcomeId).catch(() => {})
     }
     await electronApp.close()
+    await profile.cleanup()
   }
 }
 

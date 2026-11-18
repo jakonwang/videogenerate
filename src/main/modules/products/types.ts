@@ -63,6 +63,8 @@ export type Product = {
   coverImagePath?: string
   livePhotoReferenceImagePath?: string
   remark?: string
+  /** TikTok Shop product ids this library product is sold as. Joins ads (GMV Max) and creator data to the product. */
+  tiktokProductIds?: string[]
   analysisBoardPath?: string
   analysisBoardStatus?: ProductCanonicalSourceStatus
   analysisBoardPrompt?: string

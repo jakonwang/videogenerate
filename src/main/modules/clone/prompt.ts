@@ -1,4 +1,6 @@
 import type { CloneBlueprint, CloneProductMode, CloneProductType, CloneQualityMode, ReferenceLock, ShotSpec } from './types'
+import { inferCloneProductTypeFromText, isJewelryTarget, normalizeCloneProductType } from './productCategory'
+import { fillClonePromptTemplate, getActiveClonePromptTemplate } from './promptTemplateRegistry'
 
 function cleanText(value: unknown, fallback: string) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -245,130 +247,158 @@ const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, cris
 - Spatial Parallax: Keep subtle spatial parallax so the {{productName}} remains grounded in a believable 3D scene.
 
 4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
+{{referenceActionLine}}
+{{referenceSceneLine}}
 - Micro-Action: {{specificMicroAction}}
-- Absolute Anonymity: The camera angle remains tightly cropped on the {{targetBodyPart}}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.
+{{faceRuleLine}}
 - Silent Performance Lock: The model must remain completely silent. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, no open-mouth speaking expression, no speech-like lip shapes, and no presenter-style delivery. Keep lips closed or only minimally relaxed at all times. Every visible frame must read as fully silent, never mid-speech, never about to speak, and never finishing a spoken line.
 
 Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase. No AI synthetic glossiness, no commercial render look. Single panel only.`
 
-type PhysicalLightingLockVideoSlotCategory = 'handheld_interaction' | 'wearable_jewelry' | 'worn_accessory'
+/** Built-in shot video template, shown in prompt management as the default version. */
+export const DEFAULT_SHOT_VIDEO_PROMPT_TEMPLATE = PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE
+
+/**
+ * How the video prompt talks about each product category.
+ * `faceRule`:
+ *   - `anonymous`: the camera stays cropped on the body part and the face stays out of frame.
+ *   - `follow_base_image`: model-presentation shots may show the face exactly as the base image does.
+ */
+type VideoSlotProfile = {
+  productName: string
+  targetBodyPart: string
+  cameraMovement: string
+  microAction: string
+  faceRule: 'anonymous' | 'follow_base_image'
+}
+
+const VIDEO_SLOT_PROFILES: Record<CloneProductType, VideoSlotProfile> = {
+  earrings: {
+    productName: 'Earring',
+    targetBodyPart: 'Ear lobe',
+    cameraMovement: 'Subtle handheld close-up on the ear area',
+    microAction: 'The earring sways naturally under gravity with gentle realistic movement.',
+    faceRule: 'anonymous',
+  },
+  necklace: {
+    productName: 'Necklace',
+    targetBodyPart: 'Collarbone and Neck',
+    cameraMovement: 'Subtle handheld close-up on the neck and collarbone area',
+    microAction: 'The necklace rests on the collarbone and shifts gently with natural breathing.',
+    faceRule: 'anonymous',
+  },
+  ring: {
+    productName: 'Ring',
+    targetBodyPart: 'Hand and Fingers',
+    cameraMovement: 'Subtle handheld sliding tilt across the fingers',
+    microAction: 'The accessory moves naturally and gently with realistic micro-shadows as the fingers shift slightly.',
+    faceRule: 'anonymous',
+  },
+  bracelet: {
+    productName: 'Bracelet',
+    targetBodyPart: 'Wrist and Hand',
+    cameraMovement: 'Subtle handheld sliding tilt across the wrist',
+    microAction: 'The wrist turns gently so the bracelet settles naturally under gravity with realistic micro-shadows.',
+    faceRule: 'anonymous',
+  },
+  phone_case: {
+    productName: 'Phone Case',
+    targetBodyPart: 'Hands and Fingers',
+    cameraMovement: 'Micro-handheld camera movement focusing on the hands',
+    microAction: 'The hand turns the phone gently so the case back, edges, and camera cutout stay readable, with realistic micro-shadows.',
+    faceRule: 'anonymous',
+  },
+  toy: {
+    productName: 'Toy',
+    targetBodyPart: 'Hands and Fingers',
+    cameraMovement: 'Micro-handheld camera movement focusing on the hands',
+    microAction: 'The hand holds and gently turns the toy so its shape and details stay readable, with realistic micro-shadows.',
+    faceRule: 'anonymous',
+  },
+  clothes: {
+    productName: 'Garment',
+    targetBodyPart: 'Torso and Outfit',
+    cameraMovement: 'Gentle handheld movement following the outfit',
+    microAction: 'The model shifts posture naturally so the fabric drapes, folds, and moves realistically.',
+    faceRule: 'follow_base_image',
+  },
+  bag: {
+    productName: 'Bag',
+    targetBodyPart: 'Hand, Arm and Shoulder carrying the bag',
+    cameraMovement: 'Gentle handheld movement following the bag',
+    microAction: 'The model adjusts the grip or strap naturally so the bag moves with believable weight.',
+    faceRule: 'follow_base_image',
+  },
+  shoes: {
+    productName: 'Shoes',
+    targetBodyPart: 'Feet and Ankles',
+    cameraMovement: 'Low handheld movement following the feet',
+    microAction: 'The feet shift or step gently so the shoes flex naturally against the ground.',
+    faceRule: 'anonymous',
+  },
+  general: {
+    productName: 'Product',
+    targetBodyPart: 'Hands and Fingers',
+    cameraMovement: 'Micro-handheld camera movement focusing on the hands',
+    microAction: 'The product moves naturally and gently with realistic micro-shadows.',
+    faceRule: 'follow_base_image',
+  },
+}
+
+/** Human-readable product name for a category, as used inside prompts ("Earring", "Garment", "Product"). */
+export function cloneProductDisplayName(productType?: unknown) {
+  return VIDEO_SLOT_PROFILES[normalizeCloneProductType(productType)].productName
+}
 
 function normalizeTemplateText(value: unknown, fallback = '') {
   return sanitizeGeneratedVideoPrompt(keepEnglishLikeText(value, fallback), 220).replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim() || fallback
 }
 
-function inferPhysicalLightingLockVideoCategory(input: {
-  productType?: unknown
-  scriptText?: unknown
-  generationPrompt?: unknown
-  visualDescription?: unknown
-  actionDescription?: unknown
-  cameraDescription?: unknown
-  productFocus?: unknown
-  materialNeed?: unknown
-  productIdentityText?: unknown
-}) {
-  const explicitType = String(input.productType || '').trim().toLowerCase()
-  if (explicitType === 'earrings') return 'wearable_jewelry' as const
-  if (explicitType === 'phone_case') return 'handheld_interaction' as const
-  if (explicitType === 'clothes') return 'worn_accessory' as const
-  if (explicitType === 'toy') return 'handheld_interaction' as const
-
-  const corpus = [
-    input.scriptText,
-    input.generationPrompt,
-    input.visualDescription,
-    input.actionDescription,
-    input.cameraDescription,
-    input.productFocus,
-    input.materialNeed,
-    input.productIdentityText,
-  ]
-    .map((item) => keepEnglishLikeText(item, '').toLowerCase())
-    .join(' ')
-
-  if (/(earring|necklace|pendant|headpiece|headwear|headband|jewelry|jewellery)/i.test(corpus)) return 'wearable_jewelry'
-  if (/(ring|bracelet|watch|cufflink|wrist|finger)/i.test(corpus)) return 'worn_accessory'
-  if (/(keychain|key chain|plush toy|toy|serum|bottle|3c|device|electronics|phone case|phonecase|beauty|cosmetic)/i.test(corpus)) {
-    return 'handheld_interaction'
-  }
-  return 'handheld_interaction'
+/**
+ * The category that drives the video prompt wording.
+ * An explicit category always wins. Only `general` falls back to whole-word
+ * inference over product-describing text.
+ */
+function resolveVideoSlotProductType(input: { productType?: unknown; productText: string }): CloneProductType {
+  const explicitType = normalizeCloneProductType(input.productType)
+  if (explicitType !== 'general') return explicitType
+  return inferCloneProductTypeFromText(input.productText)
 }
 
-function inferPhysicalLightingLockBodyPart(input: { productType?: unknown; productText: string }) {
-  const explicitType = String(input.productType || '').trim().toLowerCase()
-  const corpus = `${explicitType} ${input.productText}`.toLowerCase()
-  if (explicitType === 'earrings') return 'Ear lobe'
-  if (explicitType === 'phone_case') return 'Hands and Fingers'
-  if (explicitType === 'toy') return 'Hands and Fingers'
-  if (explicitType === 'clothes') return 'Wrist and Fingers'
-  if (/(necklace|pendant|choker)/i.test(corpus)) return 'Collarbone and Neck'
-  if (/(earring|headpiece|headwear|hair clip|hairclip|barrette)/i.test(corpus)) return 'Ear lobe and Neck area'
-  if (/(ring|bracelet|watch|cufflink|wrist|finger)/i.test(corpus)) return 'Wrist and Fingers'
-  return 'Hands and Fingers'
+function isModelPresentationVideoShot(shot: { storyboardReferenceMode?: unknown; shotType?: unknown }) {
+  const mode = String(shot.storyboardReferenceMode || '').trim().toLowerCase()
+  if (mode === 'model_presentation') return true
+  if (mode === 'product_closeup') return false
+  return String(shot.shotType || '').trim().toLowerCase() === 'model_demo'
 }
 
-function inferPhysicalLightingLockProductName(input: {
-  category: PhysicalLightingLockVideoSlotCategory
-  productType?: unknown
-  productText: string
-}) {
-  const explicitType = String(input.productType || '').trim().toLowerCase()
-  const corpus = `${explicitType} ${input.productText}`.toLowerCase()
-  if (input.category === 'wearable_jewelry') {
-    if (explicitType === 'earrings') return 'Earring'
-    if (/(necklace|pendant|choker)/i.test(corpus)) return 'Necklace'
-    if (/(earring|stud|hoop|drop earring|dangle)/i.test(corpus)) return 'Earring'
-    return 'Jewelry Piece'
-  }
-  if (input.category === 'worn_accessory') {
-    if (/\bring\b/i.test(corpus)) return 'Ring'
-    if (/(bracelet|bangle)/i.test(corpus)) return 'Bracelet'
-    if (/\bwatch\b/i.test(corpus)) return 'Watch'
-    return 'Accessory'
-  }
-  if (/(plush toy|toy)/i.test(corpus)) return 'Plush Toy'
-  if (/(serum|essence|lotion|perfume|foundation|lip gloss|liquid|glass bottle|glass container|bottle|cosmetic|skincare)/i.test(corpus)) {
-    return 'Serum Bottle'
-  }
-  return 'Product'
+/** The action observed in the reference shot, cleaned so it can never ask for speech. */
+function buildReferenceActionText(input: { actionDescription?: unknown; scriptText?: unknown }) {
+  // Drop whole clauses about the mouth: the shot is silent, so they can only hurt.
+  const clean = (value: unknown) =>
+    stripPromptTimelineArtifacts(stripSpeechCueText(value))
+      .split(/[.;]+/)
+      .map((segment) => segment.replace(/\s+/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '').trim())
+      .filter((segment) => segment && !/\b(?:mouth|lips?)\b/i.test(segment))
+      .join('; ')
+  const action = clean(input.actionDescription)
+  const text = /[a-z]{3,}/i.test(action) ? action : ''
+  return text.slice(0, 260).trim()
 }
 
-function inferPhysicalLightingLockCameraMovement(input: {
-  category: PhysicalLightingLockVideoSlotCategory
-  scriptText?: unknown
-  cameraDescription?: unknown
-  generationPrompt?: unknown
-}) {
-  const corpus = [input.scriptText, input.cameraDescription, input.generationPrompt]
-    .map((item) => normalizeTemplateText(item, '').toLowerCase())
-    .join(' ')
-  if (input.category === 'wearable_jewelry') return 'Subtle handheld close-up on the ear area'
-  if (input.category === 'worn_accessory') return 'Subtle handheld sliding tilt across the fingers'
-  if (input.category === 'handheld_interaction') return 'Micro-handheld camera movement focusing on the hands'
-  if (/(ear|earring|earlobe|necklace|jewelry|jewellery)/i.test(corpus)) return 'Subtle handheld close-up on the ear area'
-  if (/(wrist|fingers|ring|bracelet|watch|sliding tilt|sliding pan|across)/i.test(corpus)) return 'Subtle handheld sliding tilt across the fingers'
-  return 'Micro-handheld camera movement focusing on the hands'
+function buildReferenceSceneText(value: unknown) {
+  const text = stripPromptTimelineArtifacts(stripSpeechCueText(value))
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.;,]+|[\s.;,]+$/g, '')
+    .trim()
+  return /[a-z]{3,}/i.test(text) ? text.slice(0, 260).trim() : ''
 }
 
-function inferPhysicalLightingLockSpecificMicroAction(input: {
-  category: PhysicalLightingLockVideoSlotCategory
-  productType?: unknown
-  scriptText?: unknown
-  actionDescription?: unknown
-  visualDescription?: unknown
-  productText: string
-}) {
-  const corpus = [input.scriptText, input.actionDescription, input.visualDescription, input.productText]
-    .map((item) => normalizeTemplateText(item, '').toLowerCase())
-    .join(' ')
-  if (input.category === 'wearable_jewelry') {
-    return 'The earring sways naturally under gravity with gentle realistic movement.'
+function buildVideoFaceRuleLine(input: { faceRule: VideoSlotProfile['faceRule']; modelPresentation: boolean; targetBodyPart: string; productName: string }) {
+  if (input.faceRule === 'follow_base_image' && input.modelPresentation) {
+    return `- Face Framing: Follow the base image framing exactly and keep the ${input.productName} as the visual anchor around the ${input.targetBodyPart}. If the model's face is visible in the base image, keep the same person and a calm natural expression, and never reveal more of the face than the base image shows. Do not turn the shot into a face-centered portrait.`
   }
-  if (input.category === 'worn_accessory') {
-    return 'The accessory moves naturally and gently with realistic micro-shadows.'
-  }
-  return 'The product moves naturally and gently with realistic micro-shadows.'
+  return `- Absolute Anonymity: The camera angle remains tightly cropped on the ${input.targetBodyPart}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.`
 }
 
 function composePhysicalLightingLockCameraMovement(primary: string, extraLines: string[]) {
@@ -416,13 +446,14 @@ Realistic ecommerce video
 
 export function fillVideoPromptTemplate(template: string, variables: Record<string, string>) {
   return Object.entries(variables).reduce((text, [key, value]) => {
-    return text.replace(new RegExp(`{{${key}}}`, 'g'), String(value || '').trim())
+    const replacement = String(value || '').trim()
+    // Function replacer so "$" sequences inside values are never interpreted.
+    return text.replace(new RegExp(`{{${key}}}`, 'g'), () => replacement)
   }, template)
 }
 
 function buildAccessorLockedText(input: { productType: string; base: string; earrings: string }) {
-  const normalized = String(input.productType || '').trim().toLowerCase()
-  return /earrings?/.test(normalized) ? input.earrings : input.base
+  return normalizeCloneProductType(input.productType) === 'earrings' ? input.earrings : input.base
 }
 
 export function sanitizeGeneratedVideoPrompt(value: unknown, maxChars = 1800) {
@@ -646,9 +677,7 @@ function inferJewelryLikePromptContext(input: {
     .filter(Boolean)
     .join('\n')
     .toLowerCase()
-  return /earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet|stud|hoop|drop earring|dangle earring/.test(
-    haystack,
-  )
+  return isJewelryTarget(input.productType, haystack)
 }
 
 export function buildShotAntiGlowPromptBlock(input: {
@@ -950,6 +979,36 @@ export function buildProductLockText(
       'Keep toy shape, facial details, color blocks, proportions, and material feel unchanged.',
       'Do not turn it into a different character or change the face.',
     ],
+    necklace: [
+      'Identify the product as a necklace first, then place only this exact necklace around the neck or in a hand display.',
+      'Keep chain style, chain length, pendant shape, pendant count, clasp, and component spacing unchanged.',
+      'If the model originally wears a different necklace, remove it and replace it with the uploaded necklace only.',
+      'The necklace must drape naturally under gravity along the neck and collarbone. Do not add extra pendants, stones, or layers.',
+    ],
+    ring: [
+      'Identify the product as a ring first, then place only this exact ring on the finger or in a hand display.',
+      'Keep band width, band profile, setting, stone count, stone layout, and engraving unchanged.',
+      'If the model originally wears a different ring, remove it and replace it with the uploaded ring only.',
+      'Keep a believable real-world ring size relative to the finger. Do not add extra rings or stones.',
+    ],
+    bracelet: [
+      'Identify the product as a bracelet first, then place only this exact bracelet on the wrist or in a hand display.',
+      'Keep link shape, bead count, charm placement, clasp, width, and length unchanged.',
+      'If the model originally wears a different bracelet or watch, remove it and replace it with the uploaded bracelet only.',
+      'The bracelet must sit naturally on the wrist under gravity. Do not add extra charms or layers.',
+    ],
+    bag: [
+      'Identify the product as a bag first, then keep that exact bag as the hero product.',
+      'Keep bag silhouette, size, handle and strap structure, hardware, closure, stitching, color, and surface pattern unchanged.',
+      'If the reference shot contains a different bag, replace it with the uploaded bag only.',
+      'Do not change the bag proportions, strap length, or hardware layout.',
+    ],
+    shoes: [
+      'Identify the product as shoes first, then keep that exact pair of shoes as the hero product.',
+      'Keep shoe silhouette, sole shape, upper material, lacing or strap structure, color blocks, and pattern unchanged.',
+      'If the model originally wears different shoes, replace them with the uploaded shoes only.',
+      'Keep a matching left-right pair with believable real-world size relative to the foot.',
+    ],
     general: [
       'Identify the exact product category from the uploaded references before generating the image.',
       'Keep the main product appearance consistent with the references.',
@@ -1003,6 +1062,11 @@ export function buildCloneNegativePrompt(productType: CloneProductType, shotType
     phone_case: ['no wrong camera hole', 'no changed print', 'no changed frame shape'],
     clothes: ['no changed collar', 'no changed sleeve', 'no changed pattern'],
     toy: ['no changed face', 'no changed proportions', 'no changed color blocks'],
+    necklace: ['no wrong chain structure', 'no extra pendant', 'no floating necklace', 'no changed pendant shape'],
+    ring: ['no wrong ring structure', 'no extra ring', 'no extra gemstone', 'no finger deformation'],
+    bracelet: ['no wrong bracelet structure', 'no extra charm', 'no floating bracelet', 'no wrist deformation'],
+    bag: ['no changed bag shape', 'no changed strap', 'no changed hardware', 'no changed pattern'],
+    shoes: ['no changed sole', 'no changed upper', 'no mismatched pair', 'no foot deformation'],
     general: ['no wrong product shape'],
   }
   const shotSpecific =
@@ -1046,10 +1110,7 @@ export function sanitizeJewelryGenerationPrompt(value: unknown, productType?: st
   const text = keepEnglishLikeText(value, '').trim()
   if (!text) return ''
   const normalizedType = String(productType || '').trim().toLowerCase()
-  const looksJewelry =
-    /earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(
-      `${normalizedType} ${text}`.toLowerCase(),
-    )
+  const looksJewelry = isJewelryTarget(normalizedType, text)
   if (!looksJewelry) return sanitizeGeneratedVideoPrompt(text, 700)
   const replacements: Array<[RegExp, string]> = [
     [/\bvisual impact\b/gi, 'refined product presence'],
@@ -1240,7 +1301,8 @@ export function buildOptimizedVideoPrompt(input: {
     | 'framing'
     | 'shotType'
     | 'compiledPrompt'
-  >
+  > &
+    Pick<ShotSpec, 'storyboardReferenceMode'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode
@@ -1266,7 +1328,8 @@ function buildVideoExecutionStackPrompt(input: {
     | 'framing'
     | 'shotType'
     | 'compiledPrompt'
-  >
+  > &
+    Pick<ShotSpec, 'storyboardReferenceMode'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode
@@ -1276,44 +1339,39 @@ function buildVideoExecutionStackPrompt(input: {
     .map((item) => normalizeTemplateText(item, ''))
     .filter(Boolean)
     .join(' ')
-  const category = inferPhysicalLightingLockVideoCategory({
-    productType: shot.productType,
-    scriptText: shot.scriptText,
-    generationPrompt: shot.generationPrompt,
-    visualDescription: shot.visualDescription,
-    actionDescription: shot.actionDescription,
-    cameraDescription: shot.cameraDescription,
-    productFocus: shot.productFocus,
-    materialNeed: shot.materialNeed,
-    productIdentityText: input.productIdentityText,
-  })
-  const productName = inferPhysicalLightingLockProductName({ category, productType: shot.productType, productText })
-  const targetBodyPart = inferPhysicalLightingLockBodyPart({ productType: shot.productType, productText })
-  const cameraMovement = inferPhysicalLightingLockCameraMovement({
-    category,
-    scriptText: shot.scriptText,
-    cameraDescription: shot.cameraDescription,
-    generationPrompt: shot.generationPrompt,
-  })
+  const slotProductType = resolveVideoSlotProductType({ productType: shot.productType, productText })
+  const profile = VIDEO_SLOT_PROFILES[slotProductType]
   const extraCameraMovement = extractCameraMovementOnlySentenceList({
     scriptText: shot.scriptText,
     cameraDescription: shot.cameraDescription,
     motion: shot.motion,
   })
-  const specificMicroAction = inferPhysicalLightingLockSpecificMicroAction({
-    category,
-    productType: shot.productType,
-    scriptText: shot.scriptText,
-    actionDescription: shot.actionDescription,
-    visualDescription: shot.visualDescription,
-    productText,
+  const referenceAction = buildReferenceActionText({ actionDescription: shot.actionDescription, scriptText: shot.scriptText })
+  const referenceScene = buildReferenceSceneText(shot.visualDescription)
+  // A user-managed template (scoped to this category, else to all categories) replaces the built-in one.
+  const template = getActiveClonePromptTemplate('shot_video', slotProductType) ?? PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE
+  const filled = fillClonePromptTemplate(template, {
+    productName: profile.productName,
+    targetBodyPart: profile.targetBodyPart,
+    referenceAction,
+    referenceScene,
+    cameraMovement: composePhysicalLightingLockCameraMovement(profile.cameraMovement, extraCameraMovement),
+    referenceActionLine: referenceAction
+      ? `- Reference Action: Reproduce this action from the reference shot at natural real-life speed, inside the base image framing: ${referenceAction}.`
+      : '',
+    referenceSceneLine: referenceScene
+      ? `- Reference Scene Beat: Stay consistent with this shot content, without adding new objects or changing the product: ${referenceScene}.`
+      : '',
+    specificMicroAction: profile.microAction,
+    faceRuleLine: buildVideoFaceRuleLine({
+      faceRule: profile.faceRule,
+      modelPresentation: isModelPresentationVideoShot(shot),
+      targetBodyPart: profile.targetBodyPart,
+      productName: profile.productName,
+    }),
   })
-  return fillVideoPromptTemplate(PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE, {
-    productName,
-    targetBodyPart,
-    cameraMovement: composePhysicalLightingLockCameraMovement(cameraMovement, extraCameraMovement),
-    specificMicroAction,
-  })
+  // Optional lines that resolved to nothing leave an empty line inside a list block; remove only those.
+  return filled.replace(/(\n- [^\n]*|:)\n(?:[ \t]*\n)+(?=- )/g, '$1\n')
 }
 
 export function buildFinalShotVideoPositivePrompt(input: {
@@ -1334,7 +1392,8 @@ export function buildFinalShotVideoPositivePrompt(input: {
     | 'framing'
     | 'shotType'
     | 'compiledPrompt'
-  >
+  > &
+    Pick<ShotSpec, 'storyboardReferenceMode'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode

@@ -2,9 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { AlertTriangle, CheckCircle2, ChevronDown, Clock3, FolderOpen, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2, Video, Wand2 } from 'lucide-vue-next'
-import UiCard from '../components/UiCard.vue'
-import UiButton from '../components/UiButton.vue'
+import { AlertTriangle, ArrowDownWideNarrow, ArrowUpNarrowWide, Captions, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, Copy, Download, ExternalLink, FileVideo, FolderInput, FolderOpen, Hand, Image as ImageIcon, LayoutGrid, List, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, Search, Sparkles, Trash2, Video, Wand2, X } from 'lucide-vue-next'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 
 type CloneProjectSummary = {
@@ -110,6 +108,7 @@ const currentPage = ref(1)
 const pageSizeOptions = [10, 20, 50, 100] as const
 const pageSize = ref<(typeof pageSizeOptions)[number]>(10)
 const pageSizeMenuOpen = ref(false)
+const createMenuOpen = ref(false)
 const viewMode = ref<'list' | 'grid'>('list')
 const runtimeLogs = ref<RuntimeLogItem[]>([])
 const runtimeDialogOpen = ref(false)
@@ -1150,6 +1149,44 @@ function handlePointerDown(event: Event) {
   if (!target?.closest('.clone-group-menu')) groupMenuOpenId.value = ''
   if (!target?.closest('.clone-row-move-menu')) rowMoveMenuOpenId.value = ''
   if (!target?.closest('.clone-row-action-menu')) rowActionMenuOpenId.value = ''
+  if (!target?.closest('.ctl-create')) createMenuOpen.value = false
+  if (!target?.closest('.clone-list-page-size-wrap')) pageSizeMenuOpen.value = false
+}
+
+function startTask(mode: 'auto' | 'manual') {
+  createMenuOpen.value = false
+  void createTask(mode)
+}
+
+const activeStatusCard = computed(() => overviewCards.value.find((card) => card.key === statusFilter.value && card.key !== 'all') || null)
+
+function clearFilters() {
+  statusFilter.value = 'all'
+  query.value = ''
+}
+
+function statusDotTone(status?: string) {
+  return statusTone(status).replace('is-', '')
+}
+
+const brokenCovers = ref(new Set<string>())
+function isVideoSrc(src: string) {
+  return /\.(mp4|mov|webm|mkv|m4v)(?:$|[?&#])/i.test(decodeURIComponent(src))
+}
+function coverKind(item: CloneProjectSummary): 'image' | 'video' | 'none' {
+  const src = itemCoverSrc(item)
+  if (!src || brokenCovers.value.has(item.id)) return 'none'
+  return isVideoSrc(src) ? 'video' : 'image'
+}
+function markCoverBroken(id: string) {
+  const next = new Set(brokenCovers.value)
+  next.add(id)
+  brokenCovers.value = next
+}
+
+function onRowDblClick(event: MouseEvent, id: string) {
+  if ((event.target as HTMLElement | null)?.closest('button, input, label, .clone-row-move-menu')) return
+  openTask(id)
 }
 
 onMounted(() => {
@@ -1172,751 +1209,498 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="clone-task-list-page">
-    <section class="clone-task-list-shell">
-      <div class="clone-task-list-main">
-        <section class="clone-console-panel">
-          <header class="clone-console-hero">
-            <div class="clone-console-hero__copy">
-              <div class="clone-console-hero__title-row">
-                <h1>{{ t('cloneTasks.title') }}</h1>
-                <span class="clone-console-hero__spark">✦</span>
-              </div>
-              <p>{{ t('cloneTasks.desc') }}</p>
-            </div>
-
-            <div class="clone-console-hero__actions">
-              <UiButton class="clone-console-hero__button" variant="secondary" :disabled="exporting || !selectedIds.length" @click="exportSelectedFinalVideos">
-                {{ exporting ? t('cloneTasks.actions.exporting') : t('cloneTasks.actions.batchExport') }}
-              </UiButton>
-              <div class="clone-console-run-mode">
-                <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'auto' }" type="button" @click="createRunMode = 'auto'">
-                  {{ t('cloneTasks.runMode.auto') }}
-                </button>
-                <button class="clone-console-run-mode__option" :class="{ 'is-active': createRunMode === 'manual' }" type="button" @click="createRunMode = 'manual'">
-                  {{ t('cloneTasks.runMode.manual') }}
-                </button>
-              </div>
-              <UiButton class="clone-console-hero__button clone-console-hero__button--primary" :disabled="creating || !createRunMode" @click="createTask">
-                <Plus class="h-4 w-4" />
-                {{ creating ? t('cloneTasks.actions.creating') : t('cloneTasks.actions.create') }}
-              </UiButton>
-            </div>
-          </header>
-
-          <section class="clone-console-overview">
-            <div class="clone-console-overview__cards">
-              <button
-                v-for="card in overviewCards"
-                :key="card.key"
-                type="button"
-                class="clone-console-stat"
-                :class="[`tone-${card.tone}`, { 'is-active': statusFilter === card.key || (card.key === 'pending-output' && statusFilter === 'all') }]"
-                @click="statusFilter = card.key === 'pending-output' ? 'all' : card.key"
-              >
-                <span class="clone-console-stat__icon">
-                  <component :is="card.icon" class="h-4 w-4" />
-                </span>
-                <div class="clone-console-stat__copy">
-                  <strong>{{ card.label }}</strong>
-                  <span>{{ card.helper }}</span>
-                </div>
-                <b>{{ card.value }}</b>
-              </button>
-            </div>
-          </section>
-        </section>
-
-        <div v-if="selectedIds.length || batchExportMessage" class="clone-list-batch-bar">
-          <div class="clone-list-batch-bar__summary">
-            <strong>{{ t('cloneTasks.selectedCount', { count: selectedIds.length }) }}</strong>
-            <div class="clone-list-batch-bar__stats">
-              <span class="clone-list-batch-bar__stat">
-                <em>{{ exportableSelectedCount }}</em>
-                <small>{{ t('cloneTasks.selection.exportable') }}</small>
-              </span>
-              <span class="clone-list-batch-bar__stat">
-                <em>{{ subtitleEligibleSelectedCount }}</em>
-                <small>{{ t('cloneTasks.selection.subtitleReady') }}</small>
-              </span>
-            </div>
-          </div>
-          <div class="clone-list-batch-bar__actions">
-            <button
-              v-if="selectedIds.length"
-              class="clone-list-batch-action clone-list-batch-action--danger"
-              type="button"
-              :disabled="Boolean(removingId)"
-              @click="confirmBatchRemoveTasks"
-            >
-              {{ removingId ? t('cloneTasks.actions.deleting') : t('cloneTasks.actions.batchDelete') }}
+  <div class="vg-scope ctl-page">
+    <!-- ============ Head ============ -->
+    <header class="ctl-head">
+      <div class="ctl-head__icon"><Copy :size="22" /></div>
+      <div class="ctl-head__text">
+        <h1>{{ t('cloneTasks.title') }}</h1>
+        <p>{{ t('cloneTasks.desc') }}</p>
+      </div>
+      <div class="ctl-head__actions">
+        <div class="ctl-create">
+          <button type="button" class="vg-btn vg-btn--primary ctl-create-btn" data-testid="clone-create-task" :disabled="creating" @click="startTask('auto')">
+            <LoaderCircle v-if="creating" :size="16" class="vg-spin" /><Plus v-else :size="16" />
+            {{ creating ? t('cloneTasks.actions.creating') : t('cloneTasks.actions.create') }}
+            <span class="ctl-create-btn__more" role="button" tabindex="0" data-testid="clone-create-task-more" :title="t('cloneUi.createTitle')" :aria-label="t('cloneUi.createTitle')" @click.stop="createMenuOpen = !createMenuOpen" @keydown.enter.stop.prevent="createMenuOpen = !createMenuOpen">
+              <ChevronDown :size="14" class="ctl-create-btn__caret" />
+            </span>
+          </button>
+          <div v-if="createMenuOpen" class="ctl-create__menu" role="menu">
+            <div class="ctl-create__title">{{ t('cloneUi.createTitle') }}</div>
+            <button type="button" class="ctl-create__option" role="menuitem" @click="startTask('auto')">
+              <span class="ctl-create__icon is-auto"><Sparkles :size="18" /></span>
+              <span class="ctl-create__copy"><strong>{{ t('cloneTasks.runMode.auto') }}</strong><small>{{ t('cloneUi.autoDesc') }}</small></span>
             </button>
-            <button
-              v-if="selectedIds.length"
-              class="clone-list-batch-action"
-              type="button"
-              :disabled="exporting"
-              @click="exportSelectedFinalVideos"
-            >
-              {{ exporting ? t('cloneTasks.actions.exporting') : t('cloneTasks.actions.exportFinals') }}
+            <button type="button" class="ctl-create__option" role="menuitem" @click="startTask('manual')">
+              <span class="ctl-create__icon is-manual"><Hand :size="18" /></span>
+              <span class="ctl-create__copy"><strong>{{ t('cloneTasks.runMode.manual') }}</strong><small>{{ t('cloneUi.manualDesc') }}</small></span>
             </button>
-            <button v-if="selectedIds.length && cloneGroupAssignReady" class="clone-list-batch-action" type="button" @click="openMoveBatchDialog">{{ t('cloneTasks.actions.moveToGroup') }}</button>
-            <button
-              v-if="subtitleFeatureReady && subtitleEligibleSelectedCount"
-              class="clone-list-batch-action clone-list-batch-action--accent"
-              type="button"
-              @click="openBatchSubtitleDialog"
-            >
-              {{ t('cloneTasks.actions.batchSubtitle') }}
-            </button>
-            <span v-if="batchExportMessage" class="clone-list-batch-bar__message">{{ batchExportMessage }}</span>
           </div>
         </div>
-
-        <section class="clone-console-table">
-          <div class="clone-console-table__groupbar">
-            <div class="clone-console-table__groupbar-tabs">
-              <div
-                v-for="group in visibleGroupItems"
-                :key="group.id"
-                class="clone-console-group"
-                :class="{ 'is-active': activeGroupId === group.id }"
-              >
-                <button type="button" class="clone-console-group__main" @click="activeGroupId = group.id as any">
-                  <span>{{ group.name }}</span>
-                  <em>{{ group.taskCount }}</em>
-                </button>
-                <div v-if="!group.system && (cloneGroupRenameReady || cloneGroupRemoveReady)" class="clone-group-menu">
-                  <button type="button" class="clone-console-group__more" :aria-label="t('cloneTasks.actions.more')" @click.stop="toggleGroupMenu(group.id)">
-                    <MoreHorizontal class="h-3.5 w-3.5" />
-                  </button>
-                  <div v-if="groupMenuOpenId === group.id" class="clone-group-menu__dropdown">
-                    <button v-if="cloneGroupRenameReady" type="button" class="clone-group-menu__item" @click.stop="openRenameGroupDialog(group as CloneTaskGroup)">{{ t('cloneTasks.actions.rename') }}</button>
-                    <button v-if="cloneGroupRemoveReady" type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup)">{{ t('cloneTasks.actions.delete') }}</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="hasOverflowGroups" class="clone-console-group clone-console-group--overflow" :class="{ 'is-active': Boolean(activeOverflowGroup) }">
-              <button type="button" class="clone-console-group__main" @click.stop="toggleGroupMenu('__overflow__')">
-                <span>{{ activeOverflowGroup ? activeOverflowGroup.name : t('cloneTasks.groups.more') }}</span>
-                <em>{{ activeOverflowGroup ? activeOverflowGroup.taskCount : overflowGroupItems.length }}</em>
-              </button>
-              <div class="clone-group-menu">
-                <button type="button" class="clone-console-group__more" :aria-label="t('autoUi.k_02965f90784d')" @click.stop="toggleGroupMenu('__overflow__')">
-                  <MoreHorizontal class="h-3.5 w-3.5" />
-                </button>
-                <div v-if="groupMenuOpenId === '__overflow__'" class="clone-group-menu__dropdown">
-                  <button
-                    v-for="group in overflowGroupItems"
-                    :key="`overflow-${group.id}`"
-                    type="button"
-                    class="clone-group-menu__item"
-                    :class="{ 'is-active': activeGroupId === group.id }"
-                    @click.stop="activeGroupId = group.id as any; groupMenuOpenId = ''"
-                  >
-                    <span>{{ group.name }}</span>
-                    <em>{{ group.taskCount }}</em>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="clone-console-table__groupbar-tools">
-              <button v-if="cloneGroupCreateReady" type="button" class="clone-console-group__create" @click="openCreateGroupDialog">
-                <Plus class="h-3.5 w-3.5" />
-                <span>{{ t('cloneTasks.groups.create') }}</span>
-              </button>
-              <button class="clone-console-overview__tool" type="button" @click="toggleSortOrder">
-                {{ sortOrder === 'created_desc' ? t('cloneTasks.sort.newest') : t('cloneTasks.sort.oldest') }}
-                <ChevronDown class="h-4 w-4" />
-              </button>
-              <button class="clone-console-overview__tool" type="button">
-                {{ t('cloneTasks.allMaterials') }}
-                <ChevronDown class="h-4 w-4" />
-              </button>
-              <button class="clone-console-overview__icon" type="button" :aria-label="t('autoUi.k_a6156a9057ee')" @click="toggleSelectCurrentPage">
-                <span class="clone-console-overview__icon-bars"></span>
-              </button>
-              <button
-                class="clone-console-table__viewtool"
-                :class="{ 'is-active': viewMode === 'list' }"
-                type="button"
-                :aria-label="t('autoUi.k_1fd2104d08a1')"
-                @click="viewMode = 'list'"
-              >
-                <span class="clone-console-table__viewtool-bars"></span>
-              </button>
-              <button
-                class="clone-console-table__viewtool"
-                :class="{ 'is-active': viewMode === 'grid' }"
-                type="button"
-                :aria-label="t('autoUi.k_63a3454ede3c')"
-                @click="viewMode = 'grid'"
-              >
-                <span class="clone-console-table__viewtool-grid"></span>
-              </button>
-              <button class="clone-console-table__viewtool" type="button" :aria-label="t('autoUi.k_7debf9cb0372')">
-                <span class="clone-console-table__viewtool-dot"></span>
-              </button>
-            </div>
-          </div>
-
-          <div v-if="filteredRows.length && viewMode === 'list'" class="clone-console-table__body">
-            <div class="clone-console-table__head">
-              <label class="clone-console-table__check" :aria-label="t('autoUi.k_a6156a9057ee')">
-                <input
-                  type="checkbox"
-                  :checked="allCurrentPageSelected"
-                  @change="toggleSelectCurrentPage"
-                />
-                <span></span>
-              </label>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.preview') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.task') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.stage') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.materials') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.progress') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.updated') }}</span>
-              <span class="clone-console-table__headcell">{{ t('cloneTasks.columns.actions') }}</span>
-            </div>
-
-            <article v-for="item in pagedRows" :key="item.id" class="clone-console-row">
-              <label class="clone-console-row__check">
-                <input
-                  type="checkbox"
-                  :checked="selectedSet.has(item.id)"
-                  @change="toggleSelected(item.id)"
-                />
-                <span></span>
-              </label>
-
-              <div class="clone-console-row__preview">
-                <div class="clone-console-row__thumb" :data-duration="pseudoDurationLabel(item)">
-                  <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" loading="lazy" decoding="async" />
-                  <div v-else class="clone-console-row__thumb-empty">
-                    <Video class="h-5 w-5" />
-                  </div>
-                </div>
-              </div>
-
-              <div class="clone-console-row__task">
-                <div class="clone-console-row__titleline">
-                  <h3>{{ item.title }}</h3>
-                  <button class="clone-console-row__rename" type="button" :aria-label="t('autoUi.k_29f5ec945b98')" @click="openRenameDialog(item)">
-                    <Pencil class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div class="clone-console-row__meta">
-                  <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
-                  <span class="clone-console-row__dot"></span>
-                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || '--' }}</span>
-                  <span class="clone-console-row__dot"></span>
-                  <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
-                </div>
-                <div v-if="item.lastError" class="clone-console-row__error">
-                  <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
-                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
-                </div>
-              </div>
-
-              <div class="clone-console-row__stage">
-                <div class="clone-console-row__statuswrap">
-                  <span class="clone-console-row__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
-                  <span class="clone-console-row__stepbadge" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
-                </div>
-                <div v-if="cloneGroupAssignReady" class="clone-row-move-menu clone-row-move-menu--inline">
-                  <button class="clone-console-row__groupmove" type="button" @click.stop="toggleRowMoveMenu(item.id)">
-                    <span>{{ item.groupName || t('cloneTasks.actions.moveToGroup') }}</span>
-                    <ChevronDown class="h-3.5 w-3.5" />
-                  </button>
-                  <div v-if="rowMoveMenuOpenId === item.id" class="clone-row-move-menu__dropdown">
-                    <button
-                      type="button"
-                      class="clone-row-move-menu__item"
-                      :class="{ 'is-active': !item.groupId }"
-                      :disabled="assigningProjectId === item.id"
-                      @click.stop="assignProjectToGroup(item.id)"
-                    >
-                      {{ t('cloneTasks.groups.ungrouped') }}
-                    </button>
-                    <button
-                      v-for="group in groups.filter((entry) => entry.id !== '__ungrouped__')"
-                      :key="`${item.id}-${group.id}`"
-                      type="button"
-                      class="clone-row-move-menu__item"
-                      :class="{ 'is-active': item.groupId === group.id }"
-                      :disabled="assigningProjectId === item.id"
-                      @click.stop="assignProjectToGroup(item.id, group.id)"
-                    >
-                      {{ group.name }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="clone-console-row__assets">
-                <strong>{{ t('cloneTasks.materialCount', { images: item.productReferenceImageCount, videos: item.generatedVideoCount || 0 }) }}</strong>
-                <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
-              </div>
-
-              <div class="clone-console-row__progress">
-                <div class="clone-console-row__progress-copy">
-                  <strong>{{ item.progressPercent }}%</strong>
-                </div>
-                <div class="clone-console-row__progress-track">
-                  <span :style="{ width: `${item.progressPercent}%` }"></span>
-                </div>
-                <div class="clone-console-row__progress-steps">
-                  <span
-                    v-for="(_, index) in 6"
-                    :key="`${item.id}-${index}`"
-                    class="clone-console-row__progress-step"
-                    :class="{ 'is-active': index === Math.max(0, Math.min(5, stepIndex(item.currentStep))), 'is-done': index < stepIndex(item.currentStep) }"
-                  >
-                    {{ index + 1 }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="clone-console-row__updated">
-                <Clock3 class="h-4 w-4" />
-                <div class="clone-console-row__updated-copy">
-                  <span>{{ formatDateOnly(item.updatedAt) }}</span>
-                  <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
-                </div>
-              </div>
-
-              <div class="clone-console-row__actions">
-                <button class="clone-console-row__action clone-console-row__action--edit" type="button" :title="t('autoUi.k_67659ba581ad')" @click="openTask(item.id)">
-                  <Pencil class="h-4 w-4" />
-                </button>
-                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
-                  <Play class="h-4 w-4" />
-                </button>
-                <button class="clone-console-row__action clone-console-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
-                  <Trash2 class="h-4 w-4" />
-                </button>
-                <div class="clone-row-action-menu">
-                  <button class="clone-console-row__action" type="button" :aria-label="t('autoUi.k_77836d3a9942')" @click.stop="toggleRowActionMenu(item.id)">
-                    <MoreHorizontal class="h-4 w-4" />
-                  </button>
-                  <div v-if="rowActionMenuOpenId === item.id" class="clone-group-menu__dropdown clone-row-action-menu__dropdown">
-                    <button type="button" class="clone-group-menu__item" @click.stop="openRenameDialog(item)">{{ t('cloneTasks.actions.rename') }}</button>
-                    <button type="button" class="clone-group-menu__item clone-group-menu__item--danger" @click.stop="confirmRemoveTask(item)">{{ t('cloneTasks.actions.delete') }}</button>
-                  </div>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div v-else-if="filteredRows.length && viewMode === 'grid'" class="clone-console-grid">
-            <article v-for="item in pagedRows" :key="item.id" class="clone-console-card">
-              <div class="clone-console-card__head">
-                <label class="clone-console-row__check">
-                  <input
-                    type="checkbox"
-                    :checked="selectedSet.has(item.id)"
-                    @change="toggleSelected(item.id)"
-                  />
-                  <span></span>
-                </label>
-                <span class="clone-console-row__status" :class="statusTone(item.status)">{{ humanStatus(item.status) }}</span>
-              </div>
-
-              <button class="clone-console-card__preview" type="button" @click="openVideoPreview(item)">
-                <img v-if="itemCoverSrc(item)" :src="itemCoverSrc(item)" :alt="item.title" loading="lazy" decoding="async" />
-                <div v-else class="clone-console-row__thumb-empty">
-                  <Video class="h-5 w-5" />
-                </div>
-              </button>
-
-              <div class="clone-console-card__body">
-                <div class="clone-console-row__titleline">
-                  <h3>{{ item.title }}</h3>
-                  <button class="clone-console-row__rename" type="button" :aria-label="t('autoUi.k_29f5ec945b98')" @click="openRenameDialog(item)">
-                    <Pencil class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div class="clone-console-row__meta">
-                  <span class="clone-console-row__mode">{{ humanRunMode(item.runMode) }}</span>
-                  <span class="clone-console-row__dot"></span>
-                  <span class="clone-console-row__text">{{ item.selectedModelIdentityName || '--' }}</span>
-                </div>
-                <div class="clone-console-row__stage">
-                  <span class="clone-console-row__stepbadge" :class="stepTone(item.currentStep)">{{ humanStep(item.currentStep) }}</span>
-                  <span class="clone-console-row__text">Ref {{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
-                </div>
-                <div class="clone-console-row__assets">
-                  <strong>{{ t('cloneTasks.materialCount', { images: item.productReferenceImageCount, videos: item.generatedVideoCount || 0 }) }}</strong>
-                  <span>{{ item.finalOutputPath ? 'Output Ready' : 'Output Pending' }}</span>
-                </div>
-                <div v-if="item.lastError" class="clone-console-row__error">
-                  <span class="clone-console-row__error-text">{{ compactError(item.lastError, 72) }}</span>
-                  <button class="clone-console-row__error-link" type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
-                </div>
-              </div>
-
-              <div class="clone-console-card__footer">
-                <div class="clone-console-row__progress">
-                  <div class="clone-console-row__progress-copy">
-                    <strong>{{ item.progressPercent }}%</strong>
-                  </div>
-                  <div class="clone-console-row__progress-track">
-                    <span :style="{ width: `${item.progressPercent}%` }"></span>
-                  </div>
-                </div>
-                <div class="clone-console-row__updated">
-                  <Clock3 class="h-4 w-4" />
-                  <div class="clone-console-row__updated-copy">
-                    <span>{{ formatDateOnly(item.updatedAt) }}</span>
-                    <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div class="clone-console-card__actions">
-                <button class="clone-console-row__action clone-console-row__action--edit" type="button" :title="t('autoUi.k_67659ba581ad')" @click="openTask(item.id)">
-                  <Pencil class="h-4 w-4" />
-                </button>
-                <button class="clone-console-row__action clone-console-row__action--play" type="button" @click="openVideoPreview(item)">
-                  <Play class="h-4 w-4" />
-                </button>
-                <button class="clone-console-row__action clone-console-row__action--danger" type="button" :disabled="removingId === item.id" @click="confirmRemoveTask(item)">
-                  <Trash2 class="h-4 w-4" />
-                </button>
-              </div>
-            </article>
-          </div>
-          <div v-else class="clone-list-empty">
-            <LoaderCircle v-if="loading" class="h-5 w-5 is-spinning" />
-            <Wand2 v-else class="h-5 w-5" />
-            <strong>{{ loading ? t('cloneTasks.empty.loading') : t('cloneTasks.empty.title') }}</strong>
-            <span>{{ loading ? t('cloneTasks.empty.wait') : t('cloneTasks.empty.desc') }}</span>
-          </div>
-
-          <div class="clone-list-pagination">
-            <span class="clone-list-pagination__summary">{{ t('cloneTasks.pagination.summary', { count: filteredRows.length, start: currentPageStart, end: currentPageEnd }) }}</span>
-            <div class="clone-list-pagination__controls">
-              <button type="button" :disabled="currentPage <= 1" @click="goToPrevPage">‹</button>
-              <button
-                v-for="page in visiblePageNumbers"
-                :key="page"
-                type="button"
-                :class="{ 'is-active': currentPage === page }"
-                @click="goToPage(page)"
-              >
-                {{ page }}
-              </button>
-              <button type="button" :disabled="currentPage >= pageCount" @click="goToNextPage">›</button>
-              <div class="clone-list-page-size-wrap">
-                <button type="button" class="clone-list-page-size" :aria-expanded="pageSizeMenuOpen" @click="togglePageSizeMenu">
-                  {{ pageSize }} {{ t('autoUi.k_2189643c968f') }} <ChevronDown class="h-3.5 w-3.5" />
-                </button>
-                <div v-if="pageSizeMenuOpen" class="clone-list-page-size-menu">
-                  <button
-                    v-for="option in pageSizeOptions"
-                    :key="option"
-                    type="button"
-                    :class="{ 'is-active': pageSize === option }"
-                    @click="selectPageSize(option)"
-                  >
-                    {{ option }} {{ t('autoUi.k_2189643c968f') }} </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
+    </header>
+
+    <!-- ============ Stats ============ -->
+    <section class="ctl-stats" aria-label="overview">
+      <button
+        v-for="card in overviewCards"
+        :key="card.key"
+        type="button"
+        class="ctl-stat"
+        :class="[`tone-${card.tone}`, { 'is-active': card.key !== 'pending-output' && statusFilter === card.key }]"
+        :disabled="card.key === 'pending-output'"
+        @click="statusFilter = card.key as typeof statusFilter"
+      >
+        <span class="ctl-stat__label"><i class="ctl-stat__dot" />{{ card.label }}</span>
+        <b class="ctl-stat__value">{{ card.value }}</b>
+        <small class="ctl-stat__helper">{{ card.helper }}</small>
+      </button>
     </section>
 
-    <div v-if="errorDialogOpen" class="clone-error-dialog-mask" @click.self="closeErrorDialog">
-      <div class="clone-error-dialog" @click.stop>
-        <div class="clone-error-dialog__head">
-          <div class="clone-error-dialog__copy">
-            <strong>{{ t('autoUi.k_6bd471fe24ae') }}</strong>
-            <span>{{ errorDialogTitle }}</span>
-          </div>
-          <UiButton variant="ghost" @click="closeErrorDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
-        </div>
-        <div class="clone-error-dialog__body">
-          {{ errorDialogMessage }}
-        </div>
-      </div>
-    </div>
-
-    <div v-if="renameDialogOpen" class="clone-error-dialog-mask" @click.self="closeRenameDialog">
-      <div class="clone-error-dialog clone-rename-dialog" @click.stop>
-        <div class="clone-error-dialog__head">
-          <div class="clone-error-dialog__copy">
-            <strong>{{ t('autoUi.k_29f5ec945b98') }}</strong>
-            <span>{{ t('autoUi.k_cf099d4c47c6') }}</span>
-          </div>
-          <UiButton variant="ghost" :disabled="savingRename" @click="closeRenameDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
-        </div>
-        <div class="clone-rename-dialog__body">
-          <label class="clone-rename-dialog__field">
-            <span>{{ t('autoUi.k_2e3046989973') }}</span>
-            <input v-model.trim="renameDraft" type="text" maxlength="80" :placeholder="t('autoUi.k_5169b9ecce30')" @keydown.enter.prevent="submitRename" />
-          </label>
-          <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="savingRename" @click="closeRenameDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
-            <UiButton :disabled="savingRename || !renameDraft.trim()" @click="submitRename">
-              {{ savingRename ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}
-            </UiButton>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="videoPreviewDialogOpen && videoPreviewItem" class="clone-error-dialog-mask" @click.self="closeVideoPreview">
-      <div class="clone-error-dialog clone-video-preview-dialog" @click.stop>
-        <div class="clone-error-dialog__head">
-          <div class="clone-error-dialog__copy">
-            <strong>{{ videoPreviewItem.title || t('autoUi.k_891a69798937') }}</strong>
-            <span>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), t('autoUi.k_b31b6e8ace7e')) }}</span>
-          </div>
-          <div class="clone-video-preview-dialog__head-actions">
-            <UiButton variant="ghost" :disabled="videoPreviewSaving" @click="closeVideoPreview">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
-          </div>
-        </div>
-        <div class="clone-video-preview-dialog__body">
-          <div class="clone-video-preview-dialog__player">
-            <video
-              v-if="itemPlayableVideoPath(videoPreviewItem)"
-              :src="toFileSrc(itemPlayableVideoPath(videoPreviewItem), videoPreviewItem.updatedAt)"
-              controls
-              preload="metadata"
-              autoplay
-            ></video>
-            <div v-else class="clone-video-preview-dialog__empty">{{ t('autoUi.k_7422247d9267') }}</div>
-          </div>
-          <div class="clone-video-preview-dialog__meta">
-            <div class="clone-video-preview-dialog__meta-copy">
-              <span>{{ t('autoUi.k_2b43bab7b2d0') }}{{ videoPreviewItem.selectedModelIdentityName || t('autoUi.k_9e035909e964') }}</span>
-              <span>{{ t('autoUi.k_32d77333df9b') }}{{ formatTime(videoPreviewItem.updatedAt) }}</span>
+    <!-- ============ Workbench ============ -->
+    <section class="ctl-bench">
+      <div class="ctl-toolbar">
+        <nav class="ctl-tabs" aria-label="groups">
+          <div v-for="group in visibleGroupItems" :key="group.id" class="ctl-tab clone-group-menu" :class="{ 'is-active': activeGroupId === group.id }">
+            <button type="button" class="ctl-tab__main" @click="activeGroupId = group.id as any">
+              <span>{{ group.name }}</span><em>{{ group.taskCount }}</em>
+            </button>
+            <button v-if="!group.system && (cloneGroupRenameReady || cloneGroupRemoveReady)" type="button" class="ctl-tab__more" :aria-label="t('cloneTasks.actions.more')" @click.stop="toggleGroupMenu(group.id)">
+              <MoreHorizontal :size="14" />
+            </button>
+            <div v-if="groupMenuOpenId === group.id" class="vg-menu vg-menu--left ctl-menu">
+              <button v-if="cloneGroupRenameReady" type="button" @click.stop="openRenameGroupDialog(group as CloneTaskGroup); groupMenuOpenId = ''"><Pencil :size="14" />{{ t('cloneTasks.actions.rename') }}</button>
+              <button v-if="cloneGroupRemoveReady" type="button" class="danger" @click.stop="confirmRemoveGroup(group as CloneTaskGroup); groupMenuOpenId = ''"><Trash2 :size="14" />{{ t('cloneTasks.actions.delete') }}</button>
             </div>
           </div>
-          <div class="clone-rename-dialog__actions clone-video-preview-dialog__actions">
-            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo">{{ t('autoUi.k_1213bb4b8d53') }}</UiButton>
-            <UiButton variant="secondary" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="savePreviewVideo">
-              {{ videoPreviewSaving ? t('autoUi.k_d70d425039f2') : t('autoUi.k_1ec4db03f027') }}
-            </UiButton>
-            <UiButton
-              v-if="subtitleFeatureReady && !itemHasAppliedSubtitle(videoPreviewItem)"
-              class="clone-video-preview-dialog__subtitle-button"
-              variant="secondary"
-              :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving"
-              @click="openSingleSubtitleDialog(videoPreviewItem)"
-            > {{ t('autoUi.k_6e4c3e5ffee8') }} </UiButton>
-            <UiButton
-              v-if="itemHasAppliedSubtitle(videoPreviewItem)"
-              class="clone-video-preview-dialog__revert-button"
-              variant="secondary"
-              :disabled="videoPreviewSaving"
-              @click="revertSubtitleFromPreview"
-            >
-              {{ videoPreviewSaving ? t('autoUi.k_ecd814390988') : t('autoUi.k_5d2a55f19c91') }}
-            </UiButton>
-            <UiButton :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)">{{ t('autoUi.k_0d428278d9d4') }}</UiButton>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="subtitleDialogOpen" class="clone-error-dialog-mask" @click.self="closeSubtitleDialog">
-      <div class="clone-error-dialog clone-rename-dialog clone-subtitle-dialog" @click.stop>
-        <div class="clone-error-dialog__head clone-subtitle-dialog__head">
-          <div class="clone-error-dialog__copy clone-subtitle-dialog__copy">
-            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</strong>
-            <span>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_23be11c82f2f') }}</span>
-          </div>
-          <UiButton variant="ghost" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
-        </div>
-        <div class="clone-rename-dialog__body clone-subtitle-dialog__body">
-          <div class="clone-subtitle-dialog__summary">
-            <div class="clone-subtitle-dialog__summary-item">
-              <span>{{ t('autoUi.k_11a2736ed3c4') }}</span>
-              <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong>
-            </div>
-            <div class="clone-subtitle-dialog__summary-item">
-              <span>{{ t('autoUi.k_5d9ef99b61c5') }}</span>
-              <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong>
-            </div>
-          </div>
-          <div class="clone-subtitle-dialog__tabs">
-            <button :class="{ 'is-active': subtitleDialogTab === 'title' }" type="button" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
-            <button :class="{ 'is-active': subtitleDialogTab === 'template' }" type="button" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
-            <button :class="{ 'is-active': subtitleDialogTab === 'style' }" type="button" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
-          </div>
-          <section v-if="subtitleDialogTab === 'title'" class="clone-subtitle-dialog__section">
-            <div class="clone-subtitle-dialog__section-head">
-              <span class="clone-subtitle-dialog__kicker">Title Mode</span>
-              <strong>{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
-            </div>
-            <div class="clone-subtitle-dialog__mode-pills">
-              <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'"> {{ t('autoUi.k_73e18b3f4a29') }} </button>
-              <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'"> {{ t('autoUi.k_84ba3e6f5cfb') }} </button>
-            </div>
-            <label v-if="subtitleTitleStrategy === 'single_for_all'" class="clone-rename-dialog__field">
-              <span>{{ t('autoUi.k_7e33e07fd936') }}</span>
-              <input v-model.trim="subtitleTitleText" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
-            </label>
-            <label v-else class="clone-rename-dialog__field">
-              <span>{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
-              <textarea v-model.trim="subtitleTitlePoolText" class="clone-subtitle-dialog__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')"></textarea>
-            </label>
-            <div class="clone-subtitle-dialog__inline-tip">
-              {{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}
-            </div>
-          </section>
-          <section v-else-if="subtitleDialogTab === 'template'" class="clone-subtitle-dialog__section">
-            <div class="clone-subtitle-dialog__section-head">
-              <span class="clone-subtitle-dialog__kicker">Template</span>
-              <strong>{{ t('autoUi.k_f84c2e382440') }}</strong>
-            </div>
-            <div class="clone-subtitle-dialog__preset-grid">
+          <div v-if="hasOverflowGroups" class="ctl-tab clone-group-menu" :class="{ 'is-active': Boolean(activeOverflowGroup) }">
+            <button type="button" class="ctl-tab__main" @click.stop="toggleGroupMenu('__overflow__')">
+              <span>{{ activeOverflowGroup ? activeOverflowGroup.name : t('cloneTasks.groups.more') }}</span>
+              <em>{{ activeOverflowGroup ? activeOverflowGroup.taskCount : overflowGroupItems.length }}</em>
+              <ChevronDown :size="13" />
+            </button>
+            <div v-if="groupMenuOpenId === '__overflow__'" class="vg-menu vg-menu--left ctl-menu ctl-menu--groups">
               <button
-                v-for="preset in subtitlePresets"
-                :key="preset.id"
-                class="clone-subtitle-dialog__preset"
-                :class="{ 'is-active': subtitleSelectedPreset === preset.id }"
+                v-for="group in overflowGroupItems"
+                :key="`overflow-${group.id}`"
                 type="button"
-                @click="applySubtitlePreset(preset.id)"
+                :class="{ 'is-checked': activeGroupId === group.id }"
+                @click.stop="activeGroupId = group.id as any; groupMenuOpenId = ''"
               >
-                <strong>{{ preset.name }}</strong>
-                <span>{{ preset.summary }}</span>
+                <FolderOpen :size="14" /><span class="ctl-menu__label">{{ group.name }}</span><em>{{ group.taskCount }}</em>
               </button>
             </div>
-            <div class="clone-subtitle-dialog__preset-note">{{ t('autoUi.k_6bf2c4d17ccd') }}</div>
-          </section>
-          <section v-else class="clone-subtitle-dialog__section">
-            <div class="clone-subtitle-dialog__section-head">
-              <span class="clone-subtitle-dialog__kicker">Style</span>
-              <strong>{{ t('autoUi.k_856e405fcf39') }}</strong>
-            </div>
-            <div class="clone-subtitle-dialog__style-panel clone-subtitle-dialog__style-panel--full">
-              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_b50d4d8352f5') }}</span>
-                  <input v-model.trim="subtitleCaptionStyle.fontName" type="text" :placeholder="t('autoUi.k_9567b9609e02')" />
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_576ccdb1f1c7') }}</span>
-                  <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_a48b15a6de71') }}</span>
-                  <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_3ca120ca0195') }}</span>
-                  <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
-                </label>
-              </div>
-              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--dual">
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_07f568dada4d') }}</span>
-                  <div class="clone-subtitle-dialog__color-field">
-                    <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
-                    <input v-model="subtitleCaptionStyle.fontColor" type="color" />
-                  </div>
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_eaa98f95ba53') }}</span>
-                  <div class="clone-subtitle-dialog__color-field">
-                    <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
-                    <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
-                  </div>
-                </label>
-              </div>
-              <div class="clone-subtitle-dialog__form-grid clone-subtitle-dialog__form-grid--compact">
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_88c34452cc46') }}</span>
-                  <select v-model="subtitleCaptionStyle.position" class="clone-group-select">
-                    <option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option>
-                    <option value="center">{{ t('autoUi.k_910253ea0c16') }}</option>
-                    <option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option>
-                  </select>
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_6ff4e8934c7f') }}</span>
-                  <select v-model="subtitleCaptionStyle.textAlign" class="clone-group-select">
-                    <option value="left">{{ t('autoUi.k_413f8db65f69') }}</option>
-                    <option value="center">{{ t('autoUi.k_5009324782b9') }}</option>
-                    <option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option>
-                  </select>
-                </label>
-                <label class="clone-rename-dialog__field">
-                  <span>{{ t('autoUi.k_fa0119023442') }}</span>
-                  <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
-                </label>
-              </div>
-            </div>
-          </section>
-          <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
-            <UiButton class="clone-subtitle-dialog__submit" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
-              {{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_9ca6795dd07f') }}
-            </UiButton>
+          </div>
+          <button v-if="cloneGroupCreateReady" type="button" class="ctl-tab-add" :title="t('cloneTasks.groups.create')" @click="openCreateGroupDialog">
+            <Plus :size="14" /><span>{{ t('cloneTasks.groups.create') }}</span>
+          </button>
+        </nav>
+
+        <div class="ctl-toolbar__tools">
+          <label class="vg-search ctl-search">
+            <Search :size="15" />
+            <input v-model="query" class="vg-input vg-input--sm" :placeholder="t('cloneUi.search')" />
+            <button v-if="query" type="button" class="ctl-search__clear" :aria-label="t('cloneUi.clearFilter')" @click="query = ''"><X :size="12" /></button>
+          </label>
+          <button class="vg-btn vg-btn--sm" type="button" @click="toggleSortOrder">
+            <ArrowDownWideNarrow v-if="sortOrder === 'created_desc'" :size="14" /><ArrowUpNarrowWide v-else :size="14" />
+            {{ sortOrder === 'created_desc' ? t('cloneTasks.sort.newest') : t('cloneTasks.sort.oldest') }}
+          </button>
+          <div class="ctl-viewtoggle" role="group">
+            <button type="button" :class="{ active: viewMode === 'list' }" :title="t('cloneUi.listView')" :aria-label="t('cloneUi.listView')" @click="viewMode = 'list'"><List :size="15" /></button>
+            <button type="button" data-view="grid" :class="{ active: viewMode === 'grid' }" :title="t('cloneUi.gridView')" :aria-label="t('cloneUi.gridView')" @click="viewMode = 'grid'"><LayoutGrid :size="15" /></button>
           </div>
         </div>
       </div>
-    </div>
 
-    <div v-if="groupDialogOpen" class="clone-error-dialog-mask" @click.self="closeGroupDialog">
-      <div class="clone-error-dialog clone-rename-dialog" @click.stop>
-        <div class="clone-error-dialog__head">
-          <div class="clone-error-dialog__copy">
-            <strong>
-              {{
-                groupDialogMode === 'create'
-                  ? t('autoUi.k_fa4ff6b10e32')
-                  : groupDialogMode === 'rename'
-                    ? t('autoUi.k_8f62b6b255c3')
-                    : groupDialogMode === 'move_batch'
-                      ? t('autoUi.k_b6c2525a1fb6')
-                      : t('autoUi.k_fe238ad8bfec')
-              }}
-            </strong>
-            <span>
-              {{
-                groupDialogMode === 'move_batch'
-                  ? t('autoUi.k_dcf7ccbc9a09', { p0: movingProjectIds.length })
-                  : groupDialogMode === 'move_single'
-                    ? t('autoUi.k_5cbed79340b3')
-                    : t('autoUi.k_905f3ead8016')
-              }}
+      <div v-if="activeStatusCard || query" class="ctl-filterbar">
+        <span>{{ t('cloneUi.filtering', { name: [activeStatusCard?.label, query ? `“${query}”` : ''].filter(Boolean).join(' · ') }) }}</span>
+        <button type="button" class="vg-link" @click="clearFilters">{{ t('cloneUi.clearFilter') }}</button>
+      </div>
+
+      <!-- ---------- List ---------- -->
+      <div v-if="filteredRows.length && viewMode === 'list'" class="ctl-table">
+        <div class="ctl-table__head ctl-grid-cols">
+          <label class="ctl-check" :title="t('cloneUi.selectPage')">
+            <input type="checkbox" :checked="allCurrentPageSelected" @change="toggleSelectCurrentPage" /><span />
+          </label>
+          <span>{{ t('cloneTasks.columns.task') }}</span>
+          <span>{{ t('cloneTasks.columns.stage') }}</span>
+          <span>{{ t('cloneTasks.columns.progress') }}</span>
+          <span>{{ t('cloneTasks.columns.materials') }}</span>
+          <span>{{ t('cloneTasks.columns.updated') }}</span>
+          <span class="ctl-right">{{ t('cloneTasks.columns.actions') }}</span>
+        </div>
+
+        <article
+          v-for="item in pagedRows"
+          :key="item.id"
+          :data-project-id="item.id"
+          class="ctl-row ctl-grid-cols"
+          :class="{ 'is-selected': selectedSet.has(item.id), 'is-failed': statusTone(item.status) === 'is-danger' }"
+          @dblclick="onRowDblClick($event, item.id)"
+        >
+          <label class="ctl-check">
+            <input type="checkbox" :checked="selectedSet.has(item.id)" @change="toggleSelected(item.id)" /><span />
+          </label>
+
+          <div class="ctl-task">
+            <button type="button" class="ctl-thumb" :title="t('cloneUi.play')" @click="openVideoPreview(item)">
+              <img v-if="coverKind(item) === 'image'" :src="itemCoverSrc(item)" alt="" loading="lazy" decoding="async" @error="markCoverBroken(item.id)" />
+              <video v-else-if="coverKind(item) === 'video'" :src="`${itemCoverSrc(item)}#t=0.5`" muted preload="metadata" @error="markCoverBroken(item.id)" />
+              <Video v-else :size="18" />
+              <span v-if="itemPlayableVideoPath(item)" class="ctl-thumb__play"><Play :size="14" /></span>
+            </button>
+            <div class="ctl-task__copy">
+              <div class="ctl-task__title">
+                <button type="button" class="ctl-task__name" :title="item.title" @click="openTask(item.id)">{{ item.title }}</button>
+                <button type="button" class="ctl-task__rename" :aria-label="t('cloneTasks.actions.rename')" @click="openRenameDialog(item)"><Pencil :size="13" /></button>
+              </div>
+              <div class="ctl-task__meta">
+                <span class="ctl-mode" :class="item.runMode === 'auto' ? 'is-auto' : 'is-manual'">
+                  <Sparkles v-if="item.runMode === 'auto'" :size="11" /><Hand v-else :size="11" />{{ humanRunMode(item.runMode) }}
+                </span>
+                <span v-if="item.selectedModelIdentityName" class="ctl-task__chip">{{ item.selectedModelIdentityName }}</span>
+                <span class="ctl-task__ref" :title="item.referenceVideoName || item.referenceVideoPath"><FileVideo :size="12" />{{ shortPath(item.referenceVideoName || item.referenceVideoPath) }}</span>
+              </div>
+              <div v-if="item.lastError" class="ctl-task__error">
+                <AlertTriangle :size="12" /><span>{{ compactError(item.lastError, 64) }}</span>
+                <button type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctl-stage">
+            <span class="ctl-status" :class="`tone-${statusDotTone(item.status)}`"><i />{{ humanStatus(item.status) }}</span>
+            <div v-if="cloneGroupAssignReady" class="clone-row-move-menu ctl-groupmove">
+              <button type="button" class="ctl-groupchip" @click.stop="toggleRowMoveMenu(item.id)">
+                <FolderOpen :size="12" /><span>{{ item.groupName || t('cloneTasks.groups.ungrouped') }}</span><ChevronDown :size="12" />
+              </button>
+              <div v-if="rowMoveMenuOpenId === item.id" class="vg-menu vg-menu--left ctl-menu ctl-menu--groups">
+                <button type="button" :class="{ 'is-checked': !item.groupId }" :disabled="assigningProjectId === item.id" @click.stop="assignProjectToGroup(item.id)">
+                  <FolderOpen :size="14" /><span class="ctl-menu__label">{{ t('cloneTasks.groups.ungrouped') }}</span>
+                </button>
+                <button
+                  v-for="group in groups.filter((entry) => entry.id !== '__ungrouped__')"
+                  :key="`${item.id}-${group.id}`"
+                  type="button"
+                  :class="{ 'is-checked': item.groupId === group.id }"
+                  :disabled="assigningProjectId === item.id"
+                  @click.stop="assignProjectToGroup(item.id, group.id)"
+                >
+                  <FolderOpen :size="14" /><span class="ctl-menu__label">{{ group.name }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctl-progress">
+            <div class="ctl-progress__top">
+              <strong>{{ item.progressPercent }}%</strong>
+              <span>{{ t('cloneUi.stepOf', { n: Math.min(6, stepIndex(item.currentStep) + 1) }) }} · {{ humanStep(item.currentStep) }}</span>
+            </div>
+            <div class="ctl-steps" :class="`tone-${statusDotTone(item.status)}`">
+              <i
+                v-for="index in 6"
+                :key="`${item.id}-${index}`"
+                :class="{ 'is-done': index - 1 < stepIndex(item.currentStep) || item.progressPercent >= 100, 'is-current': index - 1 === stepIndex(item.currentStep) && item.progressPercent < 100 }"
+              />
+            </div>
+          </div>
+
+          <div class="ctl-assets">
+            <span class="ctl-assets__counts"><ImageIcon :size="12" />{{ item.productReferenceImageCount || 0 }}<Video :size="12" />{{ item.generatedVideoCount || 0 }}</span>
+            <span class="ctl-assets__output" :class="{ 'is-ready': item.finalOutputPath }">
+              <CheckCircle2 v-if="item.finalOutputPath" :size="12" /><Clock3 v-else :size="12" />
+              {{ item.finalOutputPath ? t('cloneUi.outputReady') : t('cloneUi.outputPending') }}
             </span>
           </div>
-          <UiButton variant="ghost" :disabled="savingGroup" @click="closeGroupDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</UiButton>
-        </div>
-        <div class="clone-rename-dialog__body">
-          <label v-if="groupDialogMode === 'create' || groupDialogMode === 'rename'" class="clone-rename-dialog__field">
-            <span>{{ t('autoUi.k_65731c12ae52') }}</span>
-            <input v-model.trim="groupDraft" type="text" maxlength="40" :placeholder="t('autoUi.k_5b44baabf1b4')" @keydown.enter.prevent="submitGroupDialog" />
-          </label>
-          <label v-else class="clone-rename-dialog__field">
-            <span>{{ t('autoUi.k_b8fdfa5a79c0') }}</span>
-            <select v-model="moveTargetGroupId" class="clone-group-select">
-              <option value="__ungrouped__">{{ t('autoUi.k_8de957a7b7a2') }}</option>
-              <option v-for="group in groups.filter((item) => item.id !== '__ungrouped__')" :key="group.id" :value="group.id">
-                {{ group.name }}
-              </option>
-            </select>
-          </label>
-          <div class="clone-rename-dialog__actions">
-            <UiButton variant="secondary" :disabled="savingGroup" @click="closeGroupDialog">{{ t('autoUi.k_4d0b4688c787') }}</UiButton>
-            <UiButton
-              :disabled="savingGroup || ((groupDialogMode === 'create' || groupDialogMode === 'rename') ? !groupDraft.trim() : false)"
-              @click="submitGroupDialog"
-            >
-              {{ savingGroup ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}
-            </UiButton>
+
+          <div class="ctl-updated" :title="formatTime(item.updatedAt)">
+            <strong>{{ formatClockOnly(item.updatedAt) }}</strong>
+            <span>{{ formatDateOnly(item.updatedAt) }}</span>
+          </div>
+
+          <div class="ctl-actions">
+            <button type="button" class="vg-btn vg-btn--sm ctl-open" @click="openTask(item.id)">{{ t('cloneUi.open') }}<ChevronRight :size="14" /></button>
+            <button type="button" class="vg-icon-btn" :title="t('cloneUi.play')" :disabled="!itemPlayableVideoPath(item)" @click="openVideoPreview(item)"><Play :size="15" /></button>
+            <div class="clone-row-action-menu ctl-more">
+              <button type="button" class="vg-icon-btn" :aria-label="t('cloneTasks.actions.more')" @click.stop="toggleRowActionMenu(item.id)"><MoreHorizontal :size="16" /></button>
+              <div v-if="rowActionMenuOpenId === item.id" class="vg-menu ctl-menu">
+                <button type="button" @click.stop="openRenameDialog(item); rowActionMenuOpenId = ''"><Pencil :size="14" />{{ t('cloneTasks.actions.rename') }}</button>
+                <button v-if="cloneGroupAssignReady" type="button" @click.stop="openMoveSingleDialog(item); rowActionMenuOpenId = ''"><FolderInput :size="14" />{{ t('cloneUi.move') }}</button>
+                <button v-if="subtitleFeatureReady && item.finalOutputPath && !itemHasAppliedSubtitle(item)" type="button" @click.stop="openSingleSubtitleDialog(item); rowActionMenuOpenId = ''"><Captions :size="14" />{{ t('cloneUi.subtitle') }}</button>
+                <div class="ctl-menu__divider" />
+                <button type="button" class="danger" :disabled="removingId === item.id" @click.stop="confirmRemoveTask(item); rowActionMenuOpenId = ''"><Trash2 :size="14" />{{ t('cloneTasks.actions.delete') }}</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- ---------- Grid ---------- -->
+      <div v-else-if="filteredRows.length && viewMode === 'grid'" class="ctl-cards">
+        <article
+          v-for="item in pagedRows"
+          :key="item.id"
+          :data-project-id="item.id"
+          class="ctl-card"
+          :class="{ 'is-selected': selectedSet.has(item.id) }"
+          @dblclick="onRowDblClick($event, item.id)"
+        >
+          <div class="ctl-card__media">
+            <img v-if="coverKind(item) === 'image'" :src="itemCoverSrc(item)" alt="" loading="lazy" decoding="async" @error="markCoverBroken(item.id)" />
+            <video v-else-if="coverKind(item) === 'video'" :src="`${itemCoverSrc(item)}#t=0.5`" muted preload="metadata" @error="markCoverBroken(item.id)" />
+            <Video v-else :size="26" />
+            <label class="ctl-check ctl-card__check"><input type="checkbox" :checked="selectedSet.has(item.id)" @change="toggleSelected(item.id)" /><span /></label>
+            <span class="ctl-status ctl-card__status" :class="`tone-${statusDotTone(item.status)}`"><i />{{ humanStatus(item.status) }}</span>
+            <button v-if="itemPlayableVideoPath(item)" type="button" class="ctl-card__play" :title="t('cloneUi.play')" @click="openVideoPreview(item)"><Play :size="18" /></button>
+          </div>
+          <div class="ctl-card__body">
+            <div class="ctl-task__title">
+              <button type="button" class="ctl-task__name" :title="item.title" @click="openTask(item.id)">{{ item.title }}</button>
+            </div>
+            <div class="ctl-task__meta">
+              <span class="ctl-mode" :class="item.runMode === 'auto' ? 'is-auto' : 'is-manual'">{{ humanRunMode(item.runMode) }}</span>
+              <span v-if="item.selectedModelIdentityName" class="ctl-task__chip">{{ item.selectedModelIdentityName }}</span>
+            </div>
+            <div class="ctl-progress">
+              <div class="ctl-progress__top"><strong>{{ item.progressPercent }}%</strong><span>{{ humanStep(item.currentStep) }}</span></div>
+              <div class="ctl-steps" :class="`tone-${statusDotTone(item.status)}`">
+                <i v-for="index in 6" :key="`${item.id}-g-${index}`" :class="{ 'is-done': index - 1 < stepIndex(item.currentStep) || item.progressPercent >= 100, 'is-current': index - 1 === stepIndex(item.currentStep) && item.progressPercent < 100 }" />
+              </div>
+            </div>
+            <div v-if="item.lastError" class="ctl-task__error">
+              <AlertTriangle :size="12" /><span>{{ compactError(item.lastError, 40) }}</span>
+              <button type="button" @click.stop="openErrorDialog(item)">{{ t('cloneTasks.actions.viewError') }}</button>
+            </div>
+          </div>
+          <footer class="ctl-card__foot">
+            <span class="ctl-card__time"><Clock3 :size="12" />{{ formatDateOnly(item.updatedAt) }} {{ formatClockOnly(item.updatedAt) }}</span>
+            <button type="button" class="vg-icon-btn vg-icon-btn--sm" :title="t('cloneTasks.actions.rename')" @click="openRenameDialog(item)"><Pencil :size="14" /></button>
+            <button type="button" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="t('cloneTasks.actions.delete')" :disabled="removingId === item.id" @click="confirmRemoveTask(item)"><Trash2 :size="14" /></button>
+            <button type="button" class="vg-btn vg-btn--sm" @click="openTask(item.id)">{{ t('cloneUi.open') }}</button>
+          </footer>
+        </article>
+      </div>
+
+      <!-- ---------- Empty ---------- -->
+      <div v-else class="ctl-empty">
+        <div class="ctl-empty__art"><LoaderCircle v-if="loading" :size="26" class="vg-spin" /><Wand2 v-else :size="26" /></div>
+        <template v-if="loading">
+          <strong>{{ t('cloneTasks.empty.loading') }}</strong><span>{{ t('cloneTasks.empty.wait') }}</span>
+        </template>
+        <template v-else-if="rows.length">
+          <strong>{{ t('cloneUi.noMatch') }}</strong><span>{{ t('cloneUi.noMatchDesc') }}</span>
+          <button type="button" class="vg-btn vg-btn--sm" @click="clearFilters(); activeGroupId = '__all__'">{{ t('cloneUi.clearFilter') }}</button>
+        </template>
+        <template v-else>
+          <strong>{{ t('cloneTasks.empty.title') }}</strong><span>{{ t('cloneTasks.empty.desc') }}</span>
+          <div class="ctl-empty__actions">
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="creating" @click="startTask('auto')"><Sparkles :size="16" />{{ t('cloneTasks.runMode.auto') }}</button>
+            <button type="button" class="vg-btn" :disabled="creating" @click="startTask('manual')"><Hand :size="16" />{{ t('cloneTasks.runMode.manual') }}</button>
+          </div>
+        </template>
+      </div>
+
+      <!-- ---------- Footer / pagination ---------- -->
+      <footer v-if="filteredRows.length" class="ctl-pager">
+        <span class="ctl-pager__summary">{{ t('cloneTasks.pagination.summary', { count: filteredRows.length, start: currentPageStart, end: currentPageEnd }) }}</span>
+        <div class="ctl-pager__controls">
+          <button type="button" class="ctl-pagebtn" :disabled="currentPage <= 1" @click="goToPrevPage"><ChevronLeft :size="15" /></button>
+          <button v-for="page in visiblePageNumbers" :key="page" type="button" class="ctl-pagebtn" :class="{ 'is-active': currentPage === page }" @click="goToPage(page)">{{ page }}</button>
+          <button type="button" class="ctl-pagebtn" :disabled="currentPage >= pageCount" @click="goToNextPage"><ChevronRight :size="15" /></button>
+          <div class="clone-list-page-size-wrap ctl-pagesize">
+            <button type="button" class="vg-btn vg-btn--sm" :aria-expanded="pageSizeMenuOpen" @click="togglePageSizeMenu">{{ t('cloneUi.perPage', { n: pageSize }) }}<ChevronDown :size="13" /></button>
+            <div v-if="pageSizeMenuOpen" class="vg-menu vg-menu--up ctl-menu">
+              <button v-for="option in pageSizeOptions" :key="option" type="button" :class="{ 'is-checked': pageSize === option }" @click="selectPageSize(option)">{{ t('cloneUi.perPage', { n: option }) }}</button>
+            </div>
           </div>
         </div>
+      </footer>
+    </section>
+
+    <!-- ============ Floating selection bar ============ -->
+    <transition name="ctl-bar">
+      <div v-if="selectedIds.length" class="ctl-selbar">
+        <span class="ctl-selbar__count"><b>{{ selectedIds.length }}</b>{{ t('cloneTasks.selectedCount', { count: selectedIds.length }) }}</span>
+        <span class="ctl-selbar__meta">{{ t('cloneTasks.selection.exportable') }} {{ exportableSelectedCount }} · {{ t('cloneTasks.selection.subtitleReady') }} {{ subtitleEligibleSelectedCount }}</span>
+        <span class="ctl-selbar__sep" />
+        <button type="button" :disabled="exporting || !exportableSelectedCount" @click="exportSelectedFinalVideos"><Download :size="14" />{{ exporting ? t('cloneTasks.actions.exporting') : t('cloneUi.exportFinals') }}</button>
+        <button v-if="cloneGroupAssignReady" type="button" @click="openMoveBatchDialog"><FolderInput :size="14" />{{ t('cloneUi.move') }}</button>
+        <button v-if="subtitleFeatureReady" type="button" :disabled="!subtitleEligibleSelectedCount" @click="openBatchSubtitleDialog"><Captions :size="14" />{{ t('cloneUi.subtitle') }}</button>
+        <button type="button" class="danger" :disabled="Boolean(removingId)" @click="confirmBatchRemoveTasks"><Trash2 :size="14" />{{ removingId ? t('cloneTasks.actions.deleting') : t('cloneUi.delete') }}</button>
+        <button type="button" class="ctl-selbar__close" :title="t('cloneUi.clearSelection')" @click="selectedIds = []"><X :size="15" /></button>
       </div>
+    </transition>
+    <transition name="vg-toast">
+      <div v-if="batchExportMessage && !selectedIds.length" class="vg-toast vg-toast--success ctl-toast">
+        <CheckCircle2 :size="16" /><span>{{ batchExportMessage }}</span>
+        <button type="button" class="vg-icon-btn vg-icon-btn--sm" @click="batchExportMessage = ''"><X :size="14" /></button>
+      </div>
+    </transition>
+
+    <!-- ============ Dialogs ============ -->
+    <div v-if="errorDialogOpen" class="vg-backdrop" @click.self="closeErrorDialog">
+      <section class="vg-dialog vg-dialog--wide" role="dialog" aria-modal="true" @click.stop>
+        <header class="vg-dialog__head">
+          <div class="vg-dialog__title"><span class="vg-dialog__title-icon ctl-icon-danger"><AlertTriangle :size="20" /></span><div><h2>{{ t('autoUi.k_6bd471fe24ae') }}</h2><p>{{ errorDialogTitle }}</p></div></div>
+          <button type="button" class="vg-icon-btn" :aria-label="t('cloneUi.close')" @click="closeErrorDialog"><X :size="18" /></button>
+        </header>
+        <div class="vg-dialog__body"><pre class="ctl-error-text">{{ errorDialogMessage }}</pre></div>
+      </section>
+    </div>
+
+    <div v-if="renameDialogOpen" class="vg-backdrop" @click.self="closeRenameDialog">
+      <form class="vg-dialog ctl-dialog-sm" role="dialog" aria-modal="true" @click.stop @submit.prevent="submitRename">
+        <header class="vg-dialog__head">
+          <div class="vg-dialog__title"><span class="vg-dialog__title-icon"><Pencil :size="20" /></span><div><h2>{{ t('autoUi.k_29f5ec945b98') }}</h2><p>{{ t('autoUi.k_cf099d4c47c6') }}</p></div></div>
+          <button type="button" class="vg-icon-btn" :disabled="savingRename" @click="closeRenameDialog"><X :size="18" /></button>
+        </header>
+        <div class="vg-dialog__body">
+          <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_2e3046989973') }}</span><input v-model.trim="renameDraft" class="vg-input" type="text" maxlength="80" autofocus :placeholder="t('autoUi.k_5169b9ecce30')" /></label>
+        </div>
+        <footer class="vg-dialog__foot"><div class="vg-dialog__foot-actions">
+          <button type="button" class="vg-btn" :disabled="savingRename" @click="closeRenameDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
+          <button type="submit" class="vg-btn vg-btn--primary" :disabled="savingRename || !renameDraft.trim()">{{ savingRename ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}</button>
+        </div></footer>
+      </form>
+    </div>
+
+    <div v-if="videoPreviewDialogOpen && videoPreviewItem" class="vg-backdrop" @click.self="closeVideoPreview">
+      <section class="vg-dialog vg-dialog--wide ctl-preview" role="dialog" aria-modal="true" @click.stop>
+        <header class="vg-dialog__head">
+          <div class="vg-dialog__title"><span class="vg-dialog__title-icon"><Play :size="20" /></span><div><h2>{{ videoPreviewItem.title || t('autoUi.k_891a69798937') }}</h2><p>{{ safeText(shortPath(itemPlayableVideoPath(videoPreviewItem)), t('autoUi.k_b31b6e8ace7e')) }}</p></div></div>
+          <button type="button" class="vg-icon-btn" :disabled="videoPreviewSaving" @click="closeVideoPreview"><X :size="18" /></button>
+        </header>
+        <div class="ctl-preview__body">
+          <div class="ctl-preview__player">
+            <video v-if="itemPlayableVideoPath(videoPreviewItem)" :src="toFileSrc(itemPlayableVideoPath(videoPreviewItem), videoPreviewItem.updatedAt)" controls preload="metadata" autoplay />
+            <div v-else class="ctl-preview__empty"><Video :size="28" />{{ t('autoUi.k_7422247d9267') }}</div>
+          </div>
+          <aside class="ctl-preview__side">
+            <dl class="ctl-kv">
+              <div><dt>{{ t('cloneTasks.columns.stage') }}</dt><dd><span class="ctl-status" :class="`tone-${statusDotTone(videoPreviewItem.status)}`"><i />{{ humanStatus(videoPreviewItem.status) }}</span></dd></div>
+              <div><dt>{{ t('autoUi.k_2b43bab7b2d0').replace(/[:：]\s*$/, '') }}</dt><dd>{{ videoPreviewItem.selectedModelIdentityName || t('autoUi.k_9e035909e964') }}</dd></div>
+              <div><dt>{{ t('cloneUi.updated') }}</dt><dd>{{ formatTime(videoPreviewItem.updatedAt) }}</dd></div>
+            </dl>
+            <div class="ctl-preview__actions">
+              <button type="button" class="vg-btn vg-btn--primary" :disabled="!videoPreviewItem.id" @click="openTask(videoPreviewItem.id)"><ExternalLink :size="15" />{{ t('autoUi.k_0d428278d9d4') }}</button>
+              <button type="button" class="vg-btn" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="savePreviewVideo"><Download :size="15" />{{ videoPreviewSaving ? t('autoUi.k_d70d425039f2') : t('autoUi.k_1ec4db03f027') }}</button>
+              <button type="button" class="vg-btn" :disabled="!itemPlayableVideoPath(videoPreviewItem)" @click="revealPreviewVideo"><FolderOpen :size="15" />{{ t('autoUi.k_1213bb4b8d53') }}</button>
+              <button v-if="subtitleFeatureReady && !itemHasAppliedSubtitle(videoPreviewItem)" type="button" class="vg-btn" :disabled="!itemPlayableVideoPath(videoPreviewItem) || videoPreviewSaving" @click="openSingleSubtitleDialog(videoPreviewItem)"><Captions :size="15" />{{ t('autoUi.k_6e4c3e5ffee8') }}</button>
+              <button v-if="itemHasAppliedSubtitle(videoPreviewItem)" type="button" class="vg-btn" :disabled="videoPreviewSaving" @click="revertSubtitleFromPreview">{{ videoPreviewSaving ? t('autoUi.k_ecd814390988') : t('autoUi.k_5d2a55f19c91') }}</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="subtitleDialogOpen" class="vg-backdrop" @click.self="closeSubtitleDialog">
+      <section class="vg-dialog vg-dialog--wide ctl-subtitle" role="dialog" aria-modal="true" @click.stop>
+        <header class="vg-dialog__head">
+          <div class="vg-dialog__title"><span class="vg-dialog__title-icon"><Captions :size="20" /></span><div><h2>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</h2><p>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_23be11c82f2f') }}</p></div></div>
+          <button type="button" class="vg-icon-btn" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog"><X :size="18" /></button>
+        </header>
+        <div class="vg-dialog__body">
+          <div class="ctl-subtitle__summary">
+            <div><span>{{ t('autoUi.k_11a2736ed3c4') }}</span><strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong></div>
+            <div><span>{{ t('autoUi.k_5d9ef99b61c5') }}</span><strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong></div>
+          </div>
+          <div class="vg-tabs">
+            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
+            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
+            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
+          </div>
+
+          <section v-if="subtitleDialogTab === 'title'" class="ctl-subtitle__section">
+            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
+            <div class="vg-seg vg-seg--sm">
+              <button type="button" class="vg-seg__btn" :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" @click="subtitleTitleStrategy = 'single_for_all'">{{ t('autoUi.k_73e18b3f4a29') }}</button>
+              <button type="button" class="vg-seg__btn" :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" @click="subtitleTitleStrategy = 'random_pool'">{{ t('autoUi.k_84ba3e6f5cfb') }}</button>
+            </div>
+            <label v-if="subtitleTitleStrategy === 'single_for_all'" class="vg-field">
+              <span class="vg-field__label">{{ t('autoUi.k_7e33e07fd936') }}</span>
+              <input v-model.trim="subtitleTitleText" class="vg-input" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
+            </label>
+            <label v-else class="vg-field">
+              <span class="vg-field__label">{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
+              <textarea v-model.trim="subtitleTitlePoolText" class="vg-textarea ctl-subtitle__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')" />
+            </label>
+            <p class="vg-field__hint">{{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}</p>
+          </section>
+
+          <section v-else-if="subtitleDialogTab === 'template'" class="ctl-subtitle__section">
+            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_f84c2e382440') }}</strong>
+            <div class="ctl-subtitle__presets">
+              <button v-for="preset in subtitlePresets" :key="preset.id" type="button" class="ctl-preset" :class="{ 'is-active': subtitleSelectedPreset === preset.id }" @click="applySubtitlePreset(preset.id)">
+                <strong>{{ preset.name }}</strong><span>{{ preset.summary }}</span>
+              </button>
+            </div>
+            <p class="vg-field__hint">{{ t('autoUi.k_6bf2c4d17ccd') }}</p>
+          </section>
+
+          <section v-else class="ctl-subtitle__section">
+            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_856e405fcf39') }}</strong>
+            <div class="vg-form-grid ctl-subtitle__grid4">
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_b50d4d8352f5') }}</span><input v-model.trim="subtitleCaptionStyle.fontName" class="vg-input" type="text" :placeholder="t('autoUi.k_9567b9609e02')" /></label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_576ccdb1f1c7') }}</span><input v-model.number="subtitleCaptionStyle.fontSize" class="vg-input" type="number" min="18" max="120" /></label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_a48b15a6de71') }}</span><input v-model.number="subtitleCaptionStyle.strokeWidth" class="vg-input" type="number" min="0" max="16" /></label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_3ca120ca0195') }}</span><input v-model.number="subtitleCaptionStyle.maxLines" class="vg-input" type="number" min="1" max="6" /></label>
+            </div>
+            <div class="vg-form-grid">
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_07f568dada4d') }}</span><span class="ctl-color"><input v-model.trim="subtitleCaptionStyle.fontColor" class="vg-input" type="text" /><input v-model="subtitleCaptionStyle.fontColor" type="color" /></span></label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_eaa98f95ba53') }}</span><span class="ctl-color"><input v-model.trim="subtitleCaptionStyle.strokeColor" class="vg-input" type="text" /><input v-model="subtitleCaptionStyle.strokeColor" type="color" /></span></label>
+            </div>
+            <div class="vg-form-grid vg-form-grid--3">
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_88c34452cc46') }}</span>
+                <select v-model="subtitleCaptionStyle.position" class="vg-input vg-select"><option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option><option value="center">{{ t('autoUi.k_910253ea0c16') }}</option><option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option></select>
+              </label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_6ff4e8934c7f') }}</span>
+                <select v-model="subtitleCaptionStyle.textAlign" class="vg-input vg-select"><option value="left">{{ t('autoUi.k_413f8db65f69') }}</option><option value="center">{{ t('autoUi.k_5009324782b9') }}</option><option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option></select>
+              </label>
+              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_fa0119023442') }}</span><input v-model.number="subtitleCaptionStyle.bottomMargin" class="vg-input" type="number" min="48" max="600" /></label>
+            </div>
+          </section>
+        </div>
+        <footer class="vg-dialog__foot"><div class="vg-dialog__foot-actions">
+          <button type="button" class="vg-btn" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
+          <button type="button" class="vg-btn vg-btn--primary" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">{{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_9ca6795dd07f') }}</button>
+        </div></footer>
+      </section>
+    </div>
+
+    <div v-if="groupDialogOpen" class="vg-backdrop" @click.self="closeGroupDialog">
+      <form class="vg-dialog ctl-dialog-sm" role="dialog" aria-modal="true" @click.stop @submit.prevent="submitGroupDialog">
+        <header class="vg-dialog__head">
+          <div class="vg-dialog__title">
+            <span class="vg-dialog__title-icon"><FolderInput :size="20" /></span>
+            <div>
+              <h2>{{ groupDialogMode === 'create' ? t('autoUi.k_fa4ff6b10e32') : groupDialogMode === 'rename' ? t('autoUi.k_8f62b6b255c3') : groupDialogMode === 'move_batch' ? t('autoUi.k_b6c2525a1fb6') : t('autoUi.k_fe238ad8bfec') }}</h2>
+              <p>{{ groupDialogMode === 'move_batch' ? t('autoUi.k_dcf7ccbc9a09', { p0: movingProjectIds.length }) : groupDialogMode === 'move_single' ? t('autoUi.k_5cbed79340b3') : t('autoUi.k_905f3ead8016') }}</p>
+            </div>
+          </div>
+          <button type="button" class="vg-icon-btn" :disabled="savingGroup" @click="closeGroupDialog"><X :size="18" /></button>
+        </header>
+        <div class="vg-dialog__body">
+          <label v-if="groupDialogMode === 'create' || groupDialogMode === 'rename'" class="vg-field">
+            <span class="vg-field__label">{{ t('autoUi.k_65731c12ae52') }}</span>
+            <input v-model.trim="groupDraft" class="vg-input" type="text" maxlength="40" autofocus :placeholder="t('autoUi.k_5b44baabf1b4')" />
+          </label>
+          <label v-else class="vg-field">
+            <span class="vg-field__label">{{ t('autoUi.k_b8fdfa5a79c0') }}</span>
+            <select v-model="moveTargetGroupId" class="vg-input vg-select">
+              <option value="__ungrouped__">{{ t('autoUi.k_8de957a7b7a2') }}</option>
+              <option v-for="group in groups.filter((item) => item.id !== '__ungrouped__')" :key="group.id" :value="group.id">{{ group.name }}</option>
+            </select>
+          </label>
+        </div>
+        <footer class="vg-dialog__foot"><div class="vg-dialog__foot-actions">
+          <button type="button" class="vg-btn" :disabled="savingGroup" @click="closeGroupDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
+          <button type="submit" class="vg-btn vg-btn--primary" :disabled="savingGroup || ((groupDialogMode === 'create' || groupDialogMode === 'rename') ? !groupDraft.trim() : false)">{{ savingGroup ? t('autoUi.k_d70d425039f2') : t('autoUi.k_fadf24dbc5a9') }}</button>
+        </div></footer>
+      </form>
     </div>
 
     <RuntimeLogDialog
@@ -1931,1976 +1715,270 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.clone-task-list-page {
-  --clone-accent: var(--ds-primary, #22d3ee);
-  --clone-panel-border: rgba(98, 118, 168, 0.18);
-  --clone-panel-bg: linear-gradient(180deg, rgba(11, 18, 31, 0.985), rgba(7, 12, 22, 0.99));
-  --clone-card-bg: linear-gradient(180deg, rgba(17, 26, 42, 0.96), rgba(10, 17, 29, 0.96));
-  min-height: 100%;
-  padding: 6px 20px 18px;
-  color: #eef3ff;
-  background: transparent;
-}
-
-.clone-task-list-shell {
-  background: transparent;
-}
-
-.clone-task-list-main {
-  display: grid;
-  gap: 14px;
-  padding: 8px 2px 16px;
-}
-
-.clone-console-panel {
-  position: relative;
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-  border-radius: 28px;
-  border: 1px solid var(--clone-panel-border);
-  background:
-    radial-gradient(circle at 88% -12%, rgba(34, 211, 238, 0.22), transparent 32%),
-    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.16), transparent 28%),
-    var(--clone-panel-bg);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 24px 52px rgba(0, 0, 0, 0.28);
-}
-
-.clone-console-hero,
-.clone-console-hero__actions,
-.clone-console-overview,
-.clone-console-overview__tools,
-.clone-list-batch-bar,
-.clone-list-batch-bar__actions,
-.clone-console-table__groupbar,
-.clone-console-table__groupbar-tabs,
-.clone-console-table__groupbar-tools,
-.clone-console-table__head,
-.clone-console-row__statuswrap,
-.clone-console-row__meta,
-.clone-console-row__updated,
-.clone-console-row__actions,
-.clone-list-pagination,
-.clone-list-pagination__controls,
-.clone-side-card__row {
-  display: flex;
-}
-
-.clone-console-hero {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.clone-console-hero__copy {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.clone-console-hero__title-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.clone-console-hero__title-row h1 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 31px;
-  line-height: 1.02;
-  font-weight: 700;
-  letter-spacing: -0.05em;
-}
-
-.clone-console-hero__copy p {
-  margin: 0;
-  color: #96a9cc;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.clone-console-hero__spark {
-  color: #81e6ff;
-  font-size: 15px;
-  opacity: 0.9;
-}
-
-.clone-console-hero__actions {
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.clone-console-hero__button {
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 12px;
-  font-weight: 700;
-}
-
-.clone-console-hero__button--primary {
-  gap: 8px;
-}
-
-.clone-console-run-mode {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-}
-
-.clone-console-run-mode__option {
-  min-width: 92px;
-  height: 34px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #97abd1;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-console-run-mode__option.is-active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.05));
-  color: #f8fbff;
-}
-
-.clone-console-overview {
-  display: grid;
-  gap: 0;
-}
-
-.clone-console-overview__cards {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.clone-console-stat {
-  min-height: 78px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--clone-card-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-
-.clone-console-stat.is-active {
-  border-color: rgba(113, 92, 255, 0.58);
-  box-shadow: 0 0 0 1px rgba(113, 92, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transform: translateY(-1px);
-}
-
-.clone-console-stat.tone-all {
-  background: radial-gradient(circle at top right, rgba(34, 211, 238, 0.18), transparent 34%), var(--clone-card-bg);
-}
-
-.clone-console-stat.tone-running {
-  background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.22), transparent 34%), var(--clone-card-bg);
-}
-
-.clone-console-stat.tone-success {
-  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.18), transparent 34%), var(--clone-card-bg);
-}
-
-.clone-console-stat.tone-danger {
-  background: radial-gradient(circle at top right, rgba(248, 113, 113, 0.18), transparent 34%), var(--clone-card-bg);
-}
-
-.clone-console-stat.tone-muted {
-  background: radial-gradient(circle at top right, rgba(148, 163, 184, 0.16), transparent 34%), var(--clone-card-bg);
-}
-
-.clone-console-stat__icon {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #e8f6ff;
-}
-
-.clone-console-stat__copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  align-content: center;
-  justify-items: start;
-}
-
-.clone-console-stat__copy strong {
-  color: #f8fbff;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.1;
-  word-break: keep-all;
-  white-space: nowrap;
-}
-
-.clone-console-stat__copy span {
-  color: #91a5ca;
-  font-size: 10px;
-  line-height: 1;
-  word-break: keep-all;
-  white-space: nowrap;
-}
-
-.clone-console-stat b {
-  color: #ffffff;
-  font-size: 22px;
-  line-height: 1;
-  font-weight: 700;
-  justify-self: end;
-  text-align: right;
-}
-
-.clone-console-overview__tools {
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.clone-console-overview__tool,
-.clone-console-overview__icon,
-.clone-console-table__viewtool,
-.clone-console-row__rename,
-.clone-console-row__action,
-.clone-console-group__more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.035);
-  color: #c7d6f7;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-}
-
-.clone-console-overview__tool {
-  height: 38px;
-  gap: 8px;
-  padding: 0 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-console-overview__icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  padding: 0;
-  background: linear-gradient(180deg, rgba(19, 32, 49, 0.96), rgba(14, 24, 40, 0.96));
-  border-color: rgba(86, 105, 149, 0.24);
-  color: #dbe7ff;
-}
-
-.clone-console-overview__icon-bars,
-.clone-console-table__viewtool-bars,
-.clone-console-table__viewtool-grid,
-.clone-console-table__viewtool-dot {
-  position: relative;
-  display: inline-block;
-}
-
-.clone-console-overview__icon-bars,
-.clone-console-table__viewtool-bars {
-  width: 14px;
-  height: 12px;
-  background: linear-gradient(currentColor, currentColor) left 0 top 5px / 100% 2px no-repeat;
-}
-
-.clone-console-overview__icon-bars::before,
-.clone-console-overview__icon-bars::after,
-.clone-console-table__viewtool-bars::before,
-.clone-console-table__viewtool-bars::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.clone-console-overview__icon-bars::before,
-.clone-console-table__viewtool-bars::before {
-  top: 0;
-}
-
-.clone-console-overview__icon-bars::after,
-.clone-console-table__viewtool-bars::after {
-  top: 10px;
-}
-
-.clone-list-batch-bar {
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 58px;
-  padding: 10px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(96, 116, 168, 0.18);
-  background:
-    radial-gradient(circle at top right, rgba(73, 121, 255, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(12, 20, 34, 0.98), rgba(8, 14, 25, 0.96));
-  color: #d9e4ff;
-  font-size: 13px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.clone-list-batch-bar__summary {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.clone-list-batch-bar__summary strong {
-  color: #f5f8ff;
-  font-size: 16px;
-  line-height: 1.1;
-}
-
-.clone-list-batch-bar__stats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.clone-list-batch-bar__stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.clone-list-batch-bar__stat em {
-  color: #ffffff;
-  font-style: normal;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.clone-list-batch-bar__stat small {
-  color: #97a9cf;
-  font-size: 11px;
-}
-
-.clone-list-batch-bar__message {
-  color: #9fb0d8;
-  text-align: right;
-}
-
-.clone-list-batch-bar__actions {
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
-.clone-list-batch-action {
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.2);
-  background: rgba(10, 17, 28, 0.94);
-  color: #edf4ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-list-batch-action:hover {
-  border-color: rgba(130, 104, 255, 0.4);
-  background: rgba(21, 31, 50, 0.98);
-}
-
-.clone-list-batch-action--accent {
-  border-color: rgba(126, 102, 255, 0.4);
-  background: linear-gradient(135deg, rgba(85, 62, 212, 0.86), rgba(115, 93, 240, 0.86));
-  box-shadow: 0 10px 22px rgba(82, 64, 203, 0.18);
-}
-
-.clone-list-batch-action--accent:hover {
-  border-color: rgba(146, 126, 255, 0.48);
-  background: linear-gradient(135deg, rgba(92, 68, 226, 0.92), rgba(124, 101, 247, 0.92));
-}
-
-.clone-list-batch-action--danger {
-  border-color: rgba(255, 120, 120, 0.32);
-  background: rgba(61, 17, 24, 0.92);
-  color: #ffd7dc;
-}
-
-.clone-list-batch-action--danger:hover {
-  border-color: rgba(255, 144, 144, 0.46);
-  background: rgba(84, 21, 31, 0.96);
-}
-
-.clone-console-table {
-  overflow: visible;
-  border-radius: 28px;
-  border: 1px solid var(--clone-panel-border);
-  background: linear-gradient(180deg, rgba(11, 19, 32, 0.98), rgba(7, 12, 21, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 20px 44px rgba(0, 0, 0, 0.22);
-}
-
-.clone-console-table__groupbar {
-  align-items: center;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(57, 73, 111, 0.24);
-  min-width: 0;
-  flex-wrap: nowrap;
-  position: relative;
-  z-index: 3;
-  overflow: visible;
-}
-
-.clone-console-table__groupbar-tabs {
-  align-items: center;
-  gap: 8px;
-  flex: 1 1 0;
-  min-width: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 6px;
-  margin-bottom: -6px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.clone-console-table__groupbar-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.clone-console-group {
-  position: relative;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 38px;
-  padding-right: 0;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.clone-console-group.is-active {
-  background: linear-gradient(180deg, rgba(24, 36, 58, 0.96), rgba(16, 25, 43, 0.96));
-  border-color: rgba(94, 116, 164, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.clone-console-group:hover {
-  background: rgba(255, 255, 255, 0.028);
-  border-color: rgba(148, 163, 184, 0.08);
-}
-
-.clone-console-group__main {
-  flex: 0 0 auto;
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 0;
-  background: transparent;
-  color: #97abd1;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.clone-console-group.is-active .clone-console-group__main {
-  color: #f8fbff;
-}
-
-.clone-console-group__main span {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.clone-console-group__main em {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #8fa5cf;
-  font-style: normal;
-  font-size: 10px;
-  line-height: 1;
-}
-
-.clone-console-group.is-active .clone-console-group__main em {
-  background: rgba(115, 132, 255, 0.18);
-  color: #dfe8ff;
-}
-
-.clone-console-group__more {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 9px;
-  padding: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, background 160ms ease;
-}
-
-.clone-console-group:hover .clone-console-group__more,
-.clone-console-group.is-active .clone-console-group__more,
-.clone-group-menu__dropdown + .clone-console-group__more,
-.clone-group-menu:focus-within .clone-console-group__more {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.clone-console-group__create {
-  flex: 0 0 auto;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: #dce7ff;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.clone-console-group--overflow .clone-group-menu__dropdown {
-  min-width: 180px;
-  max-height: min(320px, calc(100vh - 220px));
-  overflow-y: auto;
-}
-
-.clone-console-group--overflow .clone-console-group__main {
-  color: #b2c4e8;
-}
-
-.clone-console-group--overflow {
-  flex: 0 0 auto;
-}
-
-.clone-group-menu__item.is-active {
-  background: rgba(109, 93, 255, 0.16);
-  color: #f8fbff;
-}
-
-.clone-group-menu__item em {
-  margin-left: auto;
-  color: #8ea3ca;
-  font-style: normal;
-  font-size: 11px;
-}
-
-.clone-console-table__groupbar-tools {
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  min-width: fit-content;
-  padding-left: 12px;
-  border-left: 1px solid rgba(57, 73, 111, 0.2);
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-}
-
-.clone-console-table__viewtool {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  padding: 0;
-  background: linear-gradient(180deg, rgba(20, 31, 48, 0.94), rgba(14, 24, 39, 0.94));
-  border-color: rgba(88, 105, 145, 0.22);
-  color: #9fb3db;
-}
-
-.clone-console-table__viewtool.is-active {
-  border-color: rgba(108, 88, 255, 0.42);
-  color: #eef2ff;
-  background: linear-gradient(180deg, rgba(55, 66, 135, 0.72), rgba(35, 42, 92, 0.84));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 0 1px rgba(109, 93, 255, 0.08);
-}
-
-.clone-console-table__viewtool-grid {
-  width: 14px;
-  height: 14px;
-  background:
-    linear-gradient(currentColor, currentColor) left top / 5px 5px no-repeat,
-    linear-gradient(currentColor, currentColor) right top / 5px 5px no-repeat,
-    linear-gradient(currentColor, currentColor) left bottom / 5px 5px no-repeat,
-    linear-gradient(currentColor, currentColor) right bottom / 5px 5px no-repeat;
-}
-
-.clone-console-table__viewtool-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: -6px 0 0 currentColor, 6px 0 0 currentColor;
-}
-
-.clone-console-table__body {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px 16px;
-  overflow: hidden;
-  border-bottom-left-radius: 28px;
-  border-bottom-right-radius: 28px;
-}
-
-.clone-console-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 12px;
-  padding: 12px 14px 16px;
-}
-
-.clone-console-card {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(57, 73, 111, 0.24);
-  background: linear-gradient(180deg, rgba(12, 20, 34, 0.98), rgba(8, 14, 25, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.clone-console-card__head,
-.clone-console-card__footer,
-.clone-console-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.clone-console-card__head,
-.clone-console-card__footer {
-  justify-content: space-between;
-}
-
-.clone-console-card__preview {
-  height: 180px;
-  overflow: hidden;
-  padding: 0;
-  border-radius: 14px;
-  border: 1px solid rgba(57, 73, 111, 0.18);
-  background: rgba(9, 16, 28, 0.84);
-}
-
-.clone-console-card__preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.clone-console-card__body {
-  display: grid;
-  gap: 8px;
-}
-
-.clone-console-card__actions {
-  justify-content: flex-end;
-}
-
-.clone-console-table__head {
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.024);
-  color: #7f96c1;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.clone-console-table__head,
-.clone-console-row {
-  display: grid;
-  grid-template-columns: 28px 96px minmax(260px, 1.58fr) 164px 118px 176px 104px 108px;
-  column-gap: 14px;
-}
-
-.clone-console-table__check,
-.clone-console-row__check {
-  width: 18px;
-  height: 18px;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-}
-
-.clone-console-table__check input,
-.clone-console-row__check input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.clone-console-table__check span,
-.clone-console-row__check span {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  border: 1px solid rgba(139, 155, 196, 0.32);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.clone-console-table__check input:checked + span,
-.clone-console-row__check input:checked + span {
-  border-color: color-mix(in srgb, var(--clone-accent) 48%, transparent);
-  background: color-mix(in srgb, var(--clone-accent) 28%, rgba(255, 255, 255, 0.03));
-}
-
-.clone-console-table__check input:checked + span::after,
-.clone-console-row__check input:checked + span::after {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  background: #ffffff;
-}
-
-.clone-console-row {
-  position: relative;
-  align-items: center;
-  min-height: 112px;
-  padding: 0 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(16, 24, 40, 0.96), rgba(9, 15, 26, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 28px rgba(0, 0, 0, 0.18);
-}
-
-.clone-console-row:hover {
-  border-color: rgba(133, 154, 208, 0.18);
-}
-
-.clone-console-row__preview,
-.clone-console-row__task,
-.clone-console-row__stage,
-.clone-console-row__assets,
-.clone-console-row__progress,
-.clone-console-row__updated,
-.clone-console-row__actions {
-  min-width: 0;
-  align-self: center;
-}
-
-.clone-console-row__thumb {
-  position: relative;
-  width: 96px;
-  height: 72px;
-  overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.clone-console-row__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.clone-console-row__thumb::after {
-  content: attr(data-duration);
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  min-width: 40px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(4, 8, 16, 0.78);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.clone-console-row__thumb-empty {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: #7f91b4;
-}
-
-.clone-console-row__task {
-  display: grid;
-  gap: 8px;
-  align-content: center;
-  padding-block: 14px;
-}
-
-.clone-console-row__titleline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.clone-console-row__titleline h3 {
-  margin: 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #f7fbff;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.clone-console-row__rename {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  padding: 0;
-}
-
-.clone-console-row__meta {
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  color: #8fa3ca;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.clone-console-row__mode {
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dce8ff;
-}
-
-.clone-console-row__dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(149, 166, 204, 0.58);
-}
-
-.clone-console-row__text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clone-console-row__error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 38px;
-  max-width: 100%;
-  padding: 8px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(161, 62, 74, 0.34);
-  background: linear-gradient(180deg, rgba(72, 24, 34, 0.34), rgba(54, 18, 28, 0.28));
-  box-shadow: inset 0 1px 0 rgba(255, 214, 214, 0.04);
-}
-
-.clone-console-row__error-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #f7c1c8;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.clone-console-row__error-link {
-  flex: 0 0 auto;
-  color: #ffd6db;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.clone-console-row__stage {
-  display: grid;
-  gap: 10px;
-  align-content: center;
-}
-
-.clone-console-row__statuswrap {
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.clone-console-row__status,
-.clone-console-row__stepbadge {
-  min-height: 27px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 11px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.clone-console-row__status.is-success {
-  background: rgba(16, 185, 129, 0.14);
-  color: #86efac;
-}
-
-.clone-console-row__status.is-danger {
-  background: rgba(248, 113, 113, 0.14);
-  color: #fca5a5;
-}
-
-.clone-console-row__status.is-draft {
-  background: rgba(148, 163, 184, 0.14);
-  color: #cbd5e1;
-}
-
-.clone-console-row__status.is-running {
-  background: rgba(59, 130, 246, 0.14);
-  color: #93c5fd;
-}
-
-.clone-console-row__stepbadge {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-  color: #d8e5ff;
-}
-
-.clone-console-row__stepbadge.tone-analyze {
-  color: #67e8f9;
-}
-
-.clone-console-row__stepbadge.tone-script {
-  color: #c4b5fd;
-}
-
-.clone-console-row__stepbadge.tone-storyboard {
-  color: #f9a8d4;
-}
-
-.clone-console-row__stepbadge.tone-video {
-  color: #93c5fd;
-}
-
-.clone-console-row__stepbadge.tone-compose {
-  color: #86efac;
-}
-
-.clone-console-row__groupmove {
-  min-height: 30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  color: #dce7ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.clone-console-row__assets {
-  display: grid;
-  gap: 4px;
-  align-content: center;
-}
-
-.clone-console-row__assets strong {
-  color: #eef4ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-console-row__assets span {
-  color: #8ea3c9;
-  font-size: 11px;
-}
-
-.clone-console-row__progress {
-  display: grid;
-  gap: 8px;
-  align-content: center;
-}
-
-.clone-console-row__progress-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.clone-console-row__progress-copy strong {
-  color: #f8fbff;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.clone-console-row__progress-track {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.clone-console-row__progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #22d3ee, #60a5fa);
-}
-
-.clone-console-row__progress-steps {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.clone-console-row__progress-step {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #7f93b8;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.clone-console-row__progress-step.is-active {
-  border-color: color-mix(in srgb, var(--clone-accent) 40%, transparent);
-  background: color-mix(in srgb, var(--clone-accent) 18%, rgba(255, 255, 255, 0.04));
-  color: #ffffff;
-}
-
-.clone-console-row__progress-step.is-done {
-  background: rgba(255, 255, 255, 0.07);
-  color: #eef4ff;
-}
-
-.clone-console-row__updated {
-  align-items: center;
-  gap: 10px;
-  color: #a4b3cf;
-  justify-self: start;
-}
-
-.clone-console-row__updated-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.clone-console-row__updated-copy span {
-  color: #92a5ca;
-  font-size: 11px;
-}
-
-.clone-console-row__updated-copy strong {
-  color: #eff4ff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.clone-console-row__actions {
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  justify-self: end;
-}
-
-.clone-console-row__action {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  padding: 0;
-}
-
-.clone-console-row__action--play {
-  color: #dff9ff;
-}
-
-.clone-console-row__action--edit {
-  color: #a9bdf8;
-}
-
-.clone-console-row__action--danger {
-  color: #ffb4bc;
-}
-
-.clone-row-action-menu,
-.clone-group-menu,
-.clone-row-move-menu {
-  position: relative;
-}
-
-.clone-group-menu__dropdown,
-.clone-row-move-menu__dropdown {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 8px);
-  min-width: 150px;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.14);
-  background: linear-gradient(180deg, rgba(15, 24, 39, 0.99), rgba(8, 14, 24, 0.99));
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3);
-}
-
-.clone-group-menu__dropdown,
-.clone-row-action-menu__dropdown {
-  right: 0;
-  min-width: 132px;
-}
-
-.clone-row-move-menu__dropdown {
-  left: 0;
-  right: auto;
-  max-height: 220px;
-  overflow: auto;
-}
-
-.clone-group-menu__item,
-.clone-row-move-menu__item {
-  width: 100%;
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #dbe7ff;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.clone-group-menu__item:hover,
-.clone-row-move-menu__item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.clone-group-menu__item--danger {
-  color: #ffb4bc;
-}
-
-.clone-row-move-menu__item.is-active {
-  background: color-mix(in srgb, var(--clone-accent) 16%, transparent);
-  color: #ffffff;
-}
-
-.clone-row-move-menu__item:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.clone-error-dialog-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(4, 8, 18, 0.72);
-}
-
-.clone-error-dialog {
-  width: min(720px, 100%);
-  display: grid;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  background: linear-gradient(180deg, rgba(17, 25, 42, 0.98), rgba(11, 17, 30, 0.98));
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
-}
-
-.clone-error-dialog__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.clone-error-dialog__copy {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.clone-error-dialog__copy strong {
-  color: #f8fafc;
-  font-size: 15px;
-}
-
-.clone-error-dialog__copy span {
-  color: #98a6c3;
-  font-size: 12px;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.clone-error-dialog__body {
-  max-height: 52vh;
-  overflow: auto;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(248, 113, 113, 0.14);
-  background: rgba(0, 0, 0, 0.22);
-  color: #fecdd3;
-  font-size: 12px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.clone-rename-dialog {
-  width: min(520px, 100%);
-}
-
-.clone-video-preview-dialog {
-  width: min(860px, 100%);
-  border-color: rgba(118, 136, 196, 0.16);
-}
-
-.clone-video-preview-dialog__body {
-  display: grid;
-  gap: 16px;
-}
-
-.clone-video-preview-dialog__head-actions,
-.clone-video-preview-dialog__meta-copy {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.clone-video-preview-dialog__head-actions {
-  justify-content: flex-end;
-}
-
-.clone-video-preview-dialog__player {
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(118, 136, 196, 0.16);
-  background: rgba(3, 8, 18, 0.94);
-}
-
-.clone-video-preview-dialog__player video {
-  width: 100%;
-  max-height: 72vh;
-  display: block;
-  background: #02060f;
-}
-
-.clone-video-preview-dialog__empty {
-  min-height: 260px;
-  display: grid;
-  place-items: center;
-  color: #95a3c3;
-  font-size: 13px;
-}
-
-.clone-video-preview-dialog__meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-  color: #98a6c3;
-  font-size: 12px;
-}
-
-.clone-video-preview-dialog__head-actions :deep(.ds-button) {
-  min-height: 36px;
-  border-radius: 11px !important;
-  padding: 0 14px !important;
-}
-
-.clone-video-preview-dialog__actions {
-  justify-content: flex-end;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.clone-video-preview-dialog__actions :deep(.ds-button),
-.clone-video-preview-dialog__actions:deep(.ds-button) {
-  min-height: 38px;
-  border-radius: 12px !important;
-  padding: 0 14px !important;
-}
-
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button.ds-button),
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button .ds-button),
-.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit.ds-button),
-.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit .ds-button) {
-  border-color: rgba(241, 178, 92, 0.58) !important;
-  background: linear-gradient(135deg, rgba(186, 112, 34, 0.98), rgba(228, 154, 62, 0.98)) !important;
-  color: #ffffff !important;
-  box-shadow:
-    0 16px 34px rgba(176, 106, 32, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button.ds-button:hover),
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__subtitle-button .ds-button:hover),
-.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit.ds-button:hover),
-.clone-subtitle-dialog :deep(.clone-subtitle-dialog__submit .ds-button:hover) {
-  border-color: rgba(248, 196, 118, 0.72) !important;
-  background: linear-gradient(135deg, rgba(198, 120, 38, 1), rgba(236, 166, 76, 1)) !important;
-  transform: translateY(-1px);
-}
-
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__revert-button.ds-button),
-.clone-video-preview-dialog__head-actions :deep(.clone-video-preview-dialog__revert-button .ds-button) {
-  border-color: rgba(255, 184, 108, 0.34) !important;
-  background: linear-gradient(135deg, rgba(125, 87, 35, 0.92), rgba(181, 120, 40, 0.92)) !important;
-  box-shadow: 0 12px 26px rgba(168, 114, 37, 0.22);
-}
-
-.clone-subtitle-dialog {
-  width: min(660px, calc(100vw - 24px));
-  max-height: calc(100vh - 28px);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.clone-subtitle-dialog__head {
-  align-items: flex-start;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(118, 136, 196, 0.12);
-}
-
-.clone-subtitle-dialog__copy strong {
-  font-size: 18px;
-}
-
-.clone-subtitle-dialog__copy span {
-  font-size: 13px;
-  line-height: 1.55;
-  color: #9eb0d6;
-}
-
-.clone-subtitle-dialog__body {
-  gap: 10px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.clone-subtitle-dialog__tabs {
-  display: flex;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.clone-subtitle-dialog__tabs button {
-  flex: 1 1 0;
-  min-height: 34px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #9daed3;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-subtitle-dialog__tabs button.is-active {
-  color: #ffffff;
-  background: linear-gradient(180deg, rgba(116, 94, 255, 0.42), rgba(92, 74, 214, 0.42));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.clone-subtitle-dialog__summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.clone-subtitle-dialog__summary-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid rgba(120, 138, 198, 0.12);
-  border-radius: 12px;
-  background: rgba(11, 18, 30, 0.72);
-}
-
-.clone-subtitle-dialog__summary-item span {
-  color: #8ca0d3;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.clone-subtitle-dialog__summary-item strong {
-  color: #f7faff;
-  font-size: 13px;
-  line-height: 1.2;
-  text-align: right;
-}
-
-.clone-subtitle-dialog__section {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(118, 136, 196, 0.12);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(15, 23, 38, 0.92), rgba(11, 17, 29, 0.94));
-}
-
-.clone-subtitle-dialog__section-head {
-  display: grid;
-  gap: 4px;
-}
-
-.clone-subtitle-dialog__kicker {
-  color: #8fa2d8;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.clone-subtitle-dialog__section-head strong {
-  color: #f3f6ff;
-  font-size: 15px;
-}
-
-.clone-subtitle-dialog__strategy-grid,
-.clone-subtitle-dialog__preset-grid,
-.clone-subtitle-dialog__form-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.clone-subtitle-dialog__strategy-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.clone-subtitle-dialog__mode-pills {
-  display: flex;
-  gap: 8px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.clone-subtitle-dialog__mode-pills button {
-  flex: 1 1 0;
-  min-height: 34px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #9caed4;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.clone-subtitle-dialog__mode-pills button.is-active {
-  color: #ffffff;
-  background: linear-gradient(180deg, rgba(116, 94, 255, 0.38), rgba(92, 74, 214, 0.38));
-}
-
-.clone-subtitle-dialog__preset-grid {
-  grid-template-columns: 1fr;
-}
-
-.clone-subtitle-dialog__form-grid--dual {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.clone-subtitle-dialog__form-grid--compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.clone-subtitle-dialog__style-panel {
-  display: grid;
-  gap: 10px;
-  padding: 11px;
-  border-radius: 12px;
-  border: 1px solid rgba(118, 136, 196, 0.12);
-  background: rgba(8, 14, 24, 0.55);
-}
-
-.clone-subtitle-dialog__style-panel--full {
-  gap: 9px;
-}
-
-.clone-subtitle-dialog__mini-title {
-  color: #dde6fb;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.clone-subtitle-dialog__inline-tip {
-  color: #8fa3d4;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.clone-subtitle-dialog__preset-note {
-  color: #8fa3d4;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.clone-subtitle-dialog__strategy-card,
-.clone-subtitle-dialog__preset {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(118, 136, 196, 0.16);
-  background: rgba(9, 15, 27, 0.9);
-  color: #eef4ff;
-  text-align: left;
-  min-height: 62px;
-}
-
-.clone-subtitle-dialog__strategy-card strong,
-.clone-subtitle-dialog__preset strong {
-  font-size: 13px;
-}
-
-.clone-subtitle-dialog__strategy-card small,
-.clone-subtitle-dialog__preset span {
-  color: #98a9cf;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.clone-subtitle-dialog__strategy-card.is-active,
-.clone-subtitle-dialog__preset.is-active {
-  border-color: rgba(126, 102, 255, 0.56);
-  background: linear-gradient(180deg, rgba(47, 36, 98, 0.62), rgba(18, 19, 44, 0.92));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(61, 46, 151, 0.18);
-}
-
-.clone-subtitle-dialog__color-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px;
-  gap: 8px;
-}
-
-.clone-subtitle-dialog__color-field input[type='color'] {
-  width: 54px;
-  min-height: 38px;
-  padding: 4px;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.18);
-  background: rgba(10, 18, 30, 0.96);
-}
-
-.clone-subtitle-dialog__color-field input[type='text'] {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.18);
-  background: rgba(10, 18, 30, 0.96);
-  color: #eef4ff;
-  font-size: 12px;
-  outline: none;
-}
-
-.clone-rename-dialog__body {
-  display: grid;
-  gap: 16px;
-}
-
-.clone-rename-dialog__field {
-  display: grid;
-  gap: 6px;
-}
-
-.clone-rename-dialog__field span {
-  color: #d8e3fb;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.clone-rename-dialog__field input,
-.clone-subtitle-dialog__textarea {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.18);
-  background: rgba(10, 18, 30, 0.96);
-  color: #eef4ff;
-  font-size: 13px;
-  outline: none;
-}
-
-.clone-rename-dialog__field input {
-  min-height: 38px;
-  padding: 0 12px;
-}
-
-.clone-subtitle-dialog__textarea {
-  min-height: 104px;
-  padding: 10px 12px;
-  resize: vertical;
-  line-height: 1.55;
-}
-
-.clone-group-select {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(118, 136, 196, 0.18);
-  background: rgba(10, 18, 30, 0.96);
-  color: #eef4ff;
-  font-size: 12px;
-  outline: none;
-}
-
-.clone-rename-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 2px;
-}
-
-@media (max-width: 900px) {
-  .clone-subtitle-dialog__summary,
-  .clone-subtitle-dialog__form-grid--dual,
-  .clone-subtitle-dialog__form-grid--compact {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .clone-subtitle-dialog {
-    width: min(100vw - 18px, 620px);
-    max-height: calc(100vh - 16px);
-  }
-
-  .clone-subtitle-dialog__strategy-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .clone-video-preview-dialog__actions {
-    justify-content: stretch;
-  }
-
-  .clone-video-preview-dialog__actions > * {
-    flex: 1 1 100%;
-  }
-}
-
-.clone-list-empty {
-  min-height: 320px;
-  display: grid;
-  place-items: center;
-  gap: 6px;
-  color: #97a5c4;
-  text-align: center;
-}
-
-.clone-list-empty strong {
-  color: #eef3ff;
-  font-size: 14px;
-}
-
-.clone-list-pagination {
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 60px;
-  padding: 0 22px 6px;
-  color: #93a2c0;
-  font-size: 13px;
-  border-top: 1px solid rgba(54, 69, 108, 0.16);
-  background: rgba(8, 15, 29, 0.55);
-}
-
-.clone-list-pagination {
-  align-items: center;
-}
-
-.clone-list-pagination__summary {
-  color: #a6b6d6;
-  font-weight: 600;
-}
-
-.clone-list-pagination__controls {
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-}
-
-.clone-list-pagination__controls button {
-  min-width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(89, 106, 147, 0.12);
-  background: rgba(9, 17, 28, 0.96);
-  color: #c9d4f2;
-}
-
-.clone-list-pagination__controls button.is-active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 84%, #0f172a), color-mix(in srgb, var(--clone-accent) 60%, #07111d));
-  color: #fff;
-}
-
-.clone-list-page-size {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-}
-
-.clone-list-page-size-wrap {
-  position: relative;
-}
-
-.clone-list-page-size-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  display: grid;
-  gap: 6px;
-  min-width: 132px;
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(89, 106, 147, 0.18);
-  background: rgba(9, 17, 28, 0.98);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
-  z-index: 20;
-}
-
-.clone-list-page-size-menu button {
-  justify-content: flex-start;
-  width: 100%;
-  padding: 0 12px;
-}
-
-.clone-list-page-size-menu button.is-active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--clone-accent) 84%, #0f172a), color-mix(in srgb, var(--clone-accent) 60%, #07111d));
-  color: #fff;
-}
-
-.clone-side-card {
-  padding: 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(118, 136, 196, 0.14);
-  background: linear-gradient(180deg, rgba(11, 20, 35, 0.98), rgba(8, 15, 27, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.clone-side-card__row strong {
-  font-size: 13px;
-  color: #f4f7ff;
-}
-
-.clone-side-card__row {
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.clone-side-clear {
-  color: color-mix(in srgb, var(--clone-accent) 52%, #d8e4ff);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
-.is-spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 1480px) {
-  .clone-console-table__head,
-  .clone-console-row {
-    grid-template-columns: 28px 88px minmax(220px, 1.4fr) 154px 108px 164px 96px 100px;
-  }
-}
-
-@media (max-width: 1260px) {
-  .clone-console-hero,
-  .clone-list-pagination,
-  .clone-list-batch-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .clone-console-hero__actions,
-  .clone-list-batch-bar__actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .clone-console-overview__cards {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .clone-console-table__groupbar {
-    flex-wrap: wrap;
-  }
-
-  .clone-console-table__groupbar-tabs {
-    min-width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .clone-console-table__groupbar-tools {
-    width: 100%;
-    min-width: 0;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-}
-
-@media (max-width: 1120px) {
-  .clone-console-table__head {
-    display: none;
-  }
-
-  .clone-console-row {
-    grid-template-columns: 28px 88px minmax(0, 1fr);
-    align-items: start;
-    row-gap: 12px;
-  }
-
-  .clone-console-row__task,
-  .clone-console-row__stage,
-  .clone-console-row__assets,
-  .clone-console-row__progress,
-  .clone-console-row__updated,
-  .clone-console-row__actions {
-    grid-column: 3;
-  }
-
-  .clone-console-row__preview {
-    grid-row: span 2;
-  }
-
-  .clone-console-row__updated,
-  .clone-console-row__actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 860px) {
-  .clone-task-list-page {
-    padding-inline: 12px;
-  }
-
-  .clone-console-panel,
-  .clone-console-table {
-    border-radius: 22px;
-  }
-
-  .clone-console-overview__cards {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .clone-console-table__groupbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .clone-console-table__groupbar-tabs {
-    min-width: 0;
-  }
-
-  .clone-console-table__groupbar-tools {
-    justify-content: flex-end;
-  }
-
-  .clone-console-row {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-
-  .clone-console-row__preview {
-    display: none;
-  }
-
-  .clone-console-row__task,
-  .clone-console-row__stage,
-  .clone-console-row__assets,
-  .clone-console-row__progress,
-  .clone-console-row__updated,
-  .clone-console-row__actions {
-    grid-column: 2;
-  }
+/* Clone task list — vg design language, theme tokens only. */
+.ctl-page { display: flex; flex-direction: column; gap: 14px; min-height: 100%; padding: 16px 20px 96px; }
+
+/* ---------- head ---------- */
+.ctl-head { display: flex; align-items: center; gap: 14px; }
+.ctl-head__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--vg-accent-soft); border: 1px solid var(--vg-accent-line); color: var(--vg-accent); flex-shrink: 0; }
+.ctl-head__text { flex: 1; min-width: 0; }
+.ctl-head__text h1 { font-size: 20px; font-weight: 800; line-height: 1.25; }
+.ctl-head__text p { margin-top: 2px; font-size: 13px; color: var(--theme-text-muted); }
+.ctl-head__actions { display: flex; align-items: center; gap: 8px; }
+.ctl-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--vg-accent-soft); color: var(--vg-accent); font-size: 11px; font-weight: 700; }
+.ctl-create { position: relative; }
+.ctl-create-btn__more { display: inline-flex; align-items: center; align-self: stretch; margin: 0 -6px 0 0; padding: 0 2px; cursor: pointer; }
+.ctl-create-btn__caret { margin-left: 2px; padding-left: 6px; border-left: 1px solid color-mix(in srgb, var(--theme-on-accent) 35%, transparent); box-sizing: content-box; }
+.ctl-create__menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 320px; padding: 6px; border: 1px solid var(--theme-border-control); border-radius: 12px; background: var(--theme-panel); box-shadow: var(--theme-shadow-dialog); }
+.ctl-create__title { padding: 6px 10px 6px; font-size: 11px; font-weight: 600; color: var(--theme-text-muted); }
+.ctl-create__option { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--theme-text); text-align: left; cursor: pointer; transition: background .12s, border-color .12s; }
+.ctl-create__option:hover { background: var(--theme-panel-soft); border-color: var(--theme-border); }
+.ctl-create__icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0; }
+.ctl-create__icon.is-auto { background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ctl-create__icon.is-manual { background: color-mix(in srgb, var(--vg-blue) 14%, transparent); color: var(--vg-blue); }
+.ctl-create__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ctl-create__copy strong { font-size: 13px; }
+.ctl-create__copy small { font-size: 12px; line-height: 1.5; color: var(--theme-text-muted); }
+
+/* ---------- stats ---------- */
+.ctl-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-lg); background: var(--theme-panel); }
+.ctl-stat { position: relative; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "label label" "value value" "helper helper"; align-items: end; gap: 2px 8px; padding: 14px 18px 13px; border: 0; border-left: 1px solid var(--theme-divider); background: transparent; color: var(--theme-text); text-align: left; cursor: pointer; transition: background .15s; }
+.ctl-stat:first-child { border-left: 0; }
+.ctl-stat:hover:not(:disabled) { background: var(--theme-panel-soft); }
+.ctl-stat:disabled { cursor: default; }
+.ctl-stat::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: transparent; transition: background .15s; }
+.ctl-stat.is-active { background: color-mix(in srgb, var(--vg-accent) 6%, transparent); }
+.ctl-stat.is-active::after { background: var(--stat-color, var(--vg-accent)); }
+.ctl-stat__label { grid-area: label; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--theme-text-secondary); }
+.ctl-stat__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--stat-color, var(--theme-text-muted)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stat-color, transparent) 18%, transparent); }
+.ctl-stat__value { grid-area: value; margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.ctl-stat__helper { grid-area: helper; font-size: 11px; color: var(--theme-text-muted); }
+.ctl-stat.tone-all { --stat-color: var(--vg-accent); }
+.ctl-stat.tone-running { --stat-color: var(--vg-blue); }
+.ctl-stat.tone-success { --stat-color: var(--vg-green, var(--vg-accent)); }
+.ctl-stat.tone-danger { --stat-color: var(--vg-red); }
+.ctl-stat.tone-muted { --stat-color: var(--theme-text-muted); }
+.ctl-stat:last-child { --stat-color: var(--vg-amber); }
+
+/* ---------- workbench ---------- */
+.ctl-bench { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-lg); background: var(--theme-panel); }
+.ctl-toolbar { display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 52px; border-bottom: 1px solid var(--theme-divider); }
+.ctl-tabs { display: flex; align-items: stretch; align-self: stretch; gap: 2px; flex: 1; min-width: 0; }
+.ctl-tab { position: relative; display: flex; align-items: center; }
+.ctl-tab::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: transparent; }
+.ctl-tab.is-active::after { background: var(--vg-accent); }
+.ctl-tab__main { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px; border: 0; background: transparent; color: var(--theme-text-muted); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.ctl-tab__main:hover { color: var(--theme-text); }
+.ctl-tab.is-active .ctl-tab__main { color: var(--theme-text); font-weight: 700; }
+.ctl-tab__main em { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-style: normal; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.ctl-tab.is-active .ctl-tab__main em { background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ctl-tab__main span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.ctl-tab__more { display: grid; place-items: center; width: 22px; height: 22px; margin-left: -6px; margin-right: 2px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.ctl-tab:hover .ctl-tab__more, .ctl-tab.is-active .ctl-tab__more { opacity: 1; }
+.ctl-tab__more:hover { background: var(--theme-panel-soft); color: var(--theme-text); }
+.ctl-tab-add { display: inline-flex; align-items: center; gap: 4px; align-self: center; height: 28px; margin-left: 6px; padding: 0 10px; border: 1px dashed var(--theme-border-control); border-radius: 7px; background: transparent; color: var(--theme-text-muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.ctl-tab-add:hover { border-color: var(--vg-accent); color: var(--vg-accent); }
+.ctl-toolbar__tools { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ctl-search { width: 240px; }
+.ctl-search .vg-input { padding-right: 26px; }
+.ctl-search__clear { position: absolute; right: 6px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: var(--theme-control); color: var(--theme-text-muted); cursor: pointer; }
+.ctl-viewtoggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-panel-soft); }
+.ctl-viewtoggle button { display: grid; place-items: center; width: 28px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; }
+.ctl-viewtoggle button:hover { color: var(--theme-text); }
+.ctl-viewtoggle button.active { background: var(--theme-panel); color: var(--vg-accent); box-shadow: 0 0 0 1px var(--vg-accent-line); }
+.ctl-filterbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--vg-accent) 5%, transparent); font-size: 12px; color: var(--theme-text-secondary); }
+
+/* menus */
+.ctl-menu { z-index: 45; min-width: 180px; }
+.ctl-menu--groups { max-height: 320px; overflow-y: auto; }
+.ctl-menu button svg { color: var(--theme-text-muted); }
+.ctl-menu button.is-checked { color: var(--vg-accent); font-weight: 600; }
+.ctl-menu button.is-checked svg { color: var(--vg-accent); }
+.ctl-menu button.danger svg { color: var(--vg-red); }
+.ctl-menu__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ctl-menu em { font-style: normal; font-size: 11px; color: var(--theme-text-muted); }
+.ctl-menu__divider { height: 1px; margin: 4px 6px; background: var(--theme-divider); }
+
+/* ---------- table ---------- */
+.ctl-grid-cols { display: grid; grid-template-columns: 32px minmax(260px, 2.4fr) minmax(120px, .9fr) minmax(170px, 1.2fr) minmax(110px, .8fr) 92px 168px; align-items: center; gap: 16px; }
+.ctl-table { display: flex; flex-direction: column; padding: 4px 8px 8px; }
+.ctl-table__head { height: 38px; padding: 0 12px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--theme-text-muted); }
+.ctl-right { text-align: right; }
+.ctl-row { position: relative; min-height: 84px; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; transition: background .12s, border-color .12s; }
+.ctl-row + .ctl-row::before { content: ''; position: absolute; left: 12px; right: 12px; top: -1px; height: 1px; background: var(--theme-divider); }
+.ctl-row:hover, .ctl-row:hover + .ctl-row { --row-divider: transparent; }
+.ctl-row:hover { background: var(--theme-panel-soft); }
+.ctl-row:hover::before, .ctl-row:hover + .ctl-row::before, .ctl-row.is-selected::before, .ctl-row.is-selected + .ctl-row::before { background: transparent; }
+.ctl-row.is-selected { background: var(--vg-accent-soft); border-color: var(--vg-accent-line); }
+
+.ctl-check { position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; cursor: pointer; }
+.ctl-check input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.ctl-check span { width: 16px; height: 16px; border: 1.5px solid var(--theme-border-control); border-radius: 4px; background: var(--theme-input); transition: background .12s, border-color .12s; }
+.ctl-check input:checked + span { border-color: var(--vg-accent); background: var(--vg-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E") center / 12px no-repeat; }
+.ctl-check input:focus-visible + span { box-shadow: 0 0 0 3px var(--vg-accent-soft); }
+
+.ctl-task { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ctl-thumb { position: relative; display: grid; place-items: center; width: 48px; height: 64px; flex-shrink: 0; overflow: hidden; padding: 0; border: 0; border-radius: 8px; background: var(--theme-panel-soft); color: var(--theme-text-muted); box-shadow: inset 0 0 0 1px var(--theme-border); cursor: pointer; }
+.ctl-thumb img, .ctl-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.ctl-thumb__play { position: absolute; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; opacity: 0; transition: opacity .15s; }
+.ctl-thumb__play svg { margin-left: 2px; fill: currentColor; }
+.ctl-thumb:hover .ctl-thumb__play { opacity: 1; }
+.ctl-task__copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ctl-task__title { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ctl-task__name { min-width: 0; padding: 0; border: 0; background: transparent; color: var(--theme-text); font-size: 14px; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ctl-task__name:hover { color: var(--vg-accent); }
+.ctl-task__rename { display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.ctl-row:hover .ctl-task__rename { opacity: 1; }
+.ctl-task__rename:hover { background: var(--theme-control-hover); color: var(--theme-text); }
+.ctl-task__meta { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; font-size: 12px; color: var(--theme-text-muted); }
+.ctl-mode { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.ctl-mode.is-auto { background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ctl-mode.is-manual { background: color-mix(in srgb, var(--vg-blue) 14%, transparent); color: var(--vg-blue); }
+.ctl-task__chip { height: 20px; padding: 0 7px; border: 1px solid var(--theme-border); border-radius: 6px; color: var(--theme-text-secondary); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.ctl-task__ref { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctl-task__ref svg { flex-shrink: 0; }
+.ctl-task__error { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--vg-red); }
+.ctl-task__error svg { flex-shrink: 0; }
+.ctl-task__error span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctl-task__error button { flex-shrink: 0; padding: 0; border: 0; background: transparent; color: var(--vg-red); font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+.ctl-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.ctl-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--st) 14%, transparent); color: var(--st); font-size: 12px; font-weight: 600; white-space: nowrap; --st: var(--theme-text-muted); }
+.ctl-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ctl-status.tone-success { --st: var(--vg-green, var(--vg-accent)); }
+.ctl-status.tone-running { --st: var(--vg-blue); }
+.ctl-status.tone-running i { animation: ctl-pulse 1.4s ease-in-out infinite; }
+.ctl-status.tone-danger { --st: var(--vg-red); }
+.ctl-status.tone-draft { --st: var(--theme-text-muted); }
+@keyframes ctl-pulse { 50% { opacity: .35; } }
+.ctl-groupmove { position: relative; max-width: 100%; }
+.ctl-groupchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 24px; padding: 0 8px; border: 1px solid var(--theme-border); border-radius: 7px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; cursor: pointer; }
+.ctl-groupchip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctl-groupchip:hover { border-color: var(--theme-border-control); color: var(--theme-text); }
+
+.ctl-progress { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.ctl-progress__top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ctl-progress__top strong { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ctl-progress__top span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--theme-text-muted); }
+.ctl-steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; --sc: var(--vg-accent); }
+.ctl-steps.tone-danger { --sc: var(--vg-red); }
+.ctl-steps.tone-running { --sc: var(--vg-blue); }
+.ctl-steps i { height: 5px; border-radius: 3px; background: var(--theme-panel-soft); box-shadow: inset 0 0 0 1px var(--theme-border); }
+.ctl-steps i.is-done { background: var(--sc); box-shadow: none; }
+.ctl-steps i.is-current { background: color-mix(in srgb, var(--sc) 45%, transparent); box-shadow: none; animation: ctl-pulse 1.6s ease-in-out infinite; }
+
+.ctl-assets { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 12px; }
+.ctl-assets__counts { display: inline-flex; align-items: center; gap: 4px; color: var(--theme-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ctl-assets__counts svg { color: var(--theme-text-muted); }
+.ctl-assets__counts svg + svg, .ctl-assets__counts svg:nth-of-type(2) { margin-left: 6px; }
+.ctl-assets__output { display: inline-flex; align-items: center; gap: 4px; color: var(--theme-text-muted); white-space: nowrap; }
+.ctl-assets__output.is-ready { color: var(--vg-green, var(--vg-accent)); }
+
+.ctl-updated { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.ctl-updated strong { font-size: 13px; }
+.ctl-updated span { font-size: 11px; color: var(--theme-text-muted); }
+
+.ctl-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.ctl-open { padding-right: 6px; }
+.ctl-more { position: relative; }
+.vg-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ---------- grid ---------- */
+.ctl-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding: 14px; }
+.ctl-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ctl-card:hover { border-color: var(--theme-border-control); box-shadow: var(--theme-shadow-float); }
+.ctl-card.is-selected { border-color: var(--vg-accent); box-shadow: 0 0 0 3px var(--vg-accent-soft); }
+.ctl-card__media { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 5; overflow: hidden; background: var(--theme-panel-soft); color: var(--theme-text-muted); }
+.ctl-card__media img, .ctl-card__media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.ctl-card__media::after { content: ''; position: absolute; inset: auto 0 0 0; height: 40%; background: linear-gradient(to top, rgba(0, 0, 0, .45), transparent); pointer-events: none; }
+.ctl-card__check { position: absolute; top: 10px; left: 10px; z-index: 2; }
+.ctl-card__status { position: absolute; top: 8px; right: 8px; z-index: 2; background: rgba(0, 0, 0, .55); backdrop-filter: blur(4px); }
+.ctl-card__play { position: absolute; z-index: 2; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .5); color: #fff; backdrop-filter: blur(4px); cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.ctl-card__play svg { margin-left: 3px; fill: currentColor; }
+.ctl-card:hover .ctl-card__play { opacity: 1; }
+.ctl-card__play:hover { background: var(--vg-accent); color: var(--theme-on-accent); }
+.ctl-card__body { display: flex; flex-direction: column; gap: 9px; padding: 12px 12px 10px; min-width: 0; }
+.ctl-card__foot { display: flex; align-items: center; gap: 4px; padding: 8px 10px 10px 12px; border-top: 1px solid var(--theme-divider); }
+.ctl-card__time { display: inline-flex; align-items: center; gap: 5px; flex: 1; min-width: 0; overflow: hidden; font-size: 11px; color: var(--theme-text-muted); white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.ctl-card__time svg { flex-shrink: 0; }
+
+/* ---------- empty ---------- */
+.ctl-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 320px; padding: 40px 16px; text-align: center; font-size: 13px; color: var(--theme-text-muted); }
+.ctl-empty__art { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 6px; border-radius: 18px; background: var(--vg-accent-soft); border: 1px dashed var(--vg-accent-line); color: var(--vg-accent); }
+.ctl-empty strong { font-size: 16px; color: var(--theme-text); }
+.ctl-empty__actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ---------- pager ---------- */
+.ctl-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--theme-divider); }
+.ctl-pager__summary { font-size: 12px; color: var(--theme-text-muted); }
+.ctl-pager__controls { display: flex; align-items: center; gap: 4px; }
+.ctl-pagebtn { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.ctl-pagebtn:hover:not(:disabled) { background: var(--theme-panel-soft); color: var(--theme-text); }
+.ctl-pagebtn.is-active { border-color: var(--vg-accent-line); background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ctl-pagebtn:disabled { opacity: .35; cursor: not-allowed; }
+.ctl-pagesize { position: relative; margin-left: 8px; }
+
+/* ---------- selection bar ---------- */
+.ctl-selbar { position: fixed; z-index: 60; left: calc(50% + var(--vg-sidebar-width, 240px) / 2); bottom: 26px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 6px 6px 6px 14px; border: 1px solid var(--theme-border-control); border-radius: 12px; background: var(--theme-panel); box-shadow: var(--theme-shadow-dialog); white-space: nowrap; }
+.ctl-selbar__count { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+.ctl-selbar__count b { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--vg-accent); color: var(--theme-on-accent); font-size: 12px; }
+.ctl-selbar__meta { margin-left: 8px; font-size: 11px; color: var(--theme-text-muted); }
+.ctl-selbar__sep { width: 1px; height: 18px; margin: 0 8px; background: var(--theme-divider); }
+.ctl-selbar button { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
+.ctl-selbar button:hover:not(:disabled) { background: var(--theme-panel-soft); color: var(--theme-text); }
+.ctl-selbar button:disabled { opacity: .4; cursor: not-allowed; }
+.ctl-selbar button.danger { color: var(--vg-red); }
+.ctl-selbar button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--vg-red) 12%, transparent); color: var(--vg-red); }
+.ctl-selbar__close { width: 30px; justify-content: center; padding: 0 !important; margin-left: 4px; }
+.ctl-bar-enter-active, .ctl-bar-leave-active { transition: opacity .16s, transform .16s; }
+.ctl-bar-enter-from, .ctl-bar-leave-to { opacity: 0; transform: translate(-50%, 8px); }
+.ctl-toast { gap: 10px; }
+
+/* ---------- dialogs ---------- */
+.ctl-dialog-sm { max-width: 460px; }
+.ctl-icon-danger { background: color-mix(in srgb, var(--vg-red) 14%, transparent) !important; border-color: color-mix(in srgb, var(--vg-red) 35%, transparent) !important; color: var(--vg-red) !important; }
+.ctl-error-text { max-height: 50vh; overflow: auto; margin: 0; padding: 12px 14px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-panel-soft); color: var(--theme-text-secondary); font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.ctl-preview { max-width: 960px; }
+.ctl-preview__body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; min-height: 0; }
+.ctl-preview__player { display: grid; place-items: center; min-height: 420px; max-height: 72vh; padding: 16px; background: #000; }
+.ctl-preview__player video { max-width: 100%; max-height: calc(72vh - 32px); border-radius: 6px; }
+.ctl-preview__empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(255, 255, 255, .6); font-size: 13px; }
+.ctl-preview__side { display: flex; flex-direction: column; gap: 16px; padding: 16px; border-left: 1px solid var(--theme-divider); }
+.ctl-preview__actions { display: flex; flex-direction: column; gap: 8px; }
+.ctl-preview__actions .vg-btn { justify-content: flex-start; }
+.ctl-kv { display: flex; flex-direction: column; margin: 0; }
+.ctl-kv > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--theme-divider); font-size: 12px; }
+.ctl-kv dt { color: var(--theme-text-muted); }
+.ctl-kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.ctl-subtitle { max-width: 760px; }
+.ctl-subtitle__summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ctl-subtitle__summary > div { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-panel-soft); }
+.ctl-subtitle__summary span { font-size: 11px; color: var(--theme-text-muted); }
+.ctl-subtitle__summary strong { font-size: 13px; }
+.ctl-subtitle__section { display: flex; flex-direction: column; gap: 12px; }
+.ctl-subtitle__heading { font-size: 13px; }
+.ctl-subtitle__textarea { min-height: 120px; }
+.ctl-subtitle__presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.ctl-preset { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-panel-soft); color: var(--theme-text); text-align: left; cursor: pointer; transition: border-color .12s, background .12s; }
+.ctl-preset span { font-size: 12px; line-height: 1.5; color: var(--theme-text-muted); }
+.ctl-preset:hover { border-color: var(--theme-border-control); }
+.ctl-preset.is-active { border-color: var(--vg-accent); background: var(--vg-accent-soft); }
+.ctl-preset.is-active strong { color: var(--vg-accent); }
+.ctl-subtitle__grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ctl-color { display: flex; gap: 8px; }
+.ctl-color input[type='color'] { width: 40px; height: 34px; flex-shrink: 0; padding: 2px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: var(--theme-input); cursor: pointer; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1500px) {
+  .ctl-open { display: none; }
+  .ctl-grid-cols { gap: 12px; grid-template-columns: 32px minmax(240px, 2.4fr) minmax(110px, .9fr) minmax(150px, 1.2fr) minmax(104px, .8fr) 84px 72px; }
+}
+@media (max-width: 1240px) {
+  .ctl-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ctl-stat:nth-child(4) { border-left: 0; }
+  .ctl-stat:nth-child(n + 4) { border-top: 1px solid var(--theme-divider); }
+  .ctl-grid-cols { grid-template-columns: 32px minmax(220px, 2fr) minmax(110px, 1fr) minmax(140px, 1.2fr) 72px; }
+  .ctl-assets, .ctl-updated, .ctl-table__head > span:nth-child(5), .ctl-table__head > span:nth-child(6) { display: none; }
+  .ctl-search { width: 180px; }
 }
 </style>

@@ -118,14 +118,14 @@ export const pluginDefinitions: PluginDefinition[] = [
     ],
   },
   {
-    id: "tiktok-creator-outreach",
-    name: "TikTok Creator Outreach",
+    id: "tiktok-creator-hub",
+    name: "TikTok Creator Hub",
     category: "ecommerce_listing",
-    description: "Use an isolated TikTok Affiliate session to review creators and prepare confirmed invite or message batches.",
+    description: "Multi-shop creator management: sample requests, per-creator fulfillment rate and sample costs, synced read-only from TikTok Shop Affiliate.",
     version: "0.1.0",
     entryType: "tool",
-    workspacePath: "/plugins/tiktok-creator-outreach",
-    usageHint: "Sign in inside the app, review creator rows, preview a batch, and confirm each external action.",
+    workspacePath: "/plugins/tiktok-creator-hub",
+    usageHint: "Import each shop's cookies (Cookie-Editor JSON), sync samples, then review fulfillment per creator.",
     configSchema: [],
   },
   {
@@ -196,7 +196,7 @@ export const pluginDefinitions: PluginDefinition[] = [
         key: "watermarkText",
         label: "默认水印文案",
         type: "text",
-        placeholder: "VideoGenerate",
+        placeholder: "TiktokCut",
       },
       {
         key: "position",
@@ -308,37 +308,6 @@ export const pluginDefinitions: PluginDefinition[] = [
       },
     ],
   },
-  {
-    id: "geelark-publisher",
-    name: "Geelark 发布插件",
-    category: "video_processing",
-    description:
-      "用于把复刻成片发布到 Geelark 云手机，并创建 TikTok 发布任务。",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/geelark-publisher",
-    usageHint: "首期支持 Geelark 云手机 TikTok 视频发布与商品挂车入口闭环。",
-    configSchema: [
-      {
-        key: "baseUrl",
-        label: "Geelark Base URL",
-        type: "text",
-        placeholder: "https://openapi.geelark.com",
-      },
-      {
-        key: "appId",
-        label: "App ID",
-        type: "text",
-        placeholder: "your-geelark-app-id",
-      },
-      {
-        key: "requestTimeoutMs",
-        label: "请求超时(ms)",
-        type: "number",
-        placeholder: "30000",
-      },
-    ],
-  },
 ];
 
 export function findPluginDefinition(pluginId: string) {
@@ -352,8 +321,9 @@ export function defaultPluginRecord(
   return {
     pluginId,
     userId,
-    status: "uninstalled",
-    runtimeState: "disabled",
+    // Desktop tools are built in; access is controlled by membership features, not by installation.
+    status: "installed",
+    runtimeState: "enabled",
     config: {},
     updatedAt: Date.now(),
   };

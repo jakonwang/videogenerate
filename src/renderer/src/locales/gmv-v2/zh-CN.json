@@ -1,0 +1,675 @@
+{
+  "nav": {
+    "today": "今日",
+    "diagnosis": "推广系列体检",
+    "academy": "投放学院",
+    "groups": {
+      "daily": "每日",
+      "data": "经营数据",
+      "ai": "AI 决策",
+      "more": "更多"
+    },
+    "campaigns": "推广系列",
+    "products": "商品",
+    "creatives": "素材",
+    "profit": "利润与成本",
+    "pending": "待审批",
+    "strategies": "自动策略",
+    "growth": "增长计划",
+    "overview": "账户总览",
+    "audit": "操作记录",
+    "settings": "设置",
+    "modules": {
+      "home": "概览",
+      "delivery": "投放管理",
+      "creatives": "素材",
+      "profit": "利润",
+      "automation": "自动化",
+      "tools": "工具"
+    }
+  },
+  "pages": {
+    "today": "一眼看清哪里有问题、今天该做什么。所有建议都按 TikTok 官方规则给出。",
+    "diagnosis": "每个推广系列一个结论、一个动作。点开看三条 ROI 线和近 14 天走势。",
+    "academy": "10 节 1 分钟小课，加上你的毛利率与规则设置。",
+    "campaigns": "所有推广系列的花费、ROI、预算节奏和官方建议，一张表看完。",
+    "growth": "按商品看花费、成交和测试阶段，找出该加推和该停的商品。",
+    "creatives": "素材的成交表现、疲劳和缺口，先补齐再优化。",
+    "profit": "补齐商品成本后，系统才能判断每个动作是否赚钱。",
+    "actions": "AI 生成的调整建议，看清依据后再批准执行。",
+    "rules": "给每个推广系列配置自动策略和安全上限。",
+    "sop": "新品和直播的操盘周期，按天给出任务。",
+    "overview": "多店铺的经营结果、风险和消耗节奏。",
+    "audit": "每一次对 TikTok 的改动、结果和失败原因。",
+    "settings": "账号授权、店铺绑定、成本和通知设置。"
+  },
+  "codes": {
+    "blocked": {
+      "title": "被卡住了",
+      "short": "被卡住"
+    },
+    "losing": {
+      "title": "在亏钱",
+      "short": "亏钱"
+    },
+    "underspend": {
+      "title": "花不出去",
+      "short": "花不出去"
+    },
+    "scale": {
+      "title": "可以放量",
+      "short": "能放量"
+    },
+    "creatives": {
+      "title": "素材不够",
+      "short": "素材不够"
+    },
+    "learning": {
+      "title": "学习中，先别动",
+      "short": "学习中"
+    },
+    "healthy": {
+      "title": "健康，保持",
+      "short": "健康"
+    },
+    "collecting": {
+      "title": "数据积累中",
+      "short": "积累中"
+    }
+  },
+  "reasons": {
+    "paused": "这个推广系列现在没有在投放。",
+    "no_spend": "已经连续 {days} 天几乎没有花费，系统没在给它跑量。",
+    "collecting": "刚开始投放，数据还不够判断，先让它跑几天。",
+    "no_creatives": "没有任何一条素材能投放（被拒、不可用或需要授权），系统没有素材可用。",
+    "learning_after_change": "最近刚调过 ROI 或预算，TikTok 需要至少 3 天重新学习，现在调整只会打乱它。",
+    "learning_new": "新推广系列还在学习期，前 3 天的波动是正常的。",
+    "losing_protected": "近 7 天 ROI {roi} 低于盈亏平衡线 {breakEven}。但今天订单已超过 20 单、ROI 低于目标的 90%，符合 ROI 保障，TikTok 会把差额以广告金返还。",
+    "losing_max_delivery": "这个系列用的是最大投放（不设 ROI），近 7 天 ROI {roi} 低于盈亏平衡线 {breakEven}，每多花一笔都在亏。",
+    "losing_target_low": "近 7 天 ROI {roi} 低于盈亏平衡线 {breakEven}：卖得越多亏得越多。原因是目标 ROI {target} 设得比盈亏线还低。",
+    "losing_target_ok": "目标 ROI {target} 已经高于盈亏线，但近 7 天实际只有 {roi}，说明商品本身的转化或利润撑不住。",
+    "underspend": "近 7 天预算只用了 {utilization}%，而 ROI {roi} 已经达到目标 {target}。钱花不出去，通常是目标 ROI 设得太高，系统找不到够格的流量。",
+    "underspend_at_floor": "近 7 天预算只用了 {utilization}%，但目标 ROI 已经接近盈亏线不能再降了。要靠更好的素材或更有吸引力的商品来拿量。",
+    "scale": "近 7 天预算用了 {utilization}%，ROI {roi} 也达到目标 {target}。预算成了天花板，加预算可以多卖。",
+    "scale_max_delivery": "最大投放模式下预算基本花完，ROI {roi} 仍高于盈亏线，可以小步加预算。",
+    "creatives_blocked": "有 {blocked} 条素材被卡住（需要授权、被拒或不可用），它们进不了投放。",
+    "creatives_few": "只有 {delivering} 条素材在投放，官方建议至少 {need} 条，素材少会限制系统找爆款。",
+    "healthy": "ROI 在目标之上，预算使用正常，平均每天约赚 {profitPerDay}。",
+    "healthy_low_volume": "暂时没发现问题，但订单还不多，继续观察。"
+  },
+  "actions": {
+    "raiseRoi": "把目标 ROI 从 {from} 调到 {to}",
+    "raiseRoiMaxDelivery": "改回「目标 ROI」模式，目标设为 {to}",
+    "lowerRoi": "把目标 ROI 从 {from} 调低到 {to}",
+    "raiseBudget": "把日预算从 {from} 加到 {to}",
+    "fixBlocker": {
+      "paused": "确认是否需要重新开启；如果是故意暂停，可以忽略",
+      "no_spend": "依次检查：账户余额 → 商品是否在售且有库存 → 素材是否已授权 → 目标 ROI 是否过高",
+      "no_creatives": "去授权或替换被卡住的素材，至少保证有素材能投放"
+    },
+    "fixCreatives": "先处理 {blocked} 条被卡住的素材，再补充新视频",
+    "reviewOffer": "检查售价、优惠和毛利；把长期亏钱的商品移出推广系列",
+    "waitProtection": "今天先别动，等 ROI 保障赔付；明天早上再按建议调高 ROI",
+    "waitLearning": "不要动，{days} 天后再看",
+    "keep": "保持现状"
+  },
+  "timing": {
+    "morning": "明天早上第一件事做",
+    "onceToday": "今天只调这一次",
+    "oncePerDay": "每天最多加一次"
+  },
+  "protection": {
+    "protected_today_wait": "今天符合 ROI 保障条件，现在调高 ROI 会失去今天的赔付。",
+    "raise_voids_today": "调高 ROI 会让当天失去 ROI 保障，所以放在早上第一件事做。"
+  },
+  "lines": {
+    "aria": "盈亏平衡 ROI {breakEven}，目标 ROI {target}，实际 ROI {actual}",
+    "breakEven": "盈亏线",
+    "target": "目标",
+    "actual": "实际（7 天）",
+    "unknown": "未设置毛利率",
+    "maxDelivery": "最大投放"
+  },
+  "lesson": {
+    "why": "为什么",
+    "how": "怎么做",
+    "gotIt": "知道了",
+    "source": {
+      "official": "TikTok 官方规则",
+      "experience": "行业经验，可在设置里调整"
+    }
+  },
+  "lessons": {
+    "daily_rhythm": {
+      "title": "每天只看三次",
+      "oneLine": "早上定方向，白天看节奏，晚上补素材。",
+      "why": "GMV Max 是全自动投放，频繁改动会打断系统学习。把动作集中到固定时间，既不错过问题，也不乱动。",
+      "how": [
+        "早上 9 点：看昨天完整数据，处理「今日必做」（调高 ROI 只在这个时间做）",
+        "白天：只关注花得太快或花不出去，可以加预算或调低 ROI，不要调高 ROI",
+        "晚上 8 点：处理被卡住的素材，补充新视频"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok 官方：Max Delivery 最佳实践",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "break_even": {
+      "title": "盈亏平衡 ROI：一条线定生死",
+      "oneLine": "盈亏平衡 ROI = 1 ÷ 毛利率。实际 ROI 低于它，就是在亏钱。",
+      "why": "GMV Max 的 ROI = 成交额 ÷ 广告花费。如果商品扣掉货款、物流、佣金后的毛利率是 40%，那每卖 100 元最多只能花 40 元广告，对应 ROI 2.5。低于 2.5 卖得越多亏得越多。",
+      "how": [
+        "在设置里填店铺毛利率（扣广告前），系统自动算盈亏线",
+        "目标 ROI 建议设为盈亏线 × 1.15，留出 15% 的安全空间",
+        "永远不要把目标 ROI 设在盈亏线以下"
+      ],
+      "sourceType": "experience",
+      "sourceName": "第三方：GMV Max 最佳实践",
+      "url": "https://bemomentiq.com/blog/gmv-max-best-practices-5-rules-every-tiktok-shop-account"
+    },
+    "learning_period": {
+      "title": "改完要等 3 天",
+      "oneLine": "每次调整 ROI 或预算后，至少等 3 个完整天再评估。",
+      "why": "系统每次调整后都要重新探索流量，前几天 ROI 和花费波动很正常。如果刚改完就因为波动又改回去，系统永远学不完。",
+      "how": [
+        "改完点「我已改好」，系统会自动倒计时 3 天",
+        "学习期内的系列显示为蓝色「学习中」，不要再动",
+        "3 天后看 7 天滚动数据再判断效果"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：LIVE GMV Max 最佳实践",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "underspend_roi": {
+      "title": "花不出去 = ROI 设太高",
+      "oneLine": "预算花不完、ROI 却达标，通常是目标 ROI 卡得太紧。",
+      "why": "在目标 ROI 模式下，预算只是天花板，目标 ROI 才是筛选流量的门槛。门槛太高，系统找不到够格的流量，钱就花不出去。官方建议花得慢时小幅调低目标 ROI。",
+      "how": [
+        "每次调低约 10%，不要一次降很多",
+        "一天之内最多调低一次（调低两次会失去当天的 ROI 保障）",
+        "不要低于盈亏线 × 1.05",
+        "如果已经调到底线还是花不出去，问题在素材或商品吸引力"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：LIVE GMV Max 最佳实践",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "scale_budget": {
+      "title": "放量：每天最多加 30%",
+      "oneLine": "预算用了 80–90% 以上、ROI 又达标，就该加预算了。",
+      "why": "预算使用率很高说明预算成了天花板，还有赚钱的流量没拿到。官方建议逐步加预算，每天最多加 30%，加完后 ROI 短期回落属于正常。",
+      "how": [
+        "每次加 30%，不要一次翻倍",
+        "加完等 3 天，看 ROI 是否仍在目标之上",
+        "ROI 掉到目标以下就停止加预算"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：Max Delivery 最佳实践",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "roi_protection": {
+      "title": "ROI 保障：别把赔付弄丢",
+      "oneLine": "当天 ROI 低于目标的 90% 且订单超过 20 单，TikTok 会返还差额广告金。",
+      "why": "赔付金额 = 当天花费 − 当天成交额 ÷（目标 ROI × 0.9）。但以下操作会让当天失去资格：手动调高目标 ROI、一天内调低超过一次、暂停或删除推广系列、编辑商品。最大投放和 Creative Boost 的花费不在保障范围内。",
+      "how": [
+        "调高 ROI 放在早上第一件事做，并接受当天失去保障",
+        "当天已经符合保障条件时先别动，等赔付",
+        "在 TikTok 后台把鼠标移到「ROI protected」标记上，点 View history 查看赔付记录（保留 60 天）"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：About ROI protection",
+      "url": "https://ads.tiktok.com/help/article/about-roi-protection-for-gmv-max-campaigns?lang=en"
+    },
+    "creative_supply": {
+      "title": "素材越多，系统越会找爆款",
+      "oneLine": "保证足够多可投放的视频，并持续补新视频。",
+      "why": "GMV Max 会先测试所有合格素材，再把预算集中到表现好的上面。可测试的素材越多，越容易找到爆款。TikTok 商家大学建议 Product GMV Max 至少有 40 条在投短视频；直播每次 50–70 条，或每天新增 5–10 条。",
+      "how": [
+        "先解决被卡住的素材（需授权、被拒、不可用）",
+        "每周补充新视频：换开头钩子、换达人、换卖点展示方式",
+        "把表现最好的素材交给 AI 制片人做同款变体",
+        "需要时开启「新视频加速测试」或 Creative Boost"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：提升 Product GMV Max 素材探索",
+      "url": "https://ads.tiktok.com/resources/help/article/how-to-improve-creative-exploration-in-product-gmv-max"
+    },
+    "blockers": {
+      "title": "先排除「卡住」的原因",
+      "oneLine": "不花钱时，先查余额、商品、授权，再看 ROI。",
+      "why": "加预算解决不了商品下架或素材没授权。官方把素材分为 9 种状态，其中「需授权」「被拒」「不可用」「已排除」都会让素材无法投放；被拒的视频甚至可能还在花钱。",
+      "how": [
+        "检查广告账户余额",
+        "确认商品在售、有库存",
+        "授权「需授权」的视频（授权后约 20 分钟生效）",
+        "替换或申诉被拒的视频；确认是否误排除了好素材"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：GMV Max 报表指标（素材状态）",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    },
+    "max_delivery": {
+      "title": "最大投放只用来冲量",
+      "oneLine": "目标 ROI 是常态；最大投放只用于新品冷启动、清库存和大促。",
+      "why": "最大投放会尽量花完预算，不保证 ROI。官方建议：新店或新品先用最大投放跑 3–5 天，日预算至少 10 倍客单价；大促时预算设为平时实际花费的 1–5 倍，超过 5 倍 ROI 可能大幅下降。最大投放的花费不在 ROI 保障范围内。",
+      "how": [
+        "新品：最大投放跑 3–5 天，ROI 达标后切回目标 ROI",
+        "大促：预算不超过平时花费的 5 倍",
+        "ROI 低于盈亏线：及时切回目标 ROI"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok 官方：About Max delivery",
+      "url": "https://ads.tiktok.com/help/article/about-max-delivery-optimization-for-gmv-max?lang=en"
+    },
+    "seven_day_rolling": {
+      "title": "看 7 天，不看昨天",
+      "oneLine": "所有判断都基于近 7 天滚动数据，避免被单日波动带跑。",
+      "why": "GMV Max 每天的 ROI 都会波动，单看昨天很容易误判。用 7 天滚动数据判断趋势，再结合学习期，才能做出稳定的决定。另外，商品和素材级的花费有最长 11 小时延迟，订单还包含自然流量，所以只用推广系列级数据做判断。",
+      "how": [
+        "看「实际（7 天）」ROI，而不是昨天的 ROI",
+        "单日异常先观察，连续偏离再处理",
+        "商品和素材数据只用来找素材问题，不用来判断亏不亏"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok 官方：GMV Max 报表指标（数据延迟说明）",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    }
+  },
+  "setup": {
+    "title": "第一步：填一个毛利率（30 秒）",
+    "desc": "毛利率 = 售价扣掉货款、物流、平台和达人佣金后剩下的比例（不含广告）。有了它，系统才能告诉你每个推广系列是赚是亏。不确定就先填大概值，之后随时可改。",
+    "placeholder": "例如 40",
+    "invalid": "毛利率请填 1–99 之间的数字",
+    "breakEvenPreview": "盈亏平衡 ROI ≈ {roi}",
+    "how": "毛利率怎么算？"
+  },
+  "today": {
+    "connectTitle": "先连接 TikTok 广告账户",
+    "connectDesc": "点右上角「连接」，授权后同步推广系列数据，就能看到诊断。",
+    "profit7d": "近 7 天利润（估算）",
+    "needMargin": "填毛利率后显示",
+    "spend7d": "近 7 天花费",
+    "gmv7d": "近 7 天成交额",
+    "roi7d": "近 7 天 ROI",
+    "credit": "昨天预计 ROI 保障赔付",
+    "creditHint": "按官方公式估算，以 TikTok 后台实际为准",
+    "mustDo": "今日必做",
+    "mustDoHint": "按影响大小排序，最多 5 件",
+    "impact": "影响约 {value}/天",
+    "why": "为什么",
+    "aiCreatives": "交给 AI 补素材",
+    "aiCreativePrompt": "GMV MAX 推广系列「{name}」素材不够（建议在投至少 {need} 条），帮我用表现好的商品做一批新视频素材。",
+    "openTikTok": "去 TikTok 后台",
+    "done": "我已改好",
+    "recorded": "已记录「{name}」的改动，开始 3 天观察。",
+    "allGood": "今天没有必做事项",
+    "allGoodHint": "所有推广系列都在学习期或状态健康。保持不动，就是最好的操作。",
+    "observing": "观察中",
+    "observingLine": "{kind}后观察，还剩 {days} 天",
+    "daysLeft": "还剩 {days} 天",
+    "noObserving": "没有正在观察的改动。",
+    "recentChanges": "最近记录的改动",
+    "undo": "撤销记录",
+    "lessonOfDay": "今天学一招",
+    "learnMore": "学一下",
+    "noDataTitle": "还没有投放数据",
+    "noDataDesc": "同步一次数据后，这里会显示每个推广系列的诊断。",
+    "syncNow": "立即同步"
+  },
+  "changeKinds": {
+    "roi": "调整 ROI",
+    "budget": "调整预算",
+    "products": "调整商品",
+    "status": "开关状态",
+    "other": "其他调整"
+  },
+  "campaigns": {
+    "all": "全部",
+    "search": "搜索推广系列",
+    "cols": {
+      "campaign": "推广系列",
+      "diagnosis": "诊断",
+      "lines": "盈亏线 / 目标 / 实际",
+      "utilization": "预算使用",
+      "spend": "7 天花费",
+      "profit": "7 天利润"
+    },
+    "live": "直播",
+    "product": "商品",
+    "target": "目标 ROI {value}",
+    "marginMissing": "还没填毛利率，暂时无法判断是否亏钱。去「投放学院」填写。",
+    "marginStore": "按店铺默认毛利率估算；补齐商品成本后会更准。",
+    "kv": {
+      "gmv": "7 天成交额",
+      "orders": "7 天订单",
+      "aov": "客单价",
+      "netCost": "真实花费（扣广告金）",
+      "creatives": "素材"
+    },
+    "creativeLine": "在投 {delivering} · 测试中 {learning} · 卡住 {blocked}",
+    "chartAria": "近 14 天每日花费和 ROI",
+    "chartLegend": "柱：每日花费；绿线：每日 ROI；灰虚线：目标；红虚线：盈亏线",
+    "loading": "正在加载…",
+    "empty": "没有符合条件的推广系列"
+  },
+  "academy": {
+    "lessonsTitle": "10 节 1 分钟小课",
+    "lessonsHint": "每条建议的「为什么」都来自这里",
+    "settingsTitle": "我的设置",
+    "settingsHint": "毛利率决定盈亏线，规则阈值决定什么时候提醒你",
+    "margins": "店铺毛利率（扣广告前）",
+    "noStores": "连接账户并同步后，这里会列出店铺。",
+    "rules": "规则阈值",
+    "thresholds": {
+      "safetyMargin": "安全空间（%）",
+      "learningDays": "学习期（天）",
+      "underspendUtilization": "花不出去：预算使用率低于（%）",
+      "scaleUtilization": "可以放量：预算使用率高于（%）",
+      "roiStep": "每次调低 ROI（%）",
+      "budgetStep": "每次加预算（%）",
+      "minDeliveringCreatives": "在投素材至少（条）",
+      "minOrdersForVerdict": "判断亏钱至少需要订单（单）"
+    },
+    "thresholdHints": {
+      "safetyMargin": "建议目标 ROI = 盈亏线 ×（1 + 这个值）",
+      "learningDays": "官方建议至少 3 天",
+      "underspendUtilization": "默认 50%",
+      "scaleUtilization": "官方建议 80–90% 以上",
+      "roiStep": "默认 10%，官方建议逐步下调",
+      "budgetStep": "官方建议每天最多 30%",
+      "minDeliveringCreatives": "商家大学建议至少 40 条",
+      "minOrdersForVerdict": "样本太少不下结论"
+    },
+    "saved": "已保存"
+  },
+  "dash": {
+    "kpiAria": "账户近 7 天关键指标",
+    "tiles": {
+      "profit": "近 7 天利润",
+      "gmv": "成交额",
+      "spend": "花费",
+      "roi": "ROI",
+      "credit": "昨天预计 ROI 保护赔付"
+    },
+    "estimated": "按毛利率估算",
+    "breakEvenNote": "盈亏线 {value}",
+    "creditNote": "按官方规则估算，以 TikTok 后台为准",
+    "vsPrev": "比前 7 天",
+    "sparkAria": "{name}近 14 天走势",
+    "cols": {
+      "status": "状态",
+      "campaign": "推广系列",
+      "action": "要做的事",
+      "impact": "影响/天",
+      "roi": "ROI（7 天）",
+      "trend": "14 天 ROI"
+    },
+    "perDay": "约 {value}",
+    "details": "展开详情",
+    "statusTitle": "推广系列状态",
+    "statusHint": "共 {count} 个推广系列，点一行查看",
+    "viewAll": "查看全部推广系列",
+    "trendTitle": "成交额与花费（近 14 天）",
+    "trendHint": "两条线拉开越大，赚得越多",
+    "trendAria": "近 14 天每日成交额和花费",
+    "roiTitle": "ROI 走势（近 14 天）",
+    "roiHint": "实线低于红色虚线就是在亏钱",
+    "roiAria": "近 14 天每日 ROI，对比目标和盈亏线",
+    "roiVs": "目标 {target} · 盈亏 {breakEven}",
+    "total": "合计（{count} 个）",
+    "floor": "底线"
+  },
+  "errors": {
+    "restart": "主程序还没加载新功能：请完全退出软件后重新打开（开发模式下请重启 npm run dev）。",
+    "unknown": "加载失败，请稍后重试。"
+  },
+  "rules": {
+    "groups": "规则组",
+    "groupsHint": "可复用的策略模板",
+    "auto": "自动执行",
+    "autoHint": "满足条件时自动调整",
+    "shadowHint": "只模拟，不改 TikTok",
+    "manualHint": "只给建议，你来操作",
+    "unbound": "未绑定规则",
+    "unboundHint": "这些推广系列还没有策略",
+    "guards": "所有策略都会遵守的安全规则",
+    "groupsTitle": "规则组",
+    "groupsSubtitle": "设定最低 ROI、目标 CPA 和素材测试预算，再绑定到推广系列。",
+    "ruleCol": "规则",
+    "scopeCol": "适用店铺",
+    "modeCol": "执行方式",
+    "assignHint": "给每个推广系列选规则和允许的动作",
+    "allowed": "允许",
+    "notAllowed": "不允许",
+    "noGroups": "还没有规则组。先建一个，再绑定到推广系列。",
+    "delete": "删除",
+    "boundCol": "绑定系列"
+  },
+  "simple": {
+    "nav": {
+      "today": "今天做什么",
+      "diagnosis": "推广系列体检",
+      "academy": "投放学院",
+      "settings": "连接与设置"
+    },
+    "mode": {
+      "toPro": "打开专业模式",
+      "toProHint": "显示全部功能和详细数据",
+      "toSimple": "回到新手模式",
+      "toSimpleHint": "只看今天要做的事",
+      "simple": "新手模式",
+      "pro": "专业模式"
+    },
+    "start": {
+      "title": "3 步开始使用",
+      "desc": "做完这 3 步，系统每天告诉你该改哪里。大约 3 分钟。",
+      "progress": "已完成 {done}/3",
+      "connect": "连接 TikTok 广告账户",
+      "connectDesc": "授权后系统才能读到你的推广数据。系统不会自己改你的广告。",
+      "connectDone": "已连接",
+      "connectBtn": "去连接",
+      "sync": "同步推广数据",
+      "syncDesc": "把最近 14 天的花费和成交拉过来，一般 1 到 3 分钟。",
+      "syncDone": "数据已同步",
+      "margin": "填写毛利率",
+      "marginDesc": "毛利率 = (售价 − 商品成本 − 运费等) ÷ 售价。不确定就先填 30，以后随时能改。系统靠它判断你是赚还是亏。",
+      "marginPreview": "每花 1 元广告费，至少要卖回 {roi} 元才不亏",
+      "marginExample": "例：售价 100、成本加运费 60，就填 40"
+    },
+    "kpi": {
+      "profit": "这 7 天赚了多少",
+      "profitHint": "按你填的毛利率估算，已经扣掉广告费",
+      "profitMissing": "填写毛利率后才能算出来",
+      "spend": "这 7 天广告花了多少",
+      "spendHint": "带来成交 {gmv}",
+      "roi": "每花 1 元，卖回多少元",
+      "roiHint": "低于 {value} 就是在亏钱",
+      "roiNoMargin": "填写毛利率后告诉你赚不赚钱",
+      "vsLastWeek": "比上周 {value}"
+    },
+    "tasks": {
+      "title": "今天要做 {count} 件事",
+      "hint": "从第 1 件开始做。每件都写好了在 TikTok 后台怎么点，改完回来点「我已经改好了」。",
+      "impact": "影响约 {value}/天",
+      "whyLabel": "原因：",
+      "doLabel": "要做：",
+      "done": "我已经改好了",
+      "learn": "为什么要这样做？"
+    },
+    "moreData": "查看趋势图",
+    "lessData": "收起趋势图",
+    "campaigns": {
+      "verdict": "结论",
+      "next": "下一步",
+      "roi": "每花 1 元卖回",
+      "roiHelp": "ROI：花 1 元广告费带来多少元成交",
+      "roiVs": "低于 {breakEven} 就亏",
+      "nothing": "不用动，保持现状"
+    },
+    "steps": {
+      "raise_roi": [
+        "点下方「去 TikTok 后台」，打开广告后台",
+        "进入 GMV Max，找到推广系列「{name}」",
+        "点「编辑」，把「ROI 目标」从 {from} 改成 {to}",
+        "保存后回到这里，点「我已经改好了」",
+        "改完 3 天内先别再动，让系统重新学习"
+      ],
+      "lower_roi": [
+        "点下方「去 TikTok 后台」，打开广告后台",
+        "进入 GMV Max，找到推广系列「{name}」",
+        "点「编辑」，把「ROI 目标」从 {from} 改成 {to}",
+        "保存后回到这里，点「我已经改好了」",
+        "一天只调一次，改完 3 天内先别再动"
+      ],
+      "raise_budget": [
+        "点下方「去 TikTok 后台」，打开广告后台",
+        "进入 GMV Max，找到推广系列「{name}」",
+        "点「编辑」，把「日预算」从 {from} 改成 {to}",
+        "保存后回到这里，点「我已经改好了」",
+        "一天最多加一次预算"
+      ],
+      "fix_creatives": [
+        "打开 TikTok 广告后台，进入推广系列「{name}」",
+        "打开素材列表，找出「需要授权」「未通过审核」「不可用」的视频",
+        "需要授权的去补授权；没通过的换成新视频",
+        "视频不够就点「交给 AI 补素材」",
+        "处理完回到这里，点「我已经改好了」"
+      ],
+      "fix_blocker": [
+        "打开 TikTok 广告后台，进入推广系列「{name}」",
+        "按上面「要做」的提示处理，比如账户余额、商品状态或审核问题",
+        "处理完回到这里，点「我已经改好了」"
+      ],
+      "review_offer": [
+        "看看「{name}」推广的商品：价格、库存、优惠有没有竞争力",
+        "对比同类商品别人卖多少钱、送什么",
+        "调整后回来点「我已经改好了」，3 天后再看效果"
+      ],
+      "none": []
+    }
+  },
+  "table": {
+    "moreCampaigns": "还有 {count} 个推广系列"
+  },
+  "range": {
+    "label": "日期范围",
+    "yesterday": "昨天",
+    "lastDays": "近 {days} 天",
+    "custom": "自定义",
+    "start": "开始日期",
+    "end": "结束日期",
+    "compare": "对比上期"
+  },
+  "compare": {
+    "spend": "花费",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "订单",
+    "vsPrevious": "较上期",
+    "noPrevious": "上期无数据",
+    "search": "搜索推广系列名称或 ID",
+    "allPacing": "全部",
+    "suggestions": "{count} 条建议",
+    "evaluateHint": "用最新数据重新评估所有推广系列"
+  },
+  "edit": {
+    "selected": "已选 {count} 个推广系列",
+    "selectAll": "全选本页",
+    "enable": "开启",
+    "pause": "暂停",
+    "clear": "取消选择",
+    "adjustBudget": "调整预算",
+    "adjustRoi": "调整目标 ROI",
+    "preview": "预览修改",
+    "modes": {
+      "up": "提高 %",
+      "down": "降低 %",
+      "setBudget": "设为金额",
+      "setRoi": "设为"
+    },
+    "editBudget": "修改日预算",
+    "editRoi": "修改目标 ROI",
+    "enterHint": "回车确认，Esc 取消",
+    "fields": {
+      "budget": "日预算",
+      "roi": "目标 ROI",
+      "status": "投放状态"
+    },
+    "confirmTitle": "确认修改 {count} 项",
+    "confirmHint": "修改会直接写入 TikTok。写入前后都会核对后台数值，并记入操作记录，可以撤销。",
+    "confirm": "确认修改（{count}）",
+    "cancel": "取消",
+    "close": "完成",
+    "undo": "撤销这次修改",
+    "undone": "已撤销",
+    "doneTitle": "修改结果",
+    "doneSummary": "成功 {ok} 项，失败 {failed} 项",
+    "warningCount": "有 {count} 条风险提示，请确认后再提交",
+    "safety": "写入前后自动核对，可随时撤销",
+    "warn": {
+      "budgetJump": "一次加预算超过 50%，系统可能重新进入学习期，建议分几次加",
+      "budgetCut": "一次减预算超过 50%，起量会明显变慢",
+      "belowFloor": "目标 ROI 低于保本 ROI {floor}，成交越多亏得越多",
+      "roiJump": "目标 ROI 变化超过 30%，花费和起量可能明显变化",
+      "pause": "暂停后广告立即停止投放，重新开启需要重新起量"
+    },
+    "errors": {
+      "noChange": "数值没有变化",
+      "budgetInvalid": "预算必须大于 0",
+      "roiInvalid": "目标 ROI 必须大于 0",
+      "stopped": "已开启紧急停止，所有写入操作都被暂停。先解除紧急停止再修改。",
+      "pending": "这个推广系列上一次修改还在核对中，请几分钟后再试",
+      "changedRemotely": "TikTok 后台的数值已经被改过，请先同步数据再修改",
+      "notConnected": "没有可用的 TikTok 授权或写入权限，请在设置里重新连接账户"
+    }
+  },
+  "views": {
+    "title": "视图",
+    "empty": "还没有保存的视图。把筛选、排序和列调好后保存，下次一键切换。",
+    "namePlaceholder": "视图名称，如：亏损系列",
+    "save": "保存当前视图",
+    "remove": "删除视图"
+  },
+  "columns": {
+    "title": "列",
+    "status": "状态",
+    "budget": "日预算",
+    "spend": "花费",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "订单",
+    "cpa": "单均花费",
+    "aov": "客单价",
+    "protection": "利润保护",
+    "reset": "恢复默认列"
+  },
+  "alerts": {
+    "title": "预警",
+    "empty": "现在没有需要处理的预警",
+    "desktop": "桌面通知",
+    "desktopHint": "有新预警时弹出系统通知（打开过 GMV MAX 后每 15 分钟检查一次）",
+    "settingsTitle": "预警通知",
+    "roi_below_floor": {
+      "title": "ROI 低于保本线",
+      "detail": "近 3 天 ROI {roi}，保本需要 {floor}"
+    },
+    "budget_overspend": {
+      "title": "预算可能提前花完",
+      "detail": "已花 {spent}，按时间应花 {expected}"
+    },
+    "creative_fatigue": {
+      "title": "素材疲劳",
+      "detail": "{count} 条素材效果在下降，建议补充新素材"
+    }
+  },
+  "auth": {
+    "expired": "TikTok 授权已过期，数据无法同步。重新授权后即可恢复。",
+    "expiredError": "TikTok 授权已过期，请点「重新授权」，在弹出的 TikTok 页面登录确认后再同步。",
+    "reauthorize": "重新授权",
+    "done": "TikTok 已重新授权，可以同步数据了。",
+    "status": "授权已过期"
+  },
+  "filters": {
+    "type": "推广类型",
+    "clear": "清除筛选"
+  }
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { GMV_MAX_ISSUE_CODES } from '../src/main/modules/tiktok-gmv-max/resolutions'
 import { GMV_MAX_HELP_CHAPTERS, GMV_MAX_HELP_ISSUES, GMV_MAX_HELP_ISSUE_CODES } from '../src/renderer/src/ui/components/gmv-max/helpCatalog'
 
@@ -77,7 +77,12 @@ async function run() {
   assert.match(component, /data-testid="gmv-help-issue-evidence"/)
   assert.match(component, /emit\('navigate'/)
 
-  const view = await readFile(path.join(process.cwd(), 'src/renderer/src/ui/views/TiktokGmvMaxOptimizerView.vue'), 'utf8')
+  // The GMV MAX view renders its pages from components/gmv-max/pages, so check the view and its pages together.
+  const pagesDir = path.join(process.cwd(), 'src/renderer/src/ui/components/gmv-max/pages')
+  const view = [
+    await readFile(path.join(process.cwd(), 'src/renderer/src/ui/views/TiktokGmvMaxOptimizerView.vue'), 'utf8'),
+    ...await Promise.all((await readdir(pagesDir)).filter((file) => file.endsWith('.vue')).map((file) => readFile(path.join(pagesDir, file), 'utf8'))),
+  ].join('\n')
   assert.match(view, /openHelpIssue\(primarySopIssue\.code\)/)
   assert.match(view, /:focus-issue-code="helpFocusIssueCode"/)
 

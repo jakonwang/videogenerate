@@ -5,15 +5,19 @@ import { useRoute, useRouter } from 'vue-router'
 import CloneConsoleSidebar from '../components/clone/CloneConsoleSidebar.vue'
 import CloneDataCard from '../components/clone/CloneDataCard.vue'
 import CloneMediaCard from '../components/clone/CloneMediaCard.vue'
+import CloneShotReplaceMenu from '../components/clone/CloneShotReplaceMenu.vue'
 import CloneStageHeader from '../components/clone/CloneStageHeader.vue'
 import CloneStateCard from '../components/clone/CloneStateCard.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import ClonePromptManager from '../components/clone/ClonePromptManager.vue'
+import CloneSimplePanel, { type CloneSimplePhase, type CloneSimpleState } from '../components/clone/CloneSimplePanel.vue'
 import { useCloneProjectWorkspace } from '@/composables/useCloneProjectWorkspace'
 import { useCloneRouteProject } from '@/composables/useCloneRouteProject'
 import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
-import { hasStoredWebToken, webApiClient, type GeelarkPublishAccount } from '@/lib/webApiClient'
+import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
+import { AlertTriangle, ArrowRight, Check, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
 
 const { t: tr } = useI18n()
 const route = useRoute()
@@ -457,6 +461,34 @@ const framePreviewPath = ref('')
 const framePreviewTitle = ref('')
 const shotPromptPreviewOpen = ref(false)
 const shotVideoPromptPreviewOpen = ref(false)
+const promptManagerOpen = ref(false)
+type PromptManagerKind = 'script_analysis' | 'storyboard_model' | 'storyboard_product' | 'shot_video'
+const PROMPT_KINDS_BY_STEP: Record<'all' | 'analyze' | 'grid' | 'video', PromptManagerKind[]> = {
+  all: ['script_analysis', 'storyboard_model', 'storyboard_product', 'shot_video'],
+  analyze: ['script_analysis'],
+  grid: ['storyboard_model', 'storyboard_product'],
+  video: ['shot_video'],
+}
+const promptManagerKinds = ref<PromptManagerKind[]>(PROMPT_KINDS_BY_STEP.video)
+const promptManagerKind = ref<PromptManagerKind>('shot_video')
+const promptManagerProductType = ref('all')
+/** Category of the bound product, so the dialog opens on the templates this project actually uses. */
+function projectPromptProductType() {
+  const project = current.value as any
+  const candidates = [project?.boundProductSnapshot?.type, project?.blueprint?.productCategory, project?.baseBlueprint?.productCategory]
+  for (const candidate of candidates) {
+    const normalized = candidate ? normalizeCloneProductType(candidate) : 'general'
+    if (normalized !== 'general') return normalized
+  }
+  return 'all'
+}
+function openPromptManager(step: 'all' | 'analyze' | 'grid' | 'video', options?: { kind?: PromptManagerKind; productType?: unknown }) {
+  promptManagerKinds.value = PROMPT_KINDS_BY_STEP[step]
+  promptManagerKind.value = options?.kind && PROMPT_KINDS_BY_STEP[step].includes(options.kind) ? options.kind : PROMPT_KINDS_BY_STEP[step][0]
+  const explicit = options?.productType ? normalizeCloneProductType(options.productType) : 'general'
+  promptManagerProductType.value = explicit !== 'general' ? explicit : projectPromptProductType()
+  promptManagerOpen.value = true
+}
 const identityGridPromptPreviewOpen = ref(false)
 const composeOutputDir = ref('')
 const composeLocalError = ref('')
@@ -468,10 +500,6 @@ const regeneratingStoryboardShotIds = ref<string[]>([])
 const regeneratingFailedStoryboardFrames = ref(false)
 const selectedStoryboardShotIds = ref<string[]>([])
 const queryingStoryboardFrames = ref(false)
-const geelarkPublishModalOpen = ref(false)
-const geelarkPublishSubmitting = ref(false)
-const geelarkAccounts = ref<GeelarkPublishAccount[]>([])
-const geelarkPublishMessage = ref('')
 const variantCount = ref(3)
 const selectedStageKey = ref<StageItem['key'] | ''>('')
 const selectedShotId = ref('')
@@ -493,19 +521,9 @@ const shotVideoPromptPreviewLoadedShotId = ref('')
 const identityGridPromptPreviewLoading = ref(false)
 const identityGridPromptPreviewError = ref('')
 const identityGridPromptPreview = ref<IdentityGridPromptPreview | null>(null)
-const geelarkPublishForm = reactive({
-  publishAccountId: '',
-  videoDesc: '',
-  productId: '',
-  productTitle: '',
-  scheduleAt: '',
-  needShareLink: false,
-})
-
 function closeTransientModalOverlays() {
   modelModalOpen.value = false
   productModalOpen.value = false
-  geelarkPublishModalOpen.value = false
 }
 
 function closePromptPreviewOverlays() {
@@ -921,9 +939,6 @@ const storyboardFrameStateSignature = computed(() =>
   ),
 )
 const finalOutputPath = computed(() => current.value?.finalCompose?.outputPath || '')
-const selectedGeelarkAccount = computed(
-  () => geelarkAccounts.value.find((item) => item.id === geelarkPublishForm.publishAccountId) || null,
-)
 const finalOutputDirText = computed(() => safeText(shortPath(composeOutputDir.value || current.value?.outputDir || ''), tr('autoUi.k_1507374d9548')))
 const localComposeErrorText = computed(() => safeText(current.value?.finalCompose?.error || composeLocalError.value, ''))
 const composeHealthFlagLabelMap: Record<string, string> = {
@@ -1516,6 +1531,13 @@ const analyzeGlobalSections = computed(() => {
   ].filter((item) => item.desc)
 })
 const analyzeReversePrompt = computed(() => safeText(current.value?.blueprint?.globalScript?.reversePrompt, ''))
+/** "01  0.0s-3.2s Close-up…" → { time: '0.0s-3.2s', text: 'Close-up…' } for the script list. */
+function splitScriptLine(line: string) {
+  const body = String(line || '').replace(/^\s*\d{1,3}\s+/, '').trim()
+  const match = /^(\d+(?:\.\d+)?s\s*[-–~]\s*\d+(?:\.\d+)?s)\s*(.*)$/.exec(body)
+  return match ? { time: match[1].replace(/\s+/g, ''), text: match[2] || body } : { time: '', text: body }
+}
+
 const analyzeScriptLines = computed(() => {
   const blueprintShotLines = (current.value?.blueprint?.shots || [])
     .slice()
@@ -1890,11 +1912,23 @@ function safeText(value: unknown, fallback: string) {
 
 function normalizeCloneProductType(value: unknown) {
   const text = String(value || '').trim().toLowerCase()
-  if (text === 'earrings' || text === 'phone_case' || text === 'clothes' || text === 'toy') return text
-  if (/earrings?|earring|ear jewelry|jewelry|jewellery|ear\\s|hoop|dangle|drop earring|stud|zircon|silver|gold/.test(text)) return 'earrings'
-  if (/phone\\s*case|case for phone|mobile case|iphone case/.test(text)) return 'phone_case'
-  if (/clothes|dress|shirt|hoodie|jacket|pants|skirt|garment|fashion/.test(text)) return 'clothes'
-  if (/toy|figure|doll|plush|lego|collectible/.test(text)) return 'toy'
+  // Keep in sync with src/main/modules/clone/productCategory.ts.
+  // Whole-word matching only: colour words ("gold", "silver") or fragments
+  // ("stud" in "studio") must never turn a product into earrings.
+  if (text === 'earring') return 'earrings'
+  if (
+    text === 'earrings' || text === 'necklace' || text === 'ring' || text === 'bracelet' || text === 'phone_case' ||
+    text === 'clothes' || text === 'bag' || text === 'shoes' || text === 'toy'
+  ) return text
+  if (/\b(?:earrings?|ear[\s-]?(?:studs?|cuffs?|jewelry|jewellery))\b/.test(text)) return 'earrings'
+  if (/\b(?:necklaces?|pendants?|chokers?)\b/.test(text)) return 'necklace'
+  if (/\b(?:bracelets?|bangles?)\b/.test(text)) return 'bracelet'
+  if (/\brings?\b(?!\s+lights?)/.test(text)) return 'ring'
+  if (/\b(?:phone\s*cases?|mobile cases?|iphone cases?)\b/.test(text)) return 'phone_case'
+  if (/\b(?:dress(?:es)?|shirts?|t-shirts?|hoodies?|jackets?|pants|skirts?|garments?|clothes|clothing)\b/.test(text)) return 'clothes'
+  if (/\b(?:handbags?|tote bags?|backpacks?|bags?)\b/.test(text)) return 'bag'
+  if (/\b(?:shoes?|sneakers?|boots?|sandals?|heels)\b/.test(text)) return 'shoes'
+  if (/\b(?:toys?|figurines?|dolls?|plush(?:ies)?)\b/.test(text)) return 'toy'
   return 'general'
 }
 
@@ -3128,6 +3162,7 @@ function selectProduct(item: ProductLibraryItem) {
   const nextId = String(item?.id || '').trim()
   if (!nextId) return
   selectedProductId.value = nextId
+  simpleProductPicked.value = true
   productQuery.value = ''
   productModalOpen.value = false
 }
@@ -3464,28 +3499,6 @@ async function composeFinalVideo() {
   await composeFinalVideoInWorkspace()
 }
 
-async function openGeelarkPublishModal() {
-  if (!finalOutputPath.value) {
-    geelarkPublishMessage.value = tr('autoUi.k_2ead337584f9')
-    return
-  }
-  errorText.value = ''
-  geelarkPublishMessage.value = ''
-  try {
-    geelarkAccounts.value = await webApiClient.listGeelarkPublisherAccounts()
-    if (!geelarkPublishForm.publishAccountId && geelarkAccounts.value.length) {
-      geelarkPublishForm.publishAccountId = geelarkAccounts.value[0].id
-    }
-    if (!geelarkPublishForm.scheduleAt) {
-      const next = new Date(Date.now() + 10 * 60 * 1000)
-      geelarkPublishForm.scheduleAt = next.toISOString().slice(0, 16)
-    }
-    geelarkPublishModalOpen.value = true
-  } catch (error: any) {
-    geelarkPublishMessage.value = error?.message ?? String(error)
-  }
-}
-
 async function pickComposeOutputDir() {
   const dir = await window.api.pickDir({ title: tr('autoUi.k_ebcc859bd923') })
   if (!dir) return
@@ -3504,47 +3517,29 @@ async function revealFinalOutput() {
   await window.api.shell.showItemInFolder(finalOutputPath.value)
 }
 
-async function submitGeelarkPublish() {
-  if (!current.value?.id || !finalOutputPath.value) {
-    geelarkPublishMessage.value = tr('autoUi.k_8eed551d0ade')
-    return
-  }
-  if (!geelarkPublishForm.publishAccountId) {
-    geelarkPublishMessage.value = tr('autoUi.k_b75809f9a5d3')
-    return
-  }
-  geelarkPublishSubmitting.value = true
-  geelarkPublishMessage.value = ''
+async function openTiktokCreativeStudio() {
+  if (!current.value?.id) return
   try {
-    await webApiClient.publishGeelarkVideo({
-      cloneProjectId: current.value.id,
-      videoPath: finalOutputPath.value,
-      publishAccountId: geelarkPublishForm.publishAccountId,
-      videoDesc: geelarkPublishForm.videoDesc || undefined,
-      productId: geelarkPublishForm.productId || undefined,
-      productTitle: geelarkPublishForm.productTitle || undefined,
-      scheduleAt: geelarkPublishForm.scheduleAt ? new Date(geelarkPublishForm.scheduleAt).getTime() : Date.now(),
-      needShareLink: Boolean(geelarkPublishForm.needShareLink),
-    })
-    geelarkPublishMessage.value = tr('autoUi.k_73a4cf5d0400')
-    geelarkPublishModalOpen.value = false
-    void router.push('/plugins/geelark-publisher')
+    const result = await window.api.clone.sendProjectToCreative({ cloneProjectId: current.value.id })
+    setStageLog(tr('ai.cloneShot.projectSent', { count: result.shotCount }), 'success')
+    void router.push({ path: '/plugins/tiktok-creative-studio' })
   } catch (error: any) {
-    geelarkPublishMessage.value = error?.message ?? String(error)
-  } finally {
-    geelarkPublishSubmitting.value = false
+    onShotAlternativeError(String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
   }
 }
 
-function openTiktokCreativeStudio() {
-  if (!current.value?.id) return
-  void router.push({
-    path: '/plugins/tiktok-creative-studio',
-    query: {
-      cloneProjectId: current.value.id,
-      autoCreate: '1',
-    },
-  })
+function onShotAlternativeReplaced(project: unknown) {
+  if (project) {
+    applyProject(project as CloneProject)
+    setStageLog(tr('ai.cloneShot.replaced'), 'success')
+  } else {
+    void refreshCurrentProject()
+  }
+}
+
+function onShotAlternativeError(message: string) {
+  errorText.value = message
+  setStageLog(message, 'error')
 }
 
 let timer: number | null = null
@@ -3588,8 +3583,132 @@ function buildAutoStoryboardRecoverySignature(projectId: string, kind: 'query' |
   ].join(':')
 }
 
+
+// ---------------------------------------------------------------------------
+// Simple view: the default face of a task for everyday users.
+// Three inputs, one button, four plain-language phases, then the video.
+// All pipeline logic stays in the functions above; this only maps state.
+// ---------------------------------------------------------------------------
+const LAST_MODEL_STORAGE_KEY = 'clone.simple.lastModelId'
+const viewModeOverride = ref<'simple' | 'advanced' | ''>('')
+const viewMode = computed<'simple' | 'advanced'>(() => {
+  if (viewModeOverride.value) return viewModeOverride.value
+  // Tasks created as "manual" were opened by someone who wants the step-by-step workspace.
+  return current.value?.runMode === 'manual' ? 'advanced' : 'simple'
+})
+const showSimpleView = computed(() => Boolean(current.value?.id) && viewMode.value === 'simple')
+const simpleStarting = ref(false)
+// The view mode and the "user picked a product" flag belong to one task, not to the page.
+watch(
+  () => String(current.value?.id || ''),
+  () => {
+    viewModeOverride.value = ''
+    simpleProductPicked.value = false
+  },
+)
+const simpleBusy = computed(() => loading.value || autoFlowRunning.value || simpleStarting.value)
+const simpleState = computed<CloneSimpleState>(() => {
+  if (finalOutputPath.value) return 'done'
+  const started = Boolean(current.value?.blueprint?.shots?.length) || simpleStarting.value
+  if (!started) return 'setup'
+  if (simpleBusy.value) return 'running'
+  if (generationFailureText.value) return 'error'
+  return 'paused'
+})
+const simplePhases = computed<CloneSimplePhase[]>(() => {
+  const stage = workflowStageKey.value
+  const activeIndex = finalOutputPath.value ? 4 : stage === 'analyze' ? 0 : stage === 'video' ? 2 : stage === 'compose' ? 3 : 1
+  return ['analyze', 'visuals', 'videos', 'compose'].map((key, index) => ({
+    key,
+    state: index < activeIndex ? 'done' : index === activeIndex ? 'active' : 'pending',
+  }))
+})
+// A draft can carry a placeholder name before any video is chosen, so only the path counts as "chosen".
+const simpleReferenceName = computed(() =>
+  referenceSourcePath.value ? safeText(current.value?.referenceVideoName, '') || shortPath(referenceSourcePath.value) : '',
+)
+// The workspace preselects the first library product. With several products that is a guess,
+// so the simple page only shows a product the user picked, one already bound, or the only one there is.
+const simpleProductPicked = ref(false)
+const simpleProductChosen = computed(
+  () => Boolean(selectedProductId.value) && (simpleProductPicked.value || Boolean(current.value?.productId) || products.value.length === 1),
+)
+const simpleReferenceUrl = computed(() => (referenceSourcePath.value ? mediaUrl(referenceSourcePath.value) : ''))
+const simpleFinalVideoUrl = computed(() => (finalOutputPath.value ? mediaUrl(finalOutputPath.value, finalComposeUpdatedAt.value || undefined) : ''))
+
+async function startSimpleClone() {
+  if (simpleBusy.value) return
+  if (!referenceSourcePath.value || !simpleProductChosen.value || !hasBoundModel.value) return
+  simpleStarting.value = true
+  errorText.value = ''
+  try {
+    const productId = String(selectedProductId.value || '').trim()
+    if (productId && productId !== String(current.value?.productId || '').trim()) {
+      await bindLibraryProduct(productId)
+    }
+    // One button means the whole pipeline, whatever run mode the task was created with.
+    autoRunIntentArmed.value = true
+    await createBlueprint()
+  } catch (error: any) {
+    markError(error?.message ?? error, tr('cloneUi.simple.startFailed'))
+  } finally {
+    simpleStarting.value = false
+  }
+}
+
+async function resumeSimpleClone() {
+  if (simpleBusy.value) return
+  if (!current.value?.blueprint?.shots?.length) {
+    await startSimpleClone()
+    return
+  }
+  errorText.value = ''
+  try {
+    autoRunIntentArmed.value = true
+    if (workflowStageKey.value === 'compose') await composeFinalVideo()
+    else if (workflowStageKey.value === 'video') await generateShotVideos()
+    else await autoRunToStoryboardVideos()
+  } catch (error: any) {
+    markError(error?.message ?? error, tr('cloneUi.simple.startFailed'))
+  }
+}
+
+// Remember the model, and offer it again on the next task so step 3 is usually already done.
+watch(
+  () => String(current.value?.selectedModelIdentitySnapshot?.id || selectedModelId.value || '').trim(),
+  (modelId) => {
+    if (!modelId) return
+    try {
+      window.localStorage.setItem(LAST_MODEL_STORAGE_KEY, modelId)
+    } catch {
+      // Storage can be unavailable; remembering the model is only a convenience.
+    }
+  },
+)
+let simpleModelPrefillProjectId = ''
+watch(
+  () => [String(current.value?.id || ''), models.value.length, simpleState.value, hasBoundModel.value] as const,
+  async ([projectId, modelCount, state, bound]) => {
+    if (!projectId || !modelCount || state !== 'setup' || bound) return
+    if (simpleModelPrefillProjectId === projectId) return
+    simpleModelPrefillProjectId = projectId
+    let lastModelId = ''
+    try {
+      lastModelId = String(window.localStorage.getItem(LAST_MODEL_STORAGE_KEY) || '').trim()
+    } catch {
+      lastModelId = ''
+    }
+    if (!lastModelId || !models.value.some((item) => item.id === lastModelId)) return
+    try {
+      await bindModelIdentity(lastModelId)
+    } catch {
+      // The user can still pick a model by hand.
+    }
+  },
+)
+
 onMounted(async () => {
-  cloneTopbar.show(stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
+  cloneTopbar.show(showSimpleView.value ? [] : stageItems.value.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
   pushRuntimeLog(stageLog.value)
   offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
     const text = safeText(payload?.message, '')
@@ -3889,10 +4008,10 @@ watch(
 )
 
 watch(
-  stageItems,
-  (items) => {
+  [stageItems, showSimpleView] as const,
+  ([items, simple]) => {
     if (!route.path.includes('/clone/')) return
-    cloneTopbar.show(items.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
+    cloneTopbar.show(simple ? [] : items.map(({ key, title, desc, done, active }) => ({ key, title, desc, done, active })))
   },
   { immediate: true, deep: true },
 )
@@ -3940,1103 +4059,753 @@ onUnmounted(() => {
 
 <template>
   <div class="clone-page">
-    <section class="workspace-grid">
-      <div class="main-column">
-        <article v-if="visibleStageKey === 'analyze'" class="panel panel-reference">
-          <div class="analyze-workbench">
-            <section class="analyze-hero-card">
-              <div class="analyze-hero-card__head">
-                <div class="analyze-hero-card__copy">
-                  <h2>{{ tr('autoUi.k_070160e04cfa') }}</h2>
-                  <p>{{ tr('autoUi.k_3e20340c353f') }}</p>
-                </div>
-                <div class="analyze-hero-card__controls">
-                  <button class="ghost-button small secondary-action" type="button" @click="router.push('/clone')"> {{ tr('autoUi.k_cd3b2229aab1') }} </button>
-                  <button
-                    class="primary-button small"
-                    type="button"
-                    :disabled="loading"
-                    @click="referenceSourcePath ? createBlueprint() : pickReferenceVideo()"
-                  >
-                    {{ analyzePrimaryButtonLabel }}
-                  </button>
-                </div>
-              </div>
+    <section class="workspace-grid cw-shell">
+      <CloneSimplePanel
+        v-if="showSimpleView"
+        :state="simpleState"
+        :busy="simpleBusy"
+        :reference-video-name="simpleReferenceName"
+        :reference-video-url="simpleReferenceUrl"
+        :product-name="simpleProductChosen ? selectedProductLibraryItem?.name || '' : ''"
+        :product-image-url="simpleProductChosen ? selectedProductPreview : ''"
+        :model-name="modelSnapshot?.name || ''"
+        :model-image-url="modelPreview(modelSnapshot)"
+        :phases="simplePhases"
+        :status-text="simpleState === 'running' ? stageLog : ''"
+        :error-text="simpleState === 'setup' ? errorText : generationFailureText"
+        :final-video-url="simpleFinalVideoUrl"
+        :final-poster-url="composePreviewPosterUrl"
+        @pick-video="pickReferenceVideo"
+        @pick-product="productModalOpen = true"
+        @pick-model="modelModalOpen = true"
+        @start="startSimpleClone"
+        @resume="resumeSimpleClone"
+        @open-advanced="viewModeOverride = 'advanced'"
+        @reveal-output="revealFinalOutput"
+        @open-output="openFinalOutput"
+        @new-task="router.push('/clone')"
+        @back="router.push('/clone')"
+      />
+      <div v-else class="main-column vg-scope cw">
+        <div v-if="current?.id" class="cw-modebar" data-testid="clone-advanced-bar">
+          <span class="cw-modebar__label"><SlidersHorizontal :size="14" />{{ tr('cloneUi.simple.advancedLabel') }}</span>
+          <span class="cw-modebar__hint">{{ tr('cloneUi.simple.advancedHint') }}</span>
+          <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" data-testid="clone-advanced-prompts" @click="openPromptManager('all')">{{ tr('cloneUi.promptManager.entry') }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" data-testid="clone-back-to-simple" @click="viewModeOverride = 'simple'">{{ tr('cloneUi.simple.backToSimple') }}</button>
+        </div>
+        <!-- ================= 01 参考分析 ================= -->
+        <article v-if="visibleStageKey === 'analyze'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">01</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_070160e04cfa') }}</h2>
+              <p>{{ tr('autoUi.k_3e20340c353f') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading" @click="pickReferenceVideo">
+                <Upload :size="15" />{{ referenceSourcePath ? tr('autoUi.k_afe2bfaa6eee') : tr('autoUi.k_f743536d6df3') }}
+              </button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading" @click="referenceSourcePath ? createBlueprint() : pickReferenceVideo()">
+                <Sparkles :size="15" />{{ analyzePrimaryButtonLabel }}
+              </button>
+            </div>
+          </header>
 
-              <div class="analyze-main-grid">
-                <div class="analyze-video-card">
-                  <div class="analyze-video-card__head">
-                    <strong>{{ tr('autoUi.k_ce9406ae8fc8') }}</strong>
-                    <span>{{ referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a') }}</span>
-                  </div>
-                  <div class="video-shell analyze-video-shell">
-                    <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state"
-                      :title="tr('autoUi.k_8704840e5b6a')"
-                      :description="tr('autoUi.k_8542c9c4c761')"
-                    />
-                  </div>
-                  <div class="analyze-video-card__actions">
-                    <button class="ghost-button small secondary-action" type="button" :disabled="loading" @click="pickReferenceVideo">
-                      {{ referenceSourcePath ? tr('autoUi.k_afe2bfaa6eee') : tr('autoUi.k_f743536d6df3') }}
-                    </button>
-                  </div>
-                  <div class="analyze-video-meta-card">
-                    <strong>{{ tr('autoUi.k_2be1fa57c981') }}</strong>
-                    <div class="analyze-video-meta-card__grid">
-                      <span>{{ tr('autoUi.k_1275f6feb703') }}</span>
-                      <strong>{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, tr('autoUi.k_937d465574eb')) }}</strong>
-                      <span>{{ tr('autoUi.k_3c7800e243ac') }}</span>
-                      <strong>{{ storyBeats.length || 0 }}</strong>
-                      <span>{{ tr('autoUi.k_62e951a692ff') }}</span>
-                      <strong>{{ analyzeStageProgress >= 100 ? tr('autoUi.k_1f481168be32') : loading ? tr('autoUi.k_2c2a1493ca90') : tr('autoUi.k_605dc7e35e02') }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="analyze-results-card">
-                  <div class="analyze-results-card__head">
-                    <strong>{{ tr('autoUi.k_bc2c6108be10') }}</strong>
-                    <span>{{ storyBeats.length ? tr('autoUi.k_411bdad5dc98', { p0: storyBeats.length }) : tr('autoUi.k_28bbf71875ea') }}</span>
-                  </div>
-                  <div class="analyze-results-tabs">
-                    <button class="analyze-results-tabs__item is-active" type="button">{{ tr('autoUi.k_bc2c6108be10') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_9044a92e7bea') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_6734561fef5b') }}</button>
-                    <button class="analyze-results-tabs__item" type="button">{{ tr('autoUi.k_856af808c18a') }}</button>
-                  </div>
-                  <div class="analyze-results-card__section">
-                    <div class="analyze-results-card__section-head">
-                      <strong>{{ tr('autoUi.k_ed3891236489') }}</strong>
-                      <span>{{ tr('autoUi.k_08e62304a021') }} {{ storyBeats.length || 0 }} {{ tr('autoUi.k_6bc35039a31e') }}</span>
-                    </div>
-                    <div v-if="storyBeats.length" class="analyze-structure-track">
-                      <div
-                        v-for="(item, index) in storyBeats.slice(0, 5)"
-                        :key="item.id"
-                        class="analyze-structure-node"
-                        :class="{ 'is-highlight': index === 0 }"
-                      >
-                        <span class="analyze-structure-node__index">{{ storyBeatDisplayIndex(item, index) }}</span>
-                        <strong>{{ storyBeatRangeText(item, index) }}</strong>
-                        <span>{{ localizePurpose(item.purpose) }}</span>
-                        <small>{{ shotReferenceLabel(item) }}</small>
-                      </div>
-                    </div>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state small-empty"
-                      :title="tr('autoUi.k_6390364017f6')"
-                      :description="tr('autoUi.k_7db04ef30936')"
-                    />
-                  </div>
-
-                  <div class="analyze-results-card__section">
-                    <div class="analyze-results-card__section-head">
-                      <strong>{{ tr('autoUi.k_2a33eaa96d0e') }}</strong>
-                      <span>{{ analyzeScriptLines.length ? tr('autoUi.k_75f7d1c9ae4f', { p0: analyzeScriptLines.length }) : tr('autoUi.k_472b66a0f2d0') }}</span>
-                    </div>
-                    <div v-if="analyzeScriptLines.length" class="analyze-script-lines analyze-script-lines--compact">
-                      <p v-for="(line, index) in analyzeScriptLines.slice(0, 6)" :key="`${index}-${line}`">{{ line }}</p>
-                    </div>
-                    <p v-else class="analyze-results-card__empty-copy">{{ analyzeScriptPreview }}</p>
-                  </div>
-                </div>
-
-                <div class="analyze-project-info-card">
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_4166d1b1467c') }}</strong>
-                    </div>
-                    <div class="analyze-project-field">
-                      <span>{{ tr('autoUi.k_3e7255522b33') }}</span>
-                      <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, tr('autoUi.k_96cb64ae6045')) }}</strong>
-                    </div>
-                    <div class="analyze-project-pills">
-                      <em>{{ current?.runMode === 'auto' ? tr('autoUi.k_49c1cdf32be8') : tr('autoUi.k_e1a420acee0f') }}</em>
-                      <em>{{ hasBoundModel ? tr('autoUi.k_9fa4faa55db6') : tr('autoUi.k_ca3dd55eb098') }}</em>
-                      <em>{{ effectiveProductRefs.length ? tr('autoUi.k_c8b458421614', { p0: effectiveProductRefs.length }) : tr('autoUi.k_ab8274a60c22') }}</em>
-                    </div>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_77c468a45a48') }}</strong>
-                    </div>
-                    <div class="variant-asset-card">
-                      <div class="variant-asset-card__media variant-asset-card__media--model">
-                        <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
-                        <span v-else>{{ tr('autoUi.k_39dab49974bf') }}</span>
-                      </div>
-                      <div class="variant-summary-card__copy">
-                        <span>{{ tr('autoUi.k_200b9dbfd963') }}</span>
-                        <strong>{{ safeText(modelSnapshot?.name, tr('autoUi.k_53e2db70167f')) }}</strong>
-                        <p>{{ modelSnapshot?.id ? tr('autoUi.k_4d9e8c358e49') : tr('autoUi.k_b1a363b419c5') }}</p>
-                      </div>
-                    </div>
-                    <button class="ghost-button small secondary-action full-width" type="button" :disabled="modelLoading" @click="modelModalOpen = true">{{ tr('autoUi.k_be7dc2544329') }}</button>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_188d1e2d5f79') }}</strong>
-                      <span class="status-pill" :class="productSanitizationStatusClass">{{ productSanitizationStatusLabel }}</span>
-                    </div>
-                    <div class="variant-summary-card__copy">
-                      <span>{{ tr('autoUi.k_caa411888696') }}</span>
-                      <strong>{{ boundProductDisplayName }}</strong>
-                      <p>{{ cloneProductBindingHint }}</p>
-                    </div>
-                    <div class="variant-asset-card">
-                      <div class="variant-asset-card__media variant-asset-card__media--model">
-                        <img v-if="selectedProductPreview" :src="selectedProductPreview" alt="product-preview" />
-                        <span v-else>{{ tr('autoUi.k_004922066efd') }}</span>
-                      </div>
-                      <div class="variant-summary-card__copy">
-                        <span>{{ tr('autoUi.k_b609537c0a3f') }}</span>
-                        <strong>{{ selectedProductDisplayName }}</strong>
-                        <p>{{ selectedProductBindingHint }}</p>
-                      </div>
-                    </div>
-                    <div class="variant-product-actions">
-                      <button class="ghost-button small secondary-action full-width" type="button" @click="productModalOpen = true">{{ tr('autoUi.k_f4d8d03ce5b4') }}</button>
-                      <button class="ghost-button small secondary-action" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct">{{ tr('autoUi.k_4f59a65e8f54') }}</button>
-                    </div>
-                    <div class="analyze-project-field">
-                      <span>{{ tr('autoUi.k_c417c63c9408') }}</span>
-                      <strong>{{ cloneProductSnapshotLabel }}</strong>
-                    </div>
-                    <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="analyze-project-field__hint">
-                      {{ cloneProductSnapshotHint }}
-                    </p>
-                    <div v-if="originalProductRefs.length || effectiveProductRefs.length" class="variant-product-toggle">
-                      <button
-                        class="ghost-button small secondary-action"
-                        type="button"
-                        :class="{ active: productRefPreviewMode === 'sanitized' }"
-                        :disabled="!effectiveProductRefs.length"
-                        @click="productRefPreviewMode = 'sanitized'"
-                      > {{ tr('autoUi.k_7f3a812a9479') }} </button>
-                      <button
-                        class="ghost-button small secondary-action"
-                        type="button"
-                        :class="{ active: productRefPreviewMode === 'original' }"
-                        :disabled="!originalProductRefs.length"
-                        @click="productRefPreviewMode = 'original'"
-                      > {{ tr('autoUi.k_a0217cd1e435') }} </button>
-                    </div>
-                    <div v-if="visibleProductThumbs.length" class="variant-product-strip">
-                      <span v-for="item in visibleProductThumbs.slice(0, 4)" :key="item" class="variant-product-strip__item">
-                        <img :src="previewImage(item)" alt="product-reference" />
-                        <button
-                          v-if="productRefPreviewMode !== 'original'"
-                          class="variant-product-strip__remove"
-                          type="button"
-                          :disabled="loading"
-                          @click.stop.prevent="removeProductImage(item)"
-                        > {{ tr('autoUi.k_3755f56f2f83') }} </button>
-                      </span>
-                    </div>
-                    <div v-if="visibleProductThumbs.length" class="variant-product-meta">
-                      <span>{{ cloneProductSnapshotLabel }}{{ tr('autoUi.k_de61aa8e1cbc') }}</span>
-                      <strong>{{ safeText(visibleProductThumbs[0]?.split(/[/\\\\]/).pop(), tr('autoUi.k_1b089e8482c7')) }}</strong>
-                    </div>
-                    <div class="variant-product-actions">
-                      <button class="ghost-button small danger-action" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages">{{ tr('autoUi.k_f8290c92d783') }}</button>
-                    </div>
-                  </div>
-
-                  <div class="analyze-project-info-card__section">
-                    <div class="analyze-project-info-card__head">
-                      <strong>{{ tr('autoUi.k_8f1a3358e56e') }}</strong>
-                      <span>{{ productAnalysisSections.length ? tr('autoUi.k_00f111551681') : tr('autoUi.k_86ba72ec4975') }}</span>
-                    </div>
-                    <div v-if="productAnalysisSnapshot" class="product-analysis-card">
-                      <div class="product-analysis-card__summary">
-                        <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
-                        <strong>{{ safeText(productAnalysisSnapshot.category, tr('autoUi.k_face982a4aae')) }}</strong>
-                      </div>
-                      <div class="product-analysis-card__list">
-                        <div v-for="item in productAnalysisSections" :key="item.key" class="product-analysis-card__item">
-                          <span>{{ item.title }}</span>
-                          <strong>{{ item.desc }}</strong>
-                        </div>
-                      </div>
-                      <div v-if="productAnalysisSnapshot.matchingRules.length" class="product-analysis-card__rules">
-                        <span>{{ tr('autoUi.k_f1c3fed4770a') }}</span>
-                        <div class="product-analysis-card__tags">
-                          <em v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</em>
-                        </div>
-                      </div>
-                    </div>
-                    <CloneStateCard
-                      v-else
-                      class="empty-state small-empty"
-                      :title="tr('autoUi.k_f372a7d84008')"
-                      :description="tr('autoUi.k_d650f5947a1e')"
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </article>
-
-        <article v-if="visibleStageKey === 'variant'" class="panel">
-          <div class="variant-workbench">
-            <CloneStageHeader :tag="tr('autoUi.k_6766ae37d5ac')" :title="tr('autoUi.k_239d48dea044')" :description="tr('autoUi.k_e48255e2ceca')">
-              <template #actions>
-                <button class="ghost-button small secondary-action" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
-                  {{ autoFlowRunning ? tr('autoUi.k_fb63b65d5637') : current?.runMode === 'auto' ? tr('autoUi.k_263d2e2109a4') : tr('autoUi.k_df815f635a0d') }}
+          <div class="cw-analyze">
+            <!-- reference video -->
+            <section class="cw-card cw-analyze__video">
+              <header class="cw-card__head">
+                <h3>{{ tr('autoUi.k_ce9406ae8fc8') }}</h3>
+                <span class="cw-card__hint" :title="referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a')">{{ referenceSourcePath ? tr('autoUi.k_c9ad1436b751') : tr('autoUi.k_607204bff35a') }}</span>
+              </header>
+              <div class="cw-player cw-player--portrait">
+                <video v-if="referenceSourcePath" :src="mediaUrl(referenceSourcePath)" controls preload="metadata"></video>
+                <button v-else class="cw-drop" type="button" :disabled="loading" @click="pickReferenceVideo">
+                  <span class="cw-drop__icon"><Upload :size="22" /></span>
+                  <strong>{{ tr('autoUi.k_8704840e5b6a') }}</strong>
+                  <small>{{ tr('autoUi.k_8542c9c4c761') }}</small>
                 </button>
-                <label class="inline-control">
-                  <span>{{ tr('autoUi.k_b9ae89319036') }}</span>
-                  <input v-model.number="variantCount" class="count-input" type="number" min="1" max="6" />
-                </label>
-                <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants">{{ tr('autoUi.k_ed70ccdd3b92') }}</button>
-              </template>
-            </CloneStageHeader>
-
-            <div class="variant-layout">
-              <aside class="variant-summary-panel">
-                <CloneDataCard class="variant-summary-card">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_4a2fcce5030a') }}</span>
-                    <strong>{{ scriptVariants.length }}</strong>
-                    <p>{{ tr('autoUi.k_79c74f41ca9e') }} {{ scriptVariants.length }} {{ tr('autoUi.k_98c1b3e34c1b') }}</p>
-                  </div>
-                </CloneDataCard>
-                <CloneDataCard class="variant-summary-card">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_7f06ec27ae46') }}</span>
-                    <strong>{{ selectedVariantId ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_53e2db70167f') }}</strong>
-                    <p>{{ selectedVariantId ? tr('autoUi.k_a53e25aa8df1') : tr('autoUi.k_e96de04f49c6') }}</p>
-                  </div>
-                </CloneDataCard>
-                <CloneDataCard class="variant-summary-card variant-summary-card--highlight">
-                  <div class="variant-summary-card__copy">
-                    <span>{{ tr('autoUi.k_8221bf9d729f') }}</span>
-                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_4363468b43bf')) }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_51dcc484cd16')) }}</p>
-                  </div>
-                </CloneDataCard>
-              </aside>
-
-              <section class="variant-main-panel">
-                <div v-if="scriptVariants.length" class="variant-hero-card">
-                  <div class="variant-hero-card__score">
-                    <span>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</span>
-                  </div>
-                  <div class="variant-hero-card__copy">
-                    <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_758dc6dc197b')) }}</strong>
-                    <p>{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_75bafc33692e')) }}</p>
-                    <small>{{ safeText(selectedVariantCandidate?.reason, tr('autoUi.k_b413cad5257d')) }}</small>
-                  </div>
-                  <button
-                    class="ghost-button small secondary-action"
-                    type="button"
-                    :disabled="!selectedVariantCandidate"
-                    @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined"
-                  > {{ tr('autoUi.k_96fe1ffdfa89') }} </button>
+              </div>
+              <dl class="cw-kv">
+                <div><dt>{{ tr('autoUi.k_1275f6feb703') }}</dt><dd :title="isDraftingNewProject ? referenceVideoPath : current?.referenceVideoName">{{ safeText(isDraftingNewProject ? shortPath(referenceVideoPath) : current?.referenceVideoName, tr('autoUi.k_937d465574eb')) }}</dd></div>
+                <div><dt>{{ tr('autoUi.k_3c7800e243ac') }}</dt><dd>{{ storyBeats.length || 0 }}</dd></div>
+                <div>
+                  <dt>{{ tr('autoUi.k_62e951a692ff') }}</dt>
+                  <dd><span class="cw-state" :class="analyzeStageProgress >= 100 ? 'cw-state--ok' : loading ? 'cw-state--run' : 'cw-state--idle'"><i />{{ analyzeStageProgress >= 100 ? tr('autoUi.k_1f481168be32') : loading ? tr('autoUi.k_2c2a1493ca90') : tr('autoUi.k_605dc7e35e02') }}</span></dd>
                 </div>
+              </dl>
+            </section>
 
-                <div class="variant-list-panel">
-                  <button
-                    v-for="item in scriptVariants"
-                    :key="item.id"
-                    class="variant-card variant-card--row"
-                    :class="{ selected: selectedVariantId === item.id }"
-                    type="button"
-                    @click="selectScriptVariant(item.id)"
-                  >
-                    <div class="variant-score">{{ item.score.toFixed(1) }}</div>
-                    <div class="variant-copy">
-                      <div class="variant-copy__head">
-                        <strong>{{ item.title }}</strong>
-                        <span>{{ selectedVariantId === item.id ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_ed15fd8c6ccb') }}</span>
-                      </div>
-                      <p>{{ item.summary }}</p>
-                      <small>{{ item.reason }}</small>
-                      <div v-if="item.shotScripts?.length" class="variant-shot-lines">
-                        <div v-for="shot in item.shotScripts" :key="`${item.id}-${shot.shotId}`" class="variant-shot-line">
-                          <strong>{{ safeText(shot.timeRange, tr('autoUi.k_65f2f856e95d', { p0: shot.shotIndex + 1 })) }}</strong>
-                          <span>{{ shot.scriptText }}</span>
-                        </div>
-                      </div>
+            <!-- analysis -->
+            <div class="cw-stack cw-analyze__result">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_ed3891236489') }}</h3>
+                  <span class="cw-card__hint">{{ storyBeats.length ? tr('autoUi.k_411bdad5dc98', { p0: storyBeats.length }) : tr('autoUi.k_28bbf71875ea') }}</span>
+                </header>
+                <div v-if="storyBeats.length" class="cw-beats">
+                  <div v-for="(item, index) in storyBeats" :key="item.id" class="cw-beat">
+                    <div class="cw-beat__top">
+                      <span class="cw-beat__no">{{ storyBeatDisplayIndex(item, index) }}</span>
+                      <span class="cw-beat__time">{{ storyBeatRangeText(item, index) }}</span>
                     </div>
-                  </button>
-                  <CloneStateCard
-                    v-if="!scriptVariants.length"
-                    class="empty-state section-empty"
-                    :title="tr('autoUi.k_1f81d16ba9a3')"
-                    :description="tr('autoUi.k_bd3fa57462c3')"
-                  />
+                    <strong>{{ localizePurpose(item.purpose) }}</strong>
+                    <small>{{ shotReferenceLabel(item) }}</small>
+                  </div>
                 </div>
+                <CloneStateCard v-else class="empty-state small-empty" :title="tr('autoUi.k_6390364017f6')" :description="tr('autoUi.k_7db04ef30936')" />
+              </section>
+
+              <section class="cw-card cw-card--grow">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_2a33eaa96d0e') }}</h3>
+                  <span class="cw-card__hint">{{ analyzeScriptLines.length ? tr('autoUi.k_75f7d1c9ae4f', { p0: analyzeScriptLines.length }) : tr('autoUi.k_472b66a0f2d0') }}</span>
+                </header>
+                <ol v-if="analyzeScriptLines.length" class="cw-script">
+                  <li v-for="(line, index) in analyzeScriptLines" :key="`${index}-${line}`">
+                    <span class="cw-script__no">{{ String(index + 1).padStart(2, '0') }}</span>
+                    <div>
+                      <span v-if="splitScriptLine(line).time" class="cw-script__time">{{ splitScriptLine(line).time }}</span>
+                      <p>{{ splitScriptLine(line).text }}</p>
+                    </div>
+                  </li>
+                </ol>
+                <p v-else class="cw-muted-copy">{{ analyzeScriptPreview }}</p>
               </section>
             </div>
-          </div>
-        </article>
 
-        <article v-if="visibleStageKey === 'identity-grid'" class="panel panel-storyboard-design">
-          <div class="storyboard-stage-hero">
-            <div class="storyboard-stage-hero__copy">
-              <strong>{{ tr('autoUi.k_54f65b6b0c67') }}</strong>
-              <p>{{ tr('autoUi.k_4da3b7faacaa') }}</p>
-              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_5467275a0a9c') }}</small>
-            </div>
-            <div class="storyboard-stage-hero__actions">
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
-                {{ identityGridPromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_896a398739bb') }}
-              </button>
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))"> {{ tr('autoUi.k_57459c07244a') }} </button>
-              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
-                {{ hasProjectIdentityGrid ? tr('autoUi.k_e33a423416a9') : tr('autoUi.k_7d1e8e131273') }}
-              </button>
-            </div>
-          </div>
-          <div class="storyboard-preview-card storyboard-preview-card--identity-grid">
-            <div class="storyboard-preview-card__head">
-              <div>
-                <strong>{{ tr('autoUi.k_ca9a6d04438b') }}</strong>
-                <span>{{ current?.projectIdentityGridStatus === 'done' ? tr('autoUi.k_f2afde8960a6') : current?.projectIdentityGridStatus === 'generating' ? tr('autoUi.k_57c08c730a51') : current?.projectIdentityGridStatus === 'failed' ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_aef4104370ae') }}</span>
-              </div>
-              <button class="ghost-button small" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">{{ tr('autoUi.k_c5f3b41eeba8') }}</button>
-            </div>
-            <div class="identity-grid-preview-layout">
-              <button
-                class="storyboard-preview-media storyboard-preview-media--identity-grid storyboard-preview-media--clickable"
-                type="button"
-                :disabled="!current?.projectIdentityGridPath"
-                @click="openIdentityGridPreview"
-              >
-                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" :alt="tr('autoUi.k_54f65b6b0c67')">
-                <div v-else class="storyboard-preview-media__empty storyboard-preview-media__empty--identity-grid">
-                  <strong>{{ tr('autoUi.k_be185dd5a7c7') }}</strong>
-                  <span>{{ tr('autoUi.k_4e8bd6a46ac7') }}</span>
+            <!-- project side -->
+            <aside class="cw-stack cw-analyze__side">
+              <section class="cw-card">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_4166d1b1467c') }}</h3></header>
+                <div class="cw-field">
+                  <span>{{ tr('autoUi.k_3e7255522b33') }}</span>
+                  <strong>{{ safeText(current?.blueprint?.title || current?.referenceVideoName, tr('autoUi.k_96cb64ae6045')) }}</strong>
                 </div>
-                <span v-if="current?.projectIdentityGridPath" class="storyboard-preview-media__hint">{{ tr('autoUi.k_f27060c8e9f6') }}</span>
-              </button>
-              <div class="identity-grid-preview-aside">
-                <div class="identity-grid-preview-copy">
-                  <strong>{{ tr('autoUi.k_a2645b7a4aea') }}</strong>
-                  <p>{{ tr('autoUi.k_c2d8cda2bae5') }}</p>
+                <div class="cw-flags">
+                  <span class="cw-flag" :class="current?.runMode === 'auto' ? 'is-on' : ''"><Sparkles v-if="current?.runMode === 'auto'" :size="12" /><Hand v-else :size="12" />{{ current?.runMode === 'auto' ? tr('autoUi.k_49c1cdf32be8') : tr('autoUi.k_e1a420acee0f') }}</span>
+                  <span class="cw-flag" :class="hasBoundModel ? 'is-on' : 'is-off'"><UserRound :size="12" />{{ hasBoundModel ? tr('autoUi.k_9fa4faa55db6') : tr('autoUi.k_ca3dd55eb098') }}</span>
+                  <span class="cw-flag" :class="effectiveProductRefs.length ? 'is-on' : 'is-off'"><ImageIcon :size="12" />{{ effectiveProductRefs.length ? tr('autoUi.k_c8b458421614', { p0: effectiveProductRefs.length }) : tr('autoUi.k_ab8274a60c22') }}</span>
                 </div>
-                <div class="storyboard-preview-meta storyboard-preview-meta--identity-grid">
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_1b089e8482c7') }}</span>
-                    <strong>{{ effectiveProductRefs.length }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_39dab49974bf') }}</span>
-                    <strong>{{ hasBoundModel ? tr('autoUi.k_b3addb5e3f54') : tr('autoUi.k_143b1332cb1f') }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_7c49c8f25a7a') }}</span>
-                    <strong>{{ (current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).join(' / ') || '--' }}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
+              </section>
 
-        <article v-if="visibleStageKey === 'grid'" class="panel panel-storyboard-design">
-          <div class="storyboard-stage-hero">
-            <div class="storyboard-stage-hero__copy">
-              <strong>{{ tr('autoUi.k_3a87e98554a1') }}</strong>
-              <p>{{ tr('autoUi.k_37f4224e223f') }}</p>
-              <small class="storyboard-stage-hero__hint">{{ tr('autoUi.k_a2480e598930') }}</small>
-            </div>
-            <div class="storyboard-stage-hero__actions">
-              <button class="ghost-button storyboard-stage-hero__button" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject"> {{ tr('autoUi.k_61bc0b0ca8b1') }} </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || regeneratingFailedStoryboardFrames || !failedStoryboardFrames.length"
-                @click="regenerateFailedStoryboardFrames"
-              >
-                {{ failedStoryboardActionText }}
-              </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || !selectedStoryboardShotIds.length || selectedStoryboardShotIds.every((shotId) => regeneratingStoryboardShotIds.includes(shotId))"
-                @click="regenerateSelectedStoryboardFrames"
-              >
-                {{ selectedStoryboardActionText }}
-              </button>
-              <button
-                class="ghost-button storyboard-stage-hero__button"
-                type="button"
-                :disabled="loading || queryingStoryboardFrames || !pendingStoryboardFrames.length"
-                @click="batchQueryPendingStoryboardFrames"
-              >
-                {{ pendingStoryboardActionText }}
-              </button>
-              <button class="primary-button storyboard-stage-hero__button storyboard-stage-hero__button--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? enterVideoStageAndAutoSubmit('manual_next_step') : generateStoryboardGrids()">
-                {{ storyboardFrames.length ? tr('autoUi.k_ea0ef2ae7245') : tr('autoUi.k_266542f0ab19') }}
-              </button>
-            </div>
-          </div>
-
-          <div class="storyboard-design-layout">
-            <section class="storyboard-column storyboard-column--frames">
-              <div class="storyboard-column__head">
-                <div class="storyboard-column__copy"></div>
-                <em>{{ storyboardDesignRows.length }} {{ tr('autoUi.k_bce2ef61514a') }}</em>
-              </div>
-
-              <div class="storyboard-design-table">
-                <div class="storyboard-design-table__head">
-                  <span>
-                    <input
-                      type="checkbox"
-                      :checked="storyboardDesignRows.length > 0 && selectedStoryboardShotIds.length === storyboardDesignRows.length"
-                      @change="toggleSelectAllStoryboardShots"
-                    >
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_77c468a45a48') }}</h3>
+                  <button class="vg-btn vg-btn--sm" type="button" :disabled="modelLoading" @click="modelModalOpen = true">{{ tr('autoUi.k_be7dc2544329') }}</button>
+                </header>
+                <div class="cw-entity">
+                  <span class="cw-entity__media">
+                    <img v-if="modelPreview(modelSnapshot)" :src="modelPreview(modelSnapshot)" alt="model-preview" />
+                    <UserRound v-else :size="22" />
                   </span>
+                  <div class="cw-entity__copy">
+                    <small>{{ tr('autoUi.k_200b9dbfd963') }}</small>
+                    <strong>{{ safeText(modelSnapshot?.name, tr('autoUi.k_53e2db70167f')) }}</strong>
+                    <span>{{ modelSnapshot?.id ? tr('autoUi.k_4d9e8c358e49') : tr('autoUi.k_b1a363b419c5') }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_188d1e2d5f79') }}</h3>
+                  <span class="cw-state" :class="productSanitizationStatusClass === 'success' ? 'cw-state--ok' : productSanitizationStatusClass === 'danger' ? 'cw-state--err' : productSanitizationStatusClass === 'working' ? 'cw-state--run' : 'cw-state--idle'"><i />{{ productSanitizationStatusLabel }}</span>
+                </header>
+                <div class="cw-entity">
+                  <span class="cw-entity__media">
+                    <img v-if="selectedProductPreview" :src="selectedProductPreview" alt="product-preview" />
+                    <Package v-else :size="22" />
+                  </span>
+                  <div class="cw-entity__copy">
+                    <small>{{ tr('autoUi.k_caa411888696') }}</small>
+                    <strong :title="boundProductDisplayName">{{ boundProductDisplayName }}</strong>
+                    <span>{{ cloneProductBindingHint }}</span>
+                  </div>
+                </div>
+                <div class="cw-subtle">
+                  <small>{{ tr('autoUi.k_b609537c0a3f') }}</small>
+                  <strong :title="selectedProductDisplayName">{{ selectedProductDisplayName }}</strong>
+                  <span>{{ selectedProductBindingHint }}</span>
+                </div>
+                <div class="cw-btnrow">
+                  <button class="vg-btn vg-btn--sm" type="button" @click="productModalOpen = true"><Package :size="14" />{{ tr('autoUi.k_f4d8d03ce5b4') }}</button>
+                  <button class="vg-btn vg-btn--sm vg-btn--soft" type="button" :disabled="loading || !selectedProductId || !current?.id" @click="bindSelectedProduct"><Link2 :size="14" />{{ tr('autoUi.k_4f59a65e8f54') }}</button>
+                </div>
+                <div class="cw-field cw-field--row">
+                  <span>{{ tr('autoUi.k_c417c63c9408') }}</span>
+                  <strong>{{ cloneProductSnapshotLabel }}</strong>
+                </div>
+                <p v-if="originalProductRefs.length || effectiveProductRefs.length" class="cw-note">{{ cloneProductSnapshotHint }}</p>
+                <div v-if="originalProductRefs.length || effectiveProductRefs.length" class="cw-seg">
+                  <button type="button" :class="{ 'is-on': productRefPreviewMode === 'sanitized' }" :disabled="!effectiveProductRefs.length" @click="productRefPreviewMode = 'sanitized'">{{ tr('autoUi.k_7f3a812a9479') }}</button>
+                  <button type="button" :class="{ 'is-on': productRefPreviewMode === 'original' }" :disabled="!originalProductRefs.length" @click="productRefPreviewMode = 'original'">{{ tr('autoUi.k_a0217cd1e435') }}</button>
+                </div>
+                <div v-if="visibleProductThumbs.length" class="cw-thumbs">
+                  <span v-for="item in visibleProductThumbs.slice(0, 8)" :key="item" class="cw-thumbs__item" :title="item.split(/[/\\\\]/).pop()">
+                    <img :src="previewImage(item)" alt="product-reference" />
+                    <button v-if="productRefPreviewMode !== 'original'" class="cw-thumbs__remove" type="button" :disabled="loading" :title="tr('autoUi.k_3755f56f2f83')" @click.stop.prevent="removeProductImage(item)"><X :size="12" /></button>
+                  </span>
+                </div>
+                <button class="vg-btn vg-btn--sm vg-btn--ghost cw-danger-link" type="button" :disabled="loading || !effectiveProductRefs.length" @click.stop.prevent="clearProductImages"><Trash2 :size="14" />{{ tr('autoUi.k_f8290c92d783') }}</button>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_8f1a3358e56e') }}</h3>
+                  <span class="cw-card__hint">{{ productAnalysisSections.length ? tr('autoUi.k_00f111551681') : tr('autoUi.k_86ba72ec4975') }}</span>
+                </header>
+                <template v-if="productAnalysisSnapshot">
+                  <div class="cw-field cw-field--row">
+                    <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
+                    <strong>{{ safeText(productAnalysisSnapshot.category, tr('autoUi.k_face982a4aae')) }}</strong>
+                  </div>
+                  <dl class="cw-kv cw-kv--stack">
+                    <div v-for="item in productAnalysisSections" :key="item.key"><dt>{{ item.title }}</dt><dd>{{ item.desc }}</dd></div>
+                  </dl>
+                  <div v-if="productAnalysisSnapshot.matchingRules.length" class="cw-rules">
+                    <small>{{ tr('autoUi.k_f1c3fed4770a') }}</small>
+                    <div><span v-for="rule in productAnalysisSnapshot.matchingRules" :key="rule">{{ rule }}</span></div>
+                  </div>
+                </template>
+                <CloneStateCard v-else class="empty-state small-empty" :title="tr('autoUi.k_f372a7d84008')" :description="tr('autoUi.k_d650f5947a1e')" />
+              </section>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 02 脚本生成 ================= -->
+        <article v-if="visibleStageKey === 'variant'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">02</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_239d48dea044') }}</h2>
+              <p>{{ tr('autoUi.k_e48255e2ceca') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading || !current?.id || !effectiveProductRefs.length || !hasBoundModel" @click="autoRunToStoryboardVideos">
+                <Play :size="15" />{{ autoFlowRunning ? tr('autoUi.k_fb63b65d5637') : current?.runMode === 'auto' ? tr('autoUi.k_263d2e2109a4') : tr('autoUi.k_df815f635a0d') }}
+              </button>
+              <label class="cw-count">
+                <span>{{ tr('autoUi.k_b9ae89319036') }}</span>
+                <input v-model.number="variantCount" type="number" min="1" max="6" />
+              </label>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateScriptVariants"><Sparkles :size="15" />{{ tr('autoUi.k_ed70ccdd3b92') }}</button>
+            </div>
+          </header>
+
+          <div class="cw-split">
+            <section class="cw-stack">
+              <div class="cw-metrics">
+                <div class="cw-metric"><span>{{ tr('autoUi.k_4a2fcce5030a') }}</span><strong>{{ scriptVariants.length }}</strong><small>{{ tr('autoUi.k_79c74f41ca9e') }} {{ scriptVariants.length }} {{ tr('autoUi.k_98c1b3e34c1b') }}</small></div>
+                <div class="cw-metric"><span>{{ tr('autoUi.k_7f06ec27ae46') }}</span><strong :class="selectedVariantId ? 'is-ok' : ''">{{ selectedVariantId ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_53e2db70167f') }}</strong><small>{{ selectedVariantId ? tr('autoUi.k_a53e25aa8df1') : tr('autoUi.k_e96de04f49c6') }}</small></div>
+              </div>
+
+              <div v-if="scriptVariants.length" class="cw-variants">
+                <button
+                  v-for="item in scriptVariants"
+                  :key="item.id"
+                  class="cw-variant"
+                  :class="{ 'is-selected': selectedVariantId === item.id }"
+                  type="button"
+                  @click="selectScriptVariant(item.id)"
+                >
+                  <span class="cw-score" :style="{ '--score': Math.max(0, Math.min(10, item.score)) * 10 }"><b>{{ item.score.toFixed(1) }}</b></span>
+                  <div class="cw-variant__body">
+                    <div class="cw-variant__title">
+                      <strong>{{ item.title }}</strong>
+                      <span class="cw-state" :class="selectedVariantId === item.id ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ selectedVariantId === item.id ? tr('autoUi.k_0a3020158512') : tr('autoUi.k_ed15fd8c6ccb') }}</span>
+                    </div>
+                    <p>{{ item.summary }}</p>
+                    <small class="cw-variant__reason">{{ item.reason }}</small>
+                    <ol v-if="item.shotScripts?.length && selectedVariantId === item.id" class="cw-variant__shots">
+                      <li v-for="shot in item.shotScripts" :key="`${item.id}-${shot.shotId}`">
+                        <span>{{ safeText(shot.timeRange, tr('autoUi.k_65f2f856e95d', { p0: shot.shotIndex + 1 })) }}</span>
+                        <p>{{ String(shot.scriptText || '').startsWith(String(shot.timeRange || '~')) ? String(shot.scriptText).slice(String(shot.timeRange).length).trim() : shot.scriptText }}</p>
+                      </li>
+                    </ol>
+                    <small v-else-if="item.shotScripts?.length" class="cw-variant__more">{{ item.shotScripts.length }} {{ tr('autoUi.k_bce2ef61514a') }}</small>
+                  </div>
+                </button>
+              </div>
+              <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_1f81d16ba9a3')" :description="tr('autoUi.k_bd3fa57462c3')" />
+            </section>
+
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card cw-card--accent">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_8221bf9d729f') }}</h3></header>
+                <div class="cw-hero-score">
+                  <span class="cw-score cw-score--lg" :style="{ '--score': Math.max(0, Math.min(10, selectedVariantCandidate?.score || 0)) * 10 }"><b>{{ selectedVariantCandidate?.score?.toFixed(1) || '0.0' }}</b></span>
+                  <strong>{{ safeText(selectedVariantCandidate?.title, tr('autoUi.k_758dc6dc197b')) }}</strong>
+                </div>
+                <p class="cw-body-copy">{{ safeText(selectedVariantCandidate?.summary, tr('autoUi.k_75bafc33692e')) }}</p>
+                <p class="cw-note">{{ safeText(selectedVariantCandidate?.reason, tr('autoUi.k_b413cad5257d')) }}</p>
+                <button class="vg-btn vg-btn--primary vg-btn--block" type="button" :disabled="!selectedVariantCandidate" @click="selectedVariantCandidate ? selectScriptVariant(selectedVariantCandidate.id) : undefined">
+                  <Check :size="15" />{{ tr('autoUi.k_96fe1ffdfa89') }}
+                </button>
+              </section>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 03 身份定妆图 ================= -->
+        <article v-if="visibleStageKey === 'identity-grid'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">03</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_54f65b6b0c67') }}</h2>
+              <p>{{ tr('autoUi.k_4da3b7faacaa') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="identityGridPromptPreviewLoading || !current?.id" @click="loadIdentityGridPromptPreview(true, true)">
+                <FileText :size="15" />{{ identityGridPromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_896a398739bb') }}
+              </button>
+              <button class="vg-btn" type="button" :disabled="!(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt)" @click="copyPromptText(identityGridPromptPreview?.prompt || current?.projectIdentityGridPromptPreview?.prompt || '', tr('autoUi.k_abc7750ecb1f'))">
+                <Copy :size="15" />{{ tr('autoUi.k_57459c07244a') }}
+              </button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id || !hasBoundModel || !effectiveProductRefs.length" @click="generateProjectIdentityGrid">
+                <Sparkles :size="15" />{{ hasProjectIdentityGrid ? tr('autoUi.k_e33a423416a9') : tr('autoUi.k_7d1e8e131273') }}
+              </button>
+            </div>
+          </header>
+          <p class="cw-banner"><Info :size="14" />{{ tr('autoUi.k_5467275a0a9c') }}</p>
+
+          <div class="cw-identity">
+            <section class="cw-card">
+              <header class="cw-card__head">
+                <h3>{{ tr('autoUi.k_ca9a6d04438b') }}</h3>
+                <span class="cw-state" :class="current?.projectIdentityGridStatus === 'done' ? 'cw-state--ok' : current?.projectIdentityGridStatus === 'generating' ? 'cw-state--run' : current?.projectIdentityGridStatus === 'failed' ? 'cw-state--err' : 'cw-state--idle'"><i />{{ current?.projectIdentityGridStatus === 'done' ? tr('autoUi.k_f2afde8960a6') : current?.projectIdentityGridStatus === 'generating' ? tr('autoUi.k_57c08c730a51') : current?.projectIdentityGridStatus === 'failed' ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_aef4104370ae') }}</span>
+              </header>
+              <button class="cw-canvas" type="button" :disabled="!current?.projectIdentityGridPath" @click="openIdentityGridPreview">
+                <img v-if="current?.projectIdentityGridPath" :src="previewImage(current.projectIdentityGridPath, current.projectIdentityGridUpdatedAt)" :alt="tr('autoUi.k_54f65b6b0c67')">
+                <span v-else class="cw-canvas__empty"><ImageIcon :size="26" /><strong>{{ tr('autoUi.k_be185dd5a7c7') }}</strong><small>{{ tr('autoUi.k_4e8bd6a46ac7') }}</small></span>
+                <span v-if="current?.projectIdentityGridPath" class="cw-canvas__zoom"><Maximize2 :size="13" />{{ tr('autoUi.k_f27060c8e9f6') }}</span>
+              </button>
+            </section>
+            <aside class="cw-stack">
+              <section class="cw-card">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_a2645b7a4aea') }}</h3></header>
+                <p class="cw-body-copy">{{ tr('autoUi.k_c2d8cda2bae5') }}</p>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('autoUi.k_1b089e8482c7') }}</dt><dd>{{ effectiveProductRefs.length }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_39dab49974bf') }}</dt><dd><span class="cw-state" :class="hasBoundModel ? 'cw-state--ok' : 'cw-state--err'"><i />{{ hasBoundModel ? tr('autoUi.k_b3addb5e3f54') : tr('autoUi.k_143b1332cb1f') }}</span></dd></div>
+                </dl>
+                <div v-if="(current?.projectIdentityGridPromptPreview?.gridUsagePlan || []).length" class="cw-usage">
+                  <small>{{ tr('autoUi.k_7c49c8f25a7a') }}</small>
+                  <ul><li v-for="plan in current?.projectIdentityGridPromptPreview?.gridUsagePlan || []" :key="plan">{{ plan }}</li></ul>
+                </div>
+              </section>
+              <button class="vg-btn vg-btn--primary vg-btn--block vg-btn--lg" type="button" :disabled="!hasProjectIdentityGrid" @click="selectStage('grid')">{{ tr('autoUi.k_c5f3b41eeba8') }}<ArrowRight :size="16" /></button>
+            </aside>
+          </div>
+        </article>
+
+        <!-- ================= 04 分镜设计 ================= -->
+        <article v-if="visibleStageKey === 'grid'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">04</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_3a87e98554a1') }}</h2>
+              <p>{{ tr('autoUi.k_37f4224e223f') }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading || !current?.id" @click="refreshCurrentProject"><Save :size="15" />{{ tr('autoUi.k_61bc0b0ca8b1') }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !canGenerateStoryboardFrames" @click="storyboardFrames.length ? enterVideoStageAndAutoSubmit('manual_next_step') : generateStoryboardGrids()">
+                {{ storyboardFrames.length ? tr('autoUi.k_ea0ef2ae7245') : tr('autoUi.k_266542f0ab19') }}<ArrowRight :size="15" />
+              </button>
+            </div>
+          </header>
+
+          <div class="cw-split cw-split--wide">
+            <section class="cw-card cw-card--flush">
+              <div class="cw-toolbar">
+                <label class="cw-check">
+                  <input type="checkbox" :checked="storyboardDesignRows.length > 0 && selectedStoryboardShotIds.length === storyboardDesignRows.length" @change="toggleSelectAllStoryboardShots" />
+                  <span>{{ selectedStoryboardShotIds.length ? `${selectedStoryboardShotIds.length} / ${storyboardDesignRows.length}` : `${storyboardDesignRows.length} ${tr('autoUi.k_bce2ef61514a')}` }}</span>
+                </label>
+                <span class="cw-toolbar__spacer" />
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || regeneratingFailedStoryboardFrames || !failedStoryboardFrames.length" @click="regenerateFailedStoryboardFrames"><RotateCw :size="13" />{{ failedStoryboardActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !selectedStoryboardShotIds.length || selectedStoryboardShotIds.every((shotId) => regeneratingStoryboardShotIds.includes(shotId))" @click="regenerateSelectedStoryboardFrames"><RotateCw :size="13" />{{ selectedStoryboardActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || queryingStoryboardFrames || !pendingStoryboardFrames.length" @click="batchQueryPendingStoryboardFrames"><Search :size="13" />{{ pendingStoryboardActionText }}</button>
+              </div>
+              <p class="cw-banner cw-banner--inset"><Info :size="14" />{{ tr('autoUi.k_a2480e598930') }}</p>
+
+              <div class="cw-table cw-table--frames">
+                <div class="cw-table__head">
+                  <span />
                   <span>{{ tr('autoUi.k_c7d1925fd5af') }}</span>
                   <span>{{ tr('autoUi.k_695dd5f4b7d4') }}</span>
                   <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
                   <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
                   <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
                   <span>{{ tr('autoUi.k_5e64b9174ce0') }}</span>
-                  <span>{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
+                  <span class="is-end">{{ tr('autoUi.k_f3ea6d345e2a') }}</span>
                 </div>
-
-                <div class="storyboard-design-table__body">
-                  <div
-                    v-for="row in storyboardDesignRows"
-                    :key="row.shotId"
-                    class="storyboard-design-row"
-                    :class="{ 'is-active': selectedShotId === row.shotId, 'is-working': row.isRegenerating }"
-                    role="button"
-                    tabindex="0"
-                    @click="selectedShotId = row.shotId"
-                    @keydown.enter.prevent="selectedShotId = row.shotId"
-                    @keydown.space.prevent="selectedShotId = row.shotId"
-                  >
-                    <span class="storyboard-design-cell storyboard-design-cell--select" @click.stop>
-                      <input
-                        type="checkbox"
-                        :checked="selectedStoryboardShotIds.includes(row.shotId)"
-                        @change="toggleStoryboardShotSelection(row.shotId)"
-                      >
+                <div
+                  v-for="row in storyboardDesignRows"
+                  :key="row.shotId"
+                  class="cw-row"
+                  :class="{ 'is-active': selectedShotId === row.shotId, 'is-working': row.isRegenerating, 'is-failed': Boolean(row.error) }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectedShotId = row.shotId"
+                  @keydown.enter.prevent="selectedShotId = row.shotId"
+                  @keydown.space.prevent="selectedShotId = row.shotId"
+                >
+                  <span class="cw-row__check" @click.stop><input type="checkbox" :checked="selectedStoryboardShotIds.includes(row.shotId)" @change="toggleStoryboardShotSelection(row.shotId)" /></span>
+                  <span class="cw-index"><b>{{ String(row.shotIndex).padStart(2, '0') }}</b><small>{{ row.scriptCode }}</small></span>
+                  <span class="cw-frame">
+                    <span class="cw-frame__thumb">
+                      <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), tr('autoUi.k_fcad7fe371b8'))">
+                      <span v-else class="cw-frame__empty">{{ row.isRegenerating ? tr('autoUi.k_57c08c730a51') : row.error ? tr('autoUi.k_3e3c8068bb0e') : tr('autoUi.k_aef4104370ae') }}</span>
                     </span>
-                    <span class="storyboard-design-cell storyboard-design-cell--index">
-                      <strong>{{ String(row.shotIndex).padStart(2, '0') }}</strong>
-                      <small>{{ row.scriptCode }}</small>
+                    <span class="cw-frame__copy">
+                      <strong :title="row.promptText">{{ row.promptText }}</strong>
+                      <span class="cw-words"><em v-for="word in row.tags" :key="`${row.shotId}-${word}`">{{ word }}</em></span>
+                      <small v-if="row.isRegenerating" class="is-run">{{ tr('autoUi.k_b99b4b26222c') }}</small>
+                      <small v-if="row.retryCount > 0">{{ tr('autoUi.k_a3477f849226') }} {{ row.retryCount }} {{ tr('autoUi.k_5e5b8169eee6') }}</small>
                     </span>
-
-                    <span class="storyboard-design-cell storyboard-design-cell--prompt">
-                      <span class="storyboard-design-thumb">
-                        <img v-if="row.imagePath" :src="previewImage(row.imagePath, row.updatedAt)" :alt="safeText(shotLabel(row.shotId), tr('autoUi.k_fcad7fe371b8'))">
-                        <span v-else class="storyboard-design-thumb__empty">{{ row.isRegenerating ? tr('autoUi.k_57c08c730a51') : row.error ? tr('autoUi.k_3e3c8068bb0e') : tr('autoUi.k_aef4104370ae') }}</span>
-                      </span>
-                      <span class="storyboard-design-copy">
-                        <strong>{{ row.promptText }}</strong>
-                        <span class="storyboard-design-tags">
-                          <em v-for="tag in row.tags" :key="`${row.shotId}-${tag}`">{{ tag }}</em>
-                        </span>
-                        <small v-if="row.isRegenerating" class="storyboard-design-copy__status storyboard-design-copy__status--working">{{ tr('autoUi.k_b99b4b26222c') }}</small>
-                        <small v-if="row.retryCount > 0">{{ tr('autoUi.k_a3477f849226') }} {{ row.retryCount }} {{ tr('autoUi.k_5e5b8169eee6') }}</small>
-                      </span>
-                    </span>
-
-                    <span class="storyboard-design-cell">
-                      <span class="storyboard-design-status-pill" :class="{ 'storyboard-design-status-pill--working': row.isRegenerating }">
-                        {{ row.statusText }}
-                      </span>
-                    </span>
-                    <span class="storyboard-design-cell">{{ row.sceneText }}</span>
-                    <span class="storyboard-design-cell">{{ row.cameraText }}</span>
-                    <span class="storyboard-design-cell storyboard-design-cell--voice">{{ row.voiceText }}</span>
-                    <span class="storyboard-design-cell storyboard-design-cell--actions">
-                      <button
-                        class="ghost-button small icon-button"
-                        type="button"
-                        :disabled="!shotFrameMap[row.shotId]?.imagePath"
-                        :title="tr('autoUi.k_de61aa8e1cbc')"
-                        @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"
-                      >
-                        ◱
-                      </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading" @click.stop="toggleFrameLock(row.shotId)" :title="row.locked ? tr('autoUi.k_eafaffdf18b7') : tr('autoUi.k_8a91cefeb3fb')">
-                        {{ row.locked ? tr('autoUi.k_d2feb31d47eb') : tr('autoUi.k_a9e2a2864404') }}
-                      </button>
-                      <button
-                        class="ghost-button small"
-                        type="button"
-                        :disabled="shotImagePromptPreviewLoading || row.isRegenerating"
-                        @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"
-                        :title="tr('autoUi.k_ca445a4a0ad9')"
-                      > {{ tr('autoUi.k_2f0bb1238738') }} </button>
-                      <button class="ghost-button small icon-button" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" @click.stop="regenerateStoryboardFrame(row.shotId)" :title="row.isRegenerating ? tr('autoUi.k_487e1c4e2927') : tr('autoUi.k_2e19057052a3')">
-                        {{ row.isRegenerating ? '…' : '↻' }}
-                      </button>
-                    </span>
-                  </div>
+                  </span>
+                  <span><span class="cw-state" :class="row.isRegenerating ? 'cw-state--run' : row.error ? 'cw-state--err' : row.imagePath ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ row.statusText }}</span></span>
+                  <span class="cw-cell">{{ row.sceneText }}</span>
+                  <span class="cw-cell">{{ row.cameraText }}</span>
+                  <span class="cw-cell cw-cell--muted">{{ row.voiceText }}</span>
+                  <span class="cw-actions">
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!shotFrameMap[row.shotId]?.imagePath" :title="tr('autoUi.k_de61aa8e1cbc')" @click.stop="shotFrameMap[row.shotId] && openFramePreview(shotFrameMap[row.shotId])"><Maximize2 :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-on': row.locked }" type="button" :disabled="loading" :title="row.locked ? tr('autoUi.k_eafaffdf18b7') : tr('autoUi.k_8a91cefeb3fb')" @click.stop="toggleFrameLock(row.shotId)"><Lock v-if="row.locked" :size="14" /><LockOpen v-else :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="shotImagePromptPreviewLoading || row.isRegenerating" :title="tr('autoUi.k_ca445a4a0ad9')" @click.stop="selectedShotId = row.shotId; loadShotImagePromptPreview(row.shotId, true, true)"><FileText :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="loading || row.isRegenerating || regeneratingFailedStoryboardFrames" :title="row.isRegenerating ? tr('autoUi.k_487e1c4e2927') : tr('autoUi.k_2e19057052a3')" @click.stop="regenerateStoryboardFrame(row.shotId)"><LoaderCircle v-if="row.isRegenerating" :size="14" class="vg-spin" /><RotateCw v-else :size="14" /></button>
+                  </span>
                 </div>
               </div>
             </section>
 
-            <aside class="storyboard-preview-panel">
-              <div class="storyboard-preview-card">
-                <div class="storyboard-preview-card__head">
-                  <div>
-                    <strong>{{ tr('autoUi.k_76917c58e1ee') }}</strong>
-                    <span>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_0601c4d9d5c0') }}</span>
-                  </div>
-                  <button
-                    class="ghost-button small"
-                    type="button"
-                    :disabled="!selectedStoryboardFrame?.imagePath"
-                    @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"
-                  > {{ tr('autoUi.k_c5d7f819baf3') }} </button>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_76917c58e1ee') }}</h3>
+                  <span class="cw-card__hint">{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_0601c4d9d5c0') }}</span>
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!selectedStoryboardFrame?.imagePath" :title="tr('autoUi.k_c5d7f819baf3')" @click="selectedStoryboardFrame && openFramePreview(selectedStoryboardFrame)"><Maximize2 :size="14" /></button>
+                </header>
+                <div class="cw-player cw-player--portrait cw-player--image">
+                  <img v-if="selectedStoryboardFrame?.imagePath" :src="previewImage(selectedStoryboardFrame.imagePath, selectedStoryboardFrame.updatedAt)" :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), tr('autoUi.k_76917c58e1ee'))">
+                  <span v-else class="cw-canvas__empty"><ImageIcon :size="24" /><strong>{{ selectedStoryboardRow?.error ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_4363468b43bf') }}</strong><small>{{ selectedStoryboardRow?.error || tr('autoUi.k_961be9633733') }}</small></span>
                 </div>
-
-                <div class="storyboard-preview-media">
-                  <img
-                    v-if="selectedStoryboardFrame?.imagePath"
-                    :src="previewImage(selectedStoryboardFrame.imagePath, selectedStoryboardFrame.updatedAt)"
-                    :alt="safeText(shotLabel(selectedStoryboardFrame.shotId), tr('autoUi.k_76917c58e1ee'))"
-                  >
-                  <div v-else class="storyboard-preview-media__empty">
-                    <strong>{{ selectedStoryboardRow?.error ? tr('autoUi.k_64ba75d9d600') : tr('autoUi.k_4363468b43bf') }}</strong>
-                    <span>{{ selectedStoryboardRow?.error || tr('autoUi.k_961be9633733') }}</span>
-                  </div>
+                <p v-if="selectedStoryboardRow" class="cw-body-copy cw-body-copy--strong">{{ selectedStoryboardRow.promptText }}</p>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('autoUi.k_29d0552d2e4c') }}</dt><dd>{{ selectedStoryboardRow?.durationText || '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_6867f7b4537a') }}</dt><dd>{{ selectedStoryboardRow?.sceneText || '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_3be5bb46d065') }}</dt><dd>{{ selectedStoryboardRow?.cameraText || '--' }}</dd></div>
+                </dl>
+                <div v-if="selectedStoryboardRow?.tags?.length" class="cw-words"><em v-for="word in selectedStoryboardRow?.tags || []" :key="`preview-${word}`">{{ word }}</em></div>
+                <div v-if="selectedStoryboardErrorText" class="cw-alert">
+                  <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_ce8a92e25f09') }} · {{ selectedStoryboardErrorTitle }}</strong>
+                  <p>{{ selectedStoryboardErrorText }}</p>
+                  <small>{{ tr('autoUi.k_aba23c4b2667') }}：{{ selectedStoryboardErrorAdvice }}</small>
+                  <button v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="vg-btn vg-btn--sm" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
                 </div>
-
-                <div v-if="selectedStoryboardRow" class="storyboard-preview-copy">
-                  <strong>{{ selectedStoryboardRow.promptText }}</strong>
-                  <span>{{ selectedStoryboardRow.voiceText }}</span>
-                </div>
-
-                <div class="storyboard-preview-meta">
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
-                    <strong>{{ selectedStoryboardRow?.durationText || '--' }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_6867f7b4537a') }}</span>
-                    <strong>{{ selectedStoryboardRow?.sceneText || '--' }}</strong>
-                  </div>
-                  <div class="storyboard-preview-meta__item">
-                    <span>{{ tr('autoUi.k_3be5bb46d065') }}</span>
-                    <strong>{{ selectedStoryboardRow?.cameraText || '--' }}</strong>
-                  </div>
-                </div>
-
-                <div class="storyboard-preview-tags">
-                  <em v-for="tag in selectedStoryboardRow?.tags || []" :key="`preview-${tag}`">{{ tag }}</em>
-                </div>
-                <div v-if="selectedStoryboardErrorText" class="storyboard-preview-error">
-                  <div class="storyboard-preview-error__head">
-                    <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
-                    <span>{{ selectedStoryboardErrorTitle }}</span>
-                  </div>
-                  <div class="storyboard-preview-error__body">
-                    <p>{{ selectedStoryboardErrorText }}</p>
-                  </div>
-                  <div class="storyboard-preview-error__advice">
-                    <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
-                    <p>{{ selectedStoryboardErrorAdvice }}</p>
-                  </div>
-                  <div v-if="selectedStoryboardErrorAction === 'go-models' || selectedStoryboardErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                    <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedStoryboardErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="storyboard-preview-card storyboard-preview-card--script">
-                <div class="storyboard-preview-card__head">
-                  <div>
-                    <strong>{{ tr('autoUi.k_79d85c0b1ac0') }}</strong>
-                    <span>{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : tr('autoUi.k_104ca25508ce') }}</span>
-                  </div>
-                  <button
-                    class="ghost-button small"
-                    type="button"
-                    :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow"
-                    @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"
-                  >
-                    {{ shotImagePromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_ca445a4a0ad9') }}
-                  </button>
-                </div>
-                <div class="storyboard-preview-script">
-                  <p>{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || tr('autoUi.k_aa90b861324e') }}</p>
-                </div>
-              </div>
+              </section>
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_79d85c0b1ac0') }}</h3>
+                  <span class="cw-card__hint">{{ selectedStoryboardBeat ? storyBeatRangeText(selectedStoryboardBeat, Number((selectedStoryboardRow?.shotIndex || 1) - 1)) : tr('autoUi.k_104ca25508ce') }}</span>
+                </header>
+                <p class="cw-body-copy">{{ selectedStoryboardBeat?.scriptSegment || selectedStoryboardRow?.voiceText || tr('autoUi.k_aa90b861324e') }}</p>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="shotImagePromptPreviewLoading || !selectedStoryboardRow" @click="loadShotImagePromptPreview(selectedStoryboardRow?.shotId, true, true)"><FileText :size="14" />{{ shotImagePromptPreviewLoading ? tr('autoUi.k_ce56f617e402') : tr('autoUi.k_ca445a4a0ad9') }}</button>
+              </section>
             </aside>
           </div>
         </article>
 
-        <article v-if="visibleStageKey === 'video'" class="panel panel-video-stage">
-          <CloneStageHeader
-            class="video-stage-header"
-            tag=""
-            :title="tr('cloneView.videoStage.title')"
-            :description="videoStageDescription"
-          >
-            <template #actions>
-              <button class="primary-button small" type="button" :disabled="loading || !current?.id" @click="generateShotVideos">{{ tr('cloneView.videoStage.primaryAction') }}</button>
-              <button class="ghost-button small" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
-            </template>
-              <template #aux>
-                <span>{{ tr('autoUi.k_d7f0f988776f') }}{{ runModeLabel }}</span>
-                <span>{{ tr('autoUi.k_75d859e8ba00') }}{{ shotVideoOutputs.length }} {{ tr('autoUi.k_7800d67eeb34') }}{{ failedShotOutputs.length }}</span>
-              </template>
-            </CloneStageHeader>
+        <!-- ================= 05 分镜视频 ================= -->
+        <article v-if="visibleStageKey === 'video'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">05</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('cloneView.videoStage.title') }}</h2>
+              <p>{{ videoStageDescription }}</p>
+            </div>
+            <div class="cw-head__actions">
+              <button class="vg-btn" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateShotVideos"><Clapperboard :size="15" />{{ tr('cloneView.videoStage.primaryAction') }}</button>
+            </div>
+          </header>
 
-          <div class="video-render-hints-card">
-            <div class="video-render-hints-card__copy">
-              <strong>{{ tr('autoUi.k_0b14bbf64906') }}</strong>
+          <div class="cw-settings">
+            <div class="cw-settings__copy">
+              <strong><SlidersHorizontal :size="14" />{{ tr('autoUi.k_0b14bbf64906') }}</strong>
               <span>{{ tr('autoUi.k_7fb18dbeec08') }}</span>
             </div>
-            <div class="video-render-hints-card__controls">
-              <label class="video-render-hints-card__field">
-                <span>{{ tr('autoUi.k_c27f341ce598') }}</span>
-                <select
-                  :value="videoRenderAspectRatio"
-                  :disabled="loading || !current?.id || savingVideoRenderHints"
-                  @change="handleVideoAspectRatioChange(($event.target as HTMLSelectElement).value as VideoRenderAspectRatio)"
-                >
-                  <option value="9:16">9:16</option>
-                  <option value="16:9">16:9</option>
-                </select>
-              </label>
-              <label class="video-render-hints-card__field">
-                <span>{{ tr('autoUi.k_94a6711f2408') }}</span>
-                <select
-                  :value="videoRenderResolution"
-                  :disabled="loading || !current?.id || savingVideoRenderHints"
-                  @change="handleVideoResolutionChange(($event.target as HTMLSelectElement).value as VideoRenderResolution)"
-                >
-                  <option v-for="item in filteredVideoRenderResolutionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-                </select>
-              </label>
-            </div>
+            <span class="cw-settings__meta">{{ tr('autoUi.k_d7f0f988776f') }}{{ runModeLabel }} · {{ tr('autoUi.k_75d859e8ba00') }}{{ shotVideoOutputs.length }} {{ tr('autoUi.k_7800d67eeb34') }}{{ failedShotOutputs.length }}</span>
+            <label class="cw-select">
+              <span>{{ tr('autoUi.k_c27f341ce598') }}</span>
+              <select class="vg-input vg-select vg-input--sm" :value="videoRenderAspectRatio" :disabled="loading || !current?.id || savingVideoRenderHints" @change="handleVideoAspectRatioChange(($event.target as HTMLSelectElement).value as VideoRenderAspectRatio)">
+                <option value="9:16">9:16</option>
+                <option value="16:9">16:9</option>
+              </select>
+            </label>
+            <label class="cw-select">
+              <span>{{ tr('autoUi.k_94a6711f2408') }}</span>
+              <select class="vg-input vg-select vg-input--sm" :value="videoRenderResolution" :disabled="loading || !current?.id || savingVideoRenderHints" @change="handleVideoResolutionChange(($event.target as HTMLSelectElement).value as VideoRenderResolution)">
+                <option v-for="item in filteredVideoRenderResolutionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+              </select>
+            </label>
           </div>
 
-          <div v-if="shotVideoOutputs.length" class="shot-workbench shot-workbench--reference">
-            <div class="video-stage-layout video-stage-layout--workarea">
-                <div class="video-stage-main">
-                  <div class="shot-reference-layout">
-                    <section class="shot-table-panel">
-                      <div class="shot-table-head">
-                      <div class="shot-table-actions">
-                        <button class="ghost-button small" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos">
-                          {{ failedShotActionText }}
-                        </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"> {{ tr('autoUi.k_cc874aad6450') }} </button>
-                        <button class="ghost-button small" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_b89f115ab421') }}</button>
-                      </div>
-                    </div>
+          <div v-if="shotVideoOutputs.length" class="cw-split cw-split--wide">
+            <section class="cw-card cw-card--flush">
+              <div class="cw-toolbar">
+                <div class="cw-seg cw-seg--inline">
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'all' }" @click="selectedShotFilter = 'all'">{{ tr('cloneView.videoStage.filters.all') }} <em>{{ shotVideoOutputs.length }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'ready' }" @click="selectedShotFilter = 'ready'">{{ tr('cloneView.videoStage.filters.ready') }} <em>{{ completedShotCount }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'failed' }" @click="selectedShotFilter = 'failed'">{{ tr('cloneView.videoStage.filters.failed') }} <em>{{ failedShotOutputs.length }}</em></button>
+                  <button type="button" :class="{ 'is-on': selectedShotFilter === 'pending' }" @click="selectedShotFilter = 'pending'">{{ tr('cloneView.videoStage.filters.pending') }} <em>{{ pendingShotCount }}</em></button>
+                </div>
+                <span class="cw-toolbar__spacer" />
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos"><RotateCw :size="13" />{{ failedShotActionText }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"><Search :size="13" />{{ tr('autoUi.k_cc874aad6450') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus"><RefreshCw :size="13" />{{ tr('autoUi.k_b89f115ab421') }}</button>
+              </div>
+              <div class="cw-statline">
+                <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
+                <span>{{ tr('cloneView.videoStage.stats.failedPending') }} <b>{{ failedShotOutputs.length }}</b></span>
+                <span>{{ tr('autoUi.k_e4baf28f5192') }}<b>{{ continueQueryableShotCount }}</b></span>
+                <span>{{ tr('autoUi.k_366462f4d6fb') }}<b>{{ missingTaskIdShotCount }}</b></span>
+                <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}<b>{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</b></span>
+                <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}<b>{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</b></span>
+              </div>
 
-                    <div class="shot-table-toolbar">
-                      <div class="shot-table-summary">
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'all' }" type="button" @click="selectedShotFilter = 'all'">{{ tr('cloneView.videoStage.filters.all') }} {{ shotVideoOutputs.length }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'ready' }" type="button" @click="selectedShotFilter = 'ready'">{{ tr('cloneView.videoStage.filters.ready') }} {{ completedShotCount }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'failed' }" type="button" @click="selectedShotFilter = 'failed'">{{ tr('cloneView.videoStage.filters.failed') }} {{ failedShotOutputs.length }}</button>
-                        <button class="shot-summary-link" :class="{ active: selectedShotFilter === 'pending' }" type="button" @click="selectedShotFilter = 'pending'">{{ tr('cloneView.videoStage.filters.pending') }} {{ pendingShotCount }}</button>
-                      </div>
-                      <div class="shot-table-stats">
-                        <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
-                        <span>{{ tr('cloneView.videoStage.stats.failedPending') }}：{{ failedShotOutputs.length }}</span>
-                        <span>{{ tr('autoUi.k_e4baf28f5192') }}{{ continueQueryableShotCount }}</span>
-                        <span>{{ tr('autoUi.k_366462f4d6fb') }}{{ missingTaskIdShotCount }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</span>
-                        <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</span>
-                      </div>
-                    </div>
-
-                    <div class="shot-reference-scroll">
-                      <div class="shot-reference-header" role="row">
-                        <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                        <span>{{ tr('cloneView.videoStage.columns.actions') }}</span>
-                      </div>
-
-                      <div class="shot-table-body shot-table-body--reference">
-                        <div
-                          v-for="item in filteredShotOutputs"
-                          :key="item.shotId"
-                          v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId]"
-                          class="shot-reference-row"
-                          :class="{
-                            active: selectedShotOutput?.shotId === item.shotId,
-                            ready: Boolean(item.videoPath),
-                            failed: item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error),
-                          }"
-                          @click="selectedShotId = item.shotId"
-                          @keydown.enter.prevent="selectedShotId = item.shotId"
-                          @keydown.space.prevent="selectedShotId = item.shotId"
-                          role="button"
-                          tabindex="0"
-                        >
-                          <span class="shot-reference-cell shot-reference-cell--index">
-                            <strong>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</strong>
-                            <small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--thumb">
-                            <span v-if="shotFrameMap[item.shotId]?.imagePath" class="shot-thumb shot-thumb--large">
-                              <img
-                                :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)"
-                                :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))"
-                              />
-                            </span>
-                            <span v-else class="shot-thumb shot-thumb--large shot-thumb--empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--copy">
-                            <strong>{{ shotScriptSummary(item.shotId) }}</strong>
-                            <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--metric">
-                            <strong>{{ formatDuration(item.durationSec) }}</strong>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--metric">
-                            <strong>{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</strong>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--status">
-                            <span
-                              class="queue-dot"
-                              :class="`queue-dot--${describeShotSyncState(item).tone === 'success' ? 'success' : describeShotSyncState(item).tone === 'danger' ? 'danger' : describeShotSyncState(item).tone === 'warning' ? 'working' : 'idle'}`"
-                            ></span>
-                            <span class="shot-reference-status-copy">
-                              <strong>{{ describeShotSyncState(item).title }}</strong>
-                              <small>{{ describeShotSyncState(item).detail }}</small>
-                              <small v-if="typeof item.retryCount === 'number'">{{ shotRetryStatusText(item) }}</small>
-                            </span>
-                          </span>
-                          <span class="shot-reference-cell shot-reference-cell--actions">
-                            <button class="ghost-button small action-button" type="button" @click.stop="selectedShotId = item.shotId">{{ tr('autoUi.k_de61aa8e1cbc') }}</button>
-                            <button
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="shotVideoPromptPreviewLoading"
-                              @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"
-                            > {{ tr('autoUi.k_2f0bb1238738') }} </button>
-                            <button
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)"
-                              @click.stop="regenerateShotClip(item.shotId)"
-                            >
-                              {{ regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3') }}
-                            </button>
-                            <button
-                              v-if="canForceDownloadShot(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="forceDownloadingShotVideoIds.includes(item.shotId)"
-                              @click.stop="forceDownloadShotVideoResult(item.shotId)"
-                            >
-                              {{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}
-                            </button>
-                            <button
-                              v-if="canContinueSyncShot(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="loading"
-                              @click.stop="syncFailedShotVideo(item.shotId)"
-                            > {{ tr('autoUi.k_59588f0c7deb') }} </button>
-                            <button
-                              v-else-if="canRepairShotTaskId(item)"
-                              class="ghost-button small action-button"
-                              type="button"
-                              :disabled="loading || !current?.id"
-                              @click.stop="refreshRemoteStatus"
-                            > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
+              <div class="cw-table cw-table--videos">
+                <div class="cw-table__head" role="row">
+                  <span>{{ tr('cloneView.videoStage.columns.shot') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.frame') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.script') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.duration') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.motion') }}</span>
+                  <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
+                  <span class="is-end">{{ tr('cloneView.videoStage.columns.actions') }}</span>
+                </div>
+                <div
+                  v-for="item in filteredShotOutputs"
+                  :key="item.shotId"
+                  v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId, regeneratingShotVideoIds.includes(item.shotId), forceDownloadingShotVideoIds.includes(item.shotId), loading]"
+                  class="cw-row"
+                  :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId, 'is-failed': item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error) }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectedShotId = item.shotId"
+                  @keydown.enter.prevent="selectedShotId = item.shotId"
+                  @keydown.space.prevent="selectedShotId = item.shotId"
+                >
+                  <span class="cw-index"><b>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</b><small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small></span>
+                  <span class="cw-frame__thumb cw-frame__thumb--sm">
+                    <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))" />
+                    <span v-else class="cw-frame__empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
+                    <span v-if="item.videoPath" class="cw-frame__play"><Play :size="12" /></span>
+                  </span>
+                  <span class="cw-frame__copy">
+                    <strong :title="shotScriptSummary(item.shotId)">{{ shotScriptSummary(item.shotId) }}</strong>
+                    <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
+                  </span>
+                  <span class="cw-cell cw-num">{{ formatDuration(item.durationSec) }}</span>
+                  <span class="cw-cell">{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</span>
+                  <span class="cw-shotstate">
+                    <span class="cw-state" :class="`cw-state--${describeShotSyncState(item).tone === 'success' ? 'ok' : describeShotSyncState(item).tone === 'danger' ? 'err' : describeShotSyncState(item).tone === 'warning' ? 'run' : 'idle'}`"><i />{{ describeShotSyncState(item).title }}</span>
+                    <small>{{ describeShotSyncState(item).detail }}<template v-if="typeof item.retryCount === 'number'"> · {{ shotRetryStatusText(item) }}</template></small>
+                  </span>
+                  <span class="cw-actions">
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_de61aa8e1cbc')" @click.stop="selectedShotId = item.shotId"><Eye :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="shotVideoPromptPreviewLoading" :title="tr('autoUi.k_2f0bb1238738')" @click.stop="selectedShotId = item.shotId; loadShotVideoPromptPreview(item.shotId, true, true)"><FileText :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)" :title="regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3')" @click.stop="regenerateShotClip(item.shotId)"><LoaderCircle v-if="regeneratingShotVideoIds.includes(item.shotId)" :size="14" class="vg-spin" /><RotateCw v-else :size="14" /></button>
+                    <button v-if="canForceDownloadShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="forceDownloadingShotVideoIds.includes(item.shotId)" @click.stop="forceDownloadShotVideoResult(item.shotId)">{{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}</button>
+                    <button v-if="canContinueSyncShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click.stop="syncFailedShotVideo(item.shotId)">{{ tr('autoUi.k_59588f0c7deb') }}</button>
+                    <button v-else-if="canRepairShotTaskId(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click.stop="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
+                  </span>
                 </div>
               </div>
+            </section>
 
-              <div class="video-stage-preview">
-                <CloneConsoleSidebar :tag="tr('cloneView.videoStage.previewTag')" :title="tr('cloneView.videoStage.previewTitle')">
-                  <div class="feedback-stack feedback-stack--preview">
-                    <section class="sidebar-section sidebar-section--preview">
-                      <div class="sidebar-section__head">
-                        <strong>{{ tr('cloneView.videoStage.previewTag') }}</strong>
-                        <small>{{ safeText(stageItems.find((item) => item.key === visibleStageKey)?.title, '--') }}</small>
-                      </div>
-                      <div class="sidebar-preview-shell">
-                        <div v-if="selectedShotOutput" class="sidebar-preview-shell__hud">
-                          <span>{{ `${tr('cloneView.videoStage.columns.shot')} ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` }}</span>
-                          <span>{{ formatDuration(selectedShotOutput?.durationSec) }}</span>
-                        </div>
-                        <video v-if="selectedShotOutput?.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" controls preload="metadata"></video>
-                        <CloneStateCard
-                          v-else
-                          class="empty-state small-empty"
-                          tone="pending"
-                          :title="tr('cloneView.videoStage.emptyPreviewTitle')"
-                          :description="tr('cloneView.videoStage.emptyPreviewDescription')"
-                        />
-                      </div>
-                      <CloneDataCard class="meta-card" size="large">
-                        <span>{{ tr('cloneView.videoStage.currentShot') }}</span>
-                        <strong>{{ safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('cloneView.videoStage.notSelected')) }}</strong>
-                        <em>{{ shotScriptSummary(selectedShotOutput?.shotId) }}</em>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card sidebar-script-card">
-                        <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
-                        <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
-                        <em>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</em>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card sidebar-frame-card">
-                        <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
-                        <div v-if="selectedShotFrame?.imagePath" class="sidebar-frame-thumb">
-                          <img
-                            :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)"
-                            :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))"
-                          />
-                        </div>
-                        <div v-else class="sidebar-frame-thumb sidebar-frame-thumb--empty">{{ tr('cloneView.videoStage.noReferenceFrame') }}</div>
-                      </CloneDataCard>
-                      <CloneDataCard class="meta-card compact-meta-grid">
-                        <span>{{ tr('cloneView.videoStage.columns.status') }}</span>
-                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</strong>
-                        <span>{{ tr('autoUi.k_68e297c888ef') }}</span>
-                        <strong>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</strong>
-                        <span>{{ tr('autoUi.k_9d2c439d0b11') }}</span>
-                        <strong>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</strong>
-                        <span>{{ tr('cloneView.videoStage.modelLabel') }}</span>
-                        <strong>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</strong>
-                        <span>{{ tr('cloneView.videoStage.taskIdLabel') }}</span>
-                        <strong>{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</strong>
-                      </CloneDataCard>
-                      <div v-if="selectedShotVideoErrorText" class="storyboard-preview-error">
-                        <div class="storyboard-preview-error__head">
-                          <strong>{{ tr('autoUi.k_ce8a92e25f09') }}</strong>
-                          <span>{{ selectedShotVideoErrorTitle }}</span>
-                        </div>
-                        <div class="storyboard-preview-error__body">
-                          <p>{{ selectedShotVideoErrorText }}</p>
-                        </div>
-                        <div class="storyboard-preview-error__advice">
-                          <span>{{ tr('autoUi.k_aba23c4b2667') }}</span>
-                          <p>{{ selectedShotVideoErrorAdvice }}</p>
-                        </div>
-                        <div v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="storyboard-preview-error__actions">
-                          <button class="ghost-button small" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                </CloneConsoleSidebar>
-              </div>
-            </div>
-
-            <div class="compose-fallback-bar">
-              <div class="compose-fallback-copy">
-                <strong>{{ tr('autoUi.k_1099e21fef55') }}</strong>
-                <span>{{ tr('autoUi.k_b4618efa3ca7') }}</span>
-              </div>
-              <button
-                class="primary-button small"
-                type="button"
-                :disabled="loading"
-                @click.stop="selectStage('compose')"
-              > {{ tr('autoUi.k_6a9b747fac2c') }} </button>
-            </div>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('cloneView.videoStage.previewTitle') }}</h3>
+                  <span v-if="selectedShotOutput" class="cw-card__hint">{{ `${tr('cloneView.videoStage.columns.shot')} ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` }} · {{ formatDuration(selectedShotOutput?.durationSec) }}</span>
+                </header>
+                <div class="cw-player cw-player--portrait">
+                  <video v-if="selectedShotOutput?.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" controls preload="metadata"></video>
+                  <span v-else class="cw-canvas__empty"><Clapperboard :size="24" /><strong>{{ tr('cloneView.videoStage.emptyPreviewTitle') }}</strong><small>{{ tr('cloneView.videoStage.emptyPreviewDescription') }}</small></span>
+                </div>
+                <div class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.currentShot') }}</span>
+                  <strong>{{ safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('cloneView.videoStage.notSelected')) }}</strong>
+                  <small>{{ shotScriptSummary(selectedShotOutput?.shotId) }}</small>
+                </div>
+                <div class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
+                  <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
+                  <small>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</small>
+                </div>
+                <div v-if="selectedShotFrame?.imagePath" class="cw-field">
+                  <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
+                  <span class="cw-frame__thumb cw-frame__thumb--wide"><img :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)" :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))" /></span>
+                </div>
+                <dl class="cw-kv">
+                  <div><dt>{{ tr('cloneView.videoStage.columns.status') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_68e297c888ef') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</dd></div>
+                  <div><dt>{{ tr('autoUi.k_9d2c439d0b11') }}</dt><dd>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</dd></div>
+                  <div><dt>{{ tr('cloneView.videoStage.modelLabel') }}</dt><dd>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</dd></div>
+                  <div><dt>{{ tr('cloneView.videoStage.taskIdLabel') }}</dt><dd class="cw-mono">{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</dd></div>
+                </dl>
+                <div v-if="selectedShotVideoErrorText" class="cw-alert">
+                  <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_ce8a92e25f09') }} · {{ selectedShotVideoErrorTitle }}</strong>
+                  <p>{{ selectedShotVideoErrorText }}</p>
+                  <small>{{ tr('autoUi.k_aba23c4b2667') }}：{{ selectedShotVideoErrorAdvice }}</small>
+                  <button v-if="selectedShotVideoErrorAction === 'go-models' || selectedShotVideoErrorAction === 'go-identity-grid'" class="vg-btn vg-btn--sm" type="button" @click="handleStoryboardErrorAction">{{ selectedShotVideoErrorAction === 'go-identity-grid' ? tr('autoUi.k_c02ac22e1593') : tr('autoUi.k_5d3cd4e394f6') }}</button>
+                </div>
+              </section>
+            </aside>
           </div>
 
-          <CloneStateCard
-            v-else
-            class="empty-state section-empty"
-            :title="tr('autoUi.k_b7ec5f2532fc')"
-            :description="tr('autoUi.k_7b060ff47103')"
-          />
+          <div v-if="shotVideoOutputs.length" class="cw-nextbar">
+            <div><strong>{{ tr('autoUi.k_1099e21fef55') }}</strong><span>{{ tr('autoUi.k_b4618efa3ca7') }}</span></div>
+            <button class="vg-btn vg-btn--primary" type="button" :disabled="loading" @click.stop="selectStage('compose')">{{ tr('autoUi.k_6a9b747fac2c') }}<ArrowRight :size="15" /></button>
+          </div>
+          <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_b7ec5f2532fc')" :description="tr('autoUi.k_7b060ff47103')" />
         </article>
 
-        <article v-if="visibleStageKey === 'compose'" class="panel panel-compose-stage">
-          <CloneStageHeader tag="" :title="tr('autoUi.k_780ee868bcca')" :description="tr('autoUi.k_302215860a11')">
-            <template #aux>
-              <span>{{ tr('autoUi.k_794c95d23fb2') }}{{ gatePassAllowed ? tr('autoUi.k_dcc4233255ab') : tr('autoUi.k_a00db105bd49') }}</span>
-              <span>{{ finalOutputPath ? tr('autoUi.k_26876a1765af') : tr('autoUi.k_942a589f6e38') }}</span>
-            </template>
-          </CloneStageHeader>
+        <!-- ================= 06 成片合成 ================= -->
+        <article v-if="visibleStageKey === 'compose'" class="cw-step-view">
+          <header class="cw-head">
+            <span class="cw-head__no">06</span>
+            <div class="cw-head__text">
+              <h2>{{ tr('autoUi.k_780ee868bcca') }}</h2>
+              <p>{{ tr('autoUi.k_302215860a11') }}</p>
+            </div>
+            <div class="cw-head__meta">
+              <span class="cw-state" :class="gatePassAllowed ? 'cw-state--ok' : 'cw-state--run'"><i />{{ tr('autoUi.k_794c95d23fb2') }}{{ gatePassAllowed ? tr('autoUi.k_dcc4233255ab') : tr('autoUi.k_a00db105bd49') }}</span>
+              <span class="cw-state" :class="finalOutputPath ? 'cw-state--ok' : 'cw-state--idle'"><i />{{ finalOutputPath ? tr('autoUi.k_26876a1765af') : tr('autoUi.k_942a589f6e38') }}</span>
+            </div>
+          </header>
 
-          <div class="compose-studio">
-            <div class="compose-studio__main">
-              <section class="compose-stage-card">
-                <div class="compose-stage-card__media" :class="composeAspectClass" @contextmenu.prevent="hasFreshFinalCompose && finalOutputPath && revealFinalOutput()">
+          <div class="cw-split cw-split--compose">
+            <div class="cw-stack">
+              <section class="cw-card cw-card--theater">
+                <div class="cw-theater" :class="composeAspectClass" @contextmenu.prevent="hasFreshFinalCompose && finalOutputPath && revealFinalOutput()">
                   <video v-if="composePreviewPath" :src="composePreviewMediaUrl" :poster="composePreviewPosterUrl || undefined" controls preload="metadata"></video>
-                  <CloneStateCard
-                    v-else
-                    class="empty-state"
-                    :title="tr('autoUi.k_0ac754b27412')"
-                    :description="composePreviewHint"
-                  />
+                  <span v-else class="cw-canvas__empty"><Film :size="26" /><strong>{{ tr('autoUi.k_0ac754b27412') }}</strong><small>{{ composePreviewHint }}</small></span>
                 </div>
               </section>
 
-              <section class="compose-sequence-card">
-                <div class="compose-sequence-card__head">
-                  <div class="compose-list-copy">
-                    <strong>{{ tr('autoUi.k_ab7bce9cbbe7') }}</strong>
-                    <p>{{ tr('autoUi.k_4cdcbc82fa16') }}</p>
-                  </div>
-                  <div class="compose-list-actions">
-                    <span class="mini-pill mini-pill--ghost">{{ shotVideoOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
-                    <button class="ghost-button small" type="button" :disabled="loading || !selectedShotOutput" @click="replaceShotVideo(selectedShotOutput?.shotId || '')">{{ tr('autoUi.k_e33ea5f87622') }}</button>
-                  </div>
-                </div>
-
-                <div v-if="shotVideoOutputs.length" class="compose-sequence-strip">
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_ab7bce9cbbe7') }}</h3>
+                  <span class="cw-card__hint">{{ tr('autoUi.k_4cdcbc82fa16') }}</span>
+                  <span class="cw-count-mark">{{ shotVideoOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
+                </header>
+                <div v-if="shotVideoOutputs.length" class="cw-strip">
                   <div
                     v-for="item in shotVideoOutputs"
                     :key="`${item.shotId}-studio`"
                     v-memo="[item.shotId, item.videoPath, item.status, item.error, item.durationSec, selectedShotOutput?.shotId === item.shotId, shotFrameMap[item.shotId]?.imagePath]"
-                    class="compose-sequence-item"
-                    :class="{ active: selectedShotOutput?.shotId === item.shotId }"
+                    class="cw-strip__item"
+                    :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId }"
+                    role="button"
+                    tabindex="0"
                     @click="selectedShotId = item.shotId"
                     @keydown.enter.prevent="selectedShotId = item.shotId"
                     @keydown.space.prevent="selectedShotId = item.shotId"
-                    role="button"
-                    tabindex="0"
                   >
-                    <span class="compose-sequence-item__index">{{ (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }}</span>
-                    <span class="compose-sequence-item__thumb">
-                      <img
-                        v-if="shotFrameMap[item.shotId]?.imagePath"
-                        :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)"
-                        alt="shot-frame"
-                        loading="lazy"
-                      />
-                      <span v-else>{{ tr('autoUi.k_6fd0592e6878') }}</span>
+                    <span class="cw-strip__media">
+                      <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" alt="shot-frame" loading="lazy" />
+                      <span v-else class="cw-frame__empty">{{ tr('autoUi.k_6fd0592e6878') }}</span>
+                      <b>{{ (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }}</b>
                     </span>
-                    <div class="compose-sequence-item__meta">
-                      <strong>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_24f7d6982256', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 })) }}</strong>
-                      <small>{{ formatDuration(item.durationSec) }}</small>
-                    </div>
+                    <strong>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_24f7d6982256', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 })) }}</strong>
+                    <small>{{ formatDuration(item.durationSec) }}</small>
                   </div>
                 </div>
-
-                <div v-if="selectedShotOutput" class="compose-sequence-detail">
-                  <div class="compose-sequence-detail__copy">
-                    <span class="panel-tag">{{ tr('autoUi.k_103c08e0b996') }}</span>
+                <div v-if="selectedShotOutput" class="cw-detailbar">
+                  <div>
+                    <small>{{ tr('autoUi.k_103c08e0b996') }}</small>
                     <strong>{{ safeText(shotLabel(selectedShotOutput.shotId), tr('autoUi.k_103c08e0b996')) }}</strong>
-                    <small>{{ shotScriptSummary(selectedShotOutput.shotId) }}</small>
+                    <span>{{ shotScriptSummary(selectedShotOutput.shotId) }}</span>
                   </div>
-                  <div class="compose-sequence-detail__actions">
-                    <button
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !selectedShotOutput"
-                      @click="selectedShotOutput && replaceShotVideo(selectedShotOutput.shotId)"
-                    > {{ tr('autoUi.k_e33ea5f87622') }} </button>
-                    <button
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !canContinueSyncShot(selectedShotOutput)"
-                      @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"
-                    > {{ tr('autoUi.k_0f80598c1ffa') }} </button>
-                    <button
-                      v-if="canRepairShotTaskId(selectedShotOutput)"
-                      class="ghost-button small"
-                      type="button"
-                      :disabled="loading || !current?.id"
-                      @click="refreshRemoteStatus"
-                    > {{ tr('autoUi.k_c669d0d0cdfc') }} </button>
+                  <div class="cw-btnrow">
+                    <CloneShotReplaceMenu
+                      v-if="current?.id"
+                      :clone-project-id="current.id"
+                      :shot-id="selectedShotOutput.shotId"
+                      :disabled="loading"
+                      @pick-file="replaceShotVideo(selectedShotOutput.shotId)"
+                      @replaced="onShotAlternativeReplaced"
+                      @error="onShotAlternativeError"
+                    />
+                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !canContinueSyncShot(selectedShotOutput)" @click="selectedShotOutput && syncFailedShotVideo(selectedShotOutput.shotId)"><Search :size="13" />{{ tr('autoUi.k_0f80598c1ffa') }}</button>
+                    <button v-if="canRepairShotTaskId(selectedShotOutput)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
                   </div>
                 </div>
-
-                <CloneStateCard
-                  v-else
-                  class="empty-state section-empty"
-                  :title="tr('autoUi.k_52198bfdbee3')"
-                  :description="tr('autoUi.k_fcdc361d35ed')"
-                />
+                <CloneStateCard v-else class="empty-state section-empty" :title="tr('autoUi.k_52198bfdbee3')" :description="tr('autoUi.k_fcdc361d35ed')" />
               </section>
             </div>
 
-            <aside class="compose-studio__side">
-              <section class="compose-side-card final-delivery-side">
-                <div class="compose-side-card__head">
-                  <strong>{{ tr('autoUi.k_7aaa2f87edf4') }}</strong>
-                  <small>{{ tr('autoUi.k_df429736ba90') }}</small>
+            <aside class="cw-stack cw-sticky">
+              <section class="cw-card cw-card--accent">
+                <header class="cw-card__head"><h3>{{ tr('autoUi.k_09d1dbd189c8') }}</h3></header>
+                <div class="cw-metrics cw-metrics--3">
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_29d0552d2e4c') }}</span><strong>{{ composeDurationDisplay }}</strong></div>
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_fd20702c73d1') }}</span><strong>{{ composeEstimatedSize }}</strong></div>
+                  <div class="cw-metric"><span>{{ tr('autoUi.k_a9704e1997b9') }}</span><strong :title="composeExportTimeText">{{ composeExportTimeText }}</strong></div>
                 </div>
-                <div class="compose-option-group">
+                <button class="vg-btn vg-btn--primary vg-btn--block vg-btn--lg" type="button" :disabled="!hasFreshFinalCompose || !finalOutputPath" @click="revealFinalOutput"><Download :size="16" />{{ composeExportActionLabel }}</button>
+                <div class="cw-btnrow cw-btnrow--fill">
+                  <button class="vg-btn" :class="{ 'cw-warn': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo"><RefreshCw :size="14" />{{ finalButtonLabel }}</button>
+                  <button class="vg-btn" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio"><Send :size="14" />{{ tr('autoUi.k_f0effeae0cf7') }}</button>
+                </div>
+              </section>
+
+              <section class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_7aaa2f87edf4') }}</h3>
+                  <span class="cw-card__hint">{{ tr('autoUi.k_df429736ba90') }}</span>
+                </header>
+                <div class="cw-field">
                   <span>{{ tr('autoUi.k_305c965ad310') }}</span>
-                  <div class="compose-output-dir">
-                    <strong>{{ finalOutputDirText }}</strong>
-                    <button class="ghost-button small" type="button" :disabled="loading" @click="pickComposeOutputDir">{{ tr('autoUi.k_ed358091bc9c') }}</button>
+                  <div class="cw-path">
+                    <FolderOpen :size="14" /><strong :title="finalOutputDirText">{{ finalOutputDirText }}</strong>
+                    <button class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click="pickComposeOutputDir">{{ tr('autoUi.k_ed358091bc9c') }}</button>
                   </div>
                 </div>
               </section>
 
-              <section class="compose-side-card compose-estimate-card">
-                <div class="compose-side-card__head">
-                  <strong>{{ tr('autoUi.k_09d1dbd189c8') }}</strong>
-                </div>
-                <div class="compose-export-grid">
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_29d0552d2e4c') }}</span>
-                    <strong>{{ composeDurationDisplay }}</strong>
-                  </div>
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_fd20702c73d1') }}</span>
-                    <strong>{{ composeEstimatedSize }}</strong>
-                  </div>
-                  <div class="compose-export-stat">
-                    <span>{{ tr('autoUi.k_a9704e1997b9') }}</span>
-                    <strong>{{ composeExportTimeText }}</strong>
-                  </div>
-                </div>
-                <div class="compose-side-actions">
-                  <button class="primary-button compose-export-button" type="button" :disabled="!hasFreshFinalCompose || !finalOutputPath" @click="revealFinalOutput">
-                    {{ composeExportActionLabel }}
-                  </button>
-                  <button class="ghost-button compose-side-button" :class="{ 'is-warning': !gatePassAllowed }" type="button" :disabled="loading" @click="composeFinalVideo">
-                    {{ finalButtonLabel }}
-                  </button>
-                  <button class="ghost-button compose-side-button" type="button" :disabled="loading || !current?.id" @click="openTiktokCreativeStudio"> {{ tr('autoUi.k_f0effeae0cf7') }} </button>
-                </div>
+              <div v-if="localComposeErrorText" class="cw-alert">
+                <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_408228b05be1') }}</strong>
+                <p>{{ localComposeErrorText }}</p>
+              </div>
+
+              <section v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="cw-card">
+                <header class="cw-card__head">
+                  <h3>{{ tr('autoUi.k_906e2b8b14d2') }}</h3>
+                  <span class="cw-state" :class="composeHealthFlagLabels.length ? 'cw-state--run' : 'cw-state--ok'"><i />{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.length : '✓' }}</span>
+                </header>
+                <p v-if="composeHealthVerdictText" class="cw-body-copy cw-body-copy--strong">{{ composeHealthVerdictText }}</p>
+                <div class="cw-words"><em v-for="label in composeHealthFlagLabels.length ? composeHealthFlagLabels : [tr('autoUi.k_438a2458e735')]" :key="label">{{ label }}</em></div>
+                <dl class="cw-kv">
+                  <div v-if="composeSummaryStats?.totalShots"><dt>{{ tr('autoUi.k_e3c71dbd0f6e').replace(/[:：]\s*$/, '') }}</dt><dd>{{ composeSummaryStats.totalShots }}{{ tr('autoUi.k_bfbf845243b4') }}{{ composeStageCountText }}</dd></div>
+                  <div v-if="composeAverageClipDurationText"><dt>{{ tr('autoUi.k_5b8be1da2596').replace(/[:：]\s*$/, '') }}</dt><dd>{{ composeAverageClipDurationText }}</dd></div>
+                </dl>
+                <small v-if="composeSummaryStats" class="cw-note">{{ tr('autoUi.k_c6965fe469f4') }}{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}{{ tr('autoUi.k_112fd0c2aff9') }}{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}{{ tr('autoUi.k_e30d73d034d5') }}{{ Number(composeSummaryStats.productPriorityCount || 0) }}{{ tr('autoUi.k_e985a4d66628') }}{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
+                <ul v-if="composeHealthRecommendations.length" class="cw-advice"><li v-for="item in composeHealthRecommendations" :key="item">{{ item }}</li></ul>
               </section>
 
-              <CloneDataCard v-if="localComposeErrorText" class="meta-card" tone="danger">
-                <span>{{ tr('autoUi.k_408228b05be1') }}</span>
-                <strong>{{ localComposeErrorText }}</strong>
-              </CloneDataCard>
-              <CloneDataCard v-if="composeSummaryStats || composeHealthFlags.length || composeHealthRecommendations.length || composeHealthVerdictText" class="meta-card">
-                <span>{{ tr('autoUi.k_906e2b8b14d2') }}</span>
-                <strong v-if="composeHealthVerdictText">{{ composeHealthVerdictText }}</strong>
-                <strong>{{ composeHealthFlagLabels.length ? composeHealthFlagLabels.join(' / ') : tr('autoUi.k_438a2458e735') }}</strong>
-                <small v-if="composeSummaryStats?.totalShots">{{ tr('autoUi.k_e3c71dbd0f6e') }}{{ composeSummaryStats.totalShots }}{{ tr('autoUi.k_bfbf845243b4') }}{{ composeStageCountText }}</small>
-                <small v-if="composeAverageClipDurationText">{{ tr('autoUi.k_5b8be1da2596') }}{{ composeAverageClipDurationText }}</small>
-                <small v-if="composeSummaryStats">{{ tr('autoUi.k_c6965fe469f4') }}{{ Number(composeSummaryStats.aggressiveShotCount || 0) }}{{ tr('autoUi.k_112fd0c2aff9') }}{{ Number(composeSummaryStats.readabilityProtectedCount || 0) }}{{ tr('autoUi.k_e30d73d034d5') }}{{ Number(composeSummaryStats.productPriorityCount || 0) }}{{ tr('autoUi.k_e985a4d66628') }}{{ Number(composeSummaryStats.strongHookCount || 0) }}</small>
-                <small v-for="item in composeHealthRecommendations" :key="item">{{ item }}</small>
-              </CloneDataCard>
-              <CloneDataCard v-if="previewPipelineReportPath" class="meta-card">
+              <div v-if="previewPipelineReportPath" class="cw-field cw-field--row cw-field--plain">
                 <span>{{ tr('autoUi.k_68ad7f89e687') }}</span>
-                <strong>{{ shortPath(previewPipelineReportPath) }}</strong>
-              </CloneDataCard>
+                <strong class="cw-mono" :title="previewPipelineReportPath">{{ shortPath(previewPipelineReportPath) }}</strong>
+              </div>
+              <p class="cw-banner"><Lightbulb :size="14" />{{ tr('autoUi.k_f5d8e9430ad5') }} {{ tr('autoUi.k_34be97c09b46') }}</p>
             </aside>
           </div>
-
-          <section class="compose-tip-card">
-            <span class="compose-tip-card__icon">✧</span>
-            <div>
-              <strong>{{ tr('autoUi.k_ce6897595b74') }}</strong>
-              <p>{{ tr('autoUi.k_f5d8e9430ad5') }}</p>
-              <p>{{ tr('autoUi.k_34be97c09b46') }}</p>
-            </div>
-          </section>
         </article>
-
       </div>
-
     </section>
 
     <RuntimeLogDialog
@@ -5234,6 +5003,7 @@ onUnmounted(() => {
             <h2>{{ selectedStoryboardRow ? tr('autoUi.k_24f7d6982256', { p0: String(selectedStoryboardRow.shotIndex).padStart(2, '0') }) : tr('autoUi.k_9fec4d6ec5ef') }}</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button small" type="button" data-testid="clone-shot-image-open-prompt-manager" @click="openPromptManager('grid', { kind: shotImageReferenceMode === 'product_closeup' ? 'storyboard_product' : 'storyboard_model', productType: shotImagePromptPreview?.productType })">{{ tr('cloneUi.promptManager.entry') }}</button>
             <button class="ghost-button small" type="button" :disabled="!shotImagePromptPreview" @click="copyAllShotPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             <button class="ghost-button small" type="button" @click="shotPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
@@ -5302,6 +5072,7 @@ onUnmounted(() => {
             <h2>{{ selectedShotOutput ? tr('autoUi.k_24f7d6982256', { p0: String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0') }) : tr('autoUi.k_589157bc90cb') }}</h2>
           </div>
           <div class="panel-actions">
+            <button class="ghost-button small" type="button" data-testid="clone-shot-video-open-prompt-manager" @click="openPromptManager('video', { productType: shotVideoPromptPreview?.productType })">{{ tr('cloneUi.promptManager.entry') }}</button>
             <button class="ghost-button small" type="button" :disabled="!shotVideoPromptPreview" @click="copyAllShotVideoPrompts">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             <button class="ghost-button small" type="button" @click="shotVideoPromptPreviewOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
           </div>
@@ -5426,78 +5197,13 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="geelarkPublishModalOpen" class="modal-mask" @click.self="geelarkPublishModalOpen = false">
-      <div class="modal-panel">
-        <div class="panel-head">
-          <div>
-            <span class="panel-tag">{{ tr('autoUi.k_6adb64a596d8') }}</span>
-            <h2>{{ tr('autoUi.k_533305d1af7c') }}</h2>
-          </div>
-          <button class="ghost-button small" type="button" @click="geelarkPublishModalOpen = false">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
-        </div>
-
-        <div class="publish-modal-grid">
-          <label class="publish-field publish-field--full">
-            <span>{{ tr('autoUi.k_f9d9425f7924') }}</span>
-            <strong>{{ safeText(shortPath(finalOutputPath), tr('autoUi.k_40cf5c1ab780')) }}</strong>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_f6afab4f2d29') }}</span>
-            <select v-model="geelarkPublishForm.publishAccountId" class="field-control">
-              <option value="">{{ tr('autoUi.k_107c18a5bb99') }}</option>
-              <option v-for="item in geelarkAccounts" :key="item.id" :value="item.id">
-                {{ item.name }}
-              </option>
-            </select>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_3f8afdc8504e') }}</span>
-            <strong>{{ selectedGeelarkAccount?.cloudPhoneName || tr('autoUi.k_3bf179d8d045') }}</strong>
-          </label>
-
-          <label class="publish-field publish-field--full">
-            <span>{{ tr('autoUi.k_d6c3ef6ebcd3') }}</span>
-            <textarea v-model="geelarkPublishForm.videoDesc" class="field-control field-control--textarea" :placeholder="tr('autoUi.k_5a38b0c89b33')"></textarea>
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_dffd0cb74c18') }}</span>
-            <input v-model="geelarkPublishForm.productId" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_d415beaceafd') }}</span>
-            <input v-model="geelarkPublishForm.productTitle" class="field-control" type="text" :placeholder="tr('autoUi.k_53e32830a538')" />
-          </label>
-
-          <label class="publish-field">
-            <span>{{ tr('autoUi.k_9c735206b1c6') }}</span>
-            <input v-model="geelarkPublishForm.scheduleAt" class="field-control" type="datetime-local" />
-          </label>
-
-          <button
-            type="button"
-            class="toggle-button"
-            :class="{ 'is-active': geelarkPublishForm.needShareLink }"
-            @click="geelarkPublishForm.needShareLink = !geelarkPublishForm.needShareLink"
-          >
-            <span>{{ geelarkPublishForm.needShareLink ? tr('autoUi.k_485e3bbb5e66') : tr('autoUi.k_e2f19210dbbf') }}</span>
-          </button>
-        </div>
-
-        <div v-if="geelarkPublishMessage" class="inline-form-message">
-          {{ geelarkPublishMessage }}
-        </div>
-
-        <div class="panel-actions">
-          <button class="primary-button" type="button" :disabled="geelarkPublishSubmitting" @click="submitGeelarkPublish">
-            {{ geelarkPublishSubmitting ? tr('autoUi.k_3a1624e3e681') : tr('autoUi.k_e9d29123e9e3') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ClonePromptManager
+      :open="promptManagerOpen"
+      :kinds="promptManagerKinds"
+      :initial-kind="promptManagerKind"
+      :initial-product-type="promptManagerProductType"
+      @close="promptManagerOpen = false"
+    />
   </div>
 </template>
 
@@ -5505,8 +5211,8 @@ onUnmounted(() => {
 .clone-page {
   min-height: 100%;
   padding: 4px 12px 72px;
-  background: linear-gradient(180deg, #0d1528 0%, #09101e 100%);
-  color: #eef3ff;
+  background: linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel) 100%);
+  color: var(--theme-text);
 }
 
 .hero-shell,
@@ -5540,7 +5246,7 @@ onUnmounted(() => {
   line-height: 1;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8ea6ff;
+  color: var(--theme-tone-blue);
   font-weight: 700;
 }
 
@@ -5559,29 +5265,29 @@ onUnmounted(() => {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #d8e2ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
 
 .status-pill.success {
-  color: #9df0ce;
-  border-color: rgba(81, 206, 149, 0.28);
-  background: rgba(81, 206, 149, 0.12);
+  color: var(--theme-accent);
+  border-color: color-mix(in srgb, var(--theme-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
 }
 
 .status-pill.danger {
-  color: #ffbcbc;
-  border-color: rgba(255, 120, 120, 0.28);
-  background: rgba(255, 120, 120, 0.1);
+  color: var(--theme-tone-red);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 10%, transparent);
 }
 
 .status-pill.working {
-  color: #dfe6ff;
-  border-color: rgba(142, 166, 255, 0.26);
-  background: rgba(142, 166, 255, 0.12);
+  color: var(--theme-text);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 26%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
 }
 
 .panel,
@@ -5594,8 +5300,8 @@ onUnmounted(() => {
 .frame-card,
 .review-card,
 .advanced-toggle {
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: rgba(12, 19, 34, 0.94);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
+  background: color-mix(in srgb, var(--theme-panel) 94%, transparent);
   border-radius: 18px;
 }
 
@@ -5621,7 +5327,7 @@ onUnmounted(() => {
 .history-copy span,
 .history-copy small,
 .frame-card span {
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.3;
 }
@@ -5632,7 +5338,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 14px;
   padding: 10px 2px 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--theme-border);
 }
 
 .stage-summary-copy {
@@ -5641,14 +5347,14 @@ onUnmounted(() => {
 }
 
 .stage-summary-copy strong {
-  color: #f0f4ff;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 700;
 }
 
 .stage-summary-copy span:last-child,
 .stage-summary-meta span {
-  color: #8fa0c4;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -5701,7 +5407,7 @@ onUnmounted(() => {
   gap: 18px;
   padding: 2px 2px 14px;
   margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .storyboard-stage-hero__copy {
@@ -5711,7 +5417,7 @@ onUnmounted(() => {
 }
 
 .storyboard-stage-hero__copy strong {
-  color: #f5f8ff;
+  color: var(--theme-text);
   font-size: 19px;
   line-height: 1.12;
   font-weight: 800;
@@ -5719,7 +5425,7 @@ onUnmounted(() => {
 
 .storyboard-stage-hero__copy p {
   margin: 0;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -5727,7 +5433,7 @@ onUnmounted(() => {
 .storyboard-stage-hero__hint {
   display: block;
   margin-top: 6px;
-  color: #7f92b8;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -5754,8 +5460,8 @@ onUnmounted(() => {
 
 .panel-reference {
   background:
-    linear-gradient(180deg, rgba(15, 22, 38, 0.98), rgba(10, 16, 29, 0.98)),
-    radial-gradient(circle at top left, rgba(84, 101, 194, 0.12), transparent 28%);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 28%);
 }
 
 .analyze-workbench {
@@ -5778,8 +5484,8 @@ onUnmounted(() => {
 .analyze-hero-card,
 .analyze-panel-card,
 .analyze-project-card {
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: rgba(10, 16, 29, 0.92);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
+  background: color-mix(in srgb, var(--theme-panel) 92%, transparent);
 }
 
 .analyze-topbar {
@@ -5791,7 +5497,7 @@ onUnmounted(() => {
 }
 
 .analyze-breadcrumb {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 700;
 }
@@ -5824,7 +5530,7 @@ onUnmounted(() => {
 
 .analyze-hero-card__copy h2 {
   margin: 0;
-  color: #f8fbff;
+  color: var(--theme-text);
   font-size: 20px;
   line-height: 1.2;
 }
@@ -5836,7 +5542,7 @@ onUnmounted(() => {
 .analyze-structure-node small,
 .analyze-structure-node span,
 .analyze-script-card p {
-  color: #98a6c7;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -5876,10 +5582,10 @@ onUnmounted(() => {
 .analyze-project-info-card {
   padding: 12px;
   border-radius: 18px;
-  border: 1px solid rgba(119, 137, 198, 0.14);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
   background:
-    linear-gradient(180deg, rgba(10, 16, 29, 0.92), rgba(8, 13, 24, 0.94)),
-    rgba(255, 255, 255, 0.015);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 92%, transparent), color-mix(in srgb, var(--theme-panel) 94%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-results-card__head,
@@ -5896,14 +5602,14 @@ onUnmounted(() => {
 .analyze-results-card__section-head strong,
 .analyze-project-info-card__head strong,
 .analyze-project-field strong {
-  color: #eef3ff;
+  color: var(--theme-text);
 }
 
 .analyze-results-card__head span,
 .analyze-results-card__section-head span,
 .analyze-project-field span,
 .analyze-results-card__empty-copy {
-  color: #98a6c7;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -5914,8 +5620,8 @@ onUnmounted(() => {
   gap: 10px;
   padding: 12px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-project-info-card__section + .analyze-project-info-card__section {
@@ -5936,15 +5642,15 @@ onUnmounted(() => {
   border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
-  color: #7f90b6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
 }
 
 .analyze-results-tabs__item.is-active {
-  border-color: rgba(109, 93, 255, 0.22);
-  background: rgba(109, 93, 255, 0.08);
-  color: #edf3ff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
+  color: var(--theme-text);
 }
 
 .analyze-project-field {
@@ -5953,8 +5659,8 @@ onUnmounted(() => {
   min-width: 0;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-project-field strong {
@@ -5969,11 +5675,11 @@ onUnmounted(() => {
 .analyze-project-card__copy strong,
 .analyze-engine-title,
 .analyze-summary-item strong {
-  color: #eef3ff;
+  color: var(--theme-text);
 }
 
 .analyze-video-card__head span {
-  color: #98a6c7;
+  color: var(--theme-text-secondary);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -5994,12 +5700,12 @@ onUnmounted(() => {
   gap: 10px;
   padding: 12px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-video-meta-card > strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
@@ -6011,12 +5717,12 @@ onUnmounted(() => {
 }
 
 .analyze-video-meta-card__grid span {
-  color: #7f90b6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
 .analyze-video-meta-card__grid strong {
-  color: #dfe8fb;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.45;
   text-align: right;
@@ -6031,13 +5737,13 @@ onUnmounted(() => {
 .analyze-structure-card {
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
   align-content: start;
 }
 
 .analyze-structure-card__head strong span {
-  color: #95a3c3;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
@@ -6053,12 +5759,12 @@ onUnmounted(() => {
   display: grid;
   gap: 6px;
   padding: 8px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: rgba(12, 19, 34, 0.88);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
 }
 
 .analyze-structure-node.is-highlight {
-  border-color: rgba(109, 93, 255, 0.42);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, transparent);
   box-shadow: inset 0 0 0 1px rgba(109, 93, 255, 0.18);
 }
 
@@ -6087,12 +5793,12 @@ onUnmounted(() => {
 }
 
 .analyze-material-card__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
 .analyze-material-card__head span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -6109,9 +5815,9 @@ onUnmounted(() => {
   min-height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(109, 93, 255, 0.2);
-  background: rgba(109, 93, 255, 0.08);
-  color: #cfd8ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-style: normal;
 }
@@ -6137,9 +5843,9 @@ onUnmounted(() => {
   place-items: center;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef3ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 800;
 }
@@ -6164,8 +5870,8 @@ onUnmounted(() => {
   gap: 4px;
   min-height: 76px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-insights-panel {
@@ -6184,8 +5890,8 @@ onUnmounted(() => {
   gap: 10px;
   min-height: 240px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-script-card__head,
@@ -6199,7 +5905,7 @@ onUnmounted(() => {
 .analyze-script-card__head span,
 .analyze-structure-mini__head span,
 .analyze-structure-mini__empty {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -6220,19 +5926,19 @@ onUnmounted(() => {
   display: grid;
   gap: 4px;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-global-section strong,
 .analyze-reverse-prompt strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
 .analyze-global-section p,
 .analyze-reverse-prompt p {
-  color: #9aa8c8;
+  color: var(--theme-text-secondary);
   line-height: 1.62;
 }
 
@@ -6246,8 +5952,8 @@ onUnmounted(() => {
 
 .analyze-script-lines p {
   padding: 8px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
   line-height: 1.5;
 }
 
@@ -6255,8 +5961,8 @@ onUnmounted(() => {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-structure-mini__list {
@@ -6270,17 +5976,17 @@ onUnmounted(() => {
   gap: 8px;
   align-items: start;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .analyze-structure-mini__item > span {
   display: grid;
   place-items: center;
   min-height: 32px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: rgba(12, 19, 34, 0.88);
-  color: #eef3ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 800;
 }
@@ -6292,12 +5998,12 @@ onUnmounted(() => {
 }
 
 .analyze-structure-mini__item strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
 }
 
 .analyze-structure-mini__item small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   line-height: 1.45;
 }
 
@@ -6314,13 +6020,13 @@ onUnmounted(() => {
   width: 96px;
   height: 96px;
   border-radius: 999px;
-  border: 7px solid rgba(109, 93, 255, 0.18);
-  border-top-color: rgba(109, 93, 255, 0.9);
-  border-right-color: rgba(109, 93, 255, 0.64);
+  border: 7px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  border-top-color: color-mix(in srgb, var(--theme-tone-blue) 90%, transparent);
+  border-right-color: color-mix(in srgb, var(--theme-tone-blue) 64%, transparent);
 }
 
 .analyze-engine-ring span {
-  color: #f7faff;
+  color: var(--theme-text);
   font-size: 22px;
   font-weight: 800;
 }
@@ -6345,8 +6051,8 @@ onUnmounted(() => {
   width: 86px;
   height: 58px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .analyze-project-card__thumb span {
@@ -6354,7 +6060,7 @@ onUnmounted(() => {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
 }
 
@@ -6394,11 +6100,11 @@ onUnmounted(() => {
   flex-wrap: wrap;
   min-height: 26px;
   padding: 0 2px 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .stage-head__aux span {
-  color: #8fa0c4;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -6416,12 +6122,12 @@ onUnmounted(() => {
   min-height: 34px;
   padding: 0 9px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .inline-control span {
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
 }
@@ -6438,8 +6144,8 @@ onUnmounted(() => {
   justify-content: center;
   overflow: hidden;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .video-shell video {
@@ -6448,7 +6154,7 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #060b16;
+  background: var(--theme-panel);
 }
 
 .product-thumb img,
@@ -6474,7 +6180,7 @@ onUnmounted(() => {
   object-fit: contain;
   display: block;
   margin: 0 auto;
-  background: #060b16;
+  background: var(--theme-panel);
 }
 
 .reference-side,
@@ -6488,8 +6194,8 @@ onUnmounted(() => {
   gap: 8px;
   padding: 10px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 
 .history-panel {
@@ -6510,7 +6216,7 @@ onUnmounted(() => {
 }
 
 .history-panel__copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -6527,9 +6233,9 @@ onUnmounted(() => {
   gap: 12px;
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid rgba(133, 149, 196, 0.1);
-  background: rgba(255, 255, 255, 0.025);
-  color: #dce6ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
+  color: var(--theme-text);
   text-align: left;
   cursor: pointer;
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
@@ -6537,13 +6243,13 @@ onUnmounted(() => {
 
 .history-panel__item:hover {
   transform: translateY(-1px);
-  border-color: rgba(109, 93, 255, 0.28);
-  background: rgba(109, 93, 255, 0.08);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
 }
 
 .history-panel__item.is-active {
-  border-color: rgba(109, 93, 255, 0.42);
-  background: rgba(109, 93, 255, 0.14);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
   box-shadow: inset 0 0 0 1px rgba(109, 93, 255, 0.18);
 }
 
@@ -6562,13 +6268,13 @@ onUnmounted(() => {
 }
 
 .history-panel__item-copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
 .history-panel__item-copy span,
 .history-panel__item small {
-  color: #95a3c3;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -6580,14 +6286,14 @@ onUnmounted(() => {
 .meta-card {
   padding: 10px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 
 .data-card {
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 
 .data-card-copy {
@@ -6597,10 +6303,10 @@ onUnmounted(() => {
 
 .media-card {
   border-radius: 18px;
-  border: 1px solid rgba(134, 149, 205, 0.18);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
   background:
-    linear-gradient(180deg, rgba(17, 24, 40, 0.96), rgba(12, 19, 34, 0.96)),
-    rgba(12, 19, 34, 0.94);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 96%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)),
+    color-mix(in srgb, var(--theme-panel) 94%, transparent);
 }
 
 .large-card {
@@ -6608,13 +6314,13 @@ onUnmounted(() => {
 }
 
 .danger-card {
-  border-color: rgba(255, 120, 120, 0.28);
-  background: rgba(120, 22, 22, 0.12);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
 }
 
 .context-card {
-  border-color: rgba(120, 144, 255, 0.2);
-  background: rgba(36, 54, 105, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 
 .failure-card {
@@ -6649,8 +6355,8 @@ onUnmounted(() => {
   min-height: 88px;
   padding: 12px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .beat-card strong {
@@ -6673,18 +6379,18 @@ onUnmounted(() => {
   gap: 14px;
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 78%, transparent);
 }
 
 .clone-run-mode-banner.is-auto {
-  border-color: rgba(34, 211, 238, 0.34);
-  background: linear-gradient(135deg, rgba(8, 145, 178, 0.18), rgba(15, 23, 42, 0.88));
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 18%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
 }
 
 .clone-run-mode-banner.is-manual {
-  border-color: rgba(148, 163, 184, 0.28);
-  background: linear-gradient(135deg, rgba(71, 85, 105, 0.2), rgba(15, 23, 42, 0.9));
+  border-color: var(--theme-border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-control-hover) 20%, transparent), color-mix(in srgb, var(--theme-panel) 90%, transparent));
 }
 
 .clone-run-mode-banner__main,
@@ -6702,14 +6408,14 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #f8fafc;
-  background: rgba(15, 23, 42, 0.48);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-panel) 48%, transparent);
 }
 
 .clone-run-mode-banner__main strong,
 .clone-gate-summary strong {
   font-size: 14px;
-  color: #f8fafc;
+  color: var(--theme-text);
 }
 
 .clone-run-mode-banner__main span,
@@ -6717,7 +6423,7 @@ onUnmounted(() => {
 .clone-gate-summary span {
   font-size: 12px;
   line-height: 1.6;
-  color: #cbd5e1;
+  color: var(--theme-text);
 }
 
 .clone-run-mode-banner__stats {
@@ -6728,17 +6434,17 @@ onUnmounted(() => {
 }
 
 .clone-gate-summary.is-pass {
-  border-color: rgba(74, 222, 128, 0.32);
-  background: linear-gradient(135deg, rgba(22, 101, 52, 0.22), rgba(15, 23, 42, 0.9));
+  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 22%, transparent), color-mix(in srgb, var(--theme-panel) 90%, transparent));
 }
 
 .clone-gate-summary.is-blocked {
-  border-color: rgba(248, 113, 113, 0.3);
-  background: linear-gradient(135deg, rgba(127, 29, 29, 0.24), rgba(15, 23, 42, 0.92));
+  border-color: color-mix(in srgb, var(--theme-tone-red) 30%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-red) 24%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent));
 }
 
 .primary-button.is-warning {
-  background: linear-gradient(135deg, #b45309, #dc2626);
+  background: linear-gradient(135deg, var(--theme-tone-amber), var(--theme-tone-red));
   box-shadow: 0 14px 30px rgba(185, 28, 28, 0.25);
 }
 
@@ -6765,7 +6471,7 @@ onUnmounted(() => {
 }
 
 .variant-summary-card__copy span {
-  color: #8ea6ff;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -6782,7 +6488,7 @@ onUnmounted(() => {
 
 .variant-summary-card__copy p {
   margin: 0;
-  color: #9aa9c9;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.45;
   min-width: 0;
@@ -6806,8 +6512,8 @@ onUnmounted(() => {
   height: 112px;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
@@ -6824,7 +6530,7 @@ onUnmounted(() => {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: #d9e3fb;
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -6844,9 +6550,9 @@ onUnmounted(() => {
 }
 
 .variant-product-toggle .ghost-button.active {
-  border-color: rgba(111, 184, 255, 0.42);
-  background: rgba(52, 108, 194, 0.22);
-  color: #eef5ff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
+  color: var(--theme-text);
 }
 
 .variant-product-strip__item {
@@ -6854,8 +6560,8 @@ onUnmounted(() => {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .variant-product-strip__remove {
@@ -6864,8 +6570,8 @@ onUnmounted(() => {
   top: 6px;
   border: 0;
   padding: 4px 8px;
-  background: rgba(8, 12, 22, 0.88);
-  color: #f4f7ff;
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -6875,17 +6581,17 @@ onUnmounted(() => {
   display: grid;
   gap: 4px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .variant-product-meta span {
-  color: #8fa0c3;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
 .variant-product-meta strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.45;
   word-break: break-all;
@@ -6909,13 +6615,13 @@ onUnmounted(() => {
 }
 
 .danger-action {
-  border-color: rgba(255, 120, 120, 0.26);
-  color: #ffb3b3;
+  border-color: color-mix(in srgb, var(--theme-tone-red) 26%, transparent);
+  color: var(--theme-tone-red);
 }
 
 .variant-summary-card--highlight {
-  background: linear-gradient(180deg, rgba(109, 93, 255, 0.18), rgba(12, 19, 34, 0.94));
-  border-color: rgba(109, 93, 255, 0.22);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 18%, transparent), color-mix(in srgb, var(--theme-panel) 94%, transparent));
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
 }
 
 .variant-main-panel {
@@ -6930,8 +6636,8 @@ onUnmounted(() => {
   gap: 12px;
   align-items: center;
   padding: 14px;
-  border: 1px solid rgba(109, 93, 255, 0.18);
-  background: linear-gradient(180deg, rgba(18, 25, 45, 0.98), rgba(10, 16, 29, 0.96));
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent));
 }
 
 .variant-hero-card__score {
@@ -6940,8 +6646,8 @@ onUnmounted(() => {
   width: 76px;
   height: 76px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.96), rgba(89, 182, 255, 0.82));
-  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 96%, transparent), color-mix(in srgb, var(--theme-tone-blue) 82%, transparent));
+  color: var(--theme-text);
   font-size: 22px;
   font-weight: 800;
 }
@@ -6958,12 +6664,12 @@ onUnmounted(() => {
 
 .variant-hero-card__copy p {
   margin: 0;
-  color: #d7e0fb;
+  color: var(--theme-text);
   line-height: 1.6;
 }
 
 .variant-hero-card__copy small {
-  color: #8ea6ff;
+  color: var(--theme-tone-blue);
 }
 
 .variant-list-panel {
@@ -6983,7 +6689,7 @@ onUnmounted(() => {
 }
 
 .variant-card--row.selected {
-  border-color: rgba(138, 156, 255, 0.38);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 38%, transparent);
   box-shadow: 0 0 0 1px rgba(138, 156, 255, 0.22) inset;
 }
 
@@ -6993,8 +6699,8 @@ onUnmounted(() => {
   border-radius: 18px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, rgba(111, 88, 255, 0.94), rgba(89, 182, 255, 0.84));
-  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 94%, transparent), color-mix(in srgb, var(--theme-tone-blue) 84%, transparent));
+  color: var(--theme-text);
   font-weight: 800;
   font-size: 20px;
 }
@@ -7013,7 +6719,7 @@ onUnmounted(() => {
 }
 
 .variant-copy__head span {
-  color: #8ea6ff;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 
@@ -7033,8 +6739,8 @@ onUnmounted(() => {
 .prompt-param-table__head {
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #8fa1c6;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -7042,12 +6748,12 @@ onUnmounted(() => {
 .prompt-param-table__row {
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .prompt-param-table__row strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.6;
   word-break: break-word;
@@ -7057,7 +6763,7 @@ onUnmounted(() => {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #d7e0fb;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -7081,30 +6787,30 @@ onUnmounted(() => {
   gap: 8px;
   align-items: start;
   padding: 8px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .variant-shot-line strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .variant-shot-line span {
-  color: #97a6c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.55;
 }
 
 .variant-copy p {
   margin: 0;
-  color: #dbe4fb;
+  color: var(--theme-text);
   line-height: 1.55;
 }
 
 .variant-copy small {
-  color: #8fa0c3;
+  color: var(--theme-text-secondary);
   line-height: 1.5;
 }
 
@@ -7128,8 +6834,8 @@ onUnmounted(() => {
   height: 116px;
   overflow: hidden;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .selected-model-copy {
@@ -7148,14 +6854,14 @@ onUnmounted(() => {
   aspect-ratio: 0.92;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .add-thumb {
   display: grid;
   place-items: center;
-  color: #8ea6ff;
+  color: var(--theme-tone-blue);
   font-size: 32px;
   cursor: pointer;
 }
@@ -7200,14 +6906,14 @@ onUnmounted(() => {
 }
 
 .storyboard-column__copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
   line-height: 1.2;
 }
 
 .storyboard-column__copy span,
 .storyboard-column__head em {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.45;
   font-style: normal;
@@ -7227,7 +6933,7 @@ onUnmounted(() => {
   aspect-ratio: 16 / 10;
   overflow: hidden;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .storyboard-batch-card,
@@ -7251,15 +6957,15 @@ onUnmounted(() => {
 .selected-model-copy strong,
 .data-card strong,
 .meta-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
 }
 
 .panel-tip {
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .frame-grid,
@@ -7307,10 +7013,10 @@ onUnmounted(() => {
   min-width: 0;
   padding: 10px 12px 12px;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(9, 15, 27, 0.98)),
-    rgba(255, 255, 255, 0.015);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 16px 42px rgba(0, 0, 0, 0.18);
@@ -7326,7 +7032,7 @@ onUnmounted(() => {
 
 .storyboard-design-table__head {
   padding: 0 8px 4px;
-  color: #7f92b8;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -7341,8 +7047,8 @@ onUnmounted(() => {
   min-width: 0;
   padding: 8px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(73, 95, 136, 0.18);
-  background: linear-gradient(180deg, rgba(10, 16, 29, 0.9), rgba(8, 13, 24, 0.96));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 90%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent));
   cursor: pointer;
   transition:
     border-color 0.18s ease,
@@ -7353,29 +7059,29 @@ onUnmounted(() => {
 
 .storyboard-design-row:hover,
 .storyboard-design-row:focus-visible {
-  border-color: rgba(109, 93, 255, 0.36);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 36%, transparent);
   box-shadow: 0 10px 22px rgba(2, 6, 16, 0.22);
   outline: none;
 }
 
 .storyboard-design-row.is-active {
-  border-color: rgba(109, 93, 255, 0.52);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 52%, transparent);
   background:
-    linear-gradient(180deg, rgba(16, 22, 40, 0.98), rgba(10, 16, 29, 0.98)),
-    radial-gradient(circle at top left, rgba(109, 93, 255, 0.14), transparent 40%);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 14%, transparent), transparent 40%);
   box-shadow: inset 0 0 0 1px rgba(109, 93, 255, 0.16);
 }
 
 .storyboard-design-row.is-working {
-  border-color: rgba(92, 164, 255, 0.34);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 34%, transparent);
   background:
-    linear-gradient(180deg, rgba(14, 24, 42, 0.98), rgba(10, 18, 33, 0.98)),
-    radial-gradient(circle at top left, rgba(92, 164, 255, 0.12), transparent 42%);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 42%);
 }
 
 .storyboard-design-cell {
   min-width: 0;
-  color: #d9e2f6;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -7393,20 +7099,20 @@ onUnmounted(() => {
   min-height: 96px;
   padding: 12px 8px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
   text-align: center;
 }
 
 .storyboard-design-cell--index strong {
-  color: #f7faff;
+  color: var(--theme-text);
   font-size: 24px;
   line-height: 1;
   font-weight: 800;
 }
 
 .storyboard-design-cell--index small {
-  color: #8fa0c4;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -7427,10 +7133,10 @@ onUnmounted(() => {
 
 .storyboard-design-thumb {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(14, 21, 37, 0.95), rgba(8, 13, 24, 0.95)),
-    rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 95%, transparent), color-mix(in srgb, var(--theme-panel) 95%, transparent)),
+    color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .storyboard-design-thumb img {
@@ -7438,17 +7144,17 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #050912;
+  background: var(--theme-input);
 }
 
 .storyboard-design-thumb__empty {
   display: grid;
   place-items: center;
-  color: #91a3c8;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(135deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 1%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .storyboard-design-copy {
@@ -7458,7 +7164,7 @@ onUnmounted(() => {
 }
 
 .storyboard-design-copy strong {
-  color: #f4f7ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.55;
   font-weight: 600;
@@ -7469,13 +7175,13 @@ onUnmounted(() => {
 }
 
 .storyboard-design-copy small {
-  color: #7f92b8;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
 
 .storyboard-design-copy__status--working {
-  color: #8fd0ff;
+  color: var(--theme-tone-blue);
 }
 
 .storyboard-design-tags {
@@ -7490,16 +7196,16 @@ onUnmounted(() => {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #b8c6e6;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-tone-blue);
   font-style: normal;
   font-size: 11px;
   line-height: 1;
 }
 
 .storyboard-design-cell--voice {
-  color: #b7c4e3;
+  color: var(--theme-tone-blue);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -7512,18 +7218,18 @@ onUnmounted(() => {
   min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(133, 149, 196, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dbe6fb;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
 
 .storyboard-design-status-pill--working {
-  border-color: rgba(92, 164, 255, 0.28);
-  background: rgba(20, 55, 94, 0.62);
-  color: #bfe6ff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 62%, transparent);
+  color: var(--theme-tone-blue);
 }
 
 .storyboard-design-cell--actions {
@@ -7550,10 +7256,10 @@ onUnmounted(() => {
   gap: 12px;
   padding: 12px;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(9, 15, 27, 0.98)),
-    rgba(255, 255, 255, 0.015);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 16px 42px rgba(0, 0, 0, 0.16);
@@ -7581,12 +7287,12 @@ onUnmounted(() => {
 }
 
 .storyboard-preview-card__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
 .storyboard-preview-card__head span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -7596,10 +7302,10 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(10, 16, 29, 0.96), rgba(7, 12, 23, 0.98)),
-    rgba(255, 255, 255, 0.03);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .storyboard-preview-media img {
@@ -7607,7 +7313,7 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #050912;
+  background: var(--theme-input);
 }
 
 .identity-grid-preview-layout {
@@ -7637,7 +7343,7 @@ onUnmounted(() => {
 
 .storyboard-preview-media--clickable:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(121, 102, 255, 0.32);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 32%, transparent);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
 }
 
@@ -7654,9 +7360,9 @@ onUnmounted(() => {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(6, 11, 22, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #eef3ff;
+  background: color-mix(in srgb, var(--theme-panel) 74%, transparent);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1;
   backdrop-filter: blur(10px);
@@ -7669,11 +7375,11 @@ onUnmounted(() => {
   height: 100%;
   padding: 20px;
   text-align: center;
-  color: #90a3ca;
+  color: var(--theme-tone-blue);
 }
 
 .storyboard-preview-media__empty strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
@@ -7698,18 +7404,18 @@ onUnmounted(() => {
   gap: 8px;
   padding: 14px 16px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .identity-grid-preview-copy strong {
-  color: #f2f6ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
 .identity-grid-preview-copy p {
   margin: 0;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.65;
 }
@@ -7724,7 +7430,7 @@ onUnmounted(() => {
 }
 
 .storyboard-preview-copy strong {
-  color: #f5f8ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -7742,7 +7448,7 @@ onUnmounted(() => {
 
 .storyboard-preview-copy span,
 .storyboard-preview-script p {
-  color: #9caed0;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-line;
@@ -7759,18 +7465,18 @@ onUnmounted(() => {
   gap: 4px;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .storyboard-preview-meta__item span {
-  color: #7f92b8;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.2;
 }
 
 .storyboard-preview-meta__item strong {
-  color: #edf3ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -7787,9 +7493,9 @@ onUnmounted(() => {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #b8c6e6;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-tone-blue);
   font-style: normal;
   font-size: 11px;
 }
@@ -7799,8 +7505,8 @@ onUnmounted(() => {
   gap: 10px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 120, 120, 0.22);
-  background: linear-gradient(180deg, rgba(60, 16, 24, 0.66), rgba(37, 12, 19, 0.78));
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 22%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-red) 66%, transparent), color-mix(in srgb, var(--theme-panel) 78%, transparent));
 }
 
 .storyboard-preview-error__head {
@@ -7811,12 +7517,12 @@ onUnmounted(() => {
 }
 
 .storyboard-preview-error__head strong {
-  color: #ffd7dc;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
 .storyboard-preview-error__head span {
-  color: #ffb8c2;
+  color: var(--theme-tone-red);
   font-size: 11px;
 }
 
@@ -7829,7 +7535,7 @@ onUnmounted(() => {
 .storyboard-preview-error__body p,
 .storyboard-preview-error__advice p {
   margin: 0;
-  color: #ffe7eb;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-line;
@@ -7837,7 +7543,7 @@ onUnmounted(() => {
 }
 
 .storyboard-preview-error__advice span {
-  color: #ffb8c2;
+  color: var(--theme-tone-red);
   font-size: 11px;
 }
 
@@ -7849,8 +7555,8 @@ onUnmounted(() => {
 .storyboard-preview-script {
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .modal-panel--frame-preview {
@@ -7875,10 +7581,10 @@ onUnmounted(() => {
   width: min(980px, calc(100vw - 48px));
   padding: 18px;
   border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at top left, rgba(70, 92, 156, 0.2), transparent 34%),
-    linear-gradient(180deg, rgba(10, 16, 31, 0.98), rgba(7, 11, 22, 0.98));
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 20%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
 }
 
@@ -7889,7 +7595,7 @@ onUnmounted(() => {
   gap: 18px;
   padding-bottom: 14px;
   margin-bottom: 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .modal-card__actions {
@@ -7905,7 +7611,7 @@ onUnmounted(() => {
 }
 
 .prompt-preview-modal__title strong {
-  color: #f4f7ff;
+  color: var(--theme-text);
   font-size: 24px;
   font-weight: 800;
   line-height: 1.1;
@@ -7913,7 +7619,7 @@ onUnmounted(() => {
 
 .prompt-preview-modal__title p {
   margin: 0;
-  color: #9aabcf;
+  color: var(--theme-tone-blue);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -7923,8 +7629,8 @@ onUnmounted(() => {
   place-items: center;
   min-height: 520px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(6, 11, 22, 0.88);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
 }
 
 .frame-preview-shell img {
@@ -7945,7 +7651,7 @@ onUnmounted(() => {
 }
 
 .compose-side-card__head small {
-  color: #7d8aa8;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
   min-width: 0;
@@ -7991,7 +7697,7 @@ onUnmounted(() => {
 }
 
 .publish-field span {
-  color: #dbe7f7;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -7999,20 +7705,20 @@ onUnmounted(() => {
 .publish-field strong {
   min-height: 42px;
   padding: 10px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f8fbff;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   line-height: 1.5;
 }
 
 .inline-form-message {
   margin-top: 12px;
   padding: 12px 14px;
-  border: 1px solid rgba(14, 165, 233, 0.18);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 18%, transparent);
   border-radius: 14px;
-  background: rgba(14, 165, 233, 0.1);
-  color: #dff6ff;
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
 }
 
@@ -8037,7 +7743,7 @@ onUnmounted(() => {
   gap: 8px;
   min-height: 40px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .review-shell {
@@ -8052,15 +7758,15 @@ onUnmounted(() => {
 }
 
 .mini-pill.replaced {
-  color: #cae0ff;
-  background: rgba(118, 145, 255, 0.16);
-  border-color: rgba(118, 145, 255, 0.22);
+  color: var(--theme-tone-blue);
+  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
 }
 
 .mini-pill--ghost {
-  color: #9db1d8;
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--theme-tone-blue);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  border-color: var(--theme-border);
 }
 
 .review-card .mini-pill {
@@ -8079,7 +7785,7 @@ onUnmounted(() => {
 
 .task-meta {
   padding-top: 6px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.05);
+  border-top: 1px dashed var(--theme-border);
 }
 
 .task-meta span {
@@ -8092,9 +7798,9 @@ onUnmounted(() => {
 .shot-error {
   padding: 10px 11px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 120, 120, 0.18);
-  background: rgba(255, 120, 120, 0.08);
-  color: #ffd2d2;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 8%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.55;
   word-break: break-word;
@@ -8122,7 +7828,7 @@ onUnmounted(() => {
   gap: 0;
   margin: 0;
   padding: 6px 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .panel-video-stage :deep(.stage-head) {
@@ -8140,9 +7846,9 @@ onUnmounted(() => {
   gap: 14px;
   padding: 12px 14px;
   margin: 10px 8px 0;
-  border: 1px solid rgba(133, 149, 196, 0.12);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(8, 14, 27, 0.82);
+  background: color-mix(in srgb, var(--theme-panel) 82%, transparent);
 }
 
 .video-render-hints-card__copy {
@@ -8151,12 +7857,12 @@ onUnmounted(() => {
 }
 
 .video-render-hints-card__copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
 .video-render-hints-card__copy span {
-  color: #8fa2cf;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -8175,7 +7881,7 @@ onUnmounted(() => {
 }
 
 .video-render-hints-card__field span {
-  color: #cfe0ff;
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
 }
@@ -8184,9 +7890,9 @@ onUnmounted(() => {
   min-width: 180px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: #0a1324;
-  color: #eef3ff;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-panel);
+  color: var(--theme-text);
   padding: 0 12px;
 }
 
@@ -8204,7 +7910,7 @@ onUnmounted(() => {
 
 .panel-video-stage :deep(.stage-head__main p) {
   max-width: 560px;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -8217,7 +7923,7 @@ onUnmounted(() => {
   min-height: 100%;
   margin-left: 0;
   padding: 0 0 0 24px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--theme-border);
 }
 
 .panel-video-stage :deep(.stage-head__actions .primary-button) {
@@ -8236,7 +7942,7 @@ onUnmounted(() => {
 }
 
 .panel-video-stage :deep(.stage-head__aux span) {
-  color: #8ea0c5;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -8252,10 +7958,10 @@ onUnmounted(() => {
   gap: 10px;
   padding: 6px;
   border-radius: 0;
-  border: 1px solid rgba(133, 149, 196, 0.12);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(9, 15, 27, 0.98)),
-    rgba(255, 255, 255, 0.015);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 16px 42px rgba(0, 0, 0, 0.18);
@@ -8282,8 +7988,8 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: linear-gradient(180deg, rgba(12, 19, 34, 0.92), rgba(8, 13, 24, 0.96));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 92%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent));
 }
 
 .compose-fallback-copy {
@@ -8294,13 +8000,13 @@ onUnmounted(() => {
 }
 
 .compose-fallback-copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .compose-fallback-copy span {
-  color: #8fa0c4;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -8319,10 +8025,10 @@ onUnmounted(() => {
   min-width: 0;
   min-height: 0;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(15, 24, 42, 0.98), rgba(9, 15, 28, 0.96)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
@@ -8332,10 +8038,10 @@ onUnmounted(() => {
   gap: 8px;
   padding: 12px 14px;
   align-items: center;
-  border-color: rgba(133, 149, 196, 0.1);
+  border-color: var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(17, 25, 43, 0.98), rgba(10, 16, 29, 0.96)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .shot-overview-progress {
@@ -8349,12 +8055,12 @@ onUnmounted(() => {
 }
 
 .shot-overview-progress__copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 16px;
 }
 
 .shot-overview-progress__copy small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -8369,7 +8075,7 @@ onUnmounted(() => {
   position: relative;
   height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
   overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
@@ -8378,12 +8084,12 @@ onUnmounted(() => {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6d5dff, #8b5cf6);
+  background: linear-gradient(90deg, var(--theme-tone-blue), var(--theme-tone-violet));
   box-shadow: 0 0 20px rgba(109, 93, 255, 0.35);
 }
 
 .shot-overview-progress__meter strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
@@ -8396,23 +8102,23 @@ onUnmounted(() => {
   gap: 4px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .shot-stat-card span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   text-transform: uppercase;
 }
 
 .shot-stat-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 15px;
 }
 
 .shot-stat-card--danger strong {
-  color: #ffb7b7;
+  color: var(--theme-tone-red);
 }
 
 .shot-overview-actions {
@@ -8434,11 +8140,11 @@ onUnmounted(() => {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   overflow: hidden;
   min-height: 100%;
-  border-color: rgba(133, 149, 196, 0.1);
+  border-color: var(--theme-border);
   padding-top: 4px;
   background:
-    linear-gradient(180deg, rgba(16, 24, 42, 0.98), rgba(10, 16, 29, 0.98)),
-    rgba(255, 255, 255, 0.018);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .shot-reference-scroll {
@@ -8453,7 +8159,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 14px 14px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .shot-table-tabs {
@@ -8466,17 +8172,17 @@ onUnmounted(() => {
   min-height: 40px;
   padding: 0 18px;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
-  color: #9fb0d5;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 14px;
   font-weight: 700;
 }
 
 .shot-table-tab--active {
-  color: #f4f7ff;
-  border-color: rgba(109, 93, 255, 0.36);
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.42), rgba(109, 93, 255, 0.18));
+  color: var(--theme-text);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 36%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 42%, transparent), color-mix(in srgb, var(--theme-tone-blue) 18%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -8492,8 +8198,8 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.01);
+  border-bottom: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 1%, transparent);
 }
 
 .shot-table-summary {
@@ -8501,7 +8207,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  color: #e9efff;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 700;
 }
@@ -8512,15 +8218,15 @@ onUnmounted(() => {
   border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: #b8c6e5;
+  color: var(--theme-tone-blue);
   font-size: 13px;
   font-weight: 700;
 }
 
 .shot-summary-link.active {
-  color: #ffffff;
-  border-color: rgba(109, 93, 255, 0.26);
-  background: rgba(109, 93, 255, 0.14);
+  color: var(--theme-text);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 26%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
 }
 
 .shot-reference-header,
@@ -8534,12 +8240,12 @@ onUnmounted(() => {
 
 .shot-reference-header {
   padding: 10px 12px;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
   white-space: nowrap;
 }
 
@@ -8570,19 +8276,19 @@ onUnmounted(() => {
 .shot-reference-row {
   width: 100%;
   padding: 10px 12px;
-  color: #eef3ff;
+  color: var(--theme-text);
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
   background: transparent;
   transition: background 160ms ease, border-color 160ms ease;
 }
 
 .shot-reference-row:hover {
-  background: rgba(255, 255, 255, 0.028);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .shot-reference-row.active {
-  background: linear-gradient(90deg, rgba(84, 74, 168, 0.34), rgba(84, 74, 168, 0.16));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-tone-blue) 34%, transparent), color-mix(in srgb, var(--theme-tone-blue) 16%, transparent));
   box-shadow:
     inset 3px 0 0 rgba(74, 230, 158, 0.9),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -8608,8 +8314,8 @@ onUnmounted(() => {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.05);
-  color: #dfe7fb;
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
 }
@@ -8628,22 +8334,22 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 6%, transparent), color-mix(in srgb, var(--theme-text) 3%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .shot-reference-cell--index small,
 .shot-reference-cell--copy small,
 .shot-reference-status-copy small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   line-height: 1.45;
 }
 
 .shot-reference-cell--copy strong,
 .shot-reference-status-copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -8702,7 +8408,7 @@ onUnmounted(() => {
   width: 84px;
   height: 52px;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   overflow: hidden;
 }
 
@@ -8712,14 +8418,14 @@ onUnmounted(() => {
   flex: 0 0 32px;
   padding: 0;
   border-radius: 0;
-  border-color: rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  color: #d9e3fb;
+  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  color: var(--theme-text);
 }
 
 .icon-button:hover:not(:disabled) {
-  border-color: rgba(109, 93, 255, 0.22);
-  background: rgba(109, 93, 255, 0.12);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
 }
 
 .action-button {
@@ -8738,10 +8444,10 @@ onUnmounted(() => {
 .shot-preview-card {
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(15, 24, 42, 0.98), rgba(9, 15, 28, 0.96)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .shot-preview-card__head {
@@ -8758,12 +8464,12 @@ onUnmounted(() => {
 }
 
 .shot-preview-card__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 15px;
 }
 
 .shot-preview-card__title small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -8775,7 +8481,7 @@ onUnmounted(() => {
 }
 
 .shot-preview-card__shell video {
-  background: #060b16;
+  background: var(--theme-panel);
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -8794,10 +8500,10 @@ onUnmounted(() => {
 .shot-preview-card__hud span {
   padding: 6px 10px;
   border-radius: 0;
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 10px;
-  background: rgba(6, 11, 22, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  border: 1px solid var(--theme-border);
 }
 
 .shot-preview-empty {
@@ -8812,8 +8518,8 @@ onUnmounted(() => {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .shot-preview-card__status-main {
@@ -8828,12 +8534,12 @@ onUnmounted(() => {
 }
 
 .shot-preview-card__status-copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
 }
 
 .shot-preview-card__status-copy small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 
@@ -8844,18 +8550,18 @@ onUnmounted(() => {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.014);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 1%, transparent);
 }
 
 .shot-preview-card__meta span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   text-transform: uppercase;
 }
 
 .shot-preview-card__meta strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.55;
   word-break: break-word;
@@ -8866,8 +8572,8 @@ onUnmounted(() => {
   height: 56px;
   overflow: hidden;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(10, 19, 36, 0.95), rgba(7, 13, 24, 0.95));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 95%, transparent), color-mix(in srgb, var(--theme-panel) 95%, transparent));
 }
 
 .shot-thumb img {
@@ -8880,7 +8586,7 @@ onUnmounted(() => {
 .shot-thumb--empty {
   display: grid;
   place-items: center;
-  color: #7f92b8;
+  color: var(--theme-text-secondary);
   font-size: 9px;
   letter-spacing: 0.08em;
 }
@@ -8893,19 +8599,19 @@ onUnmounted(() => {
 }
 
 .queue-dot--success {
-  background: #22c55e;
+  background: var(--theme-accent);
 }
 
 .queue-dot--danger {
-  background: #ef4444;
+  background: var(--theme-tone-red);
 }
 
 .queue-dot--working {
-  background: #38bdf8;
+  background: var(--theme-accent);
 }
 
 .queue-dot--idle {
-  background: #64748b;
+  background: var(--theme-control-hover);
 }
 
 .state-card {
@@ -8915,32 +8621,32 @@ onUnmounted(() => {
 }
 
 .state-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
 }
 
 .state-card span {
-  color: #93a2c1;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
 
 .state-card--empty {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.015)),
-    rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(142, 166, 255, 0.18);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 3%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 
 .state-card--pending {
-  background: rgba(142, 166, 255, 0.08);
-  border: 1px solid rgba(142, 166, 255, 0.16);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
 }
 
 .state-card--danger {
-  background: rgba(255, 120, 120, 0.08);
-  border: 1px solid rgba(255, 120, 120, 0.18);
+  background: color-mix(in srgb, var(--theme-tone-red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
 }
 
 .compose-studio {
@@ -8963,8 +8669,8 @@ onUnmounted(() => {
 .compose-side-card {
   padding: 20px;
   border-radius: 22px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: linear-gradient(180deg, rgba(12, 19, 34, 0.96), rgba(7, 12, 24, 0.99));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 99%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -8978,7 +8684,7 @@ onUnmounted(() => {
   min-height: 480px;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: #050913;
+  background: var(--theme-input);
 }
 
 .compose-stage-card__media video {
@@ -8986,7 +8692,7 @@ onUnmounted(() => {
   height: 100%;
   display: block;
   object-fit: cover;
-  background: #050913;
+  background: var(--theme-input);
 }
 
 .compose-stage-card__media.is-portrait video,
@@ -9021,8 +8727,8 @@ onUnmounted(() => {
   gap: 10px;
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: rgba(12, 19, 34, 0.78);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 78%, transparent);
   cursor: pointer;
   min-width: 0;
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
@@ -9030,13 +8736,13 @@ onUnmounted(() => {
 
 .compose-sequence-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(112, 92, 255, 0.28);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
 }
 
 .compose-sequence-item.active {
-  border-color: rgba(112, 92, 255, 0.62);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 62%, transparent);
   box-shadow: 0 0 0 1px rgba(112, 92, 255, 0.22);
-  background: rgba(31, 31, 61, 0.88);
+  background: color-mix(in srgb, var(--theme-panel-soft) 88%, transparent);
 }
 
 .compose-sequence-item__index {
@@ -9045,8 +8751,8 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #eef3ff;
+  background: color-mix(in srgb, var(--theme-text) 8%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 800;
 }
@@ -9058,8 +8764,8 @@ onUnmounted(() => {
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .compose-sequence-item__thumb img {
@@ -9075,13 +8781,13 @@ onUnmounted(() => {
 }
 
 .compose-sequence-item__meta strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.25;
 }
 
 .compose-sequence-item__meta small {
-  color: #9fb0d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 
@@ -9100,12 +8806,12 @@ onUnmounted(() => {
 }
 
 .compose-sequence-detail__copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 16px;
 }
 
 .compose-sequence-detail__copy small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -9134,13 +8840,13 @@ onUnmounted(() => {
   width: 86px;
   height: 86px;
   border-radius: 999px;
-  border: 6px solid rgba(112, 92, 255, 0.2);
-  border-top-color: rgba(130, 110, 255, 0.95);
-  border-right-color: rgba(98, 155, 255, 0.88);
+  border: 6px solid color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
+  border-top-color: color-mix(in srgb, var(--theme-tone-blue) 95%, transparent);
+  border-right-color: color-mix(in srgb, var(--theme-tone-blue) 88%, transparent);
 }
 
 .compose-score-ring span {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 22px;
   font-weight: 800;
 }
@@ -9151,12 +8857,12 @@ onUnmounted(() => {
 }
 
 .compose-score-copy span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
 .compose-score-copy strong {
-  color: #8b6dff;
+  color: var(--theme-tone-violet);
   font-size: 18px;
   line-height: 1.2;
 }
@@ -9171,7 +8877,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #dbe4ff;
+  color: var(--theme-text);
   font-size: 13px;
 }
 
@@ -9180,17 +8886,17 @@ onUnmounted(() => {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #52d68f;
+  background: var(--theme-accent);
   box-shadow: 0 0 0 4px rgba(82, 214, 143, 0.12);
 }
 
 .compose-score-list__item span {
   flex: 1 1 auto;
-  color: #dbe4ff;
+  color: var(--theme-text);
 }
 
 .compose-score-list__item strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
 }
 
@@ -9200,7 +8906,7 @@ onUnmounted(() => {
 }
 
 .compose-score-card small {
-  color: #7f8faf;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.6;
 }
@@ -9219,7 +8925,7 @@ onUnmounted(() => {
 .panel-compose-stage :deep(.stage-head__main p),
 .panel-final-stage :deep(.stage-head__main p) {
   max-width: 520px;
-  color: #8ea3ca;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -9250,8 +8956,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 14px;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: rgba(9, 14, 26, 0.86);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
 }
 
 .product-analysis-card__summary,
@@ -9265,12 +8971,12 @@ onUnmounted(() => {
 .product-analysis-card__item span,
 .product-analysis-card__rules span {
   font-size: 11px;
-  color: #8ea3ca;
+  color: var(--theme-tone-blue);
 }
 
 .product-analysis-card__summary strong,
 .product-analysis-card__item strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.55;
   font-weight: 500;
@@ -9293,9 +8999,9 @@ onUnmounted(() => {
   min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(119, 140, 196, 0.18);
-  background: rgba(255, 255, 255, 0.04);
-  color: #d7e2ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-style: normal;
   line-height: 1;
@@ -9306,8 +9012,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 196, 82, 0.26);
-  background: linear-gradient(180deg, rgba(64, 42, 8, 0.42), rgba(24, 17, 7, 0.54));
+  border: 1px solid color-mix(in srgb, var(--theme-tone-amber) 26%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-amber) 42%, transparent), color-mix(in srgb, var(--theme-panel) 54%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 220, 140, 0.08);
 }
 
@@ -9319,21 +9025,21 @@ onUnmounted(() => {
 
 .prompt-highlight-card__head strong,
 .prompt-highlight-card__block span {
-  color: #ffe2a2;
+  color: var(--theme-tone-amber);
 }
 
 .prompt-highlight-card__head span {
   font-size: 11px;
-  color: rgba(255, 226, 162, 0.78);
+  color: color-mix(in srgb, var(--theme-tone-amber) 78%, transparent);
 }
 
 .prompt-highlight-card__block pre {
   margin: 0;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 214, 118, 0.14);
-  background: rgba(6, 8, 14, 0.42);
-  color: #fff4d7;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-amber) 14%, transparent);
+  background: color-mix(in srgb, var(--theme-input) 42%, transparent);
+  color: var(--theme-text);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
@@ -9354,7 +9060,7 @@ onUnmounted(() => {
   display: grid;
   gap: 8px;
   text-decoration: none;
-  color: #f2f6ff;
+  color: var(--theme-text);
 }
 
 .prompt-reference-card img {
@@ -9362,23 +9068,23 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   border-radius: 12px;
-  border: 1px solid rgba(255, 214, 118, 0.16);
-  background: rgba(5, 8, 14, 0.7);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-amber) 16%, transparent);
+  background: color-mix(in srgb, var(--theme-input) 70%, transparent);
 }
 
 .prompt-reference-card span,
 .prompt-reference-empty {
   font-size: 11px;
   line-height: 1.45;
-  color: rgba(255, 235, 188, 0.82);
+  color: color-mix(in srgb, var(--theme-tone-amber) 82%, transparent);
   word-break: break-word;
 }
 
 .prompt-reference-empty {
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px dashed rgba(255, 214, 118, 0.18);
-  background: rgba(6, 8, 14, 0.28);
+  border: 1px dashed color-mix(in srgb, var(--theme-tone-amber) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-input) 28%, transparent);
 }
 
 .prompt-diagnostic-card {
@@ -9386,8 +9092,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.16);
-  background: rgba(10, 16, 29, 0.88);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
 }
 
 .prompt-diagnostic-card__head,
@@ -9400,11 +9106,11 @@ onUnmounted(() => {
 .prompt-diagnostic-item span,
 .prompt-diagnostic-item small {
   font-size: 11px;
-  color: #8ea3ca;
+  color: var(--theme-tone-blue);
 }
 
 .prompt-diagnostic-item strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 18px;
   line-height: 1.1;
 }
@@ -9420,7 +9126,7 @@ onUnmounted(() => {
   gap: 4px;
   padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid rgba(133, 149, 196, 0.16);
+  border: 1px solid var(--theme-border);
 }
 
 .prompt-health-banner strong {
@@ -9434,42 +9140,42 @@ onUnmounted(() => {
 }
 
 .prompt-health-banner.is-success {
-  border-color: rgba(72, 187, 120, 0.24);
-  background: rgba(11, 34, 21, 0.88);
+  border-color: color-mix(in srgb, var(--theme-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--theme-panel-soft) 88%, transparent);
 }
 
 .prompt-health-banner.is-success strong {
-  color: #9ff0bf;
+  color: var(--theme-accent);
 }
 
 .prompt-health-banner.is-success span {
-  color: rgba(159, 240, 191, 0.82);
+  color: color-mix(in srgb, var(--theme-accent) 82%, transparent);
 }
 
 .prompt-health-banner.is-warning {
-  border-color: rgba(255, 196, 82, 0.26);
-  background: rgba(49, 34, 8, 0.88);
+  border-color: color-mix(in srgb, var(--theme-tone-amber) 26%, transparent);
+  background: color-mix(in srgb, var(--theme-panel-soft) 88%, transparent);
 }
 
 .prompt-health-banner.is-warning strong {
-  color: #ffd778;
+  color: var(--theme-tone-amber);
 }
 
 .prompt-health-banner.is-warning span {
-  color: rgba(255, 215, 120, 0.84);
+  color: color-mix(in srgb, var(--theme-tone-amber) 84%, transparent);
 }
 
 .prompt-health-banner.is-danger {
-  border-color: rgba(248, 113, 113, 0.26);
-  background: rgba(49, 16, 16, 0.88);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 26%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 88%, transparent);
 }
 
 .prompt-health-banner.is-danger strong {
-  color: #ff9b9b;
+  color: var(--theme-tone-red);
 }
 
 .prompt-health-banner.is-danger span {
-  color: rgba(255, 155, 155, 0.84);
+  color: color-mix(in srgb, var(--theme-tone-red) 84%, transparent);
 }
 
 .panel-compose-stage {
@@ -9500,8 +9206,8 @@ onUnmounted(() => {
   gap: 14px;
   padding: 22px;
   border-radius: 24px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: linear-gradient(180deg, rgba(12, 19, 34, 0.96), rgba(8, 13, 24, 0.99));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 99%, transparent));
   min-width: 0;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -9545,14 +9251,14 @@ onUnmounted(() => {
 }
 
 .compose-list-copy strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 15px;
   line-height: 1.3;
 }
 
 .compose-list-copy p {
   margin: 0;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -9567,8 +9273,8 @@ onUnmounted(() => {
   padding: 18px;
   overflow: hidden;
   border-radius: 22px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: linear-gradient(180deg, rgba(10, 16, 29, 0.98), rgba(6, 10, 18, 1));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), var(--theme-panel));
 }
 
 .compose-canvas-shell video {
@@ -9576,7 +9282,7 @@ onUnmounted(() => {
   height: 100%;
   display: block;
   object-fit: contain;
-  background: #060b16;
+  background: var(--theme-panel);
 }
 
 .compose-canvas-frame {
@@ -9587,8 +9293,8 @@ onUnmounted(() => {
   place-items: center;
   overflow: hidden;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 12, 21, 0.98);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 98%, transparent);
 }
 
 .compose-canvas-frame.is-portrait {
@@ -9631,24 +9337,24 @@ onUnmounted(() => {
   gap: 8px;
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: rgba(12, 19, 34, 0.94);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 94%, transparent);
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
   min-width: 0;
 }
 
 .compose-shot-strip__item:hover {
-  border-color: rgba(109, 93, 255, 0.22);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
 }
 
 .compose-shot-strip__item.active {
-  border-color: rgba(109, 93, 255, 0.58);
-  background: rgba(29, 31, 58, 0.94);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 58%, transparent);
+  background: color-mix(in srgb, var(--theme-panel-soft) 94%, transparent);
 }
 
 .compose-shot-strip__index {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -9661,8 +9367,8 @@ onUnmounted(() => {
   aspect-ratio: 9 / 16;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .compose-shot-strip__thumb img {
@@ -9673,7 +9379,7 @@ onUnmounted(() => {
 }
 
 .compose-shot-strip__thumb span {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -9684,7 +9390,7 @@ onUnmounted(() => {
 }
 
 .compose-shot-strip__meta strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.35;
   white-space: nowrap;
@@ -9693,7 +9399,7 @@ onUnmounted(() => {
 }
 
 .compose-shot-strip__meta small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -9729,13 +9435,13 @@ onUnmounted(() => {
 
 .compose-shot-preview__copy strong,
 .compose-shot-info-card__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 15px;
   line-height: 1.35;
 }
 
 .compose-shot-info-card__head small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 
@@ -9746,8 +9452,8 @@ onUnmounted(() => {
   place-items: center;
   overflow: hidden;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.14);
-  background: linear-gradient(180deg, rgba(8, 14, 27, 0.96), rgba(5, 10, 19, 0.98));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .compose-shot-preview__frame video,
@@ -9758,11 +9464,11 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 
 .compose-shot-detail__empty {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 14px;
 }
 
@@ -9770,8 +9476,8 @@ onUnmounted(() => {
 .compose-shot-tip-card {
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(133, 149, 196, 0.1);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .compose-shot-info-grid {
@@ -9786,21 +9492,21 @@ onUnmounted(() => {
 
 .compose-shot-info-item span,
 .compose-shot-tip-card small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.5;
 }
 
 .compose-shot-info-item strong,
 .compose-shot-tip-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .compose-shot-tip-card p {
   margin: 0;
-  color: #c9d5ee;
+  color: var(--theme-tone-blue);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -9819,14 +9525,14 @@ onUnmounted(() => {
 }
 
 .compose-timeline-copy__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .compose-timeline-copy p {
   margin: 0;
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
   display: -webkit-box;
@@ -9871,11 +9577,11 @@ onUnmounted(() => {
 }
 
 .compose-status-ok {
-  color: #63da8b;
+  color: var(--theme-accent);
 }
 
 .compose-option-group small {
-  color: #8fa1c6;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -9883,7 +9589,7 @@ onUnmounted(() => {
 .compose-option-group--select strong::after {
   content: '⌄';
   margin-left: 10px;
-  color: #9fb0d8;
+  color: var(--theme-tone-blue);
 }
 
 .compose-score-card {
@@ -9900,12 +9606,12 @@ onUnmounted(() => {
   width: 92px;
   height: 92px;
   border-radius: 50%;
-  border: 6px solid rgba(109, 93, 255, 0.88);
+  border: 6px solid color-mix(in srgb, var(--theme-tone-blue) 88%, transparent);
   box-shadow: 0 0 0 6px rgba(109, 93, 255, 0.08);
 }
 
 .compose-score-ring span {
-  color: #f8fbff;
+  color: var(--theme-text);
   font-size: 28px;
   font-weight: 700;
 }
@@ -9917,12 +9623,12 @@ onUnmounted(() => {
 .compose-score-copy span,
 .compose-option-group > span,
 .compose-export-stat span {
-  color: #91a5cd;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 
 .compose-score-copy strong {
-  color: #8f7cff;
+  color: var(--theme-tone-blue);
   font-size: 28px;
   line-height: 1.1;
 }
@@ -9936,7 +9642,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #d6e0f3;
+  color: var(--theme-tone-blue);
   font-size: 13px;
 }
 
@@ -9944,7 +9650,7 @@ onUnmounted(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #51d08f;
+  background: var(--theme-accent);
   box-shadow: 0 0 0 4px rgba(81, 208, 143, 0.12);
 }
 
@@ -9963,16 +9669,16 @@ onUnmounted(() => {
 .compose-side-button {
   min-height: 42px;
   border-radius: 16px;
-  border: 1px solid rgba(133, 149, 196, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dce6fb;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
   box-shadow: none;
 }
 
 .compose-side-button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
 }
 
 .compose-option-group {
@@ -9989,16 +9695,16 @@ onUnmounted(() => {
 .compose-chip {
   min-height: 38px;
   padding: 0 10px;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #d6e0f3;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 13px;
 }
 
 .compose-chip.is-active {
-  border-color: rgba(109, 93, 255, 0.52);
-  background: linear-gradient(135deg, rgba(109, 93, 255, 0.9), rgba(133, 92, 246, 0.9));
-  color: #fff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 52%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 90%, transparent), color-mix(in srgb, var(--theme-tone-violet) 90%, transparent));
+  color: var(--theme-text);
 }
 
 .compose-export-grid {
@@ -10013,14 +9719,14 @@ onUnmounted(() => {
   gap: 4px;
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid rgba(133, 149, 196, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
   min-width: 0;
   overflow: hidden;
 }
 
 .compose-export-stat strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 18px;
   line-height: 1.2;
   min-width: 0;
@@ -10036,24 +9742,24 @@ onUnmounted(() => {
   margin-top: 16px;
   padding: 18px;
   border-radius: 22px;
-  border: 1px solid rgba(133, 149, 196, 0.1);
-  background: linear-gradient(180deg, rgba(12, 19, 34, 0.92), rgba(8, 13, 24, 0.98));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 92%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .compose-tip-card__icon {
-  color: #9b7cff;
+  color: var(--theme-tone-violet);
   font-size: 18px;
   line-height: 1.2;
 }
 
 .compose-tip-card strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
 .compose-tip-card p {
   margin: 6px 0 0;
-  color: #9fb0d8;
+  color: var(--theme-tone-blue);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -10064,7 +9770,7 @@ onUnmounted(() => {
 
 .console-sidebar {
   padding: 14px;
-  background: linear-gradient(180deg, rgba(13, 20, 36, 0.98), rgba(9, 15, 27, 0.98));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .console-sidebar .panel-head {
@@ -10095,20 +9801,20 @@ onUnmounted(() => {
   gap: 8px;
   overflow: hidden;
   border-radius: 0;
-  border: 1px solid rgba(133, 149, 196, 0.14);
+  border: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at top, rgba(109, 93, 255, 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(8, 14, 27, 0.96), rgba(5, 10, 19, 0.98));
+    radial-gradient(circle at top, color-mix(in srgb, var(--theme-tone-blue) 16%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .video-stage-preview :deep(.console-sidebar) {
   padding: 9px;
   border-radius: 0;
-  border: 1px solid rgba(133, 149, 196, 0.1);
+  border: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(16, 24, 42, 0.98), rgba(10, 16, 29, 0.98)),
-    rgba(255, 255, 255, 0.018);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -10117,7 +9823,7 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #060b16;
+  background: var(--theme-panel);
 }
 
 .sidebar-preview-shell__hud {
@@ -10135,10 +9841,10 @@ onUnmounted(() => {
   max-width: 100%;
   padding: 4px 8px;
   border-radius: 0;
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 9px;
-  background: rgba(6, 11, 22, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-panel) 74%, transparent);
+  border: 1px solid var(--theme-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10148,7 +9854,7 @@ onUnmounted(() => {
   display: grid;
   gap: 10px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .sidebar-section:last-child {
@@ -10165,7 +9871,7 @@ onUnmounted(() => {
 }
 
 .sidebar-section__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -10177,7 +9883,7 @@ onUnmounted(() => {
 }
 
 .sidebar-section__head small {
-  color: #7e90bb;
+  color: var(--theme-text-secondary);
   font-size: 9px;
   flex: 0 0 auto;
   max-width: 96px;
@@ -10223,7 +9929,7 @@ onUnmounted(() => {
 }
 
 .prompt-preview-card__head > span {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -10232,7 +9938,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  color: #9fb0d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 
@@ -10252,18 +9958,18 @@ onUnmounted(() => {
   gap: 8px;
   padding: 16px 18px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 
 .identity-grid-preview-stat span {
-  color: #8ea1cb;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.4;
 }
 
 .identity-grid-preview-stat strong {
-  color: #f3f6ff;
+  color: var(--theme-text);
   font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
@@ -10299,8 +10005,8 @@ onUnmounted(() => {
   padding: 14px 16px 16px;
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.015);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent)),
+    color-mix(in srgb, var(--theme-text) 2%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -10325,13 +10031,13 @@ onUnmounted(() => {
 }
 
 .identity-grid-asset-group__head strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 800;
 }
 
 .identity-grid-asset-group__head span {
-  color: #8ea3ca;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 
@@ -10340,8 +10046,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 16px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .prompt-preview-section__header {
@@ -10352,13 +10058,13 @@ onUnmounted(() => {
 }
 
 .prompt-preview-section__header strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 800;
 }
 
 .prompt-preview-section__header span {
-  color: #89a0cf;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.5;
   text-align: right;
@@ -10380,9 +10086,9 @@ onUnmounted(() => {
   min-height: 36px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(129, 155, 225, 0.18);
-  background: rgba(76, 103, 173, 0.16);
-  color: #dfe8ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -10401,9 +10107,9 @@ onUnmounted(() => {
   min-height: 0;
   max-height: min(38vh, 440px);
   overflow: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(6, 10, 20, 0.98));
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .prompt-preview-code-shell--identity-grid-top {
@@ -10418,7 +10124,7 @@ onUnmounted(() => {
 }
 
 .prompt-preview-code--identity-grid {
-  color: #d7e2ff;
+  color: var(--theme-text);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 12px;
   line-height: 1.68;
@@ -10455,10 +10161,10 @@ onUnmounted(() => {
   gap: 10px;
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(138, 160, 212, 0.1);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 10%, transparent);
   background:
-    radial-gradient(circle at top left, rgba(108, 132, 205, 0.06), transparent 42%),
-    rgba(9, 14, 28, 0.82);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 6%, transparent), transparent 42%),
+    color-mix(in srgb, var(--theme-panel) 82%, transparent);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
@@ -10475,17 +10181,17 @@ onUnmounted(() => {
   border: 0;
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
-    rgba(5, 8, 14, 0.84);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 2%, transparent), color-mix(in srgb, var(--theme-text) 1%, transparent)),
+    color-mix(in srgb, var(--theme-input) 84%, transparent);
   cursor: pointer;
   overflow: hidden;
   transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
 }
 
 .prompt-reference-card__thumb:hover {
   transform: translateY(-1px);
-  border-color: rgba(140, 168, 236, 0.26);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 26%, transparent);
   box-shadow: 0 10px 24px rgba(42, 73, 160, 0.12);
 }
 
@@ -10509,9 +10215,9 @@ onUnmounted(() => {
   width: 100%;
   min-height: 360px;
   resize: vertical;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: rgba(8, 14, 27, 0.88);
-  color: #d7e2ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.7;
   padding: 16px 18px;
@@ -10522,9 +10228,9 @@ onUnmounted(() => {
 .prompt-preview-textarea--identity-grid {
   min-height: 420px;
   border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--theme-border);
   background:
-    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(6, 10, 20, 0.98));
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 96%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 12.5px;
 }
@@ -10546,7 +10252,7 @@ onUnmounted(() => {
 }
 
 .prompt-preview-block strong {
-  color: #eef3ff;
+  color: var(--theme-text);
   font-size: 11px;
 }
 
@@ -10557,21 +10263,21 @@ onUnmounted(() => {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  border: 1px solid rgba(133, 149, 196, 0.12);
-  background: rgba(8, 14, 27, 0.88);
-  color: #d7e2ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 88%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.55;
 }
 
 .prompt-preview-empty {
-  color: #8fa2cf;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.6;
 }
 
 .prompt-preview-empty--error {
-  color: #ff9b9b;
+  color: var(--theme-tone-red);
 }
 
 @media (max-width: 900px) {
@@ -10657,8 +10363,8 @@ onUnmounted(() => {
   aspect-ratio: 16 / 7;
   overflow: hidden;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .sidebar-frame-thumb img {
@@ -10671,7 +10377,7 @@ onUnmounted(() => {
 .sidebar-frame-thumb--empty {
   display: grid;
   place-items: center;
-  color: #95a3c3;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
@@ -10693,15 +10399,15 @@ onUnmounted(() => {
   height: 88px;
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .history-fallback,
 .empty-state {
   display: grid;
   place-items: center;
-  color: #95a3c3;
+  color: var(--theme-text-secondary);
   text-align: center;
 }
 
@@ -10717,12 +10423,12 @@ onUnmounted(() => {
 }
 
 .model-card--selected {
-  border-color: rgba(86, 165, 255, 0.75);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 75%, transparent);
   box-shadow: 0 0 0 1px rgba(86, 165, 255, 0.28);
 }
 
 .model-card--bound {
-  border-color: rgba(62, 201, 142, 0.72);
+  border-color: color-mix(in srgb, var(--theme-accent) 72%, transparent);
   box-shadow: 0 0 0 1px rgba(62, 201, 142, 0.24);
 }
 
@@ -10739,15 +10445,15 @@ onUnmounted(() => {
   justify-content: center;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(62, 201, 142, 0.18);
-  color: #83f0b7;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: var(--theme-accent);
   font-size: 11px;
   line-height: 1.2;
 }
 
 .model-card-badge--selected {
-  background: rgba(86, 165, 255, 0.18);
-  color: #93c5fd;
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  color: var(--theme-tone-blue);
 }
 
 .empty-state {
@@ -10764,8 +10470,8 @@ onUnmounted(() => {
 .section-empty {
   min-height: 150px;
   border-radius: 18px;
-  border: 1px dashed rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .ghost-button,
@@ -10773,13 +10479,13 @@ onUnmounted(() => {
 .count-input {
   min-height: 38px;
   padding: 0 12px;
-  color: #eef3ff;
+  color: var(--theme-text);
 }
 
 .count-input {
   width: 84px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .ghost-button,
@@ -10802,15 +10508,15 @@ onUnmounted(() => {
 
 .primary-button {
   cursor: pointer;
-  background: linear-gradient(135deg, #7b6cff, #5aa8ff);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--theme-tone-blue), var(--theme-tone-blue));
+  color: var(--theme-text);
   font-weight: 800;
   box-shadow: 0 10px 24px rgba(96, 95, 255, 0.24);
 }
 
 .ghost-button {
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .small {
@@ -10829,7 +10535,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(3, 7, 16, 0.74);
+  background: color-mix(in srgb, var(--theme-input) 74%, transparent);
   padding: 24px;
 }
 
@@ -10839,8 +10545,8 @@ onUnmounted(() => {
   overflow: auto;
   padding: 18px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, #111a2c, #0b1323);
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, var(--theme-panel-soft), var(--theme-panel));
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
 }
 
@@ -11198,7 +10904,7 @@ onUnmounted(() => {
   }
 
   .shot-reference-row {
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--theme-border);
     border-radius: 14px;
   }
 

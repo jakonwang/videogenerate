@@ -1,0 +1,746 @@
+{
+  "producer": "AI Nhà sản xuất",
+  "producerTagline": "Nêu mục tiêu, AI lập kế hoạch, điều phối và bàn giao",
+  "history": "Lịch sử",
+  "newChat": "Cuộc trò chuyện mới",
+  "untitled": "Cuộc trò chuyện chưa đặt tên",
+  "noHistory": "Chưa có cuộc trò chuyện",
+  "tabs": {
+    "chat": "Trò chuyện",
+    "recipes": "Công thức"
+  },
+  "welcomeTitle": "Hôm nay làm nội dung gì?",
+  "welcomeDesc": "Cho tôi biết mục tiêu. Tôi sẽ đưa ra kế hoạch trước (các bước, chi phí ước tính, thời gian) và chỉ bắt đầu khi bạn bấm Chạy. Có thể kéo thả video, ảnh hoặc ghi tên sản phẩm.",
+  "browseRecipes": "Xem công thức",
+  "suggest": {
+    "health": "Kiểm tra hệ thống: mô hình, tài khoản và ổ đĩa đã sẵn sàng chưa?",
+    "weekly": "Tổng kết 7 ngày qua về sản lượng và tỷ lệ duyệt, gợi ý cho tuần tới",
+    "failed": "Gần đây tác vụ nào thất bại? Cho tôi biết nguyên nhân và cách xử lý",
+    "publish": "Tạo bản nháp đăng cho các video đã duyệt"
+  },
+  "thinking": "Đang suy nghĩ và lập kế hoạch…",
+  "composerPlaceholder": "VD: Làm 2 video nhân bản cho bông tai ngọc trai và biến khung phân cảnh thành Live Photo",
+  "composerHint": "Enter để gửi · Shift+Enter xuống dòng · kéo thả tệp",
+  "send": "Gửi",
+  "attachFile": "Thêm tệp từ máy tính",
+  "attachAsset": "Thêm từ thư viện tư liệu",
+  "dropHere": "Thả để đính kèm",
+  "settingsGroup": "AI Nhà sản xuất",
+  "nav": {
+    "workbench": "Bàn làm việc",
+    "inbox": "Hộp duyệt",
+    "groupCreate": "Sáng tạo",
+    "groupAssets": "Tài sản",
+    "creativeStudio": "TikTok Creative Studio",
+    "livePhoto": "Live Photo",
+    "production": "Trộn hàng loạt",
+    "publish": "Trung tâm đăng",
+    "insights": "Phân tích",
+    "products": "Sản phẩm",
+    "models": "Người mẫu",
+    "assets": "Thư viện tư liệu",
+    "templates": "Mẫu",
+    "tools": "Hộp công cụ"
+  },
+  "line": {
+    "clone": "Nhân bản",
+    "creative": "Creative Studio",
+    "livephoto": "Live Photo",
+    "production": "Trộn hàng loạt",
+    "publish": "Đăng"
+  },
+  "contentStatus": {
+    "running": "Đang tạo",
+    "failed": "Thất bại",
+    "ready": "Hoàn tất",
+    "draft": "Chưa bắt đầu"
+  },
+  "status": {
+    "draft": "Nháp",
+    "planning": "Đang lập kế hoạch",
+    "waiting_approval": "Chờ bạn duyệt",
+    "running": "Đang chạy",
+    "paused": "Tạm dừng",
+    "reviewing": "Đang kiểm tra",
+    "completed": "Hoàn tất",
+    "failed": "Thất bại",
+    "cancelled": "Đã hủy"
+  },
+  "intent": {
+    "ProductInspect": "Xem sản phẩm",
+    "ProductSave": "Lưu sản phẩm",
+    "ProductManage": "Quản lý sản phẩm (có thể xóa)",
+    "ProductAnalyze": "Phân tích sản phẩm",
+    "MaterialPrepare": "Chuẩn bị tư liệu sản phẩm",
+    "MaterialManage": "Quản lý tư liệu sản phẩm",
+    "CommerceVideoCreate": "Nhân bản video (phân tích đến thành phẩm)",
+    "CloneProjectManage": "Quản lý dự án nhân bản",
+    "ModelIdentityManage": "Quản lý người mẫu",
+    "LivePhotoCreate": "Tạo Live Photo",
+    "LivePhotoManage": "Quản lý Live Photo",
+    "SubtitleGenerate": "Tạo phụ đề",
+    "VideoSlice": "Cắt video dài",
+    "SourceVideoImport": "Tải video tham khảo",
+    "SourceVideoManage": "Quản lý video nguồn",
+    "ListingGenerate": "Tạo nội dung đăng bán",
+    "ListingExport": "Xuất bảng đăng bán",
+    "ListingManage": "Quản lý đăng bán",
+    "TiktokCreativeManage": "Quản lý tác vụ Creative Studio",
+    "ProductionBatchCreate": "Tạo trộn hàng loạt",
+    "ProductionQueueControl": "Điều khiển hàng đợi trộn",
+    "ProductionTaskManage": "Quản lý tác vụ trộn",
+    "TemplateSave": "Lưu mẫu",
+    "TemplateManage": "Quản lý mẫu",
+    "ArtifactInspect": "Xem kết quả",
+    "ArtifactExport": "Xuất kết quả",
+    "SystemHealthCheck": "Kiểm tra hệ thống",
+    "AssetSearch": "Tìm trong thư viện tư liệu",
+    "AssetArchive": "Lưu vào thư viện tư liệu",
+    "CloneShotsSend": "Gửi khung hình sang Creative Studio / Live Photo",
+    "CreativeFromImages": "Creative Studio: thay sản phẩm vào ảnh cảnh",
+    "LivePhotoFromVideo": "Video sang Live Photo",
+    "ReviewSubmit": "Gửi vào hộp duyệt",
+    "ProductImportFromLink": "Tạo sản phẩm từ liên kết",
+    "ProductResearchPromote": "Sản phẩm thắng thành sản phẩm",
+    "PublishDraft": "Tạo bản nháp đăng",
+    "InsightsRead": "Phân tích nội dung",
+    "ReferenceDiscover": "Tự chọn video viral tham khảo",
+    "OutputsAwait": "Chờ xuất video hoàn tất"
+  },
+  "plan": {
+    "approve": "Chạy",
+    "reject": "Không chạy",
+    "pause": "Tạm dừng",
+    "resume": "Tiếp tục",
+    "cancel": "Hủy",
+    "goReview": "Duyệt kết quả",
+    "modelCalls": "~{count} lượt gọi mô hình",
+    "modelCallsHint": "Ước tính theo kinh nghiệm công thức, thực tế có thể khác",
+    "accountCredits": "~{count} tín dụng tài khoản TikTok",
+    "accountCreditsHint": "Creative Studio dùng tín dụng tài khoản sáng tạo TikTok",
+    "minutes": "~{count} phút",
+    "awaitingConfirmation": "\"{title}\" sẽ sửa hoặc xóa dữ liệu và cần bạn xác nhận riêng trước khi chạy.",
+    "confirmStep": "Xác nhận bước này",
+    "dependencyFailed": "Bỏ qua vì bước trước thất bại",
+    "noModelCalls": "Không tốn lượt gọi mô hình"
+  },
+  "notice": {
+    "runCompleted": "AI đã hoàn tất một kế hoạch, kết quả đã vào hộp duyệt",
+    "runFailed": "Một kế hoạch thất bại, mở AI Nhà sản xuất để xem lý do",
+    "awaitingConfirmation": "AI Nhà sản xuất đang chờ bạn xác nhận"
+  },
+  "tray": {
+    "title": "Tác vụ",
+    "desc": "Kế hoạch và tiến độ của AI, chạy nền",
+    "empty": "Chưa có kế hoạch. Nhấn Ctrl+J để mở AI Nhà sản xuất."
+  },
+  "command": {
+    "placeholder": "Tìm sản phẩm, dự án, trang, hoặc nói với AI cần làm gì…",
+    "short": "Tìm hoặc ra lệnh",
+    "ask": "Giao cho AI: {text}",
+    "askHint": "Tạo kế hoạch, chạy sau khi duyệt",
+    "productSpace": "Không gian sản phẩm",
+    "empty": "Không có kết quả",
+    "navigate": "Chọn",
+    "open": "Mở",
+    "groups": {
+      "ai": "AI Nhà sản xuất",
+      "recipe": "Công thức",
+      "page": "Trang",
+      "product": "Sản phẩm",
+      "project": "Dự án",
+      "asset": "Tư liệu"
+    }
+  },
+  "recipes": {
+    "intro": "Công thức là kế hoạch dựng sẵn: điền vài thông tin, AI lập kế hoạch đầy đủ, bạn duyệt rồi chạy.",
+    "makePlan": "Tạo kế hoạch",
+    "approvalNote": "Bạn sẽ thấy thẻ kế hoạch (các bước, chi phí, thời gian) trước; chỉ chạy khi bạn bấm Chạy.",
+    "pack": {
+      "title": "Một sản phẩm, trọn bộ nội dung",
+      "desc": "Chọn sản phẩm và video tham khảo, AI nhân bản thành phẩm và tận dụng khung hình làm Live Photo / video ngắn",
+      "output": "Kết quả: N video nhân bản + Live Photo từ khung hình",
+      "prompt": "Làm trọn bộ nội dung cho sản phẩm này: nhân bản {count} video tham khảo và tận dụng khung phân cảnh",
+      "summary": "Nhân bản {count} video, gửi khung hình sang dây chuyền khác, vào hộp duyệt"
+    },
+    "scene": {
+      "title": "Ảnh cảnh thành video hàng loạt",
+      "desc": "Thay sản phẩm của bạn vào ảnh cảnh đẹp và tạo video ngắn / Live Photo hàng loạt",
+      "output": "Kết quả: mỗi ảnh một video ngắn hoặc Live Photo",
+      "promptCreative": "Dùng Creative Studio thay sản phẩm vào {count} ảnh cảnh và tạo video",
+      "promptLivePhoto": "Thay sản phẩm vào {count} ảnh cảnh và tạo Live Photo",
+      "summaryCreative": "{count} ảnh cảnh, thay sản phẩm, tài khoản TikTok tạo video, duyệt",
+      "summaryLivePhoto": "{count} ảnh cảnh, thay sản phẩm, mô hình tạo chuyển động, Live Photo, duyệt"
+    },
+    "viral": {
+      "title": "Theo một video viral",
+      "desc": "Dán liên kết viral, AI tải về và nhân bản cho từng sản phẩm",
+      "output": "Kết quả: mỗi sản phẩm một video nhân bản",
+      "prompt": "Theo {links} video viral, nhân bản cho mỗi sản phẩm trong {products} sản phẩm",
+      "summary": "Tải {links} video viral, nhân bản cho {products} sản phẩm, duyệt"
+    },
+    "winners": {
+      "title": "Sản phẩm thắng thành sản phẩm",
+      "desc": "Thêm các sản phẩm có kết luận thắng trong nghiên cứu vào thư viện sản phẩm",
+      "output": "Kết quả: sản phẩm thắng mới",
+      "prompt": "Thêm các sản phẩm thắng trong nghiên cứu vào thư viện sản phẩm",
+      "summary": "Đọc sản phẩm thắng và tạo sản phẩm"
+    },
+    "link": {
+      "title": "Sản phẩm từ liên kết",
+      "desc": "Dán liên kết trang sản phẩm, tự đọc tiêu đề và ảnh chính",
+      "output": "Kết quả: một sản phẩm mới",
+      "prompt": "Tạo sản phẩm từ liên kết này: {url}",
+      "summary": "Đọc liên kết và tạo sản phẩm"
+    },
+    "publish": {
+      "title": "Lên lịch nội dung đã duyệt",
+      "desc": "Tạo bản nháp đăng cho video đã duyệt, có thể giãn cách; bạn vẫn xác nhận đăng ở Trung tâm đăng",
+      "output": "Kết quả: bản nháp / lịch đăng",
+      "prompt": "Tạo bản nháp đăng cho các video đã duyệt nhưng chưa đăng",
+      "summary": "Gom video đã duyệt và tạo bản nháp (bạn xác nhận đăng)"
+    },
+    "autopilot": {
+      "title": "Tự động toàn trình",
+      "desc": "Từ chọn sản phẩm đến bản nháp đăng bài trong một lần chạy: sản phẩm → video viral tham khảo → dựng video → kiểm duyệt → lên lịch → tổng kết",
+      "output": "Kết quả: N video mỗi sản phẩm + Live Photo + bản nháp đăng bài + gợi ý tiếp theo",
+      "prompt": "Tự động toàn trình: đưa sản phẩm đến video hoàn chỉnh, kiểm duyệt và bản nháp đăng bài",
+      "summary": "Kiểm tra hệ thống → chuẩn bị sản phẩm → tìm video tham khảo → dựng video → chờ xuất video → kiểm duyệt{publish} → tổng kết",
+      "summaryPublish": " → bản nháp đăng bài",
+      "summaryListing": " → nội dung đăng bán"
+    }
+  },
+  "fields": {
+    "product": "Sản phẩm",
+    "productOptional": "Sản phẩm (tùy chọn, để trống là tất cả)",
+    "products": "Sản phẩm (chọn nhiều)",
+    "productsHint": "Mỗi sản phẩm nhân bản một video",
+    "selectProduct": "Chọn sản phẩm",
+    "noProducts": "Thư viện sản phẩm đang trống",
+    "referenceVideos": "Video tham khảo",
+    "referenceVideosHint": "Mỗi video tham khảo một dự án, nên dùng 1 đến 3",
+    "variantCount": "Số biến thể kịch bản",
+    "variantCountHint": "Mỗi dự án tạo bao nhiêu phiên bản kịch bản",
+    "shotsToLivePhoto": "Đồng thời tạo Live Photo từ khung hình",
+    "shotsToCreative": "Đồng thời gửi khung hình sang Creative Studio (tốn tín dụng)",
+    "sceneImages": "Ảnh cảnh",
+    "sceneImagesHint": "Ảnh sản phẩm khác hoặc ảnh cảnh đẹp, AI sẽ thay bằng sản phẩm của bạn",
+    "engine": "Tạo bằng",
+    "engineCreative": "TikTok Creative Studio (tín dụng tài khoản)",
+    "engineLivePhoto": "API mô hình + Live Photo",
+    "viralLinks": "Liên kết viral",
+    "viralLinksHint": "Mỗi dòng một liên kết chia sẻ TikTok / Douyin",
+    "scheme": "Phương án nghiên cứu",
+    "productUrl": "Liên kết sản phẩm",
+    "productNameOptional": "Tên sản phẩm (dùng khi không đọc được tiêu đề)",
+    "startAt": "Thời gian đăng đầu tiên",
+    "startAtHint": "Để trống để chỉ tạo bản nháp",
+    "intervalHours": "Giãn cách (giờ)",
+    "fromLibrary": "Từ thư viện tư liệu",
+    "fromDisk": "Từ máy tính",
+    "selectedCount": "Đã chọn {count}",
+    "required": "Bắt buộc",
+    "on": "Bật",
+    "off": "Tắt",
+    "autopilotSource": "Nguồn sản phẩm",
+    "sourceScheme": "Sản phẩm thắng trong phương án chọn hàng",
+    "sourceLink": "Dán một liên kết sản phẩm",
+    "sourceProducts": "Sản phẩm đã có trong thư viện",
+    "referenceMode": "Video viral tham khảo",
+    "referenceAuto": "Để AI tự chọn (video đã tải / thư mục tham khảo)",
+    "referenceLinks": "Tôi sẽ dán liên kết video viral",
+    "referenceCount": "Số video tham khảo cho mỗi sản phẩm",
+    "referenceCountHint": "Mỗi video tham khảo tạo một dự án dựng lại cho mỗi sản phẩm",
+    "autoApprove": "Tự động duyệt video hoàn chỉnh và tạo bản nháp đăng bài",
+    "autoApproveHint": "Chỉ áp dụng cho kết quả của lần chạy này; bạn vẫn xác nhận đăng bài tại Trung tâm đăng bài",
+    "autopilotListing": "Tạo luôn nội dung và ảnh đăng bán",
+    "autopilotListingHint": "Trợ lý đăng bán TikTok viết tiêu đề, mô tả và ảnh cho từng sản phẩm (bông tai / nhẫn / dây chuyền / vòng tay / ốp điện thoại)",
+    "listingPrice": "Giá hiển thị",
+    "listingPriceHint": "Giá theo tiền tệ của shop, ví dụ 9.99",
+    "listingLanguage": "Ngôn ngữ tiêu đề",
+    "langEn": "Tiếng Anh",
+    "langVi": "Tiếng Việt",
+    "langZh": "Tiếng Trung"
+  },
+  "inbox": {
+    "title": "Hộp duyệt",
+    "desc": "Mọi video nhân bản, video ngắn và Live Photo AI tạo ra đều ở đây. Bạn chọn: duyệt, làm lại hoặc bỏ.",
+    "tabs": {
+      "pending": "Chờ duyệt",
+      "approved": "Đã duyệt",
+      "redo": "Làm lại",
+      "discarded": "Đã bỏ"
+    },
+    "decided": {
+      "approved": "Đã duyệt và lưu vào thư mục tư liệu \"AI 成片\"",
+      "redo": "Đã đánh dấu làm lại, lý do đã vào bộ nhớ thương hiệu",
+      "discarded": "Đã bỏ"
+    },
+    "allLines": "Tất cả dây chuyền",
+    "approve": "Duyệt",
+    "redo": "Làm lại",
+    "discard": "Bỏ",
+    "switch": "Chuyển",
+    "undo": "Hoàn tác",
+    "undone": "Đã hoàn tác, quay lại chờ duyệt",
+    "prev": "Trước",
+    "next": "Sau",
+    "product": "Sản phẩm",
+    "finishedAt": "Hoàn tất lúc",
+    "decision": "Kết luận",
+    "note": "Ghi chú",
+    "redoReason": "Lý do",
+    "notePlaceholder": "Ghi chú tùy chọn, sẽ lưu vào bộ nhớ thương hiệu",
+    "redoHint": "Lý do được lưu vào bộ nhớ thương hiệu để AI tránh lần sau. Mở dự án để tạo lại.",
+    "confirmRedo": "Xác nhận làm lại",
+    "openProject": "Mở dự án",
+    "toLivePhoto": "Tạo Live Photo",
+    "toLivePhotoPrompt": "Chuyển \"{title}\" thành Live Photo",
+    "publishOne": "Tạo bản nháp đăng",
+    "publishAll": "Tạo bản nháp cho tất cả",
+    "publishPrompt": "Tạo bản nháp đăng cho {count} video đã duyệt",
+    "emptyPending": "Không có gì cần duyệt",
+    "empty": "Chưa có nội dung",
+    "emptyHint": "Để AI chạy một công thức, kết quả sẽ tự xuất hiện ở đây.",
+    "startRecipe": "Làm trọn bộ nội dung"
+  },
+  "redo": {
+    "product_mismatch": "Sản phẩm không giống",
+    "weird_motion": "Chuyển động gượng",
+    "blurry": "Hình mờ",
+    "bad_composition": "Bố cục chưa tốt",
+    "off_brand": "Không hợp thương hiệu",
+    "subtitle_issue": "Lỗi phụ đề",
+    "other": "Khác"
+  },
+  "space": {
+    "tab": "Không gian sản phẩm",
+    "profileTab": "Hồ sơ sản phẩm",
+    "makeShort": "AI làm trọn bộ",
+    "makeTitle": "Làm nội dung cho sản phẩm này",
+    "makeDesc": "Chọn công thức, AI lập kế hoạch và chạy sau khi bạn duyệt. Kết quả quay về đây và hộp duyệt.",
+    "askAi": "Hỏi AI",
+    "askPrompt": "Về sản phẩm \"{name}\": ",
+    "nextSteps": "Bước tiếp theo",
+    "suggestFirst": "Chưa có nội dung, hãy làm bộ đầu tiên",
+    "suggestReview": "{count} kết quả đang chờ duyệt",
+    "suggestFailed": "{count} tác vụ thất bại, để AI kiểm tra",
+    "suggestPublish": "{count} video đã duyệt có thể lên lịch",
+    "suggestMore": "Tăng sản lượng với video tham khảo hoặc ảnh cảnh mới",
+    "failedPrompt": "Kiểm tra các tác vụ thất bại gần đây của \"{name}\", giải thích lý do và đề xuất chạy lại",
+    "statDetail": "{running} đang chạy · {approved} đã duyệt",
+    "content": "Tất cả nội dung",
+    "clearFilter": "Bỏ lọc",
+    "noContent": "Sản phẩm này chưa có nội dung",
+    "memory": "Bộ nhớ sản phẩm",
+    "memoryHint": "AI dùng khi lập kế hoạch cho sản phẩm này",
+    "sellingPoints": "Điểm bán hàng",
+    "audience": "Đối tượng",
+    "avoid": "Cần tránh",
+    "notes": "Ghi chú",
+    "saved": "Đã lưu",
+    "lineage": "Nguồn gốc nội dung",
+    "noLineage": "Chưa có nguồn gốc; nội dung do AI liên kết sẽ được ghi tại đây",
+    "relation": {
+      "derived_from": "tạo ra",
+      "sent_to": "gửi sang",
+      "archived_as": "lưu thành",
+      "published_as": "đăng thành",
+      "created_by_run": "tạo bởi kế hoạch",
+      "product_of": "tạo ra"
+    },
+    "refKind": {
+      "clone": "Nhân bản",
+      "creative": "Creative Studio",
+      "livephoto": "Live Photo",
+      "product": "Sản phẩm",
+      "asset": "Tư liệu",
+      "publish": "Đăng",
+      "url": "Liên kết",
+      "research": "Nghiên cứu",
+      "file": "Tệp",
+      "production": "Trộn"
+    }
+  },
+  "spine": {
+    "title": "Chuỗi sản phẩm",
+    "bind": "Liên kết sản phẩm cửa hàng",
+    "editBind": "Sửa liên kết",
+    "bound": "Đã liên kết {count} sản phẩm cửa hàng",
+    "bindTitle": "Liên kết sản phẩm TikTok Shop",
+    "bindDesc": "Chọn sản phẩm trong cửa hàng tương ứng với \"{name}\". Dữ liệu quảng cáo và nhà sáng tạo sẽ được gom về sản phẩm này.",
+    "searchPlaceholder": "Tìm theo tên hoặc ID sản phẩm",
+    "untitled": "Sản phẩm chưa đặt tên",
+    "noCandidates": "Chưa đồng bộ sản phẩm cửa hàng. Hãy nhập ID sản phẩm bên dưới.",
+    "manualPlaceholder": "Nhập ID sản phẩm TikTok",
+    "addManual": "Thêm",
+    "pickedCount": "Đã chọn {count}",
+    "needBind": "Liên kết sản phẩm cửa hàng để xem",
+    "adsEmpty": "Không có dữ liệu quảng cáo trong 14 ngày qua",
+    "creatorsEmpty": "Chưa có dữ liệu nhà sáng tạo",
+    "contentDetail": "Video sẵn sàng · đang tạo {running}",
+    "publishDetail": "Video đã đăng",
+    "adsDetail": "Chi {spend} trong {days} ngày · {creatives} nội dung đang chạy",
+    "creatorsDetail": "Video nhà sáng tạo · {samples} mẫu · GMV {gmv}",
+    "noSignals": "Dữ liệu quảng cáo và nhà sáng tạo hiện chưa có gì cần xử lý.",
+    "variantPrompt": "Với sản phẩm \"{product}\", nội dung \"{name}\" bán tốt nhất. Hãy làm một loạt biến thể theo cấu trúc của nó.",
+    "stage": {
+      "content": "Nội dung",
+      "publish": "Đăng",
+      "ads": "Quảng cáo",
+      "creators": "Nhà sáng tạo"
+    },
+    "level": {
+      "warning": "Cần xử lý",
+      "success": "Cơ hội",
+      "info": "Lưu ý"
+    },
+    "source": {
+      "ads": "Quảng cáo",
+      "creators": "Nhà sáng tạo",
+      "publish": "Đăng"
+    },
+    "action": {
+      "bind": "Liên kết ngay",
+      "make_content": "Làm thêm nội dung",
+      "make_variant": "Làm biến thể",
+      "open_ads": "Xem quảng cáo",
+      "open_creators": "Xem nhà sáng tạo"
+    },
+    "signal": {
+      "bind_channel": "Chưa liên kết sản phẩm cửa hàng nên dữ liệu quảng cáo và nhà sáng tạo chưa gom được về sản phẩm này.",
+      "ads_need_creatives": "3 ngày qua chỉ có {active} nội dung đang chạy, ít hơn {target}. Không đủ để luân phiên.",
+      "ads_winner": "Nội dung \"{name}\" có ROI {roi}, cao hơn mức trung bình {avgRoi} của sản phẩm, đã có {orders} đơn.",
+      "ads_fatigue": "Nội dung chủ lực \"{name}\" giảm ROI từ {previousRoi} xuống {recentRoi} trong 3 ngày qua.",
+      "ads_concentration": "Nội dung \"{name}\" chiếm {share}% chi tiêu. Sản phẩm đang phụ thuộc vào một nội dung.",
+      "ads_unprofitable": "ROI 14 ngày là {roi}, thấp hơn ROI hòa vốn {breakEvenRoi}.",
+      "creator_winner": "Video \"{name}\" của nhà sáng tạo {creator} mang về {orders} đơn. Có thể dùng làm mẫu.",
+      "creators_awaiting_content": "{count} nhà sáng tạo đã nhận mẫu nhưng chưa đăng video."
+    }
+  },
+  "perf": {
+    "title": "Bằng chứng bán hàng",
+    "hint": "Dữ liệu quảng cáo {days} ngày qua · ROI trung bình của sản phẩm {roi}",
+    "empty": "Chưa có video nào khớp với nội dung quảng cáo. Hệ thống tự khớp khi video được đăng và chạy quảng cáo; bạn cũng có thể liên kết thủ công bên dưới.",
+    "unmatched": "{count} video đã đăng chưa khớp với nội dung quảng cáo.",
+    "unlinkedTitle": "Nội dung quảng cáo chưa liên kết",
+    "creativeStats": "Chi {spend} · ROI {roi} · {orders} đơn",
+    "pickContent": "Chọn video tương ứng",
+    "noLinkable": "Không có video để liên kết",
+    "link": "Liên kết",
+    "unlink": "Bỏ liên kết",
+    "orders": "{count} đơn",
+    "variantPrompt": "Với sản phẩm \"{product}\", video {line} \"{title}\" có ROI {roi} và {orders} đơn, đang bán tốt nhất. Hãy làm một loạt biến thể giữ nguyên cấu trúc của nó.",
+    "col": {
+      "content": "Video",
+      "verdict": "Đánh giá",
+      "spend": "Chi tiêu",
+      "revenue": "Doanh thu",
+      "orders": "Đơn hàng",
+      "creative": "Nội dung quảng cáo",
+      "linkTo": "Liên kết với video"
+    },
+    "verdict": {
+      "winner": "Bán tốt",
+      "average": "Trung bình",
+      "weak": "Không bán được",
+      "unproven": "Chưa chạy"
+    },
+    "method": {
+      "auto": "tự khớp",
+      "manual": "liên kết thủ công"
+    },
+    "variantPlanPrompt": "Video \"{title}\" có ROI {roi} và {orders} đơn. Dùng video tham chiếu của nó, cùng sản phẩm và người mẫu, làm thêm {count} biến thể với góc kịch bản khác nhau.",
+    "variantPlanSummary": "{count} biến thể của \"{title}\" → duyệt",
+    "noLinkableHint": "Chưa có video hoàn thành để liên kết. Quay lại khi video đã sẵn sàng.",
+    "showAll": "Hiện tất cả {count}",
+    "collapse": "Thu gọn"
+  },
+  "brand": {
+    "title": "Bộ nhớ thương hiệu",
+    "navDesc": "Giọng điệu, từ cấm và sở thích đã học",
+    "subtitle": "Mọi kế hoạch AI đều mang theo các yêu cầu này",
+    "brandName": "Tên thương hiệu",
+    "watermarkText": "Chữ watermark",
+    "tone": "Giọng điệu thương hiệu",
+    "tonePlaceholder": "VD: cao cấp, gọn gàng, tránh từ phóng đại",
+    "audience": "Đối tượng",
+    "audiencePlaceholder": "VD: nữ 18 đến 30 tuổi thích trang phục đi làm hằng ngày",
+    "bannedWords": "Từ cấm",
+    "bannedWordsPlaceholder": "Phân tách bằng dấu phẩy, VD: rẻ nhất, số một, tuyệt đối",
+    "subtitleStyle": "Kiểu phụ đề",
+    "notes": "Yêu cầu khác",
+    "hint": "Áp dụng cho kế hoạch tiếp theo",
+    "learned": "Sở thích AI đã học",
+    "learnedHint": "Từ quyết định duyệt / làm lại trong hộp duyệt",
+    "noFeedback": "Duyệt vài kết quả, sở thích AI học được sẽ xuất hiện ở đây",
+    "forget": "Quên mục này"
+  },
+  "automation": {
+    "navTitle": "Kiểm tra và tự động hóa",
+    "navDesc": "Kiểm tra hệ thống, bản tin ngày, tổng kết tuần",
+    "healthTitle": "Kiểm tra hệ thống",
+    "healthSubtitle": "Mô hình, tài khoản sáng tạo, kênh đăng, ổ đĩa",
+    "checkNow": "Kiểm tra ngay",
+    "checkedAt": "Lần kiểm tra trước: {time}",
+    "title": "Tự động hóa",
+    "subtitle": "Bản tin và tổng kết định kỳ; chỉ nhắc nhở, không tự thực hiện thao tác ghi",
+    "daily": "Bản tin ngày",
+    "dailyDesc": "Lỗi, chờ duyệt, cảnh báo tín dụng và tồn kho trên bàn làm việc",
+    "weekly": "Tổng kết tuần",
+    "weeklyDesc": "Tóm tắt sản lượng và tỷ lệ duyệt kèm gợi ý tuần tới",
+    "at": "Hằng ngày lúc",
+    "oclock": "giờ",
+    "aiSummary": "Tóm tắt bằng AI",
+    "aiSummaryDesc": "Dùng mô hình hội thoại viết tóm tắt 3 câu (tốn ít)",
+    "notifications": "Thông báo màn hình",
+    "notificationsDesc": "Khi kế hoạch xong, cần xác nhận hoặc có kết quả mới chờ duyệt",
+    "safetyNote": "Tự động hóa chỉ tạo bản tin và gợi ý; mọi kế hoạch tốn tín dụng hoặc sửa dữ liệu vẫn cần bạn duyệt.",
+    "weekday": {
+      "0": "Chủ nhật",
+      "1": "Thứ hai",
+      "2": "Thứ ba",
+      "3": "Thứ tư",
+      "4": "Thứ năm",
+      "5": "Thứ sáu",
+      "6": "Thứ bảy"
+    },
+    "feishu": "Gửi tới nhóm Feishu",
+    "feishuDesc": "Gửi kèm bản tin ngày và tổng kết tuần tới nhóm Feishu/Lark (cài đặt nhóm → bot → bot tùy chỉnh)",
+    "feishuSetup": "Thiết lập",
+    "feishuWebhook": "Địa chỉ Webhook",
+    "feishuWebhookHint": "Thêm bot tùy chỉnh vào nhóm Feishu rồi sao chép địa chỉ webhook của nó.",
+    "feishuSecret": "Khóa ký (không bắt buộc)",
+    "feishuSecretPlaceholder": "Chỉ cần khi bot bật xác minh chữ ký",
+    "feishuTest": "Gửi tin thử",
+    "feishuTestOk": "Đã gửi, hãy xem nhóm Feishu"
+  },
+  "home": {
+    "kicker": "Đội ngũ nội dung bán hàng AI",
+    "greeting": {
+      "night": "Khuya rồi, ",
+      "morning": "Chào buổi sáng, ",
+      "afternoon": "Chào buổi chiều, ",
+      "evening": "Chào buổi tối, "
+    },
+    "headline": "hôm nay bán gì?",
+    "sub": "Nói mục tiêu với AI Nhà sản xuất. AI lập kế hoạch, điều phối Nhân bản / Creative Studio / Live Photo và giao kết quả để bạn chọn.",
+    "goalPlaceholder": "VD: Tuần này làm 6 video và một bộ Live Photo cho mẫu bông tai mới",
+    "goalSubmit": "Giao cho AI",
+    "openWorkspace": "Mở không gian làm việc",
+    "letAi": "Để AI làm",
+    "lines": {
+      "clone": {
+        "title": "Nhân bản",
+        "desc": "Theo cấu trúc video viral để làm thành phẩm với sản phẩm của bạn"
+      },
+      "creative": {
+        "title": "TikTok Creative Studio",
+        "desc": "Thay sản phẩm vào ảnh cảnh và tạo video ngắn bằng tài khoản sáng tạo TikTok"
+      },
+      "livephoto": {
+        "title": "Live Photo",
+        "desc": "Thay sản phẩm vào ảnh cảnh và tạo ảnh chuyển động trên điện thoại"
+      }
+    },
+    "brief": "Bản tin AI hôm nay",
+    "refreshBrief": "Tạo lại",
+    "handToAi": "Giao cho AI",
+    "continue": "Tiếp tục",
+    "noProjects": "Chưa có dự án",
+    "noProjectsHint": "Bắt đầu từ một dây chuyền ở trên hoặc giao mục tiêu cho AI",
+    "toolsTitle": "Hộp công cụ",
+    "tools": {
+      "parser": "Tải video",
+      "subtitle": "Phụ đề hàng loạt",
+      "materials": "Video thành ảnh",
+      "production": "Trộn hàng loạt",
+      "creators": "Nhà sáng tạo",
+      "gmv": "GMV MAX",
+      "inventory": "Tồn kho",
+      "all": "Tất cả công cụ"
+    },
+    "autopilot": {
+      "badge": "Một người, trọn quy trình",
+      "title": "Dây chuyền tự động toàn trình",
+      "desc": "Chọn nguồn sản phẩm, phần còn lại để AI chạy lần lượt từng trạm. Khi bị chặn, AI dừng lại và cho bạn biết lý do.",
+      "cta": "Bắt đầu tự động",
+      "stages": {
+        "research": {
+          "title": "Chọn hàng",
+          "sub": "Sản phẩm thắng"
+        },
+        "product": {
+          "title": "Sản phẩm",
+          "sub": "Điểm bán hàng"
+        },
+        "reference": {
+          "title": "Video viral",
+          "sub": "Chọn tham khảo"
+        },
+        "video": {
+          "title": "Dựng video",
+          "sub": "Dựng lại + Live Photo"
+        },
+        "review": {
+          "title": "Kiểm duyệt",
+          "sub": "Hộp thư duyệt"
+        },
+        "publish": {
+          "title": "Lên lịch",
+          "sub": "Bản nháp đăng bài"
+        },
+        "insights": {
+          "title": "Tổng kết",
+          "sub": "Lô sau tốt hơn"
+        }
+      }
+    }
+  },
+  "insights": {
+    "title": "Phân tích",
+    "desc": "Xem mỗi dây chuyền tạo bao nhiêu, duyệt bao nhiêu, đăng bao nhiêu rồi quyết định bước tiếp.",
+    "days": "{count} ngày",
+    "generateWeekly": "Tạo tổng kết tuần",
+    "produced": "Đã tạo",
+    "approved": "Đã duyệt",
+    "redo": "Làm lại",
+    "approvalRate": "Tỷ lệ duyệt",
+    "published": "Đã đăng",
+    "byLine": "Theo dây chuyền",
+    "line": "Dây chuyền",
+    "dataNote": "Hiệu quả hiện tính theo tỷ lệ duyệt và đăng thành công; kênh đăng chưa cung cấp lượt xem hay doanh số.",
+    "recommendations": "Gợi ý của AI",
+    "askPlan": "Dựa trên dữ liệu tổng kết gần đây, lập kế hoạch nội dung tuần tới, ưu tiên dây chuyền có tỷ lệ duyệt cao",
+    "askPlanButton": "Để AI lập kế hoạch tuần tới",
+    "topProducts": "Sản phẩm nổi bật",
+    "productLine": "Tạo {produced} · Duyệt {approved} · Đăng {published}",
+    "noData": "Chưa có dữ liệu",
+    "redoReasons": "Lý do làm lại thường gặp",
+    "noRedo": "Chưa có bản ghi làm lại",
+    "editMemory": "Hoàn thiện bộ nhớ thương hiệu",
+    "publish": "Đăng",
+    "publishTotal": "Tác vụ đăng",
+    "publishDone": "Đã đăng",
+    "publishDraft": "Nháp chờ xác nhận",
+    "publishFailed": "Thất bại",
+    "openPublish": "Mở Trung tâm đăng",
+    "weeklyHistory": "Các lần tổng kết tuần",
+    "noWeekly": "Chưa có tổng kết tuần"
+  },
+  "tools": {
+    "title": "Hộp công cụ",
+    "desc": "Công cụ lấy tư liệu, xử lý ảnh, hậu kỳ video và vận hành cửa hàng.",
+    "search": "Tìm công cụ",
+    "recent": "Dùng gần đây",
+    "noMatch": "Không có công cụ phù hợp",
+    "back": "Về hộp công cụ",
+    "groups": {
+      "source": "Lấy tư liệu",
+      "image": "Xử lý ảnh",
+      "video": "Hậu kỳ video",
+      "operations": "Vận hành cửa hàng"
+    },
+    "items": {
+      "video-parser-download": {
+        "name": "Tải video",
+        "desc": "Dán liên kết TikTok / Douyin để tải video không watermark"
+      },
+      "live-slicer": {
+        "name": "Cắt livestream",
+        "desc": "Cắt bản ghi livestream hoặc video dài thành đoạn ngắn"
+      },
+      "product-image-materials": {
+        "name": "Ảnh sản phẩm từ video",
+        "desc": "Trích xuất hàng loạt ảnh sản phẩm từ video"
+      },
+      "product-replacement": {
+        "name": "Thay sản phẩm",
+        "desc": "Thay sản phẩm trong ảnh cảnh bằng sản phẩm của bạn"
+      },
+      "product-watermark": {
+        "name": "Watermark thương hiệu",
+        "desc": "Cắt ảnh sản phẩm vuông và thêm watermark thương hiệu"
+      },
+      "video-batch-subtitle": {
+        "name": "Phụ đề hàng loạt",
+        "desc": "Nhận dạng giọng nói và ghi phụ đề hàng loạt"
+      },
+      "video-batch-watermark": {
+        "name": "Watermark video hàng loạt",
+        "desc": "Thêm watermark chữ hoặc ảnh cho nhiều video"
+      },
+      "tiktok-listing-helper": {
+        "name": "Trợ lý đăng bán TikTok",
+        "desc": "Tạo tiêu đề, điểm bán và ảnh, xuất bảng đăng bán"
+      },
+      "tiktok-creator-hub": {
+        "name": "Quản lý nhà sáng tạo",
+        "desc": "Quản lý mẫu gửi và theo dõi nhà sáng tạo"
+      },
+      "tiktok-gmv-max-optimizer": {
+        "name": "Tối ưu GMV MAX",
+        "desc": "Phân tích quảng cáo và gợi ý ngân sách, ROI"
+      },
+      "dianxiaomi-inventory": {
+        "name": "Tồn kho Dianxiaomi",
+        "desc": "Đồng bộ xuất kho, dự báo hết hàng và nhắc nhập hàng"
+      }
+    }
+  },
+  "watermark": {
+    "videos": "Chọn video",
+    "noVideos": "Thêm video từ thư viện tư liệu hoặc máy tính",
+    "style": "Kiểu watermark",
+    "kindText": "Chữ",
+    "kindImage": "Ảnh",
+    "text": "Nội dung watermark",
+    "textPlaceholder": "VD: tên thương hiệu / cửa hàng",
+    "color": "Màu chữ",
+    "image": "Ảnh watermark",
+    "pickImage": "Chọn ảnh",
+    "pngHint": "Nên dùng PNG nền trong suốt",
+    "position": "Vị trí",
+    "positions": {
+      "top-left": "Trên trái",
+      "top-right": "Trên phải",
+      "center": "Giữa",
+      "bottom-left": "Dưới trái",
+      "bottom-right": "Dưới phải"
+    },
+    "size": "Kích thước (theo chiều rộng)",
+    "opacity": "Độ mờ",
+    "margin": "Lề",
+    "output": "Đầu ra",
+    "outputDir": "Chọn thư mục xuất",
+    "outputDefault": "Mặc định lưu vào thư mục dữ liệu",
+    "archive": "Lưu kết quả vào thư viện tư liệu",
+    "start": "Xử lý {count} video",
+    "preview": "Xem trước",
+    "previewEmpty": "Nhập chữ hoặc chọn ảnh để xem trước",
+    "history": "Lịch sử",
+    "noHistory": "Chưa có lịch sử",
+    "openDir": "Mở thư mục xuất",
+    "retry": "Thử lại mục lỗi",
+    "removeBatch": "Xóa bản ghi (giữ tệp)"
+  },
+  "pages": {
+    "productResearch": "Nghiên cứu sản phẩm"
+  },
+  "cloneShot": {
+    "replace": "Thay video",
+    "fromDisk": "Chọn từ máy tính…",
+    "madeElsewhere": "Dùng kết quả đã có",
+    "lineCreative": "tk Creative",
+    "lineLivePhoto": "Ảnh thành video",
+    "use": "Dùng",
+    "inUse": "Đang dùng",
+    "sendCreative": "Làm lại cảnh này bằng tk Creative",
+    "sendCreativeHint": "Tạo từ ảnh phân cảnh của cảnh này và tự thay vào khi xong (tốn tín dụng tài khoản sáng tạo)",
+    "running": "tk Creative đang tạo",
+    "runningAuto": "tk Creative đang tạo, xong sẽ tự thay vào",
+    "lastFailed": "Lần trước thất bại: {error}",
+    "replaced": "Đã thay video cảnh. Có thể ghép lại video cuối.",
+    "projectSent": "Đã gửi {count} ảnh phân cảnh tới tk Creative. Chọn kết quả trong menu Thay video của từng cảnh."
+  }
+}

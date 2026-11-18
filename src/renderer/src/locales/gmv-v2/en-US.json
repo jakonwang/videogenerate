@@ -1,0 +1,675 @@
+{
+  "nav": {
+    "today": "Today",
+    "diagnosis": "Campaign check-up",
+    "academy": "Academy",
+    "groups": {
+      "daily": "Daily",
+      "data": "Performance",
+      "ai": "AI decisions",
+      "more": "More"
+    },
+    "campaigns": "Campaigns",
+    "products": "Products",
+    "creatives": "Creatives",
+    "profit": "Profit & costs",
+    "pending": "Approvals",
+    "strategies": "Automation",
+    "growth": "Growth plans",
+    "overview": "Account overview",
+    "audit": "Change log",
+    "settings": "Settings",
+    "modules": {
+      "home": "Overview",
+      "delivery": "Ads manager",
+      "creatives": "Creatives",
+      "profit": "Profit",
+      "automation": "Automation",
+      "tools": "Tools"
+    }
+  },
+  "pages": {
+    "today": "See at a glance what is wrong and what to do today. Every suggestion follows TikTok's official rules.",
+    "diagnosis": "One verdict and one action per campaign. Expand a row to see the three ROI lines and the last 14 days.",
+    "academy": "Ten one-minute lessons, plus your margin and rule settings.",
+    "campaigns": "Spend, ROI, budget pacing and official suggestions for every campaign in one table.",
+    "growth": "Spend, sales and test stage per product, so you know what to push and what to stop.",
+    "creatives": "Creative sales, fatigue and gaps. Fill the gaps first, then optimize.",
+    "profit": "Add product costs so every action can be checked for profit.",
+    "actions": "AI-suggested changes. Check the evidence, then approve.",
+    "rules": "Set automation and safety limits for each campaign.",
+    "sop": "Day-by-day plans for new products and live streams.",
+    "overview": "Results, risks and spend pacing across stores.",
+    "audit": "Every change sent to TikTok, its result and any failure reason.",
+    "settings": "Account access, store binding, costs and notifications."
+  },
+  "codes": {
+    "blocked": {
+      "title": "Blocked",
+      "short": "Blocked"
+    },
+    "losing": {
+      "title": "Losing money",
+      "short": "Losing"
+    },
+    "underspend": {
+      "title": "Can't spend budget",
+      "short": "Underspend"
+    },
+    "scale": {
+      "title": "Ready to scale",
+      "short": "Scale"
+    },
+    "creatives": {
+      "title": "Not enough creatives",
+      "short": "Creatives"
+    },
+    "learning": {
+      "title": "Learning, don't touch",
+      "short": "Learning"
+    },
+    "healthy": {
+      "title": "Healthy, keep it",
+      "short": "Healthy"
+    },
+    "collecting": {
+      "title": "Collecting data",
+      "short": "Collecting"
+    }
+  },
+  "reasons": {
+    "paused": "This campaign is not delivering right now.",
+    "no_spend": "It has spent almost nothing for {days} days; the system is not delivering it.",
+    "collecting": "Just started. Not enough data yet, let it run a few days.",
+    "no_creatives": "No creative can deliver (rejected, unavailable or needs authorization).",
+    "learning_after_change": "ROI or budget changed recently. TikTok needs at least 3 days to re-learn; changing it now only disrupts it.",
+    "learning_new": "New campaign still in its learning period; swings in the first 3 days are normal.",
+    "losing_protected": "7-day ROI {roi} is below break-even {breakEven}. But today has more than 20 orders and ROI below 90% of target, so ROI protection applies and TikTok will refund the gap as ad credit.",
+    "losing_max_delivery": "This campaign uses Max delivery (no ROI target). 7-day ROI {roi} is below break-even {breakEven}; every extra dollar loses money.",
+    "losing_target_low": "7-day ROI {roi} is below break-even {breakEven}: the more you sell, the more you lose. The target ROI {target} is set below break-even.",
+    "losing_target_ok": "Target ROI {target} is already above break-even but the actual 7-day ROI is only {roi}: the product's conversion or margin can't support it.",
+    "underspend": "Only {utilization}% of budget used in 7 days while ROI {roi} already meets target {target}. Unspent budget usually means the ROI target is too tight.",
+    "underspend_at_floor": "Only {utilization}% of budget used, but the target ROI is already near break-even and can't go lower. Better creatives or a stronger offer are needed.",
+    "scale": "{utilization}% of budget used in 7 days with ROI {roi} at or above target {target}. Budget is the ceiling; more budget means more sales.",
+    "scale_max_delivery": "Budget almost fully spent under Max delivery and ROI {roi} is above break-even; raise budget in small steps.",
+    "creatives_blocked": "{blocked} creatives are blocked (authorization needed, rejected or unavailable) and can't deliver.",
+    "creatives_few": "Only {delivering} creatives are delivering; at least {need} are recommended for the system to find winners.",
+    "healthy": "ROI above target and budget use is normal; about {profitPerDay} profit per day.",
+    "healthy_low_volume": "No problems found yet, but orders are still few. Keep watching."
+  },
+  "actions": {
+    "raiseRoi": "Raise target ROI from {from} to {to}",
+    "raiseRoiMaxDelivery": "Switch back to Target ROI with a target of {to}",
+    "lowerRoi": "Lower target ROI from {from} to {to}",
+    "raiseBudget": "Raise daily budget from {from} to {to}",
+    "fixBlocker": {
+      "paused": "Check whether it should be turned back on; ignore if paused on purpose",
+      "no_spend": "Check in order: account balance, product on sale with stock, creatives authorized, target ROI not too high",
+      "no_creatives": "Authorize or replace blocked creatives so at least some can deliver"
+    },
+    "fixCreatives": "Fix the {blocked} blocked creatives first, then add new videos",
+    "reviewOffer": "Review price, offer and margin; remove products that keep losing money",
+    "waitProtection": "Don't touch it today; wait for the ROI protection credit and raise ROI tomorrow morning",
+    "waitLearning": "Don't touch it; check again in {days} days",
+    "keep": "Keep as is"
+  },
+  "timing": {
+    "morning": "First thing tomorrow morning",
+    "onceToday": "Only once today",
+    "oncePerDay": "At most once a day"
+  },
+  "protection": {
+    "protected_today_wait": "Today qualifies for ROI protection; raising ROI now would forfeit today's credit.",
+    "raise_voids_today": "Raising ROI voids that day's ROI protection, so do it first thing in the morning."
+  },
+  "lines": {
+    "aria": "Break-even ROI {breakEven}, target ROI {target}, actual ROI {actual}",
+    "breakEven": "Break-even",
+    "target": "Target",
+    "actual": "Actual (7d)",
+    "unknown": "margin not set",
+    "maxDelivery": "Max delivery"
+  },
+  "lesson": {
+    "why": "Why",
+    "how": "How",
+    "gotIt": "Got it",
+    "source": {
+      "official": "TikTok official rule",
+      "experience": "Industry practice, adjustable in settings"
+    }
+  },
+  "lessons": {
+    "daily_rhythm": {
+      "title": "Check three times a day",
+      "oneLine": "Morning: set direction. Daytime: watch pace. Evening: refill creatives.",
+      "why": "GMV Max is fully automated; frequent edits interrupt learning. Grouping actions at fixed times catches problems without over-editing.",
+      "how": [
+        "9:00: review yesterday's full data and do today's must-dos (raise ROI only at this time)",
+        "Daytime: only react to spending too fast or too slow; raise budget or lower ROI, never raise ROI",
+        "20:00: fix blocked creatives and add new videos"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok: Max delivery best practices",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "break_even": {
+      "title": "Break-even ROI decides everything",
+      "oneLine": "Break-even ROI = 1 / margin. Below it you lose money.",
+      "why": "GMV Max ROI = gross revenue / ad cost. With a 40% margin after product, shipping and commissions, you can spend at most 40 per 100 of sales, i.e. ROI 2.5. Below 2.5 every sale loses money.",
+      "how": [
+        "Enter your store margin (before ads) in settings",
+        "Set target ROI around break-even x 1.15 for a 15% safety buffer",
+        "Never set target ROI below break-even"
+      ],
+      "sourceType": "experience",
+      "sourceName": "Third party: GMV Max best practices",
+      "url": "https://bemomentiq.com/blog/gmv-max-best-practices-5-rules-every-tiktok-shop-account"
+    },
+    "learning_period": {
+      "title": "Wait 3 days after each change",
+      "oneLine": "After changing ROI or budget, wait at least 3 full days.",
+      "why": "Each change makes the system re-explore traffic; early swings are normal. Reverting because of a swing means it never finishes learning.",
+      "how": [
+        "Click \"I changed it\" so the 3-day countdown starts",
+        "Blue \"Learning\" campaigns should not be touched",
+        "After 3 days judge with 7-day rolling data"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Best practices for LIVE GMV Max",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "underspend_roi": {
+      "title": "Unspent budget = ROI too high",
+      "oneLine": "Budget unspent while ROI is on target usually means the target is too tight.",
+      "why": "In Target ROI mode the budget is only a ceiling; the target is the traffic filter. Too high a filter leaves no eligible traffic. TikTok recommends lowering the target slightly when spend is slow.",
+      "how": [
+        "Lower by about 10% each time",
+        "At most once per day (lowering twice voids that day's ROI protection)",
+        "Never below break-even x 1.05",
+        "If it still won't spend at the floor, the issue is creatives or the offer"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Best practices for LIVE GMV Max",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-live-gmv-max"
+    },
+    "scale_budget": {
+      "title": "Scale at most 30% a day",
+      "oneLine": "Budget used above 80–90% with ROI on target: raise the budget.",
+      "why": "High utilization means the budget is capping profitable traffic. TikTok recommends gradual increases of up to 30% per day; a short ROI dip afterwards is normal.",
+      "how": [
+        "Add 30% at a time, never double",
+        "Wait 3 days and check ROI stays above target",
+        "Stop raising when ROI falls below target"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Max delivery best practices",
+      "url": "https://ads.tiktok.com/help/article/best-practices-for-max-delivery-optimization"
+    },
+    "roi_protection": {
+      "title": "ROI protection: don't lose the credit",
+      "oneLine": "If a day's ROI is below 90% of target with more than 20 orders, TikTok refunds the gap.",
+      "why": "Credit = day cost minus day revenue / (target ROI x 0.9). You lose it that day if you manually raise the target, lower it more than once, pause or delete the campaign, or edit products. Max delivery and Creative Boost spend are not covered.",
+      "how": [
+        "Raise ROI first thing in the morning and accept losing that day's protection",
+        "If today already qualifies, don't touch it",
+        "In TikTok, hover the \"ROI protected\" badge and choose View history (60 days kept)"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: About ROI protection",
+      "url": "https://ads.tiktok.com/help/article/about-roi-protection-for-gmv-max-campaigns?lang=en"
+    },
+    "creative_supply": {
+      "title": "More creatives, more winners",
+      "oneLine": "Keep enough deliverable videos and add new ones regularly.",
+      "why": "GMV Max tests all eligible creatives and then concentrates budget on the best. More testable creatives make winners easier to find. TikTok Shop University suggests at least 40 delivering short videos for Product GMV Max; LIVE needs 50–70 per session or 5–10 new per day.",
+      "how": [
+        "Fix blocked creatives first (authorization, rejected, unavailable)",
+        "Add new videos weekly: new hooks, creators, demos",
+        "Send your best creative to AI Producer for variations",
+        "Use Accelerate testing or Creative Boost when needed"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Improve creative exploration in Product GMV Max",
+      "url": "https://ads.tiktok.com/resources/help/article/how-to-improve-creative-exploration-in-product-gmv-max"
+    },
+    "blockers": {
+      "title": "Rule out blockers first",
+      "oneLine": "No spend? Check balance, products and authorization before ROI.",
+      "why": "More budget can't fix an unavailable product or unauthorized videos. TikTok lists 9 creative statuses; authorization needed, rejected, unavailable and excluded can't deliver, and rejected videos may still spend.",
+      "how": [
+        "Check the ad account balance",
+        "Make sure products are on sale with stock",
+        "Authorize videos that need it (takes about 20 minutes)",
+        "Replace or appeal rejected videos; restore wrongly excluded ones"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: Metrics in GMV Max reports",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    },
+    "max_delivery": {
+      "title": "Max delivery is for bursts only",
+      "oneLine": "Target ROI is the default; Max delivery is for launches, clearance and big sales.",
+      "why": "Max delivery spends the budget without an ROI guarantee. TikTok suggests 3–5 days of Max delivery for new shops or products with at least 10x AOV daily budget, and 1–5x normal spend during big sales; above 5x ROI may drop sharply. Max delivery spend isn't covered by ROI protection.",
+      "how": [
+        "New product: 3–5 days of Max delivery, then switch to Target ROI",
+        "Big sale: at most 5x normal spend",
+        "ROI below break-even: switch back to Target ROI"
+      ],
+      "sourceType": "official",
+      "sourceName": "TikTok: About Max delivery",
+      "url": "https://ads.tiktok.com/help/article/about-max-delivery-optimization-for-gmv-max?lang=en"
+    },
+    "seven_day_rolling": {
+      "title": "Look at 7 days, not yesterday",
+      "oneLine": "All verdicts use 7-day rolling data to avoid single-day noise.",
+      "why": "Daily ROI swings. Judging trends on 7-day data plus the learning period gives stable decisions. Product and creative cost can lag up to 11 hours and their orders include organic sales, so verdicts use campaign-level data only.",
+      "how": [
+        "Use \"Actual (7d)\" ROI, not yesterday's",
+        "Watch one-off anomalies before acting",
+        "Use product and creative data to find creative issues, not to judge profit"
+      ],
+      "sourceType": "experience",
+      "sourceName": "TikTok: Metrics in GMV Max reports (latency notes)",
+      "url": "https://business-api.tiktok.com/portal/docs/metrics-in-gmv-max-campaign-reports/v1.3"
+    }
+  },
+  "setup": {
+    "title": "Step 1: enter one margin (30 seconds)",
+    "desc": "Margin = what's left of the price after product cost, shipping, platform and creator commission (before ads). It lets the system tell whether each campaign makes or loses money. A rough value is fine; change it anytime.",
+    "placeholder": "e.g. 40",
+    "invalid": "Enter a margin between 1 and 99",
+    "breakEvenPreview": "Break-even ROI about {roi}",
+    "how": "How to calculate margin?"
+  },
+  "today": {
+    "connectTitle": "Connect your TikTok ad account first",
+    "connectDesc": "Click Connect at the top right, authorize and sync to see diagnoses.",
+    "profit7d": "7-day profit (estimate)",
+    "needMargin": "Enter margin to see",
+    "spend7d": "7-day spend",
+    "gmv7d": "7-day revenue",
+    "roi7d": "7-day ROI",
+    "credit": "Est. ROI protection credit (yesterday)",
+    "creditHint": "Estimated with TikTok's formula; TikTok's own record is final",
+    "mustDo": "Must do today",
+    "mustDoHint": "Ranked by impact, at most 5",
+    "impact": "about {value}/day",
+    "why": "Why",
+    "aiCreatives": "Ask AI for creatives",
+    "aiCreativePrompt": "GMV MAX campaign \"{name}\" lacks creatives (at least {need} delivering recommended). Make a batch of new video creatives for its best products.",
+    "openTikTok": "Open TikTok",
+    "done": "I changed it",
+    "recorded": "Recorded the change for \"{name}\". 3-day observation started.",
+    "allGood": "Nothing to do today",
+    "allGoodHint": "All campaigns are learning or healthy. Not touching them is the best move.",
+    "observing": "Observing",
+    "observingLine": "{kind}, {days} days left",
+    "daysLeft": "{days} days left",
+    "noObserving": "No changes under observation.",
+    "recentChanges": "Recently recorded changes",
+    "undo": "Undo record",
+    "lessonOfDay": "Lesson of the day",
+    "learnMore": "Learn",
+    "noDataTitle": "No delivery data yet",
+    "noDataDesc": "Sync once and diagnoses for each campaign will appear here.",
+    "syncNow": "Sync now"
+  },
+  "changeKinds": {
+    "roi": "ROI change",
+    "budget": "Budget change",
+    "products": "Product change",
+    "status": "Status change",
+    "other": "Other change"
+  },
+  "campaigns": {
+    "all": "All",
+    "search": "Search campaigns",
+    "cols": {
+      "campaign": "Campaign",
+      "diagnosis": "Diagnosis",
+      "lines": "Break-even / target / actual",
+      "utilization": "Budget used",
+      "spend": "7d spend",
+      "profit": "7d profit"
+    },
+    "live": "LIVE",
+    "product": "Product",
+    "target": "Target ROI {value}",
+    "marginMissing": "Margin not set yet, so profit can't be judged. Set it in Academy.",
+    "marginStore": "Estimated with the store default margin; complete product costs for accuracy.",
+    "kv": {
+      "gmv": "7d revenue",
+      "orders": "7d orders",
+      "aov": "Avg order value",
+      "netCost": "Net cost (after credits)",
+      "creatives": "Creatives"
+    },
+    "creativeLine": "{delivering} delivering, {learning} testing, {blocked} blocked",
+    "chartAria": "Daily spend and ROI for 14 days",
+    "chartLegend": "Bars: daily spend. Green: daily ROI. Grey dashed: target. Red dashed: break-even.",
+    "loading": "Loading…",
+    "empty": "No matching campaigns"
+  },
+  "academy": {
+    "lessonsTitle": "Ten one-minute lessons",
+    "lessonsHint": "Every \"Why\" links here",
+    "settingsTitle": "My settings",
+    "settingsHint": "Margin sets the break-even line; thresholds decide when you're alerted",
+    "margins": "Store margin (before ads)",
+    "noStores": "Stores appear here after you connect and sync.",
+    "rules": "Rule thresholds",
+    "thresholds": {
+      "safetyMargin": "Safety buffer (%)",
+      "learningDays": "Learning period (days)",
+      "underspendUtilization": "Underspend: budget used below (%)",
+      "scaleUtilization": "Scale: budget used above (%)",
+      "roiStep": "Lower ROI by (%)",
+      "budgetStep": "Raise budget by (%)",
+      "minDeliveringCreatives": "Delivering creatives at least",
+      "minOrdersForVerdict": "Orders needed to call a loss"
+    },
+    "thresholdHints": {
+      "safetyMargin": "Recommended target = break-even x (1 + this)",
+      "learningDays": "TikTok recommends at least 3",
+      "underspendUtilization": "Default 50%",
+      "scaleUtilization": "TikTok recommends 80–90%+",
+      "roiStep": "Default 10%, lower gradually",
+      "budgetStep": "TikTok recommends at most 30% a day",
+      "minDeliveringCreatives": "Shop University suggests 40+",
+      "minOrdersForVerdict": "No verdict on tiny samples"
+    },
+    "saved": "Saved"
+  },
+  "dash": {
+    "kpiAria": "Account key metrics, last 7 days",
+    "tiles": {
+      "profit": "Profit (7 days)",
+      "gmv": "Gross revenue",
+      "spend": "Spend",
+      "roi": "ROI",
+      "credit": "Expected ROI protection credit (yesterday)"
+    },
+    "estimated": "Estimated from your margin",
+    "breakEvenNote": "Break-even {value}",
+    "creditNote": "Estimated with the official rule; TikTok Ads Manager is final",
+    "vsPrev": "vs prior 7 days",
+    "sparkAria": "{name}, 14-day trend",
+    "cols": {
+      "status": "Status",
+      "campaign": "Campaign",
+      "action": "What to do",
+      "impact": "Impact / day",
+      "roi": "ROI (7 days)",
+      "trend": "14-day ROI"
+    },
+    "perDay": "~{value}",
+    "details": "Show details",
+    "statusTitle": "Campaign status",
+    "statusHint": "{count} campaigns. Click a row to view them.",
+    "viewAll": "View all campaigns",
+    "trendTitle": "Gross revenue and spend (14 days)",
+    "trendHint": "The wider the gap between the lines, the more you earn",
+    "trendAria": "Daily gross revenue and spend, last 14 days",
+    "roiTitle": "ROI trend (14 days)",
+    "roiHint": "Below the red dashed line means losing money",
+    "roiAria": "Daily ROI for the last 14 days against target and break-even",
+    "roiVs": "Target {target} · break-even {breakEven}",
+    "total": "Total ({count})",
+    "floor": "Floor"
+  },
+  "errors": {
+    "restart": "The app core has not loaded the new features yet. Quit the app completely and reopen it (in development, restart npm run dev).",
+    "unknown": "Failed to load, please try again."
+  },
+  "rules": {
+    "groups": "Rule groups",
+    "groupsHint": "Reusable strategy templates",
+    "auto": "Automatic",
+    "autoHint": "Adjusts on its own when conditions are met",
+    "shadowHint": "Simulates only, never changes TikTok",
+    "manualHint": "Suggestions only, you make the change",
+    "unbound": "No rule",
+    "unboundHint": "Campaigns without a strategy yet",
+    "guards": "Safety rules every strategy follows",
+    "groupsTitle": "Rule groups",
+    "groupsSubtitle": "Set minimum ROI, target CPA and creative test budget, then bind to campaigns.",
+    "ruleCol": "Rule",
+    "scopeCol": "Store",
+    "modeCol": "Mode",
+    "assignHint": "Pick a rule and allowed actions for each campaign",
+    "allowed": "allowed",
+    "notAllowed": "not allowed",
+    "noGroups": "No rule groups yet. Create one, then bind it to campaigns.",
+    "delete": "Delete",
+    "boundCol": "Campaigns"
+  },
+  "simple": {
+    "nav": {
+      "today": "What to do today",
+      "diagnosis": "Campaign check-up",
+      "academy": "Academy",
+      "settings": "Connect & settings"
+    },
+    "mode": {
+      "toPro": "Open pro mode",
+      "toProHint": "Show every tool and detailed data",
+      "toSimple": "Back to beginner mode",
+      "toSimpleHint": "Only what to do today",
+      "simple": "Beginner",
+      "pro": "Pro"
+    },
+    "start": {
+      "title": "Get started in 3 steps",
+      "desc": "Finish these 3 steps and the app tells you every day what to change. About 3 minutes.",
+      "progress": "{done}/3 done",
+      "connect": "Connect your TikTok ads account",
+      "connectDesc": "Needed so the app can read your campaign data. It never changes your ads by itself.",
+      "connectDone": "Connected",
+      "connectBtn": "Connect",
+      "sync": "Sync campaign data",
+      "syncDesc": "Pulls in spend and sales for the last 14 days. Usually 1 to 3 minutes.",
+      "syncDone": "Data synced",
+      "margin": "Enter your gross margin",
+      "marginDesc": "Margin = (price − product cost − shipping etc.) ÷ price. Not sure? Enter 30 for now and change it later. The app uses it to tell whether you make or lose money.",
+      "marginPreview": "Each 1 of ad spend must bring back at least {roi} to break even",
+      "marginExample": "Example: price 100, cost plus shipping 60, enter 40"
+    },
+    "kpi": {
+      "profit": "Profit in the last 7 days",
+      "profitHint": "Estimated from your margin, after ad spend",
+      "profitMissing": "Enter your margin to see this",
+      "spend": "Ad spend in the last 7 days",
+      "spendHint": "Brought in {gmv} in sales",
+      "roi": "Sales for every 1 spent",
+      "roiHint": "Below {value} means losing money",
+      "roiNoMargin": "Enter your margin to know if you make money",
+      "vsLastWeek": "{value} vs last week"
+    },
+    "tasks": {
+      "title": "{count} things to do today",
+      "hint": "Start with number 1. Each one shows what to click in TikTok Ads Manager. When done, come back and click \"I have changed it\".",
+      "impact": "About {value}/day",
+      "whyLabel": "Why: ",
+      "doLabel": "Do: ",
+      "done": "I have changed it",
+      "learn": "Why do this?"
+    },
+    "moreData": "Show trend charts",
+    "lessData": "Hide trend charts",
+    "campaigns": {
+      "verdict": "Verdict",
+      "next": "Next step",
+      "roi": "Sales per 1 spent",
+      "roiHelp": "ROI: sales brought in by each 1 of ad spend",
+      "roiVs": "Below {breakEven} loses money",
+      "nothing": "Nothing to change"
+    },
+    "steps": {
+      "raise_roi": [
+        "Click \"Open TikTok\" below",
+        "Go to GMV Max and find the campaign \"{name}\"",
+        "Click Edit and change the ROI target from {from} to {to}",
+        "Save, then come back and click \"I have changed it\"",
+        "Leave it alone for 3 days so it can relearn"
+      ],
+      "lower_roi": [
+        "Click \"Open TikTok\" below",
+        "Go to GMV Max and find the campaign \"{name}\"",
+        "Click Edit and change the ROI target from {from} to {to}",
+        "Save, then come back and click \"I have changed it\"",
+        "Change it once a day at most, then wait 3 days"
+      ],
+      "raise_budget": [
+        "Click \"Open TikTok\" below",
+        "Go to GMV Max and find the campaign \"{name}\"",
+        "Click Edit and change the daily budget from {from} to {to}",
+        "Save, then come back and click \"I have changed it\"",
+        "Raise the budget once a day at most"
+      ],
+      "fix_creatives": [
+        "Open TikTok Ads Manager and go to the campaign \"{name}\"",
+        "Open the creatives list and find videos marked as needing authorization, rejected or unavailable",
+        "Authorize the ones that need it; replace rejected ones with new videos",
+        "Not enough videos? Click \"Ask AI for creatives\"",
+        "When done, come back and click \"I have changed it\""
+      ],
+      "fix_blocker": [
+        "Open TikTok Ads Manager and go to the campaign \"{name}\"",
+        "Fix what the \"Do\" line says, such as account balance, product status or review issues",
+        "When done, come back and click \"I have changed it\""
+      ],
+      "review_offer": [
+        "Check the product in \"{name}\": is the price, stock and offer competitive?",
+        "Compare what similar products sell for and include",
+        "After adjusting, click \"I have changed it\" and check again in 3 days"
+      ],
+      "none": []
+    }
+  },
+  "table": {
+    "moreCampaigns": "+{count} more campaigns"
+  },
+  "range": {
+    "label": "Date range",
+    "yesterday": "Yesterday",
+    "lastDays": "Last {days} days",
+    "custom": "Custom",
+    "start": "Start date",
+    "end": "End date",
+    "compare": "Compare"
+  },
+  "compare": {
+    "spend": "Spend",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "Orders",
+    "vsPrevious": "vs previous",
+    "noPrevious": "No previous data",
+    "search": "Search campaign name or ID",
+    "allPacing": "All",
+    "suggestions": "{count} suggestions",
+    "evaluateHint": "Re-evaluate every campaign with the latest data"
+  },
+  "edit": {
+    "selected": "{count} campaigns selected",
+    "selectAll": "Select this page",
+    "enable": "Turn on",
+    "pause": "Pause",
+    "clear": "Clear selection",
+    "adjustBudget": "Adjust budget",
+    "adjustRoi": "Adjust target ROI",
+    "preview": "Preview changes",
+    "modes": {
+      "up": "Raise by %",
+      "down": "Lower by %",
+      "setBudget": "Set amount",
+      "setRoi": "Set to"
+    },
+    "editBudget": "Edit daily budget",
+    "editRoi": "Edit target ROI",
+    "enterHint": "Enter to confirm, Esc to cancel",
+    "fields": {
+      "budget": "Daily budget",
+      "roi": "Target ROI",
+      "status": "Delivery"
+    },
+    "confirmTitle": "Confirm {count} changes",
+    "confirmHint": "Changes are written to TikTok. Values are checked before and after the write, logged, and can be undone.",
+    "confirm": "Apply ({count})",
+    "cancel": "Cancel",
+    "close": "Done",
+    "undo": "Undo this change",
+    "undone": "Undone",
+    "doneTitle": "Results",
+    "doneSummary": "{ok} succeeded, {failed} failed",
+    "warningCount": "{count} risk notes, review before applying",
+    "safety": "Checked before and after writing, can be undone",
+    "warn": {
+      "budgetJump": "Raising budget by more than 50% at once can restart learning; raise it in steps",
+      "budgetCut": "Cutting budget by more than 50% will slow delivery noticeably",
+      "belowFloor": "Target ROI is below the break-even ROI {floor}; more sales means more loss",
+      "roiJump": "Target ROI changes by more than 30%; spend and delivery may shift a lot",
+      "pause": "Delivery stops right away; turning it back on has to ramp up again"
+    },
+    "errors": {
+      "noChange": "Nothing changed",
+      "budgetInvalid": "Budget must be above 0",
+      "roiInvalid": "Target ROI must be above 0",
+      "stopped": "Emergency stop is on, so all writes are paused. Turn it off first.",
+      "pending": "The previous change on this campaign is still being verified; try again in a few minutes",
+      "changedRemotely": "The value was changed in TikTok; sync data first",
+      "notConnected": "No usable TikTok authorization or write permission; reconnect the account in settings"
+    }
+  },
+  "views": {
+    "title": "Views",
+    "empty": "No saved views yet. Set filters, sorting and columns, then save them here.",
+    "namePlaceholder": "View name, e.g. Losing money",
+    "save": "Save current view",
+    "remove": "Delete view"
+  },
+  "columns": {
+    "title": "Columns",
+    "status": "Status",
+    "budget": "Daily budget",
+    "spend": "Spend",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "orders": "Orders",
+    "cpa": "Cost per order",
+    "aov": "Avg. order value",
+    "protection": "Profit guard",
+    "reset": "Reset columns"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "empty": "No alerts right now",
+    "desktop": "Desktop notifications",
+    "desktopHint": "Show a system notification for new alerts (checked every 15 minutes once GMV MAX has been opened)",
+    "settingsTitle": "Alert notifications",
+    "roi_below_floor": {
+      "title": "ROI below break-even",
+      "detail": "3-day ROI {roi}, break-even needs {floor}"
+    },
+    "budget_overspend": {
+      "title": "Budget may run out early",
+      "detail": "{spent} spent, pace expects {expected}"
+    },
+    "creative_fatigue": {
+      "title": "Creatives are tiring",
+      "detail": "{count} creatives are declining; add new ones"
+    }
+  },
+  "auth": {
+    "expired": "TikTok authorization has expired, so data cannot sync. Authorize again to resume.",
+    "expiredError": "TikTok authorization has expired. Click Authorize again, confirm in the TikTok page that opens, then sync.",
+    "reauthorize": "Authorize again",
+    "done": "TikTok is authorized again; you can sync now.",
+    "status": "Authorization expired"
+  },
+  "filters": {
+    "type": "Campaign type",
+    "clear": "Clear filters"
+  }
+}

@@ -1,5 +1,6 @@
 import http from 'node:http'
 import { handleWebApiRequest } from '../modules/web-platform/webApiRouter'
+import { isLocalApiAllowed } from './cloudLicense'
 
 let server: http.Server | null = null
 let boundPort: number | null = null
@@ -11,6 +12,13 @@ export async function ensureWebApiServer() {
   if (server && boundPort != null) return boundPort
   for (let p = PORT_START; p < PORT_START + PORT_TRIES; p++) {
     const candidate = http.createServer((req, res) => {
+      // 商业版未授权时，本地 API 同样拒绝服务，避免绕过界面直接调用
+      if (req.method !== 'OPTIONS' && !isLocalApiAllowed()) {
+        res.statusCode = 403
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ ok: false, error: 'LICENSE_REQUIRED' }))
+        return
+      }
       void handleWebApiRequest(req, res)
     })
     try {

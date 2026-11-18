@@ -1,0 +1,161 @@
+{
+  "createTitle": "选择运行方式",
+  "autoDesc": "AI 依次完成全部 6 个步骤，适合批量出片",
+  "manualDesc": "每一步确认后再继续，适合精细调整",
+  "search": "搜索任务、模特或参考视频",
+  "outputReady": "成片已生成",
+  "outputPending": "待生成成片",
+  "stepOf": "第 {n}/6 步",
+  "open": "打开任务",
+  "play": "预览成片",
+  "runLog": "运行日志",
+  "clearSelection": "取消选择",
+  "listView": "列表视图",
+  "gridView": "网格视图",
+  "perPage": "{n} 条/页",
+  "group": "分组",
+  "filtering": "正在筛选：{name}",
+  "clearFilter": "清除筛选",
+  "noMatch": "没有符合条件的任务",
+  "noMatchDesc": "换个关键词，或清除筛选后再看看。",
+  "close": "关闭",
+  "cancel": "取消",
+  "save": "保存",
+  "selectPage": "全选本页",
+  "updated": "更新于",
+  "exportFinals": "导出成片",
+  "subtitle": "加字幕",
+  "move": "移动到分组",
+  "delete": "删除",
+  "backToList": "任务列表",
+  "promptManager": {
+    "entry": "提示词管理",
+    "title": "复刻提示词管理",
+    "desc": "按环节和品类管理提示词版本。启用的版本会用于之后的生成，已生成的内容不受影响。",
+    "kinds": {
+      "shot_video": {
+        "label": "分镜视频",
+        "hint": "生成分镜视频时发给视频模型的提示词。占位符会按分镜和品类自动填入。"
+      },
+      "storyboard_model": {
+        "label": "分镜图 · 模特展示",
+        "hint": "模特展示类分镜生成首尾帧时使用。图 1 是模特与产品参考，图 2 是场景参考。"
+      },
+      "storyboard_product": {
+        "label": "分镜图 · 产品特写",
+        "hint": "产品特写类分镜生成首尾帧时使用。图 1 是产品参考，图 2 是场景参考。"
+      },
+      "script_analysis": {
+        "label": "脚本分析",
+        "hint": "分析参考视频时的指导说明。输出格式和分镜时间轴由系统自动追加，无需写在这里。"
+      }
+    },
+    "category": "适用品类",
+    "categoryHint": "某个品类有启用的版本时优先用它，否则用“全部品类”的版本，再否则用内置默认。",
+    "customized": "已自定义",
+    "version": "版本",
+    "versionHint": "修改后可保存更新，或另存为新版本。",
+    "builtinHint": "内置默认不可修改，可在其基础上另存为新版本。",
+    "builtinName": "内置默认",
+    "active": "使用中",
+    "name": "版本名称",
+    "namePlaceholder": "留空则自动命名",
+    "content": "提示词内容",
+    "placeholders": "可用占位符：",
+    "insertPlaceholder": "点击插入到末尾",
+    "save": "保存更新",
+    "saveAsNew": "另存为新版本",
+    "activate": "启用此版本",
+    "rollback": "回滚为新版本",
+    "remove": "删除",
+    "saved": "已保存 V{version}，启用后才会生效。",
+    "activated": "已启用，之后的生成会使用这个版本。",
+    "restored": "已恢复为 V{version} 并启用。",
+    "deleted": "已删除。",
+    "discardConfirm": "当前修改尚未保存，确定放弃吗？",
+    "deleteConfirm": "确定删除 V{version} 吗？此操作无法撤销。",
+    "categories": {
+      "all": "全部品类",
+      "earrings": "耳环",
+      "necklace": "项链",
+      "ring": "戒指",
+      "bracelet": "手链",
+      "phone_case": "手机壳",
+      "clothes": "服装",
+      "bag": "包",
+      "shoes": "鞋",
+      "toy": "玩具",
+      "general": "通用"
+    },
+    "titleFor": "{kind}提示词"
+  },
+  "simple": {
+    "headline": {
+      "setup": "复刻一条爆款视频",
+      "running": "正在为你生成视频",
+      "paused": "还没生成完",
+      "error": "生成遇到问题",
+      "done": "视频做好了"
+    },
+    "subline": {
+      "setup": "选好下面三样，点一下按钮，剩下的交给 AI。",
+      "running": "可以离开这个页面去做别的，回来还能看到进度。",
+      "paused": "上次停在中途，点“继续生成”接着做。",
+      "error": "看一下原因，处理后点“重试”即可接着做，不用从头开始。",
+      "done": "可以直接保存使用，或再做一条。"
+    },
+    "openAdvanced": "逐步调整",
+    "change": "更换",
+    "video": {
+      "title": "参考视频",
+      "hint": "想模仿的那条爆款视频",
+      "action": "选择视频",
+      "chosen": "已选择"
+    },
+    "product": {
+      "title": "你的商品",
+      "hint": "从商品库里选要卖的商品",
+      "action": "选择商品"
+    },
+    "model": {
+      "title": "出镜模特",
+      "hint": "从模特库里选，下次会默认用同一个",
+      "action": "选择模特"
+    },
+    "start": "开始复刻",
+    "starting": "正在开始…",
+    "startHint": "点击后会自动完成分析、画面、视频和合成。",
+    "missing": "还差：{items}",
+    "startFailed": "没能开始生成",
+    "phases": {
+      "analyze": {
+        "title": "分析参考视频",
+        "desc": "看懂镜头和节奏"
+      },
+      "visuals": {
+        "title": "生成画面",
+        "desc": "写脚本，把商品和模特放进每个镜头"
+      },
+      "videos": {
+        "title": "生成视频",
+        "desc": "让每个镜头动起来，耗时最长"
+      },
+      "compose": {
+        "title": "合成成片",
+        "desc": "拼接成一条完整视频"
+      }
+    },
+    "runningHint": "生成视频这一步通常需要几分钟到十几分钟。",
+    "pausedHint": "已完成的部分会保留。",
+    "errorHint": "如果反复失败，可以点右上角“逐步调整”查看每一步的详情。",
+    "retry": "重试",
+    "resume": "继续生成",
+    "reveal": "保存 / 打开所在文件夹",
+    "open": "用播放器打开",
+    "newTask": "再做一条",
+    "doneHint": "想修改某个镜头？点右上角“逐步调整”。",
+    "advancedLabel": "逐步调整",
+    "advancedHint": "这里可以逐个步骤查看和修改；日常使用返回简洁模式即可。",
+    "backToSimple": "返回简洁模式"
+  }
+}

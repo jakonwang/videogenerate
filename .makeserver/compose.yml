@@ -1,0 +1,44 @@
+# videogenerate 服务编排（makeserver 规范）；构建上下文 .. = 仓库根目录
+
+services:
+  # 云服务：账号、会员、支付、AI/视频任务，并在 /app/ 提供网页版
+  cloud:
+    image: ${MS_REGISTRY}videogenerate-server:${MS_TAG}
+    build:
+      context: ..
+      dockerfile: .makeserver/docker/Dockerfile
+      args:
+        NEXT_PUBLIC_CLOUD_API_BASE_URL: ${NEXT_PUBLIC_CLOUD_API_BASE_URL}
+    command: ["node_modules/.bin/tsx", "services/cloud/server.ts"]
+    restart: unless-stopped
+    env_file: ${MS_SHARED}/.env
+    environment:
+      NODE_ENV: production
+      CLOUD_HOST: 0.0.0.0
+      CLOUD_PORT: "18300"
+      CLOUD_DATA_DIR: /data
+      CLOUD_TRUST_PROXY: "1"
+    volumes:
+      - ${MS_SHARED}/data:/data
+    networks:
+      web:
+        aliases: ["${MS_PROJECT}-cloud"]
+
+  # 官网 + 用户中心 + 管理后台（Next.js），和 cloud 用同一个镜像
+  web:
+    image: ${MS_REGISTRY}videogenerate-server:${MS_TAG}
+    working_dir: /app/apps/web-next
+    command: ["../../node_modules/.bin/next", "start", "--hostname", "0.0.0.0", "--port", "18280"]
+    restart: unless-stopped
+    env_file: ${MS_SHARED}/.env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - cloud
+    networks:
+      web:
+        aliases: ["${MS_PROJECT}-web"]
+
+networks:
+  web:
+    external: true

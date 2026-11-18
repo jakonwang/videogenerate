@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ShotSpec } from '../types'
+import { isEarringTarget } from '../productCategory'
 import { computePromptHash } from '../cache'
 import {
   buildCameraMotionLockText,
@@ -50,9 +51,7 @@ function looksLikeEarringPromptTarget(shot: ShotSpec, productDescription?: strin
   ]
     .map((item) => String(item || '').toLowerCase())
     .join('\n')
-  return /earrings?|earring|ear jewelry|jewelry|jewellery|hoop|dangle|drop earring|stud|silver|gold|zircon|star-shaped dangles/.test(
-    haystack,
-  )
+  return isEarringTarget(shot.productType, haystack)
 }
 
 function buildFaceVisibilityLockText(input: { isEarringLike: boolean; modelPresentationShot: boolean }) {

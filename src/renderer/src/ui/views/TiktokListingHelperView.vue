@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -596,17 +597,16 @@ onBeforeUnmount(() => {
     <section class="listing-shell">
       <div class="page-top">
         <div class="crumb-row">
-          <button class="back-link" type="button" @click="router.push('/plugins?tab=installed')">
-            <ChevronLeft class="h-4 w-4" /> {{ tr('autoUi.k_a2a2147b4eb9') }} </button>
+          <button class="back-link" type="button" @click="router.push('/plugins')">
+            <ChevronLeft class="h-4 w-4" /> {{ tr('ai.tools.back') }} </button>
           <span>/</span>
-          <strong>{{ tr('autoUi.k_add920d22933') }}</strong>
+          <strong>{{ tr('ai.tools.items.tiktok-listing-helper.name') }}</strong>
         </div>
 
         <div class="page-top__main">
           <div class="hero-copy">
             <div class="page-title-row">
               <h1>{{ activeTab === 'list' ? tr('autoUi.k_44544d214520') : tr('autoUi.k_8ded76cf707b') }}</h1>
-              <span class="official-badge">{{ tr('autoUi.k_174b4bbfebfc') }}</span>
             </div>
             <p>
               {{
@@ -761,7 +761,7 @@ onBeforeUnmount(() => {
                   </label>
 
                   <div class="product-info" @click="viewItem(item)">
-                    <img :src="toFileUrl(item.sourceImagePath)" alt="product" class="product-cover" />
+                    <img :src="thumbnailUrl(item.sourceImagePath, 96)" alt="product" class="product-cover" loading="lazy" decoding="async" />
                     <div class="product-copy">
                       <strong>{{ previewTitle(item) }}</strong>
                       <div class="product-copy__meta">
@@ -826,7 +826,7 @@ onBeforeUnmount(() => {
                     </label>
                     <span class="status-pill" :class="statusTone(item.generationStatus)">{{ statusLabel(item.generationStatus) }}</span>
                   </div>
-                  <img :src="toFileUrl(item.sourceImagePath)" alt="product" class="grid-card__image" />
+                  <img :src="thumbnailUrl(item.sourceImagePath, 320)" alt="product" class="grid-card__image" loading="lazy" decoding="async" />
                   <strong>{{ previewTitle(item) }}</strong>
                   <p>{{ previewDescription(item) }}</p>
                   <div class="grid-card__meta">
@@ -1163,7 +1163,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .listing-page {
   padding: 10px;
-  color: #f7f8fc;
+  color: var(--theme-text);
 }
 
 .listing-shell {
@@ -1181,7 +1181,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: rgba(225, 232, 245, 0.82);
+  color: var(--theme-text);
   font-size: 14px;
 }
 
@@ -1192,7 +1192,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   background: transparent;
-  color: rgba(243, 246, 255, 0.92);
+  color: var(--theme-text);
   font-weight: 600;
 }
 
@@ -1216,7 +1216,7 @@ onBeforeUnmount(() => {
 
 .page-title-row h1 {
   margin: 0;
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -1224,7 +1224,7 @@ onBeforeUnmount(() => {
 
 .hero-copy p {
   margin: 0;
-  color: rgba(207, 215, 232, 0.78);
+  color: color-mix(in srgb, var(--theme-tone-blue) 78%, transparent);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1235,9 +1235,9 @@ onBeforeUnmount(() => {
   min-height: 30px;
   padding: 0 10px;
   border-radius: 10px;
-  border: 1px solid rgba(138, 92, 246, 0.42);
-  background: rgba(98, 71, 179, 0.2);
-  color: #c7b7ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 42%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-violet) 20%, transparent);
+  color: var(--theme-tone-violet);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1262,15 +1262,15 @@ onBeforeUnmount(() => {
   min-height: 40px;
   padding: 0 16px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   font-size: 13px;
   font-weight: 700;
   transition: 0.2s ease;
 }
 
 .hero-primary-button {
-  background: linear-gradient(135deg, #7c5cff, #5c6dff);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--theme-tone-violet), var(--theme-tone-blue));
+  color: var(--theme-text);
   box-shadow: 0 18px 38px rgba(100, 92, 255, 0.24);
 }
 
@@ -1285,8 +1285,8 @@ onBeforeUnmount(() => {
 .row-action,
 .page-btn,
 .upload-trigger {
-  background: rgba(255, 255, 255, 0.05);
-  color: #f4f7ff;
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  color: var(--theme-text);
 }
 
 .toolbar-button--ghost {
@@ -1297,26 +1297,26 @@ onBeforeUnmount(() => {
 .tab-bar {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .tab-button {
   min-width: 142px;
   min-height: 42px;
   padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-bottom: none;
   border-radius: 10px 10px 0 0;
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(203, 212, 228, 0.82);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
 }
 
 .tab-button.active {
-  border-color: rgba(104, 122, 255, 0.26);
-  background: rgba(99, 94, 143, 0.18);
-  color: #8f7dff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 26%, transparent);
+  background: color-mix(in srgb, var(--theme-control-hover) 18%, transparent);
+  color: var(--theme-tone-blue);
   box-shadow: inset 0 -2px 0 #7c5cff;
 }
 
@@ -1328,15 +1328,15 @@ onBeforeUnmount(() => {
 }
 
 .notice.success {
-  border: 1px solid rgba(52, 211, 153, 0.18);
-  background: rgba(16, 185, 129, 0.12);
-  color: #d4ffec;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-text);
 }
 
 .notice.error {
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd4d4;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  color: var(--theme-text);
 }
 
 .export-config-dialog-mask {
@@ -1346,7 +1346,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(3, 7, 18, 0.68);
+  background: color-mix(in srgb, var(--theme-input) 68%, transparent);
   backdrop-filter: blur(12px);
 }
 
@@ -1355,9 +1355,9 @@ onBeforeUnmount(() => {
   max-height: min(88vh, 920px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(10, 16, 30, 0.98), rgba(7, 12, 24, 0.98));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 28px 70px rgba(3, 8, 18, 0.42);
   overflow: hidden;
 }
@@ -1372,7 +1372,7 @@ onBeforeUnmount(() => {
 }
 
 .export-config-dialog__head {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .export-config-dialog__copy {
@@ -1381,13 +1381,13 @@ onBeforeUnmount(() => {
 }
 
 .export-config-dialog__copy strong {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 16px;
 }
 
 .export-config-dialog__copy p {
   margin: 0;
-  color: rgba(207, 215, 232, 0.72);
+  color: color-mix(in srgb, var(--theme-tone-blue) 72%, transparent);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -1395,10 +1395,10 @@ onBeforeUnmount(() => {
 .export-config-dialog__close {
   width: 34px;
   height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f8fbff;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 18px;
 }
 
@@ -1414,13 +1414,13 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .export-config-card__head strong {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
@@ -1430,7 +1430,7 @@ onBeforeUnmount(() => {
 }
 
 .export-config-field span {
-  color: #f5f7ff;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1438,10 +1438,10 @@ onBeforeUnmount(() => {
 .export-config-field input,
 .export-config-field textarea {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(25, 32, 50, 0.82);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 82%, transparent);
+  color: var(--theme-text);
   padding: 12px 14px;
   outline: none;
   font-size: 13px;
@@ -1449,7 +1449,7 @@ onBeforeUnmount(() => {
 }
 
 .export-config-dialog__footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--theme-border);
   justify-content: flex-end;
 }
 
@@ -1472,9 +1472,9 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(249, 115, 22, 0.18));
-  color: #ffb4b4;
-  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-red) 22%, transparent), color-mix(in srgb, var(--theme-tone-amber) 18%, transparent));
+  color: var(--theme-tone-red);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 22%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -1485,28 +1485,28 @@ onBeforeUnmount(() => {
 }
 
 .delete-dialog__content strong {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 15px;
 }
 
 .delete-dialog__content span {
-  color: rgba(207, 215, 232, 0.72);
+  color: color-mix(in srgb, var(--theme-tone-blue) 72%, transparent);
   font-size: 12px;
   line-height: 1.6;
   word-break: break-word;
 }
 
 .delete-dialog__confirm {
-  border-color: rgba(248, 113, 113, 0.22);
-  background: linear-gradient(135deg, #ef4444, #f97316);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 22%, transparent);
+  background: linear-gradient(135deg, var(--theme-tone-red), var(--theme-tone-amber));
   box-shadow: 0 18px 38px rgba(239, 68, 68, 0.24);
 }
 
 .workspace-card,
 .editor-card {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(10, 16, 30, 0.98), rgba(7, 12, 24, 0.98));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -1525,9 +1525,9 @@ onBeforeUnmount(() => {
 .select-shell,
 .price-row input,
 .result-box {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(25, 32, 50, 0.78);
+  background: color-mix(in srgb, var(--theme-panel-soft) 78%, transparent);
 }
 
 .field-shell {
@@ -1536,7 +1536,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 40px;
   padding: 0 12px;
-  color: rgba(207, 215, 232, 0.76);
+  color: color-mix(in srgb, var(--theme-tone-blue) 76%, transparent);
 }
 
 .field-shell--search {
@@ -1553,7 +1553,7 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   background: transparent;
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
@@ -1575,20 +1575,20 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .stat-card span {
-  color: rgba(204, 213, 229, 0.74);
+  color: var(--theme-text);
   font-size: 12px;
 }
 
 .stat-card strong {
   display: block;
   margin-top: 6px;
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 16px;
   font-weight: 800;
 }
@@ -1602,36 +1602,36 @@ onBeforeUnmount(() => {
 }
 
 .stat-icon--violet {
-  background: rgba(110, 73, 214, 0.28);
-  color: #c6b1ff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 28%, transparent);
+  color: var(--theme-tone-violet);
 }
 
 .stat-icon--green {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
+  background: color-mix(in srgb, var(--theme-accent) 20%, transparent);
+  color: var(--theme-accent);
 }
 
 .stat-icon--blue {
-  background: rgba(37, 99, 235, 0.22);
-  color: #93c5fd;
+  background: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
+  color: var(--theme-tone-blue);
 }
 
 .stat-icon--amber {
-  background: rgba(245, 158, 11, 0.24);
-  color: #fcd34d;
+  background: color-mix(in srgb, var(--theme-tone-amber) 24%, transparent);
+  color: var(--theme-tone-amber);
 }
 
 .stat-icon--slate {
-  background: rgba(100, 116, 139, 0.26);
-  color: #d4dce8;
+  background: color-mix(in srgb, var(--theme-control-hover) 26%, transparent);
+  color: var(--theme-text);
 }
 
 .table-card {
   margin-top: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
   overflow: hidden;
-  background: rgba(14, 20, 36, 0.9);
+  background: color-mix(in srgb, var(--theme-panel) 90%, transparent);
 }
 
 .table-header,
@@ -1652,11 +1652,11 @@ onBeforeUnmount(() => {
 .table-footer {
   justify-content: space-between;
   padding: 8px 12px;
-  color: rgba(216, 223, 237, 0.78);
+  color: color-mix(in srgb, var(--theme-tone-blue) 78%, transparent);
 }
 
 .table-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .table-header__right,
@@ -1677,7 +1677,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #ffffff;
+  color: var(--theme-text);
 }
 
 .icon-button,
@@ -1691,14 +1691,14 @@ onBeforeUnmount(() => {
 
 .icon-button.active,
 .page-btn.active {
-  border-color: rgba(144, 102, 255, 0.52);
-  color: #c8b6ff;
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 52%, transparent);
+  color: var(--theme-tone-violet);
   box-shadow: inset 0 0 0 1px rgba(144, 102, 255, 0.18);
 }
 
 .empty-state {
   padding: 28px 18px;
-  color: rgba(207, 215, 232, 0.74);
+  color: color-mix(in srgb, var(--theme-tone-blue) 74%, transparent);
 }
 
 .product-table {
@@ -1716,14 +1716,14 @@ onBeforeUnmount(() => {
 
 .product-table__head {
   min-height: 42px;
-  color: rgba(193, 203, 223, 0.74);
+  color: var(--theme-text);
   font-size: 12px;
 }
 
 .product-row {
   min-height: 68px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  color: #eef2ff;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-text);
 }
 
 .product-info {
@@ -1746,7 +1746,7 @@ onBeforeUnmount(() => {
   width: 52px;
   height: 52px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 
 .product-copy {
@@ -1758,7 +1758,7 @@ onBeforeUnmount(() => {
 .product-copy strong,
 .grid-card strong,
 .preview-card strong {
-  color: #ffffff;
+  color: var(--theme-text);
 }
 
 .product-copy strong {
@@ -1786,34 +1786,34 @@ onBeforeUnmount(() => {
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   font-size: 11px;
   font-weight: 700;
 }
 
 .mini-pill--neutral {
-  color: rgba(236, 242, 255, 0.88);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
 }
 
 .status--done {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.16);
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
 }
 
 .status--generating {
-  color: #38bdf8;
-  background: rgba(37, 99, 235, 0.16);
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
 }
 
 .status--failed {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.18);
+  color: var(--theme-tone-amber);
+  background: color-mix(in srgb, var(--theme-tone-amber) 18%, transparent);
 }
 
 .status--idle {
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, 0.16);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-control-hover) 16%, transparent);
 }
 
 .grid-cards {
@@ -1827,9 +1827,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .grid-card__top {
@@ -1843,13 +1843,13 @@ onBeforeUnmount(() => {
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 
 .grid-card p,
 .preview-card p {
   margin: 0;
-  color: rgba(207, 215, 232, 0.74);
+  color: color-mix(in srgb, var(--theme-tone-blue) 74%, transparent);
   line-height: 1.7;
 }
 
@@ -1865,10 +1865,10 @@ onBeforeUnmount(() => {
   width: 72px;
   height: 72px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .reference-thumb img {
@@ -1887,8 +1887,8 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  background: rgba(7, 10, 20, 0.74);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-panel) 74%, transparent);
+  color: var(--theme-text);
 }
 
 .page-size {
@@ -1897,9 +1897,9 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .editor-stage {
@@ -1923,7 +1923,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #ffffff;
+  color: var(--theme-text);
 }
 
 .panel-head strong,
@@ -1941,9 +1941,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 10px;
   padding: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--theme-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .upload-preview {
@@ -1955,7 +1955,7 @@ onBeforeUnmount(() => {
   width: 170px;
   height: 170px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 
 .upload-trigger {
@@ -1965,7 +1965,7 @@ onBeforeUnmount(() => {
 
 .upload-box small,
 .generate-box p {
-  color: rgba(195, 205, 224, 0.72);
+  color: var(--theme-text);
   font-size: 12px;
   text-align: center;
 }
@@ -1976,13 +1976,13 @@ onBeforeUnmount(() => {
 }
 
 .editor-field span {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 13px;
   font-weight: 700;
 }
 
 .editor-field em {
-  color: #f87171;
+  color: var(--theme-tone-red);
   font-style: normal;
 }
 
@@ -2004,12 +2004,12 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 10px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--theme-border);
 }
 
 .result-topbar {
   justify-content: space-between;
-  color: rgba(225, 232, 245, 0.8);
+  color: var(--theme-text);
 }
 
 .result-block {
@@ -2023,17 +2023,17 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  color: rgba(242, 246, 255, 0.94);
+  color: var(--theme-text);
 }
 
 .result-box span {
-  color: rgba(148, 163, 184, 0.8);
+  color: var(--theme-text-secondary);
   white-space: nowrap;
 }
 
 .result-box--error {
-  border-color: rgba(248, 113, 113, 0.24);
-  background: rgba(239, 68, 68, 0.1);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 24%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 10%, transparent);
 }
 
 .result-box--error > div {
@@ -2051,9 +2051,9 @@ onBeforeUnmount(() => {
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(25, 32, 50, 0.78);
+  background: color-mix(in srgb, var(--theme-panel-soft) 78%, transparent);
 }
 
 .result-analysis-board__preview,
@@ -2062,8 +2062,8 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .result-analysis-board__preview img {
@@ -2075,7 +2075,7 @@ onBeforeUnmount(() => {
 .result-analysis-board__placeholder {
   display: grid;
   place-items: center;
-  color: rgba(195, 205, 224, 0.66);
+  color: var(--theme-text);
   font-size: 12px;
   text-align: center;
   padding: 14px;
@@ -2088,13 +2088,13 @@ onBeforeUnmount(() => {
 }
 
 .result-analysis-board__meta strong {
-  color: #ffffff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 
 .result-analysis-board__meta p {
   margin: 0;
-  color: rgba(207, 215, 232, 0.76);
+  color: color-mix(in srgb, var(--theme-tone-blue) 76%, transparent);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -2112,8 +2112,8 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .result-thumb-card img {
@@ -2128,7 +2128,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   padding: 8px;
-  background: linear-gradient(180deg, rgba(8, 12, 20, 0.56), rgba(8, 12, 20, 0.08) 38%, rgba(8, 12, 20, 0.48));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 56%, transparent), color-mix(in srgb, var(--theme-panel) 8%, transparent) 38%, color-mix(in srgb, var(--theme-panel) 48%, transparent));
 }
 
 .thumb-index {
@@ -2138,8 +2138,8 @@ onBeforeUnmount(() => {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-text) 22%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2147,18 +2147,18 @@ onBeforeUnmount(() => {
 .thumb-tool {
   width: 26px;
   height: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(7, 13, 22, 0.48);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-panel) 48%, transparent);
+  color: var(--theme-text);
 }
 
 .primary-mark {
   position: absolute;
   left: 8px;
   bottom: 8px;
-  background: rgba(124, 92, 255, 0.94);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 94%, transparent);
+  color: var(--theme-text);
 }
 
 .regenerate-tile {
@@ -2166,7 +2166,7 @@ onBeforeUnmount(() => {
   place-items: center;
   gap: 8px;
   border-style: dashed;
-  color: rgba(228, 235, 248, 0.88);
+  color: var(--theme-text);
 }
 
 .editor-footer {
@@ -2178,9 +2178,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .preview-card__image,
@@ -2191,14 +2191,14 @@ onBeforeUnmount(() => {
 }
 
 .preview-card__image {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 
 .preview-card__placeholder {
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(195, 205, 224, 0.66);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 
 .preview-meta {
@@ -2212,16 +2212,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--theme-border);
 }
 
 .preview-meta dt {
-  color: rgba(195, 205, 224, 0.72);
+  color: var(--theme-text);
 }
 
 .preview-meta dd {
   margin: 0;
-  color: #ffffff;
+  color: var(--theme-text);
   text-align: right;
 }
 
@@ -2306,5 +2306,18 @@ onBeforeUnmount(() => {
   .table-footer__meta {
     flex-wrap: wrap;
   }
+}
+</style>
+
+<style>
+/* The global theme restyles every input; inputs nested in a styled shell must stay borderless. */
+html[data-app-theme] body #app .app-shell :is(.field-shell, .select-shell, .page-size) :is(input, select) {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
 }
 </style>

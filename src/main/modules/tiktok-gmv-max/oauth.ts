@@ -135,7 +135,9 @@ export class GmvMaxOAuthProvider implements OAuthClientProvider {
         if (settled) return
         settled = true
         if (timeout) clearTimeout(timeout)
+        // Drop the browser's keep-alive socket too: on Windows it keeps port 17863 bound and the next sign-in fails.
         this.callbackServer?.close()
+        this.callbackServer?.closeAllConnections?.()
         this.callbackServer = null
         if (error) reject(error)
         else if (result) resolve(result)
@@ -150,11 +152,11 @@ export class GmvMaxOAuthProvider implements OAuthClientProvider {
         try {
           result = validateGmvMaxOAuthCallback(url, this.oauthState)
         } catch (error) {
-          response.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' }).end('<h1>Invalid authorization response</h1><p>Return to VideoGenerate.</p>')
+          response.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', Connection: 'close' }).end('<h1>Invalid authorization response</h1><p>Return to VideoGenerate.</p>')
           finish(error instanceof Error ? error : new Error(String(error)))
           return
         }
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end('<h1>Authorization complete</h1><p>You can close this window and return to VideoGenerate.</p>')
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', Connection: 'close' }).end('<h1>Authorization complete</h1><p>You can close this window and return to VideoGenerate.</p>')
         finish(undefined, result)
       })
       this.callbackServer = server

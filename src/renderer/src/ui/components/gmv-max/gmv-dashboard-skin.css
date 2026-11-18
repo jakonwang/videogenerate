@@ -1,0 +1,1351 @@
+/*
+ * GMV MAX dashboard skin.
+ * One visual language for every GMV MAX page (the older pages included): neutral surfaces, hairline tables,
+ * status shown as icon/dot + text label (never a coloured fill), numbers in tabular figures.
+ * Selectors are prefixed with `html[data-app-theme] body #app .gmv-workspace.gv-skin` so they outrank both the view's long scoped stylesheet
+ * and the app-wide `#app .app-shell .is-*` fills (which use !important, hence !important here too).
+ * Colour tokens come from `.gv-viz` (gmv-max/v2/gmv-v2-viz.css).
+ */
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin {
+  --d-surface: var(--surface-1);
+  --d-border: var(--theme-border);
+  --d-line: var(--grid);
+  --d-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  --d-radius: 10px;
+  --status-info: var(--series-1);
+}
+
+/* ---------- tone helpers (safe from the global .is-* fills) ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-good { --tone: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-warning { --tone: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-serious { --tone: var(--status-serious); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-critical { --tone: var(--status-critical); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-info { --tone: var(--status-info); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gvt-neutral { --tone: var(--status-neutral); }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--tone, var(--status-neutral));
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dot--end { flex-direction: row; justify-content: flex-end; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dmuted { color: var(--text-muted); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- page header ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header h1,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header__copy h1 { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header__copy p { color: var(--text-muted); font-size: 12.5px; }
+
+/* ---------- section headings: plain titles, no accent cards ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel__heading {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading { margin: 2px 0 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading::before,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading::after { display: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading h2,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel__heading h2 { margin: 0; color: var(--text-primary); font-size: 15px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section__heading p,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel__heading p { margin: 3px 0 0; color: var(--text-muted); font-size: 12.5px; font-weight: 400; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel__heading { margin-bottom: 12px; }
+
+/* ---------- cards ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dcard {
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel { padding: 16px 18px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dcard { overflow: hidden; }
+
+/* ---------- KPI tiles (all old tile rows share one look) ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals, .gmv-dkpis) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px !important;
+  border: 1px solid var(--d-border) !important;
+  border-left-width: 1px !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article::before,
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article::after { display: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article span,
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article small {
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article small { color: var(--text-muted) !important; font-size: 11.5px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories) > article strong {
+  color: var(--text-primary) !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-protection-goals > article strong { color: var(--text-primary) !important; font-size: 13.5px !important; }
+/* tile icons carry the tone */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article > svg,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-results .gmv-metric-icon {
+  width: 30px !important;
+  height: 30px !important;
+  padding: 6px;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--tone, var(--status-neutral)) 14%, transparent) !important;
+  color: var(--tone, var(--status-neutral)) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-results .gmv-metric-icon svg { color: inherit !important; width: 18px; height: 18px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-decision-categories, .gmv-v2-signals) > article { --tone: var(--status-neutral); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-decision-categories, .gmv-v2-signals, .gmv-task-summary, .gmv-today-status) > article:is(.is-danger, .is-risk, .is-action) { --tone: var(--status-critical); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-decision-categories, .gmv-v2-signals, .gmv-task-summary) > article:is(.is-success, .is-opportunity) { --tone: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-decision-categories, .gmv-task-summary) > article.is-warning { --tone: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-v2-decision-categories, .gmv-v2-signals, .gmv-task-summary) > article:is(.is-blue, .is-action) { --tone: var(--status-info); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-results .gmv-metric-icon.is-blue { --tone: var(--series-1); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-results .gmv-metric-icon.is-red { --tone: var(--series-2); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-results .gmv-metric-icon:is(.is-cyan, .is-green) { --tone: var(--status-neutral); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-protection-goals > article { --tone: var(--status-info); }
+
+/* task summary tiles: dot + label on top, number, hint */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-summary > article { display: grid; gap: 4px; grid-template-columns: minmax(0, 1fr); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-summary > article > span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-summary > article > span::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-summary > article > strong { order: 0; }
+
+/* new pacing tiles (campaigns) */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi:hover { border-color: color-mix(in srgb, var(--text-primary) 22%, var(--d-border)) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi.is-selected { border-color: var(--text-primary) !important; box-shadow: inset 0 0 0 1px var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi__label { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi__icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi strong { color: var(--text-primary); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi small { color: var(--text-muted); font-size: 11.5px; line-height: 1.45; }
+
+/* ---------- toolbar above a table ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtoolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtoolbar__title h2 { margin: 0; color: var(--text-primary); font-size: 15px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtoolbar__title span { display: block; margin-top: 3px; color: var(--text-muted); font-size: 12.5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtoolbar__actions { display: flex; align-items: center; gap: 8px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter { position: relative; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > summary::-webkit-details-marker { display: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > summary .gmv-icon { width: 15px; height: 15px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter[open] > summary { border-color: var(--text-primary); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > .gmv-filter-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: min(640px, 80vw);
+  padding: 14px;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .3);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > .gmv-filter-panel > button { grid-column: 1 / -1; justify-self: end; }
+
+/* ---------- collapsible filter / detail rows ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-advanced-details {
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-advanced-details > summary {
+  min-height: 44px !important;
+  padding: 8px 14px !important;
+  gap: 10px !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-advanced-details > summary strong { color: var(--text-primary) !important; font-size: 13px !important; font-weight: 600 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-advanced-details > summary small { color: var(--text-muted) !important; font-size: 12px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-advanced-details > summary > svg:first-child { width: 16px; height: 16px; color: var(--text-secondary) !important; }
+
+/* ---------- tables ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) { width: 100%; border-collapse: collapse; font-size: 13px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 38px;
+  padding: 0 12px !important;
+  border-bottom: 1px solid var(--d-line) !important;
+  background: var(--d-surface) !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-align: left;
+  white-space: nowrap;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td {
+  height: auto !important;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid var(--d-line) !important;
+  background: transparent !important;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody tr:hover td { background: var(--d-hover) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td small { display: block; margin-top: 2px; color: var(--text-muted) !important; font-size: 11.5px !important; font-weight: 400 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-sort-button:hover { color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-sort-button small { color: inherit !important; font-size: 10px !important; background: transparent !important; padding: 0 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .is-num .gmv-sort-button { flex-direction: row; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-table-wrap,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dscroll { overflow: auto; border: 0 !important; border-radius: 0 !important; background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-table-wrap { border: 1px solid var(--d-border) !important; border-radius: var(--d-radius) !important; background: var(--d-surface) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-panel .gmv-table-wrap { border: 0 !important; border-radius: 0 !important; }
+
+/* new campaigns table details */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable { min-width: 1080px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable__name { min-width: 200px; max-width: 280px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-campaign-link { padding: 0; border: 0; background: transparent; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-campaign-link strong { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-campaign-link:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable__pacing { min-width: 150px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dstate { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dbar { position: relative; display: block; width: 120px; height: 6px; margin-top: 6px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary) 9%, transparent); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dbar i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--series-1); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dbar b { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--text-primary); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dlink { padding: 0; border: 0; background: transparent; color: var(--text-primary); font: inherit; cursor: pointer; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dlink b { display: inline-flex; min-width: 20px; height: 20px; padding: 0 6px; align-items: center; justify-content: center; border-radius: 999px; background: color-mix(in srgb, var(--status-warning) 22%, transparent); color: var(--text-primary); font-size: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dlink:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- status pills -> dot + label ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-status, .gmv-lifecycle, .gmv-flow-state, .gmv-enhancement-badge) {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  white-space: nowrap;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--tone, var(--status-neutral));
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-status.is-success { --tone: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-status.is-warning { --tone: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-status:is(.is-danger, .is-error) { --tone: var(--status-critical); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-status.is-blue { --tone: var(--status-info); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-flow-state svg,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-enhancement-badge svg { width: 14px; height: 14px; color: var(--text-secondary); }
+
+/* ---------- alerts: neutral surface + toned icon ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert {
+  border: 1px solid var(--d-border) !important;
+  border-left: 3px solid var(--tone, var(--status-neutral)) !important;
+  border-radius: 8px !important;
+  background: var(--d-surface) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+  font-size: 13px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert--warning { --tone: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert--danger { --tone: var(--status-critical); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert--success { --tone: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert > svg,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-alert .gmv-icon:first-child { color: var(--tone) !important; }
+
+/* ---------- segmented controls & pagination ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-segments {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--d-border) !important;
+  border-radius: 8px !important;
+  background: var(--d-surface) !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-segments > button {
+  height: 28px;
+  padding: 0 11px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-segments > button.is-active { background: color-mix(in srgb, var(--text-primary) 10%, transparent) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 0 !important;
+  padding: 10px 12px !important;
+  border: 0 !important;
+  border-top: 1px solid var(--d-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-pagination .gmv-button,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-pagination select { height: 30px !important; min-height: 30px !important; padding: 0 10px !important; font-size: 12.5px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dcard > .gmv-pagination,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dcard .gmv-pagination { border-top: 1px solid var(--d-line) !important; }
+
+/* ---------- empty states ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-empty { padding: 36px 16px !important; color: var(--text-muted) !important; font-size: 13px; text-align: center; background: transparent !important; border: 0 !important; }
+
+/* ---------- section rhythm ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-section { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------- growth plan page ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article { display: grid; gap: 4px; grid-template-columns: minmax(0, 1fr); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article > span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px !important; font-weight: 500 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article > span::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article > strong { color: var(--text-primary) !important; font-size: 24px !important; font-weight: 700 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article.is-observing { --tone: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article.is-normal { --tone: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-today-status > article.is-suggested { --tone: var(--status-info); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-growth-cycle-actions, .gmv-decision-scope) {
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-growth-cycle-actions { padding: 14px 16px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-growth-cycle-actions strong { font-size: 15px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-growth-cycle-actions small { font-size: 12.5px !important; color: var(--text-muted) !important; font-weight: 400 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kicker { color: var(--text-muted) !important; font-size: 11.5px !important; font-weight: 500 !important; letter-spacing: .02em; text-transform: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-store-tabs > button,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-scope-filter > button { border: 1px solid transparent !important; background: transparent !important; color: var(--text-secondary) !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-store-tabs > button.is-active,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-scope-filter > button.is-active { border-color: var(--d-border) !important; background: color-mix(in srgb, var(--text-primary) 8%, transparent) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-panel-heading h2 { font-size: 15px !important; font-weight: 600 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-decision-panel-heading p { font-size: 12.5px !important; font-weight: 400 !important; color: var(--text-muted) !important; }
+
+/* ---------- campaigns table: compact cells ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable td,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable td strong,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable td .gmv-dot { font-size: 13px !important; line-height: 1.4 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable td { white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable td small { white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-campaign-link { height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-icon-button { width: 30px !important; height: 30px !important; min-height: 30px !important; padding: 0 !important; display: inline-grid; place-items: center; border: 1px solid transparent !important; background: transparent !important; color: var(--text-secondary) !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-icon-button:hover { border-color: var(--d-border) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-icon-button svg { width: 16px; height: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-row__actions { display: flex; gap: 2px; justify-content: flex-end; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-dlink { height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable thead th:first-child,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable tbody td:first-child { position: sticky; left: 0; z-index: 1; background: var(--d-surface) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable thead th:first-child { z-index: 2; }
+
+/* ---------- profit & cost page ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > .gmv-section__heading { order: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > [data-testid="gmv-store-profit-summary"] { order: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > .gmv-alert { order: 2; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > [data-testid="gmv-product-cost-page"] { order: 3; margin-bottom: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > .gmv-store-cost-panel { order: 4; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-task-page > .gmv-notification-panel { order: 5; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 !important; border: 0 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card header strong { font-size: 14px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card header small { display: block; margin-top: 2px; font-size: 11.5px !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card__primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 !important; border: 0 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card__primary span { display: grid; gap: 2px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card__primary small,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card dt { font-size: 12px !important; font-weight: 400 !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card__primary strong { font-size: 22px !important; font-weight: 700 !important; color: var(--text-primary) !important; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 16px; margin: 0; padding-top: 12px !important; border-top: 1px solid var(--d-line) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-profit-card dd { margin: 2px 0 0; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-profit-card, .gmv-cost-summary) :is(.is-positive, .is-negative) { color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cost-summary { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cost-summary > * {
+  padding: 10px 12px !important;
+  border: 1px solid var(--d-line) !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cost-summary small,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cost-summary span { font-size: 12px !important; font-weight: 400 !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cost-summary strong { font-size: 20px !important; font-weight: 700 !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-account-metadata { border: 1px solid var(--d-line) !important; border-radius: 8px !important; background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-account-metadata article { background: transparent !important; border-color: var(--d-line) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-account-metadata span { font-size: 12px !important; color: var(--text-muted) !important; font-weight: 400 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-account-metadata strong { font-size: 16px !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-account-metadata__icon { color: var(--text-secondary) !important; }
+
+/* ---------- forms inside panels ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-form-grid { gap: 12px 14px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-form-grid label > span { font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-form-grid label small { font-size: 11.5px !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-form-grid :is(input, select) { height: 36px !important; min-height: 36px !important; font-size: 13px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-filter-panel :is(input, select) { height: 34px !important; min-height: 34px !important; font-size: 13px !important; }
+
+/* ---------- automation page ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi--static { cursor: default; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi--static:hover { border-color: var(--d-border) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dguards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 10px 14px;
+  list-style: none;
+  border: 1px dashed var(--d-border);
+  border-radius: var(--d-radius);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dguards li { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dguards svg { width: 14px; height: 14px; color: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable--auto { min-width: 720px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dselect { height: 32px !important; min-height: 32px !important; min-width: 180px; padding: 0 28px 0 10px !important; font-size: 13px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dperms { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dperms span {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 3px;
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dperms span.is-on { color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dperms svg { width: 12px; height: 12px; color: var(--text-muted); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dperms span.is-on svg { color: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-button--sm { height: 30px !important; min-height: 30px !important; padding: 0 10px !important; font-size: 12.5px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-empty__action { margin: 12px auto 0; display: inline-flex; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-rule-card,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dtable .gmv-policy { display: table-row !important; padding: 0 !important; border: 0 !important; background: transparent !important; }
+
+/* ---------- creatives page ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-section__heading { order: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-blocker-alert { order: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-hero { order: 2; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-filters { order: 3; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-layout { order: 4; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-queue { order: 5; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-creative-command { order: 6; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-task-page > .gmv-experiment-board { order: 7; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-hero {
+  display: flex !important;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-view-tabs {
+  display: inline-flex;
+  align-self: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--d-border) !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-view-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-view-tabs > button.is-active { background: color-mix(in srgb, var(--text-primary) 10%, transparent) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-view-tabs svg { width: 15px; height: 15px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-kpis {
+  flex: 1 1 560px;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px 0;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-kpis > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 2px 12px !important;
+  border: 0 !important;
+  border-left: 1px solid var(--d-line) !important;
+  background: transparent !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-kpis small { font-size: 12px !important; font-weight: 400 !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-kpis strong { font-size: 18px !important; font-weight: 700 !important; color: var(--text-primary) !important; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-command,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-experiment-board,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-creative-queue {
+  padding: 16px 18px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: var(--d-radius) !important;
+  background: var(--d-surface) !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-subheading h3 { margin: 0; font-size: 14px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-subheading p { margin: 3px 0 0; font-size: 12.5px !important; font-weight: 400 !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-funnel-track article { background: transparent !important; border-color: var(--d-line) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-funnel-track article span { font-size: 12.5px !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-funnel-track article strong { color: var(--text-primary) !important; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-funnel-track article i { background: var(--series-1) !important; opacity: 1; }
+
+/* ---------- approvals list ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-v2-action-list > * {
+  border-color: var(--d-line) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ---------- top navigation layout (menu above the content, full-width pages) ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-feature-layout.is-topnav { display: flex !important; flex-direction: column; grid-template-columns: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-feature-layout.is-topnav > .gmv-feature-content { width: 100%; padding: 16px 24px 48px; }
+@media (max-width: 780px) { html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-feature-layout.is-topnav > .gmv-feature-content { padding: 12px 14px 40px; } }
+
+/* ---------- one table system for every GMV table ----------
+ * Body text 13px / 500, one muted 12px sub-line, headers 12px muted, 12px x 11px cell padding,
+ * 40px thumbnails, one-line product and campaign names (full text on hover). */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td {
+  padding: 11px 12px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  vertical-align: middle !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td :is(strong, span, b, a, button, div, p, em, i, label) {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td strong { font-weight: 600 !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td :is(small, small *) {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+  color: var(--text-muted) !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td small { display: block; margin-top: 2px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th,
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th :is(button, span) {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  color: var(--text-muted) !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th .gmv-sort-button:hover { color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th small {
+  font-size: 10.5px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+}
+
+/* product identity: 40px thumb + one-line name */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-identity {
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: center !important;
+  min-width: 240px;
+  max-width: 360px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-thumb {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  overflow: hidden;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-identity > div { min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-identity strong,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-identity small {
+  display: block !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* campaign name lists: one line each, at most two plus "+N" */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-series { display: grid; gap: 1px; max-width: 240px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-product-series strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td .gmv-more { color: var(--series-1) !important; }
+
+/* long ids and names in any cell stay on one line */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td > strong,
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td > small { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td > strong { display: block; }
+
+/* status labels inside tables use the same size as the text around them */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td :is(.gmv-status, .gmv-dot, .gmv-dstate, .gmv-lifecycle, .gmv-flow-state) { font-size: 13px !important; font-weight: 500 !important; }
+
+/* inline buttons in rows: same compact size everywhere */
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td .gmv-button {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12.5px !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td .gmv-icon-button {
+  width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td .gmv-score { width: 64px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td { white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) tbody td :is(small, strong, span) { white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-pagination :is(span, small, strong) { font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+
+/* ---------- calmer page header + shared date bar ----------
+ * The top bar already names the page, so the header drops its icon tile and shrinks the title. */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header__symbol { display: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header h1,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header__copy h1 { font-size: 18px !important; font-weight: 650 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header__copy p { margin-top: 2px; font-size: 13px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header.has-range {
+  padding-bottom: 16px;
+  align-items: center !important;
+  border-bottom: 1px solid var(--theme-divider);
+}
+
+/* ---------- ads manager (campaigns): 4 KPIs, one toolbar, 7 data columns ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am { display: grid; gap: 20px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip {
+  display: grid;
+  grid-template-columns: repeat(var(--kpi-count, 4), minmax(0, 1fr));
+  border: 1px solid var(--d-border);
+  border-radius: 10px;
+  background: var(--d-surface);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item { padding: 18px 22px; display: grid; gap: 6px; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item + .gmv-kpistrip__item { border-left: 1px solid var(--d-border); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item > span { color: var(--text-muted); font-size: 13px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item > strong {
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__change { font-size: 12.5px !important; font-weight: 600 !important; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__change i { margin-left: 4px; color: var(--text-muted); font-style: normal; font-weight: 400; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__change.is-up { color: var(--status-good) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__change.is-down { color: var(--status-critical) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__change.is-flat { color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__spacer { flex: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__search {
+  width: 280px;
+  max-width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-surface);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__search svg { width: 15px; height: 15px; color: var(--text-muted); flex-shrink: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__search input {
+  min-width: 0;
+  flex: 1;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  outline: none;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__seg { display: inline-flex; padding: 2px; border: 1px solid var(--d-border); border-radius: 8px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__seg button {
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 11px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__seg button:hover { color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__seg button.is-active {
+  background: color-mix(in srgb, var(--text-primary) 11%, transparent) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__seg em { color: var(--text-muted); font-size: 11.5px; font-style: normal; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--text-primary);
+  color: var(--d-surface);
+  font-size: 11px;
+}
+/* roomier rows than the shared table system, and row actions only on hover */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table tbody td { padding-top: 14px !important; padding-bottom: 14px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table .gmv-dtable__name { max-width: 320px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table .gmv-campaign-link strong { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pacing { color: var(--tone, var(--text-muted)) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pacing.gvt-good { color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__suggest { display: block; margin-top: 2px; font-size: 12px !important; color: var(--series-1) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__actions { opacity: 0; transition: opacity .12s; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table tr:hover .gmv-am__actions,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__actions:focus-within { opacity: 1; }
+@media (max-width: 1180px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item { padding: 14px 16px; }
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__item > strong { font-size: 21px; }
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-kpistrip__hint { color: var(--text-muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* header tools: plain inline items instead of a boxed card */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header .gmv-header__actions {
+  padding: 0 !important;
+  gap: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header :is(.gmv-v2-scope-button, .gmv-v2-freshness) {
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header .gmv-v2-scope-button:hover { border-color: var(--d-border) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header :is(.gmv-v2-scope-button, .gmv-v2-freshness) small { display: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header :is(.gmv-v2-scope-button, .gmv-v2-freshness) strong { font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary, var(--text-muted)) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header :is(.gmv-v2-scope-button, .gmv-v2-freshness) > svg:first-child { width: 15px !important; color: var(--text-muted) !important; }
+
+/* ---------- ads manager editing: selection, inline edit, on-off switch, bulk bar, views and columns ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pick { width: 36px; padding-right: 0 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pick input,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__check input { width: 15px; height: 15px; accent-color: var(--theme-accent); cursor: pointer; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table tr.is-selected td { background: color-mix(in srgb, var(--theme-accent) 7%, transparent) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__bulk {
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, var(--d-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-accent) 8%, var(--d-surface));
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__bulk-count { margin-right: 6px; color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust > summary,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__menu > summary { display: inline-flex; align-items: center; gap: 6px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel { display: flex !important; align-items: center; gap: 8px; min-width: 0 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel label { display: inline-flex !important; align-items: center; gap: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel input { width: 90px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__menu-panel { width: 260px; display: grid !important; gap: 6px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__menu-empty { margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view button {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view button:hover,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view button.is-active { background: color-mix(in srgb, var(--text-primary) 8%, transparent) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view .gmv-am__view-remove { justify-content: center; padding: 0 !important; color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__view-save { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-top: 6px; border-top: 1px solid var(--d-border); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__check { display: flex !important; align-items: center; gap: 8px; padding: 3px 2px; color: var(--text-primary); font-size: 13px; cursor: pointer; }
+/* on-off switch in the status column */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__switch {
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__switch i {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  transition: background .15s;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__switch i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__switch.is-on i { background: var(--status-good); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__switch.is-on i::after { transform: translateX(13px); }
+/* pencil appears on row hover next to editable values */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__editable { display: inline-flex !important; align-items: center; justify-content: flex-end; gap: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin small.gmv-am__editable { display: flex !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pen {
+  width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  display: inline-grid;
+  place-items: center;
+  border: 0 !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  opacity: 0;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pen svg { width: 13px; height: 13px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table tr:hover .gmv-am__pen,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pen:focus-visible { opacity: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__pen:hover { background: color-mix(in srgb, var(--text-primary) 10%, transparent) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__inline { display: grid; justify-items: end; gap: 3px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__inline input {
+  width: 110px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--theme-accent) !important;
+  border-radius: 6px !important;
+  background: var(--d-surface) !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  text-align: right;
+}
+/* the checkbox column replaces the old 280px first column */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table :is(th, td).gmv-am__pick { width: 44px !important; min-width: 44px !important; max-width: 44px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__table :is(th, td):nth-child(2) { min-width: 220px; }
+/* compact single-column menus; bulk menus open to the right of their button */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > .gmv-filter-panel.gmv-am__menu-panel { width: 260px !important; grid-template-columns: minmax(0, 1fr) !important; gap: 4px !important; padding: 10px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > .gmv-filter-panel.gmv-am__menu-panel > button { justify-self: start; margin-top: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dfilter > .gmv-filter-panel.gmv-am__adjust-panel { left: 0; right: auto; width: auto !important; padding: 10px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__check span { font-size: 13px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel { flex-wrap: nowrap; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel select { width: 120px !important; min-width: 120px !important; flex: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-am__adjust-panel > button { flex: none; grid-column: auto; }
+
+/* expired / expiring TikTok authorization: message on the left, the fix on the right */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-auth-banner { display: flex !important; align-items: center; gap: 10px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-auth-banner > span { flex: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-auth-banner > .gmv-button { flex: none; }
+
+/* ---------- always-visible filters: store dropdown in the header, date / type / search row on data pages ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-header-filters { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-header-search { width: 240px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-store-select {
+  position: relative;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-surface);
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-store-select > svg:first-child { width: 15px; height: 15px; color: var(--text-muted); flex-shrink: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-store-select > svg:last-child { position: absolute; right: 9px; width: 14px; height: 14px; color: var(--text-muted); pointer-events: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-store-select select {
+  max-width: 200px;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  outline: none;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-store-select select option { background: var(--d-surface); color: var(--text-primary); }
+/* the table dims while a filter reloads it, so a click visibly does something */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dcard.is-loading .gmv-dscroll { opacity: .45; pointer-events: none; transition: opacity .15s; }
+
+/* ---------- creatives page, simple layout: to-do cards, 4 KPIs, status tabs, 7-column list, collapsed advanced tools ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx { display: grid; gap: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item + .gmv-cx-todo__item { border-left: 1px solid var(--d-line); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__icon { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item.is-attention .gmv-cx-todo__icon { color: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item p { flex: 1; min-width: 0; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item p b { margin-right: 2px; color: var(--text-primary); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link {
+  flex: none;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 4px 2px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--series-1) !important;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link:disabled { color: var(--text-muted) !important; cursor: default; text-decoration: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-kpis .gmv-kpistrip__item { padding: 12px 18px; gap: 2px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-kpis .gmv-kpistrip__item > span { font-size: 12.5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-kpis .gmv-kpistrip__item > strong { font-size: 20px; font-weight: 650; }
+@media (max-width: 1100px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo { grid-template-columns: minmax(0, 1fr); }
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-todo__item + .gmv-cx-todo__item { border-left: 0; border-top: 1px solid var(--d-line); }
+}
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestions > header { display: grid; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--d-line); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestions > header strong { color: var(--text-primary); font-size: 14px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestions > header small { color: var(--text-muted); font-size: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--d-line); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion:last-child { border-bottom: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion__main { display: grid; gap: 2px; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion__main strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion__main span { color: var(--text-secondary); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion__main small { color: var(--text-muted); font-size: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion__actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-list { display: grid; gap: 10px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-select { width: auto; min-width: 120px; height: 34px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table { min-width: 860px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__actions { width: 1%; white-space: nowrap; text-align: right !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row { cursor: pointer; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table tbody td { padding-top: 8px !important; padding-bottom: 8px !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video { display: flex; align-items: center; gap: 12px; min-width: 0; max-width: 420px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb {
+  position: relative;
+  flex: none;
+  width: 42px !important;
+  height: 56px !important;
+  min-height: 0 !important;
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent) !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb:disabled { cursor: default; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb img { width: 100%; height: 100%; object-fit: cover; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb img.is-product { background: #fff; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__badge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: .02em;
+  text-align: center;
+  pointer-events: none;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__placeholder { width: 16px; height: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__play {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 4px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  fill: #fff;
+  opacity: 0;
+  transition: opacity .15s;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb:not(:disabled):hover .gmv-cx-video__play,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__thumb:not(:disabled):focus-visible .gmv-cx-video__play { opacity: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text { display: grid; gap: 3px; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text small { display: flex !important; align-items: center; gap: 6px; margin: 0 !important; white-space: nowrap; overflow: hidden; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text small img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-state { display: inline-flex; align-items: center; gap: 6px; color: var(--text-primary); font-size: 12.5px; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-state.is-muted { color: var(--text-muted); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-state.is-muted::before { display: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chevron {
+  width: 28px !important;
+  height: 28px !important;
+  min-height: 0 !important;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chevron:hover,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row.is-expanded .gmv-cx-chevron { background: var(--d-hover) !important; color: var(--text-primary) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chevron .gmv-icon { width: 16px; height: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table tr.is-expanded td { border-bottom-color: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail-row td { background: color-mix(in srgb, var(--text-primary) 2.5%, transparent) !important; padding: 4px 16px 14px !important; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced > summary { display: flex; align-items: center; cursor: pointer; list-style: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced > summary::-webkit-details-marker { display: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced > summary > span { display: grid; flex: 1; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced[open] > summary > svg:last-child { transform: rotate(180deg); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced__body { display: grid; gap: 16px; padding: 4px 14px 16px; border-top: 1px solid var(--d-line); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced__split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-block { display: grid; gap: 10px; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-block > h3 { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-block > h3 .gmv-icon { width: 15px; height: 15px; color: var(--text-secondary); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx .gmv-list-panel { padding: 0 !important; border: 0 !important; background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-regenerate { justify-self: start; }
+@media (max-width: 1100px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-advanced__split { grid-template-columns: minmax(0, 1fr); }
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-suggestion { flex-wrap: wrap; }
+}
+
+/* ---------- creatives page v3: top earners / wasters, segment chips, ROI pills, spend bars ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top {
+  min-width: 0;
+  padding: 12px 16px 8px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top.is-waste { border-color: color-mix(in srgb, var(--status-critical) 45%, var(--d-border)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__title { display: inline-flex; align-items: center; gap: 6px; color: var(--tone); font-size: 14px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__title .gmv-icon { width: 16px; height: 16px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top ol { margin: 0; padding: 0; list-style: none; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--d-line); font-size: 13px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top li:first-child { border-top: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__rank { flex: none; width: 18px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__value { flex: none; color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__value.is-waste { color: var(--status-critical) !important; background: transparent !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-top__empty { margin: 8px 0 6px; color: var(--text-muted); font-size: 13px; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip:hover { color: var(--text-primary) !important; border-color: var(--text-muted) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip.is-active {
+  border-color: var(--text-primary) !important;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone, var(--status-neutral)); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip em { color: var(--text-muted); font-style: normal; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-chip.is-active em { color: var(--text-secondary); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link { display: inline-flex; align-items: center; gap: 5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link .gmv-icon { width: 14px; height: 14px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-link.is-warning { color: var(--status-warning) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-summary { margin: -2px 0 0; color: var(--text-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-table-wrap.is-loading .gmv-cx-table { opacity: .45; transition: opacity .15s; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table { min-width: 760px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__title { overflow: hidden; color: var(--text-primary); font-size: 13.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-video__text small { display: block !important; overflow: hidden; text-overflow: ellipsis; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__spend { width: 22%; min-width: 150px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-spend { display: block; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar-track { display: block; height: 4px; margin-top: 5px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bar-track i { display: block; height: 100%; border-radius: 2px; background: var(--series-1); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill {
+  display: inline-block;
+  min-width: 48px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--status-neutral)) 16%, transparent) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-good { color: var(--status-good) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-critical { color: var(--status-critical) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-pill.gvt-neutral { background: transparent !important; }
+@media (max-width: 1000px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tops { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- creatives page: exclude / restore and push ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__check { width: 36px; padding-right: 0 !important; text-align: center !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__check input { width: 15px; height: 15px; margin: 0; accent-color: var(--series-1); cursor: pointer; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row.is-selected td { background: color-mix(in srgb, var(--series-1) 9%, transparent) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row.is-excluded .gmv-cx-video__thumb,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row.is-excluded .gmv-cx-spend,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row.is-excluded .gmv-cx-bar-track { opacity: .5; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--status-neutral)) 18%, transparent);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tag.gvt-warning { color: var(--status-warning); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-tag.gvt-critical { color: var(--status-critical); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-table__actions { display: table-cell; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row-button {
+  height: 28px !important;
+  min-height: 0 !important;
+  margin-right: 4px;
+  padding: 0 12px !important;
+  border: 1px solid var(--d-border) !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-secondary) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  opacity: .75;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row:hover .gmv-cx-row-button { opacity: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row-button:hover { border-color: var(--status-critical) !important; color: var(--status-critical) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row-button[data-testid="gmv-creative-restore"]:hover { border-color: var(--status-good) !important; color: var(--status-good) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bulk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 16px;
+  border: 1px solid color-mix(in srgb, var(--series-1) 45%, var(--d-border));
+  border-radius: var(--d-radius);
+  background: color-mix(in srgb, var(--series-1) 10%, var(--d-surface));
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bulk strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-bulk__notice { color: var(--status-warning); font-size: 12.5px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-danger-button {
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 14px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: var(--status-critical) !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+
+/* ---------- creatives page: row detail panel ---------- */
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail-row td { padding: 6px 16px 16px !important; white-space: normal !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(0, 1.4fr);
+  gap: 14px 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--d-line);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+  cursor: default;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__product { display: flex; gap: 12px; min-width: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__product img { flex: none; width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #fff; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__product-text { display: grid; gap: 3px; min-width: 0; align-content: start; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__label { color: var(--text-muted); font-size: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__product-text p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+}
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__meta { overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__stats div { min-width: 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__stats dt { overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__stats dd { margin: 3px 0 0; color: var(--text-primary); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding-top: 10px; border-top: 1px solid var(--d-line); }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__foot .gmv-cx-link { margin-left: 6px; font-size: 12px; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__foot .gmv-cx-row-button { opacity: 1; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-row-button.is-plain:hover { border-color: var(--text-muted) !important; color: var(--text-primary) !important; }
+@media (max-width: 1200px) {
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail { grid-template-columns: minmax(0, 1fr); }
+  html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-cx-detail__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

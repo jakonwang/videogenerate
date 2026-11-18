@@ -2,13 +2,12 @@ import type http from 'node:http'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { webPlatformService } from './service'
+import { isDevelopmentEnv } from '../../lib/appEnv'
 import { livePhotoService } from '../live-photo/service'
 import { productImageMaterialsService } from '../product-image-materials/service'
 import { videoParserDownloadService } from '../video-parser-download/service'
 import { normalizeCapabilityProfileState } from '../../../shared/platformSettings'
 import { agentOsService } from '../agent-os/service'
-import { tiktokCreatorOutreachRepo } from '../tiktok-creator-outreach/repo'
-import { tiktokShopAffiliateApi } from '../tiktok-creator-outreach/apiClient'
 
 type JsonObject = Record<string, unknown>
 
@@ -172,28 +171,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         timestamp: Date.now(),
         dataDir: String(process.env.VIDEOGENERATE_DATA_DIR || '').trim() || undefined,
       })
-      return
-    }
-    if (req.method === 'POST' && pathname === '/plugins/tiktok-creator-outreach/events') {
-      const body = await readBody(req)
-      await tiktokCreatorOutreachRepo.appendAudit({
-        accountId: typeof body.accountId === 'string' ? body.accountId : 'chrome-extension',
-        action: body.type === 'creators_read' || body.type === 'invite_confirmed' || body.type === 'message_confirmed' ? body.type : 'extension_event',
-        status: 'success',
-        count: Array.isArray((body.payload as Record<string, unknown> | undefined)?.items) ? ((body.payload as Record<string, unknown>).items as unknown[]).length : undefined,
-        detail: JSON.stringify(body.payload || {}).slice(0, 2000),
-      })
-      json(res, 200, { ok: true })
-      return
-    }
-    if (req.method === 'GET' && pathname === '/plugins/tiktok-creator-outreach/oauth/callback') {
-      const code = String(url.searchParams.get('code') || '')
-      const state = String(url.searchParams.get('state') || '')
-      if (!code || !state) { json(res, 400, { ok: false, error: 'missing code or state' }); return }
-      const result = await tiktokShopAffiliateApi.handleOAuthCallback(code, state)
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end('<!doctype html><html><body><h2>TikTok Shop authorization completed</h2><p>You can close this window and return to VideoGenerate.</p></body></html>')
-      void result
       return
     }
 
@@ -380,6 +357,12 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
     }
 
     if (req.method === 'POST' && pathname.startsWith('/payments/notify/')) {
+      // 旧的本地模拟支付回调：不验签、谁都能调。真实收款已迁到云端服务（services/cloud，带验签），
+      // 这里只在开发环境保留给旧的 web-next 联调页面使用。
+      if (!isDevelopmentEnv()) {
+        json(res, 410, { ok: false, error: '本地支付回调已停用，请使用云端服务支付' })
+        return
+      }
       const orderId = pathname.split('/').pop() || ''
       const body = await readBodyClean(req)
       const result = await webPlatformService.payOrder(orderId, {
@@ -404,165 +387,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
     if (req.method === 'GET' && pathname === '/plugins/installed') {
       const result = await webPlatformService.listInstalledPlugins(token)
       json(res, 200, { ok: true, plugins: result })
-      return
-    }
-
-    if (pathname === '/plugins/geelark-publisher/config' && req.method === 'GET') {
-      const result = await webPlatformService.getGeelarkPluginConfig(token)
-      json(res, 200, { ok: true, config: result })
-      return
-    }
-
-    if (pathname === '/plugins/geelark-publisher/config' && req.method === 'POST') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.setGeelarkPluginConfig(token, {
-        baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
-        appId: typeof body.appId === 'string' ? body.appId : undefined,
-        appSecret: typeof body.appSecret === 'string' ? body.appSecret : undefined,
-        accessToken: typeof body.accessToken === 'string' ? body.accessToken : undefined,
-        requestTimeoutMs: typeof body.requestTimeoutMs === 'number' ? Number(body.requestTimeoutMs) : undefined,
-      })
-      json(res, 200, { ok: true, config: result })
-      return
-    }
-
-    if (req.method === 'GET' && pathname === '/plugins/geelark-publisher/cloud-phones') {
-      const result = await webPlatformService.listGeelarkCloudPhones(token)
-      json(res, 200, { ok: true, items: result })
-      return
-    }
-
-    if (req.method === 'GET' && pathname === '/plugins/geelark-publisher/accounts') {
-      const result = await webPlatformService.listGeelarkPublisherAccounts(token)
-      json(res, 200, { ok: true, items: result })
-      return
-    }
-
-    if (req.method === 'GET' && pathname === '/plugins/geelark-publisher/publish-candidates') {
-      const result = await webPlatformService.listGeelarkPublishCandidates(token)
-      json(res, 200, { ok: true, items: result })
-      return
-    }
-
-    if (req.method === 'GET' && pathname === '/plugins/geelark-publisher/music-presets') {
-      const result = await webPlatformService.listGeelarkMusicPresets(token)
-      json(res, 200, { ok: true, items: result })
-      return
-    }
-
-    if (req.method === 'POST' && pathname === '/plugins/geelark-publisher/music-presets') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.upsertGeelarkMusicPreset(token, {
-        id: typeof body.id === 'string' ? body.id : undefined,
-        label: typeof body.label === 'string' ? body.label : '',
-        refVideoId: typeof body.refVideoId === 'string' ? body.refVideoId : '',
-        remark: typeof body.remark === 'string' ? body.remark : undefined,
-      })
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    const geelarkMusicPresetMatch = /^\/plugins\/geelark-publisher\/music-presets\/([^/]+)$/.exec(pathname)
-    if (geelarkMusicPresetMatch && req.method === 'DELETE') {
-      await webPlatformService.deleteGeelarkMusicPreset(token, decodeURIComponent(geelarkMusicPresetMatch[1] || ''))
-      json(res, 200, { ok: true })
-      return
-    }
-
-    if (req.method === 'POST' && pathname === '/plugins/geelark-publisher/publish-title') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.generateGeelarkPublishTitles(token, {
-        cloneProjectId: typeof body.cloneProjectId === 'string' ? body.cloneProjectId : '',
-        contentLanguage: typeof body.contentLanguage === 'string' ? body.contentLanguage : undefined,
-        productTitle: typeof body.productTitle === 'string' ? body.productTitle : undefined,
-        productId: typeof body.productId === 'string' ? body.productId : undefined,
-        productReferenceImagePaths: Array.isArray(body.productReferenceImagePaths)
-          ? body.productReferenceImagePaths.map(String)
-          : [],
-      })
-      json(res, 200, { ok: true, ...result })
-      return
-    }
-
-    if (req.method === 'POST' && pathname === '/plugins/geelark-publisher/accounts') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.upsertGeelarkPublisherAccount(token, {
-        id: typeof body.id === 'string' ? body.id : undefined,
-        name: typeof body.name === 'string' ? body.name : '',
-        geelarkAccountId: typeof body.geelarkAccountId === 'string' ? body.geelarkAccountId : undefined,
-        cloudPhoneId: typeof body.cloudPhoneId === 'string' ? body.cloudPhoneId : '',
-        cloudPhoneName: typeof body.cloudPhoneName === 'string' ? body.cloudPhoneName : '',
-        remark: typeof body.remark === 'string' ? body.remark : undefined,
-        status: body.status === 'disabled' ? 'disabled' : 'active',
-      })
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    const geelarkAccountMatch = /^\/plugins\/geelark-publisher\/accounts\/([^/]+)$/.exec(pathname)
-    if (geelarkAccountMatch && req.method === 'POST') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.upsertGeelarkPublisherAccount(token, {
-        id: decodeURIComponent(geelarkAccountMatch[1] || ''),
-        name: typeof body.name === 'string' ? body.name : '',
-        geelarkAccountId: typeof body.geelarkAccountId === 'string' ? body.geelarkAccountId : undefined,
-        cloudPhoneId: typeof body.cloudPhoneId === 'string' ? body.cloudPhoneId : '',
-        cloudPhoneName: typeof body.cloudPhoneName === 'string' ? body.cloudPhoneName : '',
-        remark: typeof body.remark === 'string' ? body.remark : undefined,
-        status: body.status === 'disabled' ? 'disabled' : 'active',
-      })
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    if (geelarkAccountMatch && req.method === 'DELETE') {
-      await webPlatformService.deleteGeelarkPublisherAccount(token, decodeURIComponent(geelarkAccountMatch[1] || ''))
-      json(res, 200, { ok: true })
-      return
-    }
-
-    if (req.method === 'GET' && pathname === '/plugins/geelark-publisher/tasks') {
-      const result = await webPlatformService.listGeelarkPublishTasks(token)
-      json(res, 200, { ok: true, items: result })
-      return
-    }
-
-    const geelarkTaskMatch = /^\/plugins\/geelark-publisher\/tasks\/([^/]+)$/.exec(pathname)
-    if (geelarkTaskMatch && req.method === 'GET') {
-      const result = await webPlatformService.getGeelarkPublishTask(token, decodeURIComponent(geelarkTaskMatch[1] || ''))
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    const geelarkTaskSyncMatch = /^\/plugins\/geelark-publisher\/tasks\/([^/]+)\/sync$/.exec(pathname)
-    if (geelarkTaskSyncMatch && req.method === 'POST') {
-      const result = await webPlatformService.syncGeelarkPublishTask(token, decodeURIComponent(geelarkTaskSyncMatch[1] || ''))
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    if (req.method === 'POST' && pathname === '/plugins/geelark-publisher/publish') {
-      const body = await readBodyClean(req)
-      const result = await webPlatformService.publishGeelarkVideo(token, {
-        cloneProjectId: typeof body.cloneProjectId === 'string' ? body.cloneProjectId : undefined,
-        videoPath: typeof body.videoPath === 'string' ? body.videoPath : '',
-        publishAccountId: typeof body.publishAccountId === 'string' ? body.publishAccountId : '',
-        videoDesc: typeof body.videoDesc === 'string' ? body.videoDesc : undefined,
-        productId: typeof body.productId === 'string' ? body.productId : undefined,
-        productTitle: typeof body.productTitle === 'string' ? body.productTitle : undefined,
-        refVideoId: typeof body.refVideoId === 'string' ? body.refVideoId : undefined,
-        sameVideoVolume: typeof body.sameVideoVolume === 'number' ? Number(body.sameVideoVolume) : undefined,
-        sourceVideoVolume: typeof body.sourceVideoVolume === 'number' ? Number(body.sourceVideoVolume) : undefined,
-        markAI: typeof body.markAI === 'boolean' ? Boolean(body.markAI) : undefined,
-        musicMode:
-          body.musicMode === 'library_ref' || body.musicMode === 'manual_ref' || body.musicMode === 'volume_only'
-            ? body.musicMode
-            : undefined,
-        musicLabel: typeof body.musicLabel === 'string' ? body.musicLabel : undefined,
-        scheduleAt: typeof body.scheduleAt === 'number' ? Number(body.scheduleAt) : undefined,
-        needShareLink: typeof body.needShareLink === 'boolean' ? Boolean(body.needShareLink) : undefined,
-      })
-      json(res, 200, { ok: true, item: result })
       return
     }
 
@@ -717,15 +541,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         subtitleTrack: body.subtitleTrack && typeof body.subtitleTrack === 'object' ? (body.subtitleTrack as Record<string, unknown>) : undefined,
         previewAtSec: typeof body.previewAtSec === 'number' ? Number(body.previewAtSec) : undefined,
         includeVideo: body.includeVideo === true,
-      })
-      json(res, 200, { ok: true, item: result })
-      return
-    }
-
-    const batchSubtitlePushMatch = /^\/plugins\/video-batch-subtitle\/jobs\/([^/]+)\/push-to-geelark$/.exec(pathname)
-    if (batchSubtitlePushMatch && req.method === 'POST') {
-      const result = await webPlatformService.pushBatchSubtitleOutputsToGeelarkPool(token, {
-        jobId: decodeURIComponent(batchSubtitlePushMatch[1] || ''),
       })
       json(res, 200, { ok: true, item: result })
       return

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion } from '../clone/unifiedChat'
+import { contentHubIntentDescriptions } from './contentHubCapabilities'
 import type {
   AgentAttachment,
   AgentEmployeeManifest,
@@ -42,8 +43,6 @@ const intentCatalog: Array<PlannedIntent & { description: string; employeeId: st
   { intentType: 'Intent.LivePhotoManage', title: 'Manage live photo', description: 'Retry, pause, resume, subtitle, export, or delete existing Live Photo work.', employeeId: 'employee.clone' },
   { intentType: 'Intent.SubtitleGenerate', title: 'Create subtitle package', description: 'Create subtitle and packaging outputs.', employeeId: 'employee.package' },
   { intentType: 'Intent.VideoSlice', title: 'Split long video', description: 'Split a long local video into reusable segments.', employeeId: 'employee.package' },
-  { intentType: 'Intent.VideoPublish', title: 'Publish video', description: 'Publish an approved video to an approved account.', employeeId: 'employee.publish' },
-  { intentType: 'Intent.PublishingManage', title: 'Manage publishing', description: 'Manage publishing accounts, music presets, and publishing tasks.', employeeId: 'employee.publish' },
   { intentType: 'Intent.SourceVideoImport', title: 'Import source videos', description: 'Import source videos from approved sharing links.', employeeId: 'employee.material' },
   { intentType: 'Intent.SourceVideoManage', title: 'Manage source videos', description: 'Retry or delete an existing source video.', employeeId: 'employee.material' },
   { intentType: 'Intent.ListingGenerate', title: 'Generate product listing', description: 'Generate listing copy and product images for an existing listing record.', employeeId: 'employee.package' },
@@ -57,6 +56,12 @@ const intentCatalog: Array<PlannedIntent & { description: string; employeeId: st
   { intentType: 'Intent.TemplateManage', title: 'Manage production template', description: 'Duplicate, delete, or edit an existing production template.', employeeId: 'employee.package' },
   { intentType: 'Intent.ArtifactInspect', title: 'Inspect existing results', description: 'Read existing results without exporting or regenerating them.', employeeId: 'employee.package' },
   { intentType: 'Intent.ArtifactExport', title: 'Export deliverables', description: 'Export existing artifacts without regenerating them.', employeeId: 'employee.package' },
+  ...Object.entries(contentHubIntentDescriptions).map(([intentType, value]) => ({
+    intentType: intentType as AgentIntentType,
+    title: value.title,
+    description: value.description,
+    employeeId: value.employeeId,
+  })),
 ]
 
 function uniqueIntents(values: AgentIntentType[]) {
@@ -79,7 +84,6 @@ function fallbackIntentTypes(prompt: string, attachments: AgentAttachment[]) {
   const listingManage = /(\u5546\u54c1\u520a\u767b|listing).*(\u521b\u5efa|\u66f4\u65b0|\u4fee\u6539|\u5220\u9664|\u914d\u7f6e|create|update|edit|delete|configure)/.test(text)
   const creativeManage = /(tiktok\s*creative|creative\s*studio|\u521b\u610f\u5de5\u4f5c\u5ba4)/.test(text)
   const videoSlice = /(\u957f\u89c6\u9891|\u76f4\u64ad\u5f55\u50cf|long\s*video|live\s*recording).*(\u5207\u7247|\u5206\u5272|split|slice)|(\u5207\u7247|\u5206\u5272|split|slice).*(\u89c6\u9891|video)/.test(text)
-  const publishingManage = /(\u53d1\u5e03\u8d26\u53f7|\u53d1\u5e03\u4efb\u52a1|\u97f3\u4e50\u9884\u8bbe|publishing\s*account|publishing\s*task|music\s*preset).*(\u65b0\u5efa|\u4fdd\u5b58|\u5220\u9664|\u540c\u6b65|create|save|delete|sync)/.test(text)
   if (productDelete) intents.push('Intent.ProductManage')
   else if (productSave) intents.push('Intent.ProductSave')
   else if (/\u5546\u54c1|\u4ea7\u54c1|product/.test(text)) intents.push('Intent.ProductInspect')
@@ -98,8 +102,6 @@ function fallbackIntentTypes(prompt: string, attachments: AgentAttachment[]) {
   if (!cloneProjectManage && !sourceVideoManage && (/\u89c6\u9891|\u590d\u523b|\u6210\u7247|video|clone/.test(text) || hasVideo)) intents.push('Intent.CommerceVideoCreate')
   if (!livePhotoManage && /\u5b57\u5e55|\u5305\u88c5|subtitle|caption/.test(text)) intents.push('Intent.SubtitleGenerate')
   if (videoSlice) intents.push('Intent.VideoSlice')
-  if (publishingManage) intents.push('Intent.PublishingManage')
-  else if (/\u53d1\u5e03|\u4e0a\u67b6|publish/.test(text)) intents.push('Intent.VideoPublish')
   if (!sourceVideoManage && /(https?:\/\/|\u5206\u4eab\u94fe\u63a5|\u4e0b\u8f7d|download|import).*(tiktok|\u89c6\u9891|video)/.test(text)) intents.push('Intent.SourceVideoImport')
   if (sourceVideoManage) intents.push('Intent.SourceVideoManage')
   if (/(\u5546\u54c1\u520a\u767b|listing).*(\u751f\u6210|generate)/.test(text)) intents.push('Intent.ListingGenerate')

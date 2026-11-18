@@ -453,12 +453,12 @@ onMounted(() => {
   border-radius: 7px;
 }
 
-.tone-green { background: rgba(34, 197, 94, 0.13); color: #22c55e; }
-.tone-blue { background: rgba(59, 130, 246, 0.13); color: #60a5fa; }
-.tone-violet { background: rgba(139, 92, 246, 0.13); color: #a78bfa; }
-.tone-amber { background: rgba(245, 158, 11, 0.13); color: #f59e0b; }
-.tone-cyan { background: rgba(6, 182, 212, 0.13); color: #22d3ee; }
-.tone-red { background: rgba(239, 68, 68, 0.13); color: #f87171; }
+.tone-green { background: color-mix(in srgb, var(--theme-accent) 13%, transparent); color: var(--theme-accent); }
+.tone-blue { background: color-mix(in srgb, var(--theme-tone-blue) 13%, transparent); color: var(--theme-tone-blue); }
+.tone-violet { background: color-mix(in srgb, var(--theme-tone-violet) 13%, transparent); color: var(--theme-tone-violet); }
+.tone-amber { background: color-mix(in srgb, var(--theme-tone-amber) 13%, transparent); color: var(--theme-tone-amber); }
+.tone-cyan { background: color-mix(in srgb, var(--theme-accent) 13%, transparent); color: var(--theme-accent); }
+.tone-red { background: color-mix(in srgb, var(--theme-tone-red) 13%, transparent); color: var(--theme-tone-red); }
 
 .storage-row__title {
   display: flex;
@@ -497,9 +497,9 @@ onMounted(() => {
   font-weight: 750;
 }
 
-.risk-safe { color: #22c55e; background: rgba(34, 197, 94, 0.1); }
-.risk-caution { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
-.risk-destructive { color: #f87171; background: rgba(239, 68, 68, 0.1); }
+.risk-safe { color: var(--theme-accent); background: color-mix(in srgb, var(--theme-accent) 10%, transparent); }
+.risk-caution { color: var(--theme-tone-amber); background: color-mix(in srgb, var(--theme-tone-amber) 10%, transparent); }
+.risk-destructive { color: var(--theme-tone-red); background: color-mix(in srgb, var(--theme-tone-red) 10%, transparent); }
 .risk-protected { color: var(--theme-text-muted); background: var(--theme-panel-soft); }
 
 .storage-row__size {
@@ -540,9 +540,9 @@ onMounted(() => {
 
 .cleanup-button.destructive:hover,
 .modal-button.danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.13);
-  color: #f87171;
+  border-color: color-mix(in srgb, var(--theme-tone-red) 35%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 13%, transparent);
+  color: var(--theme-tone-red);
 }
 
 .cleanup-button.protected {
@@ -574,8 +574,8 @@ button:disabled {
   font-size: 11px;
 }
 
-.storage-notice.success { color: #22c55e; background: rgba(34, 197, 94, 0.09); }
-.storage-notice.error { color: #f87171; background: rgba(239, 68, 68, 0.09); }
+.storage-notice.success { color: var(--theme-accent); background: color-mix(in srgb, var(--theme-accent) 9%, transparent); }
+.storage-notice.error { color: var(--theme-tone-red); background: color-mix(in srgb, var(--theme-tone-red) 9%, transparent); }
 
 .storage-modal-backdrop {
   position: fixed;
@@ -584,7 +584,7 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.56);
+  background: color-mix(in srgb, var(--theme-input) 56%, transparent);
 }
 
 .storage-modal {

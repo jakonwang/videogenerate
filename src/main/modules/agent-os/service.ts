@@ -10,6 +10,9 @@ import { assertRunTransition, assertStepTransition, canRunTransition, canStepTra
 import { agentOsStore } from './store'
 import { livePhotoService } from '../live-photo/service'
 import { materializeManagedAsset } from '../managed-assets/service'
+import { estimatePlanCost } from '../content-hub/costEstimate'
+import { buildMemoryGuidance } from '../content-hub/brandMemory'
+import { buildWorkspaceSnapshot } from '../content-hub/workspaceSnapshot'
 import type {
   AgentApproval,
   AgentArtifact,
@@ -266,11 +269,56 @@ function recoveryAdvice(run: AgentRun, steps: AgentWorkflowStep[], attempts: Age
   return { action: 'none' as const, canResume: false, blockedStepIds: [], unresolvedAttemptIds: [], reason: '' }
 }
 
+const AWAITING_CONFIRMATION = 'awaiting_confirmation'
+const ALWAYS_CONFIRM_INTENTS = new Set<AgentIntentType>(['Intent.ProductManage', 'Intent.ProductionQueueControl'])
+const MANAGE_INTENTS = new Set<AgentIntentType>([
+  'Intent.MaterialManage',
+  'Intent.SourceVideoManage',
+  'Intent.TemplateManage',
+  'Intent.ProductionTaskManage',
+  'Intent.ListingManage',
+  'Intent.LivePhotoManage',
+  'Intent.CloneProjectManage',
+  'Intent.ModelIdentityManage',
+  'Intent.TiktokCreativeManage',
+])
+const DESTRUCTIVE_PATTERN = /(delete|remove|purge|cancel|删除|移除|清空|取消)/i
+
+/** Destructive steps pause at execution time and wait for an explicit per-step confirmation. */
+export function stepRequiresConfirmation(step: Pick<AgentWorkflowStep, 'intentType' | 'input'>) {
+  if (ALWAYS_CONFIRM_INTENTS.has(step.intentType)) return true
+  if (!MANAGE_INTENTS.has(step.intentType)) return false
+  return DESTRUCTIVE_PATTERN.test(`${cleanText(step.input?.action)} ${cleanText(step.input?.request)}`)
+}
+
 async function executeStep(runId: string, stepId: string) {
   const snapshot = await agentOsStore.read()
   const run = snapshot.runs.find((item) => item.id === runId)
   const step = snapshot.steps.find((item) => item.id === stepId)
   if (!run || !step || run.status !== 'running' || step.status !== 'ready') return
+  if (!step.confirmedAt && stepRequiresConfirmation(step)) {
+    await agentOsStore.mutate((db, emit) => {
+      const storedRun = db.runs.find((item) => item.id === run.id)
+      const storedStep = db.steps.find((item) => item.id === step.id)
+      if (!storedRun || !storedStep || storedRun.status !== 'running' || storedStep.status !== 'ready') return
+      transitionStep(storedStep, 'blocked')
+      storedStep.error = AWAITING_CONFIRMATION
+      transitionRun(storedRun, 'paused')
+      storedRun.error = `Waiting for confirmation: ${storedStep.title}`
+      appendEvent({
+        emit,
+        type: 'agent.step.awaiting_confirmation',
+        aggregateType: 'step',
+        aggregateId: storedStep.id,
+        conversationId: storedRun.conversationId,
+        runId: storedRun.id,
+        stepId: storedStep.id,
+        correlationId: storedRun.id,
+        payload: { title: storedStep.title, intentType: storedStep.intentType },
+      })
+    })
+    return
+  }
   const revision = run.revisions.find((item) => item.version === run.activeRevision)
   if (!revision) throw new Error('Active run revision is missing')
   const employee = snapshot.employees.find((item) => item.id === step.employeeId && item.enabled && !item.archivedAt)
@@ -289,6 +337,16 @@ async function executeStep(runId: string, stepId: string) {
     return
   }
   const dependencyArtifacts = snapshot.artifacts.filter((item) => step.dependsOn.includes(item.producerStepId))
+  // Pipelines hand products, reference videos and projects down the whole chain, not just one step.
+  const ancestorIds = new Set<string>()
+  const pendingIds = [...step.dependsOn]
+  while (pendingIds.length) {
+    const id = pendingIds.pop()!
+    if (ancestorIds.has(id)) continue
+    ancestorIds.add(id)
+    pendingIds.push(...(snapshot.steps.find((item) => item.id === id)?.dependsOn || []))
+  }
+  const upstreamArtifacts = snapshot.artifacts.filter((item) => ancestorIds.has(item.producerStepId))
   const executionInput = { ...step.input, dependencyArtifactIds: dependencyArtifacts.map((item) => item.id) }
   const sequence = snapshot.attempts.filter((item) => item.stepId === step.id).length + 1
   const attemptId = randomUUID()
@@ -347,6 +405,7 @@ async function executeStep(runId: string, stepId: string) {
       step,
       idempotencyKey: attempt.idempotencyKey,
       dependencyArtifacts,
+      upstreamArtifacts,
       registerArtifact,
     }))
   } catch (error) {
@@ -803,6 +862,9 @@ export const agentOsService = {
       employeeId: employee.id,
       status: 'pending',
       repairCount: 0,
+      // Direct single-intent calls come from an explicit user action (UI button / API), not from an
+      // AI-drafted plan, so the per-step confirmation gate does not apply to them.
+      confirmedAt: timestamp,
       updatedAt: timestamp,
     }
     await agentOsStore.mutate((db, emit) => {
@@ -869,6 +931,8 @@ export const agentOsService = {
     content: string
     attachments?: AgentAttachment[]
     context?: Record<string, unknown>
+    /** Recipes pass a ready-made intent list; the brain is skipped and the plan still needs approval. */
+    plan?: { intents: AgentIntentType[]; summary?: string }
   }) {
     const prompt = cleanText(input.content)
     if (!prompt) throw new Error('Enter a work objective')
@@ -943,22 +1007,41 @@ export const agentOsService = {
     let preferredSummary: string | undefined
     let modelDecision: Awaited<ReturnType<typeof decideAgentTurn>> = null
     let decisionBrainUnavailable = false
-    try {
-      modelDecision = await withTimeout(
-        decideAgentTurn({
-          request: resolvedClarification ? workflowPrompt : prompt,
-          employee,
-          messages: snapshot.messages.filter((item) => item.conversationId === conversation.id),
-          attachments,
-          context: mergedContext,
-          artifacts: conversationArtifacts,
-        }),
-        25_000,
-        'Agent decision timed out',
-      )
-    } catch (error) {
-      decisionBrainUnavailable = true
-      console.warn('[agent-os] decision brain unavailable, using deterministic routing', cleanText((error as Error)?.message || error))
+    const forcedIntents = Array.isArray(input.plan?.intents)
+      ? input.plan!.intents.filter((intent) => employee.allowedIntents.includes(intent))
+      : []
+    if (forcedIntents.length) {
+      modelDecision = {
+        action: 'workflow',
+        summary: cleanText(input.plan?.summary) || prompt,
+        intents: forcedIntents,
+        context: {},
+      }
+    } else {
+      try {
+        const productId = cleanText(mergedContext.productId)
+        const [memoryGuidance, workspace] = await Promise.all([
+          buildMemoryGuidance(productId || undefined).catch(() => ''),
+          buildWorkspaceSnapshot().catch(() => undefined),
+        ])
+        modelDecision = await withTimeout(
+          decideAgentTurn({
+            request: resolvedClarification ? workflowPrompt : prompt,
+            employee,
+            messages: snapshot.messages.filter((item) => item.conversationId === conversation.id),
+            attachments,
+            context: mergedContext,
+            artifacts: conversationArtifacts,
+            memoryGuidance,
+            workspace,
+          }),
+          25_000,
+          'Agent decision timed out',
+        )
+      } catch (error) {
+        decisionBrainUnavailable = true
+        console.warn('[agent-os] decision brain unavailable, using deterministic routing', cleanText((error as Error)?.message || error))
+      }
     }
     if (modelDecision?.action === 'workflow') {
       preferredIntents = modelDecision.intents
@@ -970,7 +1053,9 @@ export const agentOsService = {
     const safeFallbackRoute = decisionBrainUnavailable && fallbackRoute.kind === 'workflow' && !hasExplicitBusinessExecution(routedRequest)
       ? { kind: 'direct' as const, responseCode: 'assistant_unavailable' as const }
       : fallbackRoute
-    const route = modelDecision?.action === 'reply'
+    const route = forcedIntents.length
+      ? { kind: 'workflow' as const }
+      : modelDecision?.action === 'reply'
       ? { kind: 'model_reply' as const, content: modelDecision.response }
       : modelDecision?.action === 'clarify'
         ? { kind: 'model_clarification' as const, content: modelDecision.response }
@@ -1253,6 +1338,51 @@ export const agentOsService = {
     })
     scheduleRun(run.id)
     return run
+  },
+
+  /** Confirms one destructive step that paused the run at execution time, then continues the run. */
+  async confirmStep(input: { runId: string; stepId: string; channel?: 'desktop' | 'feishu'; approverId?: string }) {
+    const run = await agentOsStore.mutate((db, emit) => {
+      const item = db.runs.find((candidate) => candidate.id === input.runId)
+      if (!item) throw new Error('Run does not exist')
+      const step = db.steps.find((candidate) => candidate.id === input.stepId && candidate.runId === item.id)
+      if (!step || step.status !== 'blocked' || step.error !== AWAITING_CONFIRMATION) throw new Error('This step is not waiting for confirmation')
+      transitionStep(step, 'ready')
+      step.error = undefined
+      step.confirmedAt = now()
+      const stillWaiting = db.steps.some((candidate) => candidate.runId === item.id && candidate.revision === item.activeRevision && candidate.status === 'blocked')
+      if (!stillWaiting && item.status === 'paused') {
+        transitionRun(item, 'running')
+        item.error = undefined
+      }
+      db.approvals.push({
+        id: randomUUID(),
+        runId: item.id,
+        revision: item.activeRevision,
+        planHash: item.revisions.find((revision) => revision.version === item.activeRevision)?.hash || '',
+        status: 'approved',
+        channel: input.channel === 'feishu' ? 'feishu' : 'desktop',
+        approverId: cleanText(input.approverId) || 'desktop-local',
+        createdAt: now(),
+      })
+      appendEvent({ emit, type: 'agent.step.confirmed', aggregateType: 'step', aggregateId: step.id, conversationId: item.conversationId, runId: item.id, stepId: step.id, correlationId: item.id, payload: { title: step.title } })
+      return item
+    })
+    if (run.status === 'running') scheduleRun(run.id)
+    return run
+  },
+
+  async estimateRun(runId: string) {
+    const db = await agentOsStore.read()
+    const run = db.runs.find((item) => item.id === runId)
+    if (!run) throw new Error('Run does not exist')
+    const steps = db.steps.filter((item) => item.runId === run.id && item.revision === run.activeRevision).sort((a, b) => a.order - b.order)
+    const estimate = estimatePlanCost(steps)
+    estimate.dangerousSteps = Array.from(new Set([
+      ...estimate.dangerousSteps,
+      ...steps.filter((step) => stepRequiresConfirmation(step)).map((step) => `${step.title}: requires confirmation before it runs`),
+    ]))
+    return estimate
   },
 
   async cancelRun(runId: string) {

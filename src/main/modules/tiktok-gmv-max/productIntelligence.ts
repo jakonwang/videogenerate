@@ -114,7 +114,7 @@ export function mergeGmvMaxProductInsights(
   const grouped = new Map<string, GmvMaxProductInsight[]>()
   for (const item of rows) {
     const key = `${item.storeId}:${item.productId || item.productName || item.id}`
-    grouped.set(key, [...(grouped.get(key) || []), item])
+    { const bucket = grouped.get(key); if (bucket) bucket.push(item); else grouped.set(key, [item]) }
   }
 
   return [...grouped.values()].map((group) => {
@@ -185,7 +185,7 @@ export function analyzeGmvMaxProductIntelligence(input: {
   const grouped = new Map<string, GmvMaxCreativeMetric[]>()
   for (const metric of input.metrics) {
     if (!metric.itemGroupId) continue
-    grouped.set(metric.itemGroupId, [...(grouped.get(metric.itemGroupId) || []), metric])
+    { const bucket = grouped.get(metric.itemGroupId); if (bucket) bucket.push(metric); else grouped.set(metric.itemGroupId, [metric]) }
   }
   const totalSpend = sum(input.metrics.map((item) => gmvMaxDecimal.parse(item.cost)))
   const totalRevenue = sum(input.metrics.map((item) => gmvMaxDecimal.parse(item.grossRevenue)))

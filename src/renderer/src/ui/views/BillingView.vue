@@ -1,487 +1,199 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, CreditCard, LoaderCircle, Wallet, Zap } from 'lucide-vue-next'
-import UiCard from '../components/UiCard.vue'
-import UiButton from '../components/UiButton.vue'
-import {
-  type BillingOrder,
-  type SubscriptionPlan,
-  type WalletTransaction,
-  webApiClient,
-} from '@/lib/webApiClient'
-import { useWebSessionStore } from '@/stores/webSession'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import { CalendarClock, Crown, LaptopMinimal, LoaderCircle, LogOut, ReceiptText, RefreshCw, ShieldCheck, UserRound, WifiOff } from 'lucide-vue-next'
+import type { CloudDevice, CloudOrder } from '../../../../shared/cloud/types'
+import CloudPurchasePanel from '../components/cloud/CloudPurchasePanel.vue'
+import { useCloudAuthStore } from '@/stores/cloudAuth'
 
-const webSession = useWebSessionStore()
+const PERMANENT_AT = 253402214400000
+
 const { t, locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const cloudAuth = useCloudAuthStore()
 
 const loading = ref(false)
-const paying = ref('')
-const plans = ref<SubscriptionPlan[]>([])
-const orders = ref<BillingOrder[]>([])
-const transactions = ref<WalletTransaction[]>([])
-const feedback = ref('')
+const devices = ref<CloudDevice[]>([])
+const maxDevices = ref(0)
+const maxMobileDevices = ref(1)
+const orders = ref<CloudOrder[]>([])
+const supportContact = ref('')
+const message = ref<{ tone: 'accent' | 'danger'; text: string } | null>(null)
+const unbinding = ref('')
 
-const walletBalance = computed(() => webSession.wallet?.balanceCredits ?? 0)
-const activePlan = computed(() => webSession.subscription?.planName || t('billing.notActive'))
+const status = computed(() => cloudAuth.status)
+const lockedFeature = computed(() => (typeof route.query.feature === 'string' ? route.query.feature : ''))
 
-const computePackOptions = computed(() => [
-  { credits: 100, priceHint: t('billing.packs.light') },
-  { credits: 300, priceHint: t('billing.packs.regular') },
-  { credits: 1000, priceHint: t('billing.packs.batch') },
-])
-
-function formatTime(value?: number) {
-  if (!value) return '--'
+function formatTime(value?: number | null) {
+  if (!value) return '—'
+  if (value >= PERMANENT_AT) return t('cloud.membership.permanent')
   return new Date(value).toLocaleString(locale.value)
 }
 
-function orderTypeLabel(type: BillingOrder['type']) {
-  return type === 'subscription' ? t('billing.order.subscription') : t('billing.order.compute')
-}
+const planLabel = computed(() => {
+  const s = status.value
+  if (!s) return '—'
+  if (s.mode === 'off' && !s.loggedIn) return t('cloud.membership.internalBuild')
+  if (s.unlimited) return t('cloud.membership.unlimited')
+  return s.planName || t('cloud.membership.none')
+})
 
-function transactionTone(type: WalletTransaction['type']) {
-  return type === 'compute_charge' ? 'is-negative' : 'is-positive'
-}
+const expiresLabel = computed(() => {
+  const s = status.value
+  if (!s) return '—'
+  if (s.unlimited) return t('cloud.membership.unlimited')
+  return formatTime(s.planExpiresAt)
+})
 
-async function refresh() {
+async function load() {
   loading.value = true
   try {
-    const [planRows, orderRows, transactionRows] = await Promise.all([
-      webApiClient.listPlans(),
-      webApiClient.listOrders(),
-      webApiClient.listTransactions(),
-      webSession.refreshProfile(),
-    ])
-    plans.value = planRows
-    orders.value = orderRows
-    transactions.value = transactionRows
+    await cloudAuth.refresh()
+    if (!status.value?.loggedIn) return
+    const [me, orderList, config] = await Promise.all([window.api.cloud.me(), window.api.cloud.listOrders(), window.api.cloud.getConfig()])
+    if (me.ok) {
+      devices.value = me.devices
+      maxDevices.value = me.entitlement.maxDevices
+      maxMobileDevices.value = me.entitlement.maxMobileDevices ?? 1
+    }
+    if (orderList.ok) orders.value = orderList.items
+    if (config.ok) supportContact.value = String(config.values['support.contact'] ?? '')
   } finally {
     loading.value = false
   }
 }
 
-async function createAndPayOrder(input: { type: 'subscription' | 'compute_pack'; planId?: string; credits?: number }) {
-  paying.value = input.planId || String(input.credits || input.type)
-  feedback.value = ''
+async function unbind(device: CloudDevice) {
+  if (!window.confirm(t('cloud.membership.unbindConfirm'))) return
+  unbinding.value = device.id
+  message.value = null
   try {
-    const created = await webApiClient.createOrder({
-      ...input,
-      paymentChannel: 'mock_wechat',
-    })
-    await webApiClient.payMockOrder(created.order.id)
-    feedback.value = input.type === 'subscription' ? t('billing.messages.subscribed') : t('billing.messages.recharged')
-    await refresh()
-  } catch (error: any) {
-    feedback.value = error?.message ?? String(error)
+    const result = await window.api.cloud.unbindDevice(device.id)
+    if (!result.ok) {
+      message.value = { tone: 'danger', text: result.error }
+      return
+    }
+    devices.value = result.devices
+    cloudAuth.setStatus(result.status)
+    if (device.machineId === status.value?.machineId && status.value.mode === 'enforced') void router.replace('/login')
   } finally {
-    paying.value = ''
+    unbinding.value = ''
   }
 }
 
-onMounted(() => {
-  void refresh()
-})
+async function logout() {
+  if (!window.confirm(t('cloud.membership.logoutConfirm'))) return
+  const result = await window.api.cloud.logout()
+  if (result.ok) cloudAuth.setStatus(result.status)
+  devices.value = []
+  orders.value = []
+  if (result.ok && result.status.mode === 'enforced') void router.replace('/login')
+}
+
+onMounted(() => void load())
 </script>
 
 <template>
-  <div class="billing-page">
-    <section class="billing-hero">
-      <div class="billing-hero__copy">
-        <span class="panel-tag">Billing</span>
-        <h1>{{ t('billing.title') }}</h1>
-        <p>{{ t('billing.desc') }}</p>
+  <div class="vg-scope vg-page membership" data-testid="membership-page">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><ShieldCheck :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('cloud.membership.title') }}</h1>
+        <p>{{ t('cloud.membership.desc') }}</p>
       </div>
-      <UiButton variant="ghost" :disabled="loading" @click="refresh">
-        <LoaderCircle v-if="loading" class="h-4 w-4 is-spinning" />
-        <Wallet v-else class="h-4 w-4" />
-        {{ t('billing.refresh') }}
-      </UiButton>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn" type="button" :disabled="loading" @click="load">
+          <LoaderCircle v-if="loading" :size="15" class="vg-spin" />
+          <RefreshCw v-else :size="15" />
+          {{ t('cloud.membership.refresh') }}
+        </button>
+        <button v-if="status?.loggedIn" class="vg-btn vg-btn--ghost" type="button" data-testid="membership-logout" @click="logout">
+          <LogOut :size="15" /> {{ t('cloud.membership.logout') }}
+        </button>
+        <RouterLink v-else class="vg-btn vg-btn--primary" to="/login">{{ t('cloud.login.submitLogin') }}</RouterLink>
+      </div>
+    </header>
+
+    <div v-if="lockedFeature" class="vg-notice vg-notice--warning"><span>{{ t('cloud.membership.featureLocked') }}</span></div>
+    <div v-if="status?.offline && status.tokenExpiresAt" class="vg-notice vg-notice--warning">
+      <WifiOff :size="15" /><span>{{ t('cloud.membership.offline', { time: formatTime(status.tokenExpiresAt) }) }}</span>
+    </div>
+    <div v-if="status?.mode === 'off'" class="vg-notice"><span>{{ t('cloud.membership.internalBuild') }}</span></div>
+    <div v-if="message" class="vg-notice" :class="message.tone === 'danger' ? 'vg-notice--danger' : 'vg-notice--accent'"><span>{{ message.text }}</span></div>
+
+    <section class="vg-stats">
+      <div class="vg-stat">
+        <span class="vg-stat__icon"><UserRound :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.account') }}</span><span class="vg-stat__value membership__stat-text">{{ status?.account || '—' }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--violet"><Crown :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.plan') }}</span><span class="vg-stat__value membership__stat-text" data-testid="membership-plan">{{ planLabel }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--amber"><CalendarClock :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('cloud.membership.expires') }}</span><span class="vg-stat__value membership__stat-text">{{ expiresLabel }}</span></span>
+      </div>
     </section>
 
-    <section class="billing-summary">
-      <UiCard class="billing-summary-card">
-        <span>{{ t('billing.currentAccount') }}</span>
-        <strong>{{ webSession.displayName }}</strong>
-      </UiCard>
-      <UiCard class="billing-summary-card">
-        <span>{{ t('billing.currentPlan') }}</span>
-        <strong>{{ activePlan }}</strong>
-      </UiCard>
-      <UiCard class="billing-summary-card">
-        <span>{{ t('billing.balance') }}</span>
-        <strong>{{ walletBalance }}</strong>
-      </UiCard>
-    </section>
+    <div class="vg-split membership__layout">
+      <div class="vg-stack">
+        <CloudPurchasePanel v-if="status?.loggedIn && !status.unlimited" @activated="load" />
 
-    <section class="billing-grid">
-      <div class="billing-main">
-        <UiCard class="billing-panel">
-          <div class="billing-panel__head">
-            <strong>{{ t('billing.plans.title') }}</strong>
-            <small>{{ t('billing.plans.desc') }}</small>
+        <section v-if="status?.loggedIn" class="vg-card vg-card--flush">
+          <div class="vg-card__head">
+            <span class="vg-card__title"><ReceiptText :size="16" /> {{ t('cloud.membership.ordersTitle') }}</span>
           </div>
-          <div class="plan-grid">
-            <article v-for="plan in plans" :key="plan.id" class="plan-card">
-              <div class="plan-card__price">
-                <strong>{{ plan.name }}</strong>
-                <span>¥{{ plan.priceCny }} / {{ t('billing.days', { count: plan.durationDays }) }}</span>
-              </div>
-              <div class="plan-card__meta">
-                <span>{{ t('billing.plans.credits', { count: plan.monthlyComputeCredits }) }}</span>
-              </div>
-              <UiButton :disabled="paying === plan.id" @click="createAndPayOrder({ type: 'subscription', planId: plan.id })">
-                <CreditCard class="h-4 w-4" />
-                {{ paying === plan.id ? t('billing.paying') : t('billing.subscribe') }}
-              </UiButton>
-            </article>
-          </div>
-        </UiCard>
-
-        <UiCard class="billing-panel">
-          <div class="billing-panel__head">
-            <strong>{{ t('billing.packs.title') }}</strong>
-            <small>{{ t('billing.packs.desc') }}</small>
-          </div>
-          <div class="plan-grid pack-grid">
-            <article v-for="pack in computePackOptions" :key="pack.credits" class="plan-card pack-card">
-              <div class="plan-card__price">
-                <strong>{{ t('billing.creditCount', { count: pack.credits }) }}</strong>
-                <span>{{ pack.priceHint }}</span>
-              </div>
-              <UiButton :disabled="paying === String(pack.credits)" @click="createAndPayOrder({ type: 'compute_pack', credits: pack.credits })">
-                <Zap class="h-4 w-4" />
-                {{ paying === String(pack.credits) ? t('billing.recharging') : t('billing.recharge') }}
-              </UiButton>
-            </article>
-          </div>
-        </UiCard>
-
-        <UiCard class="billing-panel">
-          <div class="billing-panel__head">
-            <strong>{{ t('billing.order.title') }}</strong>
-            <small>{{ t('billing.order.desc') }}</small>
-          </div>
-          <div class="billing-table">
-            <div class="billing-table__head">
-              <span>{{ t('billing.order.type') }}</span>
-              <span>{{ t('billing.order.amount') }}</span>
-              <span>{{ t('billing.order.status') }}</span>
-              <span>{{ t('billing.order.time') }}</span>
-            </div>
-            <div v-if="orders.length" class="billing-table__body">
-              <article v-for="order in orders.slice(0, 12)" :key="order.id" class="billing-table__row">
-                <span>{{ orderTypeLabel(order.type) }}</span>
-                <span>¥{{ order.amountCny }}</span>
-                <span>{{ order.status }}</span>
-                <span>{{ formatTime(order.paidAt || order.createdAt) }}</span>
-              </article>
-            </div>
-            <div v-else class="billing-empty">{{ t('billing.order.empty') }}</div>
-          </div>
-        </UiCard>
+          <table v-if="orders.length" class="vg-table">
+            <tbody>
+              <tr v-for="order in orders.slice(0, 12)" :key="order.orderNo">
+                <td>{{ order.planName }}</td>
+                <td class="num">¥{{ (order.amountFen / 100).toFixed(2) }}</td>
+                <td>
+                  <span class="vg-pill vg-pill--dot" :class="order.status === 'paid' ? 'vg-pill--green' : order.status === 'refunded' ? 'vg-pill--red' : 'vg-pill--amber'">
+                    {{ t(`cloud.orderStatus.${order.status}`) }}
+                  </span>
+                </td>
+                <td class="vg-secondary vg-num">{{ formatTime(order.paidAt || order.createdAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="vg-empty"><p>{{ t('cloud.membership.noOrders') }}</p></div>
+        </section>
       </div>
 
-      <aside class="billing-side">
-        <UiCard class="billing-panel">
-          <div class="billing-panel__head">
-            <strong>{{ t('billing.transactions.title') }}</strong>
-            <small>{{ t('billing.transactions.desc') }}</small>
+      <aside class="vg-stack">
+        <section v-if="status?.loggedIn" class="vg-card">
+          <div class="vg-card__head">
+            <span class="vg-card__title">
+              <LaptopMinimal :size="16" /> {{ t('cloud.membership.devices') }}
+              <small>{{ maxDevices === 0 ? t('cloud.membership.devicesUnlimited') : t('cloud.membership.devicesDesc', { max: maxDevices, mobile: maxMobileDevices }) }}</small>
+            </span>
           </div>
-          <div v-if="transactions.length" class="transaction-list">
-            <article v-for="item in transactions.slice(0, 12)" :key="item.id" class="transaction-item">
-              <div>
-                <strong>{{ item.note }}</strong>
-                <small>{{ formatTime(item.createdAt) }}</small>
-              </div>
-              <em :class="transactionTone(item.type)">{{ item.amountCredits > 0 ? `+${item.amountCredits}` : item.amountCredits }}</em>
-            </article>
+          <div class="vg-list">
+            <div v-for="device in devices" :key="device.id" class="vg-list__item">
+              <span class="vg-list__main">
+                <span class="vg-list__title">
+                  {{ device.name || device.id }}
+                  <span v-if="device.machineId === status?.machineId" class="vg-pill vg-pill--accent">{{ t('cloud.membership.thisDevice') }}</span>
+                </span>
+                <span class="vg-list__sub">{{ device.platform }} · {{ t('cloud.membership.lastSeen', { time: formatTime(device.lastSeenAt) }) }}</span>
+              </span>
+              <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" :disabled="unbinding === device.id" @click="unbind(device)">{{ t('cloud.membership.unbind') }}</button>
+            </div>
+            <div v-if="!devices.length" class="vg-empty"><p>—</p></div>
           </div>
-          <div v-else class="billing-empty">{{ t('billing.transactions.empty') }}</div>
-        </UiCard>
-
-        <UiCard class="billing-panel">
-          <div class="billing-panel__head">
-            <strong>{{ t('billing.notes.title') }}</strong>
-          </div>
-          <div class="billing-note-list">
-            <article class="billing-note">
-              <CheckCircle2 class="h-4 w-4" />
-              <span>{{ t('billing.notes.membership') }}</span>
-            </article>
-            <article class="billing-note">
-              <CheckCircle2 class="h-4 w-4" />
-              <span>{{ t('billing.notes.payment') }}</span>
-            </article>
-          </div>
-          <p v-if="feedback" class="billing-feedback">{{ feedback }}</p>
-        </UiCard>
+        </section>
+        <p v-if="supportContact" class="vg-muted membership__support">{{ t('cloud.membership.support', { contact: supportContact }) }}</p>
       </aside>
-    </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.billing-page {
-  min-height: 100%;
-  padding: 6px 10px 18px;
-  display: grid;
-  gap: 10px;
-  color: #eef3ff;
-}
-
-.billing-hero,
-.billing-summary,
-.billing-grid,
-.plan-grid,
-.billing-table__head,
-.billing-table__row {
-  display: grid;
-}
-
-.billing-hero {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: linear-gradient(180deg, rgba(12, 18, 34, 0.96), rgba(10, 15, 27, 0.94));
-}
-
-.billing-hero__copy {
-  display: grid;
-  gap: 4px;
-}
-
-.billing-hero__copy h1 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.billing-hero__copy p {
-  margin: 0;
-  color: #97a5c4;
-  font-size: 12px;
-}
-
-.panel-tag {
-  display: inline-block;
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #8ea6ff;
-  font-weight: 700;
-}
-
-.billing-summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.billing-summary-card,
-.billing-panel {
-  padding: 12px 14px;
-  background: rgba(9, 15, 28, 0.94);
-  border: 1px solid rgba(119, 137, 198, 0.1);
-}
-
-.billing-summary-card span {
-  color: #92a1c3;
-  font-size: 11px;
-}
-
-.billing-summary-card strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 20px;
-}
-
-.billing-grid {
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 10px;
-  align-items: start;
-}
-
-.billing-main,
-.billing-side {
-  display: grid;
-  gap: 10px;
-}
-
-.billing-panel__head {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-
-.billing-panel__head strong {
-  font-size: 13px;
-}
-
-.billing-panel__head small {
-  color: #8ea0c7;
-  font-size: 11px;
-}
-
-.plan-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.pack-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.plan-card {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.plan-card__price {
-  display: grid;
-  gap: 4px;
-}
-
-.plan-card__price strong {
-  font-size: 14px;
-}
-
-.plan-card__price span,
-.plan-card__meta span {
-  color: #8ea0c7;
-  font-size: 11px;
-}
-
-.billing-table {
-  display: grid;
-  gap: 8px;
-}
-
-.billing-table__head,
-.billing-table__row {
-  grid-template-columns: 1.2fr 0.7fr 0.7fr 0.9fr;
-  gap: 10px;
-  align-items: center;
-}
-
-.billing-table__head {
-  color: #7f93bf;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.billing-table__body {
-  display: grid;
-  gap: 6px;
-}
-
-.billing-table__row {
-  padding: 10px 0;
-  border-top: 1px solid rgba(148, 163, 184, 0.08);
-  font-size: 12px;
-}
-
-.transaction-list {
-  display: grid;
-  gap: 8px;
-}
-
-.transaction-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-}
-
-.transaction-item strong {
-  display: block;
-  font-size: 12px;
-}
-
-.transaction-item small {
-  color: #8ea0c7;
-  font-size: 11px;
-}
-
-.transaction-item em {
-  font-style: normal;
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.transaction-item em.is-positive {
-  color: #86efac;
-}
-
-.transaction-item em.is-negative {
-  color: #fca5a5;
-}
-
-.billing-note-list {
-  display: grid;
-  gap: 8px;
-}
-
-.billing-note {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  color: #9aaccc;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.billing-feedback {
-  margin: 10px 0 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(109, 93, 255, 0.12);
-  border: 1px solid rgba(109, 93, 255, 0.2);
-  color: #ddd6fe;
-  font-size: 12px;
-}
-
-.billing-empty {
-  color: #8ea0c7;
-  font-size: 12px;
-  padding: 8px 0;
-}
-
-.is-spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 1100px) {
-  .billing-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 900px) {
-  .billing-hero,
-  .billing-summary,
-  .plan-grid,
-  .pack-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.membership { width: min(1408px, 100%); margin: 0 auto; }
+.membership__stat-text { font-size: 16px; overflow: hidden; text-overflow: ellipsis; }
+.membership__support { font-size: 12px; }
 </style>

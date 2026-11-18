@@ -6,6 +6,14 @@ import { router } from './router'
 import './styles.css'
 import './design-system/themes.css'
 import './design-system/theme-components.css'
+import './design-system/ui-kit.css'
+import './design-system/clone-workspace.css'
+import './design-system/clone-studio.css'
+import './design-system/creative-studio.css'
+import './design-system/product-materials.css'
+import './design-system/publisher.css'
+import './design-system/live-photo.css'
+import './design-system/live-slicer.css'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer-error]', {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { buildModelLibraryPrompt } from '../../../shared/modelLibraryPrompt'
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
@@ -24,6 +25,7 @@ import {
 } from '../../../shared/modelProfileOptions'
 import {
   buildShotAntiGlowPromptBlock,
+  cloneProductDisplayName,
   buildFailInsteadRuleText,
   buildFrameContinuityLockText,
   buildHumanPriorityRuleText,
@@ -37,6 +39,8 @@ import {
   sanitizeGeneratedVideoPrompt,
 } from './prompt'
 import { canUseMockGeneration } from './mockPolicy'
+import { fillClonePromptTemplate, getActiveClonePromptTemplate, type ClonePromptKind } from './promptTemplateRegistry'
+import { isEarringTarget, isJewelryProductType, isJewelryTarget, normalizeCloneProductType } from './productCategory'
 
 type GenerateImageInput = {
   credentials: ModelCredentials
@@ -889,39 +893,7 @@ export function buildModelLibraryPromptPreview(input: {
   }
 }
 
-export function buildModelLibraryPrompt(input: {
-  productType: CloneProductType
-  productPoints?: string
-  profile: ReturnType<typeof defaultModelIdentityDescription>
-  hasModelReference?: boolean
-}) {
-  return [
-    'Create one single-image multi-angle reference sheet for a new virtual model identity package for short-form social commerce videos.',
-    'Generate the model only. Do not add, hold, wear, present, or interact with any product, accessory, prop, package, phone, jewelry, clothing item, or branded object.',
-    'The model must be a new person and must not copy any person from the reference video.',
-    `Market: ${input.profile.market}. Gender: ${input.profile.gender}. Age range: ${input.profile.ageRange}.`,
-    `Face shape: ${input.profile.faceShape || 'oval face shape'}. Hair: ${input.profile.hairStyle}. Hair color: ${input.profile.hairColor || 'natural dark black hair color'}.`,
-    `Skin tone: ${input.profile.skinTone}. Body type: ${input.profile.bodyType || 'slim build'}. Outfit: ${input.profile.outfitStyle}.`,
-    `Mood: ${input.profile.mood}. Scene: ${input.profile.sceneStyle}. Language style: ${input.profile.languageStyle || 'Chinese-speaking social-commerce expression style'}.`,
-    `Camera presence: ${input.profile.cameraPresence || 'natural social-commerce camera presence'}. Style bias: ${input.profile.styleBias || 'conversion-focused product demo style'}.`,
-    'For Southeast Asian hot-weather everyday styling, prefer short-sleeve tops, light breathable casual clothing, and simple daily outfits unless the user explicitly requests otherwise.',
-    'The model should look like a real ordinary person, not a fashion model, celebrity, luxury campaign face, or highly polished influencer.',
-    'Prefer natural facial features, realistic proportions, light everyday grooming, and believable skin texture. Avoid overly sharp jawlines, glamorous makeup, dramatic styling, or high-end editorial beauty treatment.',
-    'The face should feel ordinary and believable, not exceptionally beautiful or commercially perfected.',
-    'Allow mild asymmetry, normal pores, light under-eye presence, natural smile lines, and small everyday skin texture details.',
-    'Do not beautify the face into a luxury ad look. Do not generate flawless skin, porcelain skin, perfect symmetry, sculpted editorial cheekbones, or overly polished influencer makeup.',
-    'Output format: one single image only, arranged as a practical 3x3 multi-angle contact sheet with 9 panels.',
-    'The 9 panels must show the same exact model identity from different reusable angles and framings such as front portrait, left 45 degree, right 45 degree, left profile, right profile, half body, hands-near-face pose, seated natural pose, and one simple close detail angle.',
-    'Keep the same face, hair, outfit, lighting, age impression, and scene style fully consistent across all 9 panels.',
-    'Do not make every panel front-facing. The purpose is reusable multi-angle identity coverage, not a single hero portrait repeated 9 times.',
-    'Show the model alone in a simple, practical, reusable everyday reference set.',
-    'No product, no prop, no handbag, no jewelry showcase, no package, no phone, no bottle, no text, no subtitle, no watermark, no logo, no UI overlay, no random letters.',
-    'Realistic smartphone photo style, natural skin texture, ordinary home lighting, and authentic everyday framing.',
-    'Single person only. One collage image only.',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
+export { buildModelLibraryPrompt }
 
 export function buildIdentityPackPrompt(input: {
   productType: CloneProductType
@@ -1185,9 +1157,7 @@ function looksLikeEarringStoryboardShot(productType: CloneProductType, shot: Sho
   ]
     .map((item) => String(item || '').toLowerCase())
     .join('\n')
-  return /earrings?|ear\s|earring|hoop|dangle|drop earring|stud|ear jewelry|jewelry|jewellery|zircon|silver|gold|star-shaped dangles/.test(
-    haystack,
-  )
+  return isEarringTarget(productType, haystack)
 }
 
 function isWearableStoryboardShot(productType: CloneProductType, shot: ShotSpec, productDescription?: string) {
@@ -1205,7 +1175,9 @@ function isWearableStoryboardShot(productType: CloneProductType, shot: ShotSpec,
   ]
     .map((item) => String(item || '').toLowerCase())
     .join('\n')
-  return /ring|bracelet|necklace|pendant|wrist|finger|neck|clavicle|wearing|worn accessory|wear shot/.test(haystack)
+  if (isJewelryTarget(productType, haystack)) return true
+  if (normalizeCloneProductType(productType) !== 'general') return false
+  return /\b(?:worn on|wearing the|worn accessory|wear shot|on the wrist|on the finger|around the neck)\b/.test(haystack)
 }
 
 function sanitizeCompiledFramePrompt(productType: CloneProductType, compiledPrompt?: string) {
@@ -1561,7 +1533,30 @@ function hasNoPersonStoryboardSignal(shot?: ShotSpec) {
   ) || handOnlySignal
 }
 
-function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, shot?: ShotSpec) {
+const STORYBOARD_NO_HUMAN_RULE =
+  '- NO HUMAN ADDITIONS: If Image 1 or Image 2 is product-only, no-model, no-person, tabletop, flat-lay, isolated, or packaging-only, do NOT add any hands, fingers, arms, human limbs, or human interaction. Do NOT invent hand gestures, hand posing, or hand actions.'
+const STORYBOARD_HUMAN_SUPPORT_RULE =
+  '- HUMAN SUPPORT RULE: Only keep human context when it is already required by the reference composition. Never add extra hands, fingers, arms, or human gestures that are not needed to preserve the original product presentation structure.'
+
+function storyboardPromptKind(mode: StoryboardReferenceMode): ClonePromptKind {
+  return mode === 'product_closeup' ? 'storyboard_product' : 'storyboard_model'
+}
+
+/** Built-in storyboard image template, shown in prompt management as the default version. */
+export function getDefaultStoryboardPromptTemplate(mode: StoryboardReferenceMode) {
+  return composeStoryboardFrameTransferTemplate(mode, '{{humanSupportRule}}')
+}
+
+function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, shot?: ShotSpec, productType?: CloneProductType) {
+  // A user-managed template (scoped to this category, else to all categories) replaces the built-in one.
+  const template = getActiveClonePromptTemplate(storyboardPromptKind(mode), productType) ?? getDefaultStoryboardPromptTemplate(mode)
+  return fillClonePromptTemplate(template, {
+    humanSupportRule: hasNoPersonStoryboardSignal(shot) ? STORYBOARD_NO_HUMAN_RULE : STORYBOARD_HUMAN_SUPPORT_RULE,
+    productName: cloneProductDisplayName(productType),
+  }).trim()
+}
+
+function composeStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, humanSupportRule: string) {
   const intro =
     mode === 'product_closeup'
       ? [
@@ -1585,9 +1580,7 @@ function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, sho
       ? [
         '2. PRESENTATION STRUCTURE:',
         'Keep the product fully consistent with Image 1, including its visible structure, material, color, finish, proportions, and defining details.',
-        hasNoPersonStoryboardSignal(shot)
-          ? '- NO HUMAN ADDITIONS: If Image 1 or Image 2 is product-only, no-model, no-person, tabletop, flat-lay, isolated, or packaging-only, do NOT add any hands, fingers, arms, human limbs, or human interaction. Do NOT invent hand gestures, hand posing, or hand actions.'
-          : '- HUMAN SUPPORT RULE: Only keep human context when it is already required by the reference composition. Never add extra hands, fingers, arms, or human gestures that are not needed to preserve the original product presentation structure.',
+        humanSupportRule,
         '- SCENE INTEGRATION: Place that same product naturally into the daily environment, composition, and atmosphere of Image 2 so the final result feels like a real-life casual capture in that scene.',
         '- BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2 to present the product naturally, such as hand placement or ear/neck/hand relation. Do not infer or recreate a specific person identity from Image 1.',
         '- CLOTHING: Only preserve clothing or accessory context when it is visible and necessary for the Image 2 scene composition. Ignore unrelated fashion details that do not help the product sit naturally in the scene.',
@@ -1670,7 +1663,7 @@ export function resolveStoryboardImageTemplateType(input: {
     return explicit
   }
   const normalizedType = String(input.productType || '').trim().toLowerCase()
-  if (/earrings?|ring|bracelet|necklace|pendant/.test(normalizedType)) return 'jewelry'
+  if (isJewelryProductType(normalizedType)) return 'jewelry'
   if (hasPackagingStoryboardSignal(input.shot)) return 'ecommerce_packaging'
   if (hasLifestyleInteractionStoryboardSignal(input.productType, input.shot)) return 'lifestyle_interaction'
   return 'general'
@@ -1694,7 +1687,7 @@ export function buildGptFramePrompt(input: {
           shot: input.shot,
           explicitTemplateType: input.explicitTemplateType,
         })
-  return buildStoryboardFrameTransferTemplate(referenceMode, input.shot)
+  return buildStoryboardFrameTransferTemplate(referenceMode, input.shot, input.productType)
 }
 export async function generateModelIdentityPackImages(input: {
   credentials: ModelCredentials

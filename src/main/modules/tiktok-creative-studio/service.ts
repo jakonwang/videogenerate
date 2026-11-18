@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import PQueue from 'p-queue'
 import { getAppPaths } from '../../lib/paths'
-import { tiktokCreativeStudioRepo } from './repo'
+import { onTiktokCreativeTaskChanged, tiktokCreativeStudioRepo } from './repo'
 import { tiktokCreativeAccounts } from './accounts'
 import { TiktokOfficialClient } from './officialClient'
 import { prepareReferenceImageForExternalWorkflow } from '../live-photo/service'
@@ -70,6 +70,47 @@ function resolveGeneratedImagePath(shot: TiktokCreativeShotTask) {
   return [shot.preparedImagePath, shot.imagePreparation?.generatedStillPath, ...attemptPaths]
     .map((value) => String(value || '').trim())
     .find((value) => value && existsSync(value))
+}
+
+function withResolvedImagePaths(task: TiktokCreativeTask): TiktokCreativeTask {
+  return {
+    ...task,
+    shots: task.shots.map((shot): TiktokCreativeShotTask => {
+      const generatedImagePath = resolveGeneratedImagePath(shot)
+      return {
+        ...shot,
+        preparedImagePath: generatedImagePath,
+        imagePreparation: shot.imagePreparation
+          ? {
+              ...shot.imagePreparation,
+              generatedStillPath: generatedImagePath,
+            }
+          : undefined,
+      }
+    }),
+  }
+}
+
+function summarizeTaskForList(task: TiktokCreativeTask): TiktokCreativeTask {
+  return {
+    ...task,
+    logs: [],
+    shots: task.shots.map((shot) => {
+      const preparation = shot.imagePreparation as (Record<string, any> & { generationAttempts?: unknown[] }) | undefined
+      const { generationAttempts, ...restPreparation } = preparation || {}
+      return {
+        ...shot,
+        logs: [],
+        requestTrace: undefined,
+        imagePreparation: preparation
+          ? {
+              ...restPreparation,
+              generationAttemptCount: Array.isArray(generationAttempts) ? generationAttempts.length : 0,
+            } as TiktokCreativeShotTask['imagePreparation']
+          : undefined,
+      }
+    }),
+  }
 }
 
 function isAmbiguousCreationError(message: string) {
@@ -253,15 +294,39 @@ async function accountClient(account: TiktokCreativeAccount) {
   return new TiktokOfficialClient({ cookies, accountId: account.id })
 }
 
+// Recently read credit balances. Avoids re-checking every account (and
+// possibly opening its page) before each task creation.
+const CREDIT_CACHE_MS = 2 * 60_000
+const creditCache = new Map<string, { credit: number; at: number }>()
+
+function rememberCredit(accountId: string, credit: number | undefined) {
+  if (credit === undefined) creditCache.delete(accountId)
+  else creditCache.set(accountId, { credit, at: now() })
+}
+
+function consumeCachedCredit(accountId: string, amount: number) {
+  const cached = creditCache.get(accountId)
+  if (cached) cached.credit -= amount
+}
+
 async function chooseAccount(requiredCredit: number) {
   const accounts = (await tiktokCreativeAccounts.list()).filter((account) => account.enabled)
   if (!accounts.length) throw new Error('No enabled TikTok account is configured')
   const errors: string[] = []
   for (const account of accounts) {
+    const cached = creditCache.get(account.id)
+    if (cached && now() - cached.at < CREDIT_CACHE_MS) {
+      if (cached.credit >= requiredCredit) {
+        return { account, client: await accountClient(account), requiredCredit }
+      }
+      errors.push(`${account.name}: insufficient credit`)
+      continue
+    }
     const client = await accountClient(account)
     let selected = false
     try {
       const result = await client.queryCredit()
+      rememberCredit(account.id, result.authenticated ? result.credit : undefined)
       if (!result.authenticated) {
         await tiktokCreativeAccounts.updateState(account.id, { state: 'expired', lastError: 'Login expired' })
         errors.push(`${account.name}: login expired`)
@@ -279,7 +344,7 @@ async function chooseAccount(requiredCredit: number) {
       }
       await tiktokCreativeAccounts.updateState(account.id, { state: 'ready', credit: result.credit })
       selected = true
-      return { account, client }
+      return { account, client, requiredCredit }
     } catch (error) {
       const message = getErrorMessage(error, 'Account check failed')
       await tiktokCreativeAccounts.updateState(account.id, { state: /login|auth|401|403/i.test(message) ? 'expired' : 'error', lastError: message })
@@ -355,10 +420,148 @@ async function downloadResult(input: { taskId: string; shotId: string; client: T
   return { dir, videoPath, posterPath }
 }
 
-async function pollOfficialTask(taskId: string, shotId: string, shot: TiktokCreativeShotTask) {
-  if (!shot.accountId || !shot.officialTaskId) throw new Error('Official task binding is incomplete')
-  if (Number(shot.pollAttempts || 0) >= 180) {
-    await persistShot(taskId, shotId, (current) => ({
+// ---------------------------------------------------------------------------
+// Official task status polling.
+//
+// All shots waiting on TikTok are tracked in one in-memory registry and checked
+// by a single loop. Due shots are grouped per account and checked with one
+// client (one warm page at most), instead of every shot creating its own
+// client, loading the Creative Studio page and closing it again.
+// ---------------------------------------------------------------------------
+type OfficialPollEntry = {
+  taskId: string
+  shotId: string
+  accountId: string
+  dueAt: number
+  authFailures: number
+}
+
+const officialPollEntries = new Map<string, OfficialPollEntry>()
+const OFFICIAL_POLL_TICK_MS = 5000
+const OFFICIAL_POLL_MAX_ATTEMPTS = 180
+// Consecutive 401 responses tolerated before the shot is paused for re-login.
+const OFFICIAL_POLL_MAX_AUTH_FAILURES = 6
+let officialPollTimer: ReturnType<typeof setInterval> | undefined
+let officialPollRunning = false
+
+function registerOfficialPoll(taskId: string, shotId: string, accountId: string, delayMs = 0) {
+  const key = shotKey(taskId, shotId)
+  const dueAt = now() + Math.max(0, delayMs)
+  const existing = officialPollEntries.get(key)
+  if (existing) {
+    existing.accountId = accountId
+    existing.dueAt = Math.min(existing.dueAt, dueAt)
+  } else {
+    officialPollEntries.set(key, { taskId, shotId, accountId, dueAt, authFailures: 0 })
+  }
+  ensureOfficialPollTimer()
+}
+
+function rescheduleOfficialPoll(entry: OfficialPollEntry, delayMs: number) {
+  entry.dueAt = now() + Math.max(0, delayMs)
+}
+
+function ensureOfficialPollTimer() {
+  if (officialPollTimer) return
+  officialPollTimer = setInterval(() => { void runOfficialPollTick() }, OFFICIAL_POLL_TICK_MS)
+  officialPollTimer.unref?.()
+}
+
+function stopOfficialPollTimerIfIdle() {
+  if (officialPollEntries.size || !officialPollTimer) return
+  clearInterval(officialPollTimer)
+  officialPollTimer = undefined
+}
+
+async function runOfficialPollTick() {
+  if (officialPollRunning) return
+  officialPollRunning = true
+  try {
+    const timestamp = now()
+    const due = Array.from(officialPollEntries.values()).filter((entry) => entry.dueAt <= timestamp)
+    if (!due.length) return
+    const byAccount = new Map<string, OfficialPollEntry[]>()
+    for (const entry of due) {
+      const group = byAccount.get(entry.accountId) || []
+      group.push(entry)
+      byAccount.set(entry.accountId, group)
+    }
+    const accounts = await tiktokCreativeAccounts.list()
+    for (const [accountId, entries] of byAccount) {
+      const account = accounts.find((item) => item.id === accountId)
+      if (!account) {
+        for (const entry of entries) {
+          officialPollEntries.delete(shotKey(entry.taskId, entry.shotId))
+          await failOfficialPoll(entry, 'The account bound to this task no longer exists').catch(() => undefined)
+        }
+        continue
+      }
+      await withAccountLock(accountId, async () => {
+        const client = await accountClient(account)
+        try {
+          for (const entry of entries) {
+            await pollOneOfficialTask(entry, client).catch(async (error) => {
+              await handleOfficialPollError(entry, error).catch(() => undefined)
+            })
+          }
+        } finally {
+          await client.close()
+        }
+      }).catch((error) => {
+        console.warn('[tiktok-creative] pollGroupFailed', { accountId, error: getErrorMessage(error, 'poll failed') })
+        for (const entry of entries) rescheduleOfficialPoll(entry, 30_000)
+      })
+    }
+  } finally {
+    officialPollRunning = false
+    stopOfficialPollTimerIfIdle()
+  }
+}
+
+async function failOfficialPoll(entry: OfficialPollEntry, message: string, status: 'failed' | 'requires_manual' = 'failed', remoteStatus: TiktokCreativeShotTask['remoteStatus'] = 'failed') {
+  await persistShot(entry.taskId, entry.shotId, (current) => ({
+    ...current,
+    status,
+    remoteStatus,
+    lastError: message,
+    remoteStatusUpdatedAt: now(),
+    updatedAt: now(),
+    logs: [...(current.logs || []), buildLog(`[tiktok-creative] ${message}`, 'error')].slice(-200),
+  }))
+}
+
+async function handleOfficialPollError(entry: OfficialPollEntry, error: unknown) {
+  const key = shotKey(entry.taskId, entry.shotId)
+  const message = getErrorMessage(error, 'TikTok task status check failed')
+  // Transient network / rate-limit errors: keep the shot and try again later.
+  if (isAmbiguousCreationError(message)) {
+    const task = await tiktokCreativeStudioRepo.get(entry.taskId)
+    const attempts = Number(task?.shots.find((item) => item.shotId === entry.shotId)?.pollAttempts || 0)
+    rescheduleOfficialPoll(entry, resolveTiktokOfficialTaskPollDelay(attempts + 1, key))
+    return
+  }
+  officialPollEntries.delete(key)
+  const authPaused = /login|cookie|auth|verification|captcha/i.test(message)
+  await failOfficialPoll(
+    entry,
+    message,
+    authPaused ? 'requires_manual' : 'failed',
+    authPaused ? 'paused_auth' : 'failed',
+  )
+}
+
+async function pollOneOfficialTask(entry: OfficialPollEntry, client: TiktokOfficialClient) {
+  const key = shotKey(entry.taskId, entry.shotId)
+  const task = await tiktokCreativeStudioRepo.get(entry.taskId)
+  const shot = task?.shots.find((item) => item.shotId === entry.shotId)
+  if (!task || !shot || !shot.officialTaskId || shot.status !== 'running') {
+    officialPollEntries.delete(key)
+    return
+  }
+  const pollAttempts = Number(shot.pollAttempts || 0)
+  if (pollAttempts >= OFFICIAL_POLL_MAX_ATTEMPTS) {
+    officialPollEntries.delete(key)
+    await persistShot(entry.taskId, entry.shotId, (current) => ({
       ...current,
       status: 'requires_manual',
       remoteStatus: 'paused_error',
@@ -368,89 +571,83 @@ async function pollOfficialTask(taskId: string, shotId: string, shot: TiktokCrea
     }))
     return
   }
-  const account = (await tiktokCreativeAccounts.list()).find((item) => item.id === shot.accountId)
-  if (!account) throw new Error('The account bound to this task no longer exists')
-  const client = await accountClient(account)
-  try {
-    let result: Awaited<ReturnType<TiktokOfficialClient['checkTask']>>
-    try {
-      result = await client.checkTask(shot.officialTaskId)
-    } catch (error) {
-      if (!isTiktokOfficialTaskResultPendingError(error)) throw error
-      await persistShot(taskId, shotId, (current) => ({
-        ...current,
-        status: 'running',
-        remoteStatus: 'processing',
-        pollAttempts: Number(current.pollAttempts || 0) + 1,
-        requestTrace: [...(current.requestTrace || []), ...client.getRequestTrace()].slice(-30),
-        lastError: undefined,
-        remoteStatusUpdatedAt: now(),
-        updatedAt: now(),
-      }))
-      scheduleShot(
-        taskId,
-        shotId,
-        resolveTiktokOfficialTaskPollDelay(Number(shot.pollAttempts || 0) + 1, shotKey(taskId, shotId)),
-      )
-      return
-    }
-    if (result.completed && result.videoUrl) {
-      const downloaded = await downloadResult({ taskId, shotId, client, videoUrl: result.videoUrl, posterUrl: result.posterUrl })
-      await persistShot(taskId, shotId, (current) => ({
-        ...current,
-        status: 'completed',
-        remoteStatus: 'completed',
-        officialVideoId: result.videoId,
-        resultVideoPath: downloaded.videoPath,
-        posterPath: downloaded.posterPath,
-        requestTrace: [...(current.requestTrace || []), ...(result.requestTrace || [])].slice(-30),
-        downloadDir: downloaded.dir,
-        remoteStatusUpdatedAt: now(),
-        updatedAt: now(),
-        logs: [...(current.logs || []), buildLog(`[tiktok-creative] video downloaded: ${downloaded.videoPath}`, 'success')].slice(-200),
-      }))
-      return
-    }
-    if (result.processing || result.status === 2) {
-      await persistShot(taskId, shotId, (current) => ({
-        ...current,
-        status: 'running',
-        remoteStatus: 'processing',
-        pollAttempts: Number(current.pollAttempts || 0) + 1,
-        requestTrace: [...(current.requestTrace || []), ...(result.requestTrace || [])].slice(-30),
-        remoteStatusUpdatedAt: now(),
-        updatedAt: now(),
-      }))
-      scheduleShot(
-        taskId,
-        shotId,
-        resolveTiktokOfficialTaskPollDelay(Number(shot.pollAttempts || 0) + 1, shotKey(taskId, shotId)),
-      )
-      return
-    }
-    const reason = String(result.failureReason || '').trim()
-    const rawSummary = result.raw === undefined
-      ? ''
-      : JSON.stringify(result.raw).slice(0, 1600)
-    const message = `TikTok task failed with status ${String(result.status ?? 'unknown')}${reason ? `: ${reason}` : ''}`
-    await persistShot(taskId, shotId, (current) => ({
+  const markProcessing = async (trace: TiktokCreativeShotTask['requestTrace']) => {
+    await persistShot(entry.taskId, entry.shotId, (current) => ({
       ...current,
-      status: 'failed',
-      remoteStatus: 'failed',
-      lastError: message,
-      requestTrace: [...(current.requestTrace || []), ...(result.requestTrace || [])].slice(-30),
+      status: 'running',
+      remoteStatus: 'processing',
+      pollAttempts: Number(current.pollAttempts || 0) + 1,
+      requestTrace: [...(current.requestTrace || []), ...(trace || [])].slice(-30),
+      lastError: undefined,
       remoteStatusUpdatedAt: now(),
       updatedAt: now(),
-      logs: [
-        ...(current.logs || []),
-        buildLog(`[tiktok-creative] ${message}`, 'error'),
-        ...(rawSummary ? [buildLog(`[tiktok-creative] TikTok failure response: ${rawSummary}`, 'error')] : []),
-      ].slice(-200),
+    }))
+    rescheduleOfficialPoll(entry, resolveTiktokOfficialTaskPollDelay(pollAttempts + 1, key))
+  }
+
+  let result: Awaited<ReturnType<TiktokOfficialClient['checkTask']>>
+  try {
+    result = await client.checkTask(shot.officialTaskId)
+  } catch (error) {
+    if (!isTiktokOfficialTaskResultPendingError(error)) throw error
+    entry.authFailures += 1
+    if (entry.authFailures >= OFFICIAL_POLL_MAX_AUTH_FAILURES) {
+      officialPollEntries.delete(key)
+      await failOfficialPoll(
+        entry,
+        `TikTok returned 401 for ${entry.authFailures} consecutive status checks; re-import the account cookies and retry`,
+        'requires_manual',
+        'paused_auth',
+      )
+      return
+    }
+    await markProcessing(client.getRequestTrace())
+    return
+  }
+  entry.authFailures = 0
+
+  if (result.completed && result.videoUrl) {
+    officialPollEntries.delete(key)
+    const downloaded = await downloadResult({ taskId: entry.taskId, shotId: entry.shotId, client, videoUrl: result.videoUrl, posterUrl: result.posterUrl })
+    await persistShot(entry.taskId, entry.shotId, (current) => ({
+      ...current,
+      status: 'completed',
+      remoteStatus: 'completed',
+      officialVideoId: result.videoId,
+      resultVideoPath: downloaded.videoPath,
+      posterPath: downloaded.posterPath,
+      requestTrace: [...(current.requestTrace || []), ...(result.requestTrace || [])].slice(-30),
+      downloadDir: downloaded.dir,
+      remoteStatusUpdatedAt: now(),
+      updatedAt: now(),
+      logs: [...(current.logs || []), buildLog(`[tiktok-creative] video downloaded: ${downloaded.videoPath}`, 'success')].slice(-200),
     }))
     return
-  } finally {
-    await client.close()
   }
+  if (result.processing || result.status === 2) {
+    await markProcessing(result.requestTrace)
+    return
+  }
+  officialPollEntries.delete(key)
+  const reason = String(result.failureReason || '').trim()
+  const rawSummary = result.raw === undefined
+    ? ''
+    : JSON.stringify(result.raw).slice(0, 1600)
+  const message = `TikTok task failed with status ${String(result.status ?? 'unknown')}${reason ? `: ${reason}` : ''}`
+  await persistShot(entry.taskId, entry.shotId, (current) => ({
+    ...current,
+    status: 'failed',
+    remoteStatus: 'failed',
+    lastError: message,
+    requestTrace: [...(current.requestTrace || []), ...(result.requestTrace || [])].slice(-30),
+    remoteStatusUpdatedAt: now(),
+    updatedAt: now(),
+    logs: [
+      ...(current.logs || []),
+      buildLog(`[tiktok-creative] ${message}`, 'error'),
+      ...(rawSummary ? [buildLog(`[tiktok-creative] TikTok failure response: ${rawSummary}`, 'error')] : []),
+    ].slice(-200),
+  }))
 }
 
 async function processReferenceShot(taskId: string, shotId: string) {
@@ -468,9 +665,9 @@ async function processReferenceShot(taskId: string, shotId: string) {
       queueLength: shotProcessingQueue.size,
     })
     if (shot.officialTaskId) {
-      await withAccountLock(shot.accountId || '__unbound__', async () => {
-        await pollOfficialTask(taskId, shotId, shot)
-      })
+      if (!shot.accountId) throw new Error('Official task binding is incomplete')
+      // Status checks run in the shared batched poller, outside this queue.
+      registerOfficialPoll(taskId, shotId, shot.accountId, 0)
       return
     }
 
@@ -601,6 +798,7 @@ async function processReferenceShot(taskId: string, shotId: string) {
               lastError: `[official_create_unconfirmed] ${message}`,
               updatedAt: now(),
             })).catch(() => undefined)
+            creditCache.delete(selected.account.id)
             throw new Error(`[official_create_unconfirmed] ${message}`)
           }
           await persistShot(taskId, shotId, (current) => ({
@@ -614,6 +812,7 @@ async function processReferenceShot(taskId: string, shotId: string) {
             updatedAt: now(),
             logs: [...(current.logs || []), buildLog(`[tiktok-creative] official task created: ${created.taskId}`, 'success')].slice(-200),
           }))
+          consumeCachedCredit(selected.account.id, selected.requiredCredit)
           if (created.videoUrl) {
             const downloaded = await downloadResult({ taskId, shotId, client: selected.client, videoUrl: created.videoUrl, posterUrl: created.posterUrl })
             await persistShot(taskId, shotId, (current) => ({
@@ -626,7 +825,7 @@ async function processReferenceShot(taskId: string, shotId: string) {
               updatedAt: now(),
             }))
           } else {
-            scheduleShot(taskId, shotId, 10000)
+            registerOfficialPoll(taskId, shotId, selected.account.id, 10000)
           }
         })
       } finally {
@@ -698,22 +897,42 @@ export const tiktokCreativeStudioService = {
 
   async list() {
     const tasks = await tiktokCreativeStudioRepo.list()
-    return tasks.map((task): TiktokCreativeTask => ({
-      ...task,
-      shots: task.shots.map((shot): TiktokCreativeShotTask => {
-        const generatedImagePath = resolveGeneratedImagePath(shot)
-        return {
-          ...shot,
-          preparedImagePath: generatedImagePath,
-          imagePreparation: shot.imagePreparation
-            ? {
-                ...shot.imagePreparation,
-                generatedStillPath: generatedImagePath,
-              }
-            : undefined,
-        }
-      }),
-    }))
+    return tasks.map(withResolvedImagePaths)
+  },
+
+  // Lightweight rows for the library grid: drops logs, request traces and
+  // image attempt history, which make up most of the payload.
+  async listSummary(input?: { ids?: string[] }) {
+    const ids = Array.isArray(input?.ids) ? input.ids.map((id) => String(id || '').trim()).filter(Boolean) : undefined
+    const tasks = ids
+      ? (await Promise.all(ids.map((id) => tiktokCreativeStudioRepo.get(id)))).filter((task): task is TiktokCreativeTask => Boolean(task))
+      : await tiktokCreativeStudioRepo.list()
+    return tasks.map((task) => summarizeTaskForList(withResolvedImagePaths(task)))
+  },
+
+  async getTask(id: string) {
+    const task = await tiktokCreativeStudioRepo.get(String(id || '').trim())
+    return task ? withResolvedImagePaths(task) : null
+  },
+
+  subscribeChanges(listener: (taskIds: string[]) => void) {
+    let pending = new Set<string>()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const unsubscribe = onTiktokCreativeTaskChanged((taskId) => {
+      pending.add(taskId)
+      if (timer) return
+      // Coalesce bursts of writes (several persistShot calls per poll).
+      timer = setTimeout(() => {
+        timer = undefined
+        const taskIds = Array.from(pending)
+        pending = new Set()
+        listener(taskIds)
+      }, 500)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsubscribe()
+    }
   },
 
   async listAccounts() {
@@ -766,7 +985,8 @@ export const tiktokCreativeStudioService = {
       const client = await accountClient(account)
       try {
         const result = await client.queryCredit()
-        const state = !result.authenticated ? 'expired' : result.credit !== undefined && result.credit < 5 ? 'insufficient_credit' : result.credit === undefined ? 'error' : 'ready'
+        rememberCredit(account.id, result.authenticated ? result.credit : undefined)
+        const state =!result.authenticated ? 'expired' : result.credit !== undefined && result.credit < 5 ? 'insufficient_credit' : result.credit === undefined ? 'error' : 'ready'
         return await tiktokCreativeAccounts.updateState(account.id, {
           state,
           credit: result.credit,
@@ -1008,6 +1228,7 @@ export const tiktokCreativeStudioService = {
               lastError: `[official_create_unconfirmed] ${message}`,
               updatedAt: now(),
             })).catch(() => undefined)
+            creditCache.delete(selected.account.id)
             throw new Error(`[official_create_unconfirmed] ${message}`)
           }
           await persistShot(task.id, shotId, (current) => ({
@@ -1021,6 +1242,7 @@ export const tiktokCreativeStudioService = {
             updatedAt: now(),
             logs: [...(current.logs || []), buildLog(`[tiktok-creative] official task created from bypassed image: ${created.taskId}`, 'success')].slice(-200),
           }))
+          consumeCachedCredit(selected.account.id, selected.requiredCredit)
           if (created.videoUrl) {
             const downloaded = await downloadResult({ taskId: task.id, shotId, client: selected.client, videoUrl: created.videoUrl, posterUrl: created.posterUrl })
             await persistShot(task.id, shotId, (current) => ({
@@ -1033,7 +1255,7 @@ export const tiktokCreativeStudioService = {
               updatedAt: now(),
             }))
           } else {
-            scheduleShot(task.id, shotId, 10000)
+            registerOfficialPoll(task.id, shotId, selected.account.id, 10000)
           }
           })
         } finally {

@@ -1,0 +1,124 @@
+/* Creator hub: small layout refinements on top of the vg- UI kit (colours come from --theme-* tokens only). */
+/* The active-tab underline sits at bottom: -1px; without this the tab strip grows a vertical scrollbar. */
+.ch-page .vg-tabs { overflow-y: hidden; }
+.ch-page .ch-shop-switch { display: inline-flex; align-items: center; gap: 8px; }
+.ch-page .ch-shop-switch .vg-select { min-width: 200px; }
+.ch-page .ch-table-scroll { overflow-x: auto; }
+.ch-page .ch-pager-wrap { padding: 0 14px 12px; }
+.ch-page .ch-search { width: 280px; max-width: 100%; }
+.ch-page .ch-nowrap { white-space: nowrap; }
+.ch-page .ch-person { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 280px; }
+.ch-page .ch-product { max-width: 240px; }
+.ch-page .ch-error-line { color: var(--vg-red); font-size: 12px; }
+.ch-page .ch-sort { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+.ch-page .ch-sort.is-active { color: var(--vg-accent); }
+.ch-page .ch-cost-input { width: 120px; text-align: right; }
+.ch-page .ch-cost-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--theme-text); cursor: pointer; padding: 2px 4px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.ch-page .ch-cost-btn svg { color: var(--theme-text-muted); }
+.ch-page .ch-cost-btn:hover { background: var(--theme-panel-soft); }
+.ch-page .ch-rule { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.ch-page .ch-rule__text { flex: 1 1 420px; }
+.ch-page .ch-num-field { width: 140px; }
+.ch-page .ch-num-field .vg-field__label { font-size: 12px; font-weight: 500; color: var(--theme-text-muted); }
+.ch-page .ch-rule__save { align-self: flex-end; }
+
+.ch-page .ch-window-line { justify-content: flex-end; font-size: 12px; }
+.ch-page .ch-delta { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; }
+.ch-page .ch-delta.is-up { color: var(--vg-green); }
+.ch-page .ch-delta.is-down { color: var(--vg-red); }
+.ch-page .ch-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.ch-page .ch-overview-grid .vg-list__item--button .vg-stat__icon { width: 30px; height: 30px; }
+.ch-page .ch-funnel { display: flex; flex-direction: column; gap: 10px; }
+.ch-page .ch-funnel__row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 64px 52px; align-items: center; gap: 10px; font-size: 12px; }
+.ch-page .ch-funnel__label { color: var(--theme-text-secondary); }
+.ch-page .ch-funnel__track { height: 10px; border-radius: 999px; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); overflow: hidden; }
+.ch-page .ch-funnel__bar { height: 100%; background: var(--vg-accent); border-radius: inherit; }
+.ch-page .ch-funnel__value { text-align: right; font-weight: 700; color: var(--theme-text); }
+.ch-page .ch-funnel__rate { text-align: right; }
+.ch-page .ch-small { font-size: 12px; margin-top: 10px; }
+.ch-page .ch-video { max-width: 340px; }
+.ch-page .ch-video__cover { width: 40px; height: 52px; object-fit: cover; }
+.ch-page .ch-sample-tag { height: 18px; font-size: 11px; align-self: flex-start; }
+.ch-page .ch-tags { gap: 4px; max-width: 200px; }
+.ch-page .ch-note { display: inline-block; max-width: 180px; color: var(--theme-text-secondary); }
+.ch-page .ch-row-muted { opacity: .55; }
+.ch-page .ch-ban { color: var(--vg-red); margin-left: 4px; vertical-align: -1px; }
+.ch-page .ch-sync-cell { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.ch-page .ch-range-card { margin-top: 0; }
+/* Discover (creator search + pool) */
+.ch-page .ch-small-inline { font-size: 12px; }
+.ch-page .ch-discover-form { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ch-page .ch-discover-category { min-width: 200px; }
+.ch-page .ch-range { flex-wrap: nowrap; }
+.ch-page .ch-range .vg-input { width: 100%; }
+.ch-page .ch-bulk { align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.ch-page .ch-person-btn { border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.ch-page .ch-person-btn:hover .vg-list__title { color: var(--vg-accent); }
+.ch-page .ch-star, .ch-detail .ch-star { color: var(--vg-amber); margin-left: 4px; vertical-align: -1px; }
+.ch-page .ch-sub { font-size: 11px; }
+.ch-page .ch-flags { gap: 4px; max-width: 220px; }
+@media (max-width: 1100px) {
+  .ch-page .ch-discover-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .ch-page .ch-discover-form { grid-template-columns: minmax(0, 1fr); }
+  .ch-page .ch-discover-form .span-2 { grid-column: auto; }
+}
+
+/* Creator detail dialog (teleported, so not under .ch-page) */
+.ch-detail .ch-detail__avatar { width: 44px; height: 44px; }
+.ch-detail .ch-detail__badges { gap: 6px; margin-top: 6px; }
+.ch-detail .ch-detail__section { display: flex; flex-direction: column; gap: 10px; }
+.ch-detail .ch-detail__section + .ch-detail__section { padding-top: 14px; border-top: 1px solid var(--theme-divider); }
+.ch-detail .ch-detail__title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 700; }
+.ch-detail .ch-detail__title svg { color: var(--vg-accent); }
+.ch-detail .ch-detail__title small { font-size: 12px; font-weight: 500; }
+.ch-detail .ch-detail__subtitle { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--theme-text-secondary); }
+.ch-detail .ch-detail__stats { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.ch-detail .ch-detail__stats .vg-stat { padding: 10px 12px; }
+.ch-detail .ch-detail__value { font-size: 15px; }
+.ch-detail .ch-detail__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ch-detail .ch-detail__kv { margin-top: 12px; font-size: 12px; }
+.ch-detail .ch-detail__source { margin: 0 4px 4px 0; }
+.ch-detail .ch-detail__table { max-height: 260px; }
+.ch-detail .ch-detail__cell { display: inline-block; max-width: 260px; text-align: left; }
+.ch-detail .ch-funnel { display: flex; flex-direction: column; gap: 8px; }
+.ch-detail .ch-funnel__row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 32px 36px; align-items: center; gap: 10px; font-size: 12px; }
+.ch-detail .ch-funnel__label { color: var(--theme-text-secondary); }
+.ch-detail .ch-funnel__track { height: 8px; border-radius: 999px; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); overflow: hidden; }
+.ch-detail .ch-funnel__bar { height: 100%; background: var(--vg-accent); border-radius: inherit; }
+.ch-detail .ch-funnel__value { text-align: right; font-weight: 700; }
+.ch-detail .ch-small { font-size: 12px; }
+.ch-detail .ch-nowrap { white-space: nowrap; }
+.ch-detail .ch-tone-green { color: var(--vg-green); }
+.ch-detail .ch-tone-amber { color: var(--vg-amber); }
+.ch-detail .ch-tone-red { color: var(--vg-red); }
+/* Contact is the main action of the dialog: shown first, separated from what follows. */
+.ch-detail .ch-detail__section.ch-detail__section--contact { order: -1; padding-top: 0; border-top: 0; padding-bottom: 14px; border-bottom: 1px solid var(--theme-divider); }
+.ch-detail .ch-contact-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ch-detail .ch-contact-log { max-height: 180px; overflow-y: auto; }
+.ch-detail .ch-contact-log .vg-list__item { padding: 6px 4px; }
+@media (max-width: 900px) {
+  .ch-detail .ch-detail__grid { grid-template-columns: minmax(0, 1fr); }
+  .ch-detail .ch-contact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Zalo outreach dialog (teleported) */
+.ch-zalo .ch-zalo__select { flex: 1; min-width: 0; }
+.ch-zalo .ch-zalo__name { width: 220px; max-width: 100%; }
+
+.ch-chip-btn { cursor: pointer; }
+.ch-chip-btn:hover { border-color: var(--vg-accent-line); color: var(--vg-accent); }
+@media (max-width: 1100px) {
+  .ch-page .ch-overview-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ch-steps { margin: 0; padding-left: 18px; list-style: decimal; display: flex; flex-direction: column; gap: 4px; color: var(--theme-text-secondary); font-size: 12px; }
+.ch-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ch-field-head label { font-size: 13px; font-weight: 600; color: var(--theme-text); }
+.ch-cookie-text { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .ch-page .ch-search { width: 100%; }
+  .ch-page .ch-shop-switch .vg-select { min-width: 0; }
+}

@@ -67,13 +67,23 @@ function parseChatContent(endpointStyle: string, text: string) {
   return cleanAiText(extractModelMessageContent(text))
 }
 
+export type ChatImageInput = {
+  /** Short caption sent right before the image, e.g. "shot_1 start frame". */
+  label?: string
+  mimeType: string
+  base64: string
+}
+
 export async function generateChatCompletion(input: {
   credentials: ModelCredentials
   system?: string
   prompt: string
+  /** Optional images for multimodal models, sent after the prompt in order. */
+  images?: ChatImageInput[]
   model?: string
   timeoutMs?: number
 }) {
+  const images = (input.images ?? []).filter((item) => item && item.base64 && item.mimeType)
   const cfg = resolveApifoxHubCredentials(input.credentials, 'chat')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
@@ -94,7 +104,18 @@ export async function generateChatCompletion(input: {
       model,
       messages: [
         ...(input.system ? [{ role: 'system', content: input.system }] : []),
-        { role: 'user', content: input.prompt },
+        {
+          role: 'user',
+          content: images.length
+            ? [
+                { type: 'text', text: input.prompt },
+                ...images.flatMap((image) => [
+                  ...(image.label ? [{ type: 'text', text: image.label }] : []),
+                  { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+                ]),
+              ]
+            : input.prompt,
+        },
       ],
     }
 
@@ -103,7 +124,18 @@ export async function generateChatCompletion(input: {
       headers = { 'x-goog-api-key': key, 'Content-Type': 'application/json' }
       body = {
         system_instruction: input.system ? { parts: [{ text: input.system }] } : undefined,
-        contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: input.prompt },
+              ...images.flatMap((image) => [
+                ...(image.label ? [{ text: image.label }] : []),
+                { inline_data: { mime_type: image.mimeType, data: image.base64 } },
+              ]),
+            ],
+          },
+        ],
       }
     } else if (cfg.chatEndpointStyle === 'anthropic_native') {
       url = `${root}/v1/messages`
@@ -116,7 +148,20 @@ export async function generateChatCompletion(input: {
         model,
         system: input.system || undefined,
         max_tokens: 4096,
-        messages: [{ role: 'user', content: input.prompt }],
+        messages: [
+          {
+            role: 'user',
+            content: images.length
+              ? [
+                  { type: 'text', text: input.prompt },
+                  ...images.flatMap((image) => [
+                    ...(image.label ? [{ type: 'text', text: image.label }] : []),
+                    { type: 'image', source: { type: 'base64', media_type: image.mimeType, data: image.base64 } },
+                  ]),
+                ]
+              : input.prompt,
+          },
+        ],
       }
     }
 
@@ -157,6 +202,7 @@ export async function generateChatCompletion(input: {
       baseUrl: cfg.baseUrl,
       content: parseChatContent(cfg.chatEndpointStyle, text),
       raw: text,
+      imageCount: images.length,
     }
   }
 

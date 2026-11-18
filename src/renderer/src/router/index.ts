@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import MainLayout from "@/ui/MainLayout.vue";
 import HomeView from "@/ui/views/HomeView.vue";
+import { featureForPath, useCloudAuthStore } from "@/stores/cloudAuth";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -10,11 +11,37 @@ const router = createRouter({
       redirect: { name: "home" },
     },
     {
+      path: "/login",
+      name: "login",
+      component: () => import("@/ui/views/CloudLoginView.vue"),
+      meta: { public: true },
+    },
+    {
       path: "/",
       component: MainLayout,
       children: [
         { path: "", redirect: { name: "home" } },
         { path: "home", name: "home", component: HomeView },
+        {
+          path: "inbox",
+          name: "inbox",
+          component: () => import("@/ui/views/ReviewInboxView.vue"),
+        },
+        {
+          path: "insights",
+          name: "insights",
+          component: () => import("@/ui/views/InsightsView.vue"),
+        },
+        {
+          path: "product-research",
+          name: "product-research",
+          component: () => import("@/ui/views/ProductResearchView.vue"),
+        },
+        {
+          path: "product-research/:schemeId",
+          name: "product-research-detail",
+          component: () => import("@/ui/views/ProductResearchDetailView.vue"),
+        },
         {
           path: "production",
           name: "production",
@@ -24,6 +51,21 @@ const router = createRouter({
           path: "production/create",
           name: "production-create",
           component: () => import("@/ui/views/ProductionCreateTaskView.vue"),
+        },
+        {
+          path: "production/mix/insights",
+          name: "production-mix-insights",
+          component: () => import("@/ui/views/ProductionMixInsightsView.vue"),
+        },
+        {
+          path: "production/mix",
+          name: "production-mix",
+          component: () => import("@/ui/views/ProductionMixStudioView.vue"),
+        },
+        {
+          path: "production/pool",
+          name: "production-pool",
+          component: () => import("@/ui/views/ProductionClipPoolView.vue"),
         },
         {
           path: "production/tasks",
@@ -66,11 +108,6 @@ const router = createRouter({
           component: () => import("@/ui/views/PluginsView.vue"),
         },
         {
-          path: "plugins/geelark-publisher",
-          name: "plugin-geelark-publisher",
-          component: () => import("@/ui/views/GeelarkPublisherView.vue"),
-        },
-        {
           path: "plugins/live-photo-generator",
           name: "plugin-live-photo-generator",
           component: () => import("@/ui/views/LivePhotoGeneratorView.vue"),
@@ -101,9 +138,9 @@ const router = createRouter({
           component: () => import("@/ui/views/TiktokCreativeStudioView.vue"),
         },
         {
-          path: "plugins/tiktok-creator-outreach",
-          name: "plugin-tiktok-creator-outreach",
-          component: () => import("@/ui/views/TiktokCreatorOutreachView.vue"),
+          path: "plugins/tiktok-creator-hub",
+          name: "plugin-tiktok-creator-hub",
+          component: () => import("@/ui/views/TiktokCreatorHubView.vue"),
         },
         {
           path: "publish",
@@ -121,11 +158,6 @@ const router = createRouter({
           component: () => import("@/ui/views/TiktokGmvMaxOptimizerView.vue"),
         },
         {
-          path: "plugins/geelark-publisher/publish-center",
-          name: "plugin-geelark-publish-center",
-          component: () => import("@/ui/views/GeelarkPublishCenterView.vue"),
-        },
-        {
           path: "plugins/video-parser-download",
           name: "plugin-video-parser-download",
           component: () => import("@/ui/views/VideoParserDownloadView.vue"),
@@ -133,8 +165,7 @@ const router = createRouter({
         {
           path: "plugins/video-batch-watermark",
           name: "plugin-video-batch-watermark",
-          component: () =>
-            import("@/ui/views/PluginWorkspacePlaceholderView.vue"),
+          component: () => import("@/ui/views/VideoBatchWatermarkView.vue"),
         },
         {
           path: "plugins/video-batch-subtitle",
@@ -179,4 +210,21 @@ const router = createRouter({
   ],
 });
 
+/**
+ * 商业版授权守卫：未登录 / 会员无效 → 登录页；套餐不含该功能 → 会员页。
+ * 真正的限制在主进程（IPC 与本地 API 守卫），这里负责引导用户。
+ */
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true;
+  const cloudAuth = useCloudAuthStore();
+  const status = await cloudAuth.ensureLoaded();
+  if (status.mode !== "enforced") return true;
+  if (!status.licensed) return { name: "login", query: { next: to.fullPath } };
+  if (to.name !== "billing" && !cloudAuth.hasFeature(featureForPath(to.path))) {
+    return { name: "billing", query: { feature: featureForPath(to.path) ?? "" } };
+  }
+  return true;
+});
+
 export { router };
+

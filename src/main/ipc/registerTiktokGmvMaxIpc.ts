@@ -5,10 +5,16 @@ import { dialog, type IpcMain } from 'electron'
 import { getAppPaths } from '../lib/paths'
 import { gmvMaxService } from '../modules/tiktok-gmv-max/service'
 import { gmvMaxWorkerClient } from '../modules/tiktok-gmv-max/workerClient'
+import { startGmvMaxAlertMonitor } from '../modules/tiktok-gmv-max/alertMonitor'
 import type { GmvMaxDecisionRuleConfig, GmvMaxListEntry, GmvMaxNotificationConfig, GmvMaxPolicyPreset, GmvMaxProductCost, GmvMaxRuleGroup, GmvMaxStoreCost, GmvMaxSupplementalMetric } from '../modules/tiktok-gmv-max/types'
 
 export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
-  ipcMain.handle('plugin:tiktokGmvMax:getDashboard', async (_event, payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => await gmvMaxWorkerClient.call('getDashboard', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:getDashboard', async (_event, payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => {
+    // Desktop alerts start once GMV MAX has been opened, so users who never use it do not pay for the worker.
+    startGmvMaxAlertMonitor()
+    return await gmvMaxWorkerClient.call('getDashboard', [payload])
+  })
+  ipcMain.handle('plugin:tiktokGmvMax:getAlerts', async () => await gmvMaxWorkerClient.call('getAlerts'))
   ipcMain.handle('plugin:tiktokGmvMax:getCampaignWorkspace', async (_event, payload: Parameters<typeof gmvMaxService.getCampaignWorkspace>[0]) => await gmvMaxWorkerClient.call('getCampaignWorkspace', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:getCampaignPage', async (_event, payload?: Parameters<typeof gmvMaxService.getCampaignPage>[0]) => await gmvMaxWorkerClient.call('getCampaignPage', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:getCreativePage', async (_event, payload?: Parameters<typeof gmvMaxService.getCreativePage>[0]) => await gmvMaxWorkerClient.call('getCreativePage', [payload]))
@@ -21,6 +27,10 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokGmvMax:getActionPage', async (_event, payload?: Parameters<typeof gmvMaxService.getActionPage>[0]) => await gmvMaxWorkerClient.call('getActionPage', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:getOutcomePage', async (_event, payload?: Parameters<typeof gmvMaxService.getOutcomePage>[0]) => await gmvMaxWorkerClient.call('getOutcomePage', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:getAuditPage', async (_event, payload?: Parameters<typeof gmvMaxService.getAuditPage>[0]) => await gmvMaxWorkerClient.call('getAuditPage', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:getV2Workspace', async (_event, payload?: { storeId?: string }) => await gmvMaxWorkerClient.call('getV2Workspace', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:saveV2Settings', async (_event, payload) => await gmvMaxWorkerClient.call('saveV2Settings', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:recordV2Change', async (_event, payload) => await gmvMaxWorkerClient.call('recordV2Change', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:undoV2Change', async (_event, payload) => await gmvMaxWorkerClient.call('undoV2Change', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:connect', async (_event, payload?: { name?: string }) => {
     return await gmvMaxService.connect({ name: String(payload?.name || '').trim() || undefined })
   })
@@ -110,6 +120,13 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokGmvMax:approve', async (_event, payload: { id: string }) => {
     return await gmvMaxWorkerClient.call('approveRecommendation', [String(payload?.id || '')])
   })
+  ipcMain.handle('plugin:tiktokGmvMax:pushCreativeChanges', async (_event, payload: { operation: string; items: Array<{ campaignId: string; creativeId: string; label?: string }> }) => {
+    const operation = String(payload?.operation || '').toUpperCase() === 'ADD' ? 'ADD' : 'REMOVE'
+    const items = Array.isArray(payload?.items)
+      ? payload.items.map((item) => ({ campaignId: String(item?.campaignId || ''), creativeId: String(item?.creativeId || ''), label: item?.label ? String(item.label) : undefined }))
+      : []
+    return await gmvMaxWorkerClient.call('pushCreativeChanges', [{ operation, items }])
+  })
   ipcMain.handle('plugin:tiktokGmvMax:approveBatch', async (_event, payload: { ids: string[] }) => {
     return await gmvMaxWorkerClient.call('approveRecommendations', [{ ids: Array.isArray(payload?.ids) ? payload.ids.map(String) : [] }])
   })
@@ -135,6 +152,8 @@ export function registerTiktokGmvMaxIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:tiktokGmvMax:saveListEntry', async (_event, payload: GmvMaxListEntry) => await gmvMaxWorkerClient.call('saveListEntry', [payload]))
   ipcMain.handle('plugin:tiktokGmvMax:removeListEntry', async (_event, payload: { id: string }) => await gmvMaxWorkerClient.call('removeListEntry', [String(payload?.id || '')]))
   ipcMain.handle('plugin:tiktokGmvMax:backtest', async (_event, payload?: { campaignId?: string; days?: number }) => await gmvMaxWorkerClient.call('runBacktest', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:applyManualChange', async (_event, payload: { campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }) => await gmvMaxWorkerClient.call('applyManualChange', [payload]))
+  ipcMain.handle('plugin:tiktokGmvMax:applyManualChanges', async (_event, payload: { changes: Array<{ campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }> }) => await gmvMaxWorkerClient.call('applyManualChanges', [{ changes: Array.isArray(payload?.changes) ? payload.changes : [] }]))
   ipcMain.handle('plugin:tiktokGmvMax:rollback', async (_event, payload: { id: string }) => await gmvMaxWorkerClient.call('rollbackAction', [String(payload?.id || '')]))
   ipcMain.handle('plugin:tiktokGmvMax:saveNotificationConfig', async (_event, payload: GmvMaxNotificationConfig) => await gmvMaxWorkerClient.call('saveNotificationConfig', [payload]))
 }

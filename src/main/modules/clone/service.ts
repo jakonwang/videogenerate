@@ -33,6 +33,7 @@ import {
   submitTask as submitAi666Task,
 } from './unifiedVideo'
 import { productsRepo } from '../products/repo'
+import { productAnalysisBoardPromptVersionService } from '../products/promptVersions'
 import { templatesRepo } from '../templates/repo'
 import { getMediaInfo } from '../media/info'
 import { generateThumbnailJpg } from '../media/thumbnail'
@@ -274,6 +275,7 @@ import { queryGrsCredits } from './grsai'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent } from './aiResponse'
 import { downloadAtlasToFile } from './atlasRetry'
 import { promptConsistencyService } from './prompt-consistency/service'
+import { inferCloneProductTypeFromText, isEarringTarget, normalizeCloneProductType } from './productCategory'
 import { createCloneProjectWorkspaceService } from './projectWorkspace'
 import { createCloneProductBindingService } from './productBinding'
 import { createCloneStoryboardGridWorkflow } from './storyboardGridWorkflow'
@@ -373,9 +375,8 @@ function inferEarringLikePromptTarget(input: {
   ]
     .map((item) => String(item || '').toLowerCase())
     .join('\n')
-  return /earrings?|earring|ear jewelry|jewelry|jewellery|ear\s|hoop|dangle|drop earring|stud|silver|gold|zircon|star-shaped dangles/.test(
-    haystack,
-  )
+  // An explicit category always wins; text is only consulted for `general`.
+  return isEarringTarget(input.productType, haystack)
 }
 
 function resolveProjectIdentityGridProductType(project: CloneProject, fallback?: CloneProductType) {
@@ -2260,6 +2261,23 @@ function hasEnoughVariantDiversity(candidates: CloneScriptVariantCandidate[]) {
   return false
 }
 
+/** The script each project actually turned into a video, as "do not repeat" context for its variants. */
+export function collectVariantAvoidScripts(projects: Array<Pick<CloneProject, 'scriptVariantCandidates' | 'selectedScriptVariantId'>>) {
+  const seen = new Set<string>()
+  const out: Array<{ title: string; summary: string }> = []
+  for (const project of projects) {
+    const candidates = project.scriptVariantCandidates ?? []
+    const used = candidates.find((item) => item.id === project.selectedScriptVariantId) || candidates.find((item) => item.selected)
+    const title = String(used?.title || '').trim()
+    const summary = String(used?.summary || '').trim()
+    const key = `${title}|${summary}`
+    if ((!title && !summary) || seen.has(key)) continue
+    seen.add(key)
+    out.push({ title, summary })
+  }
+  return out.slice(-8)
+}
+
 function scriptVariantThemePreset(index: number, locale: CloneLocale) {
   if (locale === 'zh-CN') {
     const presets = [
@@ -2352,6 +2370,20 @@ function buildShotTimeRange(shot: Pick<ShotSpec, 'startSec' | 'endSec' | 'durati
   return `${startSec.toFixed(1)}s-${clampedEnd.toFixed(1)}s`
 }
 
+/** Prompt lines that keep a variant project from repeating scripts already made from the same reference. */
+export function buildAvoidScriptsPromptLines(avoidScripts?: Array<{ title: string; summary: string }>) {
+  const rows = (avoidScripts ?? [])
+    .map((item) => ({ title: String(item?.title || '').trim(), summary: String(item?.summary || '').trim() }))
+    .filter((item) => item.title || item.summary)
+    .slice(0, 8)
+  if (!rows.length) return []
+  return [
+    'These script angles were already produced as videos from this same reference. This run exists to test new angles against them.',
+    'Every variant must take a clearly different hook and selling emphasis from all of them, while keeping the shot order and structure:',
+    ...rows.map((item, index) => `Already used ${index + 1}: ${item.title}${item.summary ? ` - ${item.summary.slice(0, 200)}` : ''}`),
+  ]
+}
+
 async function generateWholeScriptVariantsWithAi(input: {
   credentials: ModelCredentials
   locale: CloneLocale
@@ -2360,6 +2392,8 @@ async function generateWholeScriptVariantsWithAi(input: {
   modelIdentity?: { name?: string; imagePaths?: string[]; description?: string }
   productReferenceImagePaths?: string[]
   productAnalysisText?: string
+  /** Scripts already produced from the same reference; new variants must not repeat their angle. */
+  avoidScripts?: Array<{ title: string; summary: string }>
 }) {
   const key = String(input.credentials.grsaiApiKey || '').trim()
   if (!key) throw new Error('未配置 GRS.AI API Key，无法生成整片脚本变体')
@@ -2413,6 +2447,7 @@ async function generateWholeScriptVariantsWithAi(input: {
     'Return JSON only.',
     'JSON shape:',
     '{"variants":[{"title":"","summary":"","reason":"","score":8.6,"shotScripts":[{"shotId":"","shotIndex":0,"timeRange":"0.0s-3.0s","scriptText":"","scriptRole":"hook","visualDescription":"","actionDescription":"","cameraDescription":"","generationPrompt":""}]}]}',
+    ...buildAvoidScriptsPromptLines(input.avoidScripts),
     'Bound asset context:',
     assetContext,
     'Source shots:',
@@ -3203,18 +3238,24 @@ function mergeImageProviderOverrides(credentials: ModelCredentials, input: Parti
 
 
 function normalizeProductType(v?: string): CloneProductType {
-  if (v === 'earrings' || v === 'phone_case' || v === 'clothes' || v === 'toy') return v
-  return 'general'
+  return normalizeCloneProductType(v)
 }
 
 function resolveProjectLevelProductType(project?: CloneProject) {
-  return normalizeProductType(
-    project?.baseBlueprint?.productCategory ||
-      project?.blueprint?.productCategory ||
-      project?.boundProductSnapshot?.productAnalysis?.category ||
-      project?.boundProductSnapshot?.type ||
-      'general',
-  )
+  // The bound product is the source of truth for the category. The blueprint
+  // category comes from reference-video heuristics and is usually `general`,
+  // so it must not shadow the product the user actually bound.
+  const candidates = [
+    project?.boundProductSnapshot?.type,
+    project?.baseBlueprint?.productCategory,
+    project?.blueprint?.productCategory,
+  ]
+  for (const candidate of candidates) {
+    const normalized = normalizeProductType(candidate)
+    if (normalized !== 'general') return normalized
+  }
+  // The analysed category is free text from the vision model ("Drop earrings", "Tote bag").
+  return inferCloneProductTypeFromText(project?.boundProductSnapshot?.productAnalysis?.category)
 }
 
 function resolveProjectStoryboardTemplateType(project?: CloneProject) {
@@ -3379,6 +3420,31 @@ function productTypeLockPrompt(productType: CloneProductType) {
     toy: [
       'Toy shape, color blocks, material, face details and proportions must match the reference image.',
       'Do not turn the toy into another character or change its scale.',
+    ],
+    necklace: [
+      'If the original shot contains another necklace, replace it with the uploaded necklace only.',
+      'Chain style, chain length, pendant shape, pendant count and clasp must match the reference image.',
+      'The necklace must drape naturally around the neck; do not add extra pendants or layers.',
+    ],
+    ring: [
+      'If the original shot contains another ring, replace it with the uploaded ring only.',
+      'Band width, setting, stone count and stone layout must match the reference image.',
+      'Keep a believable ring size on the finger; do not add extra rings or deform the finger.',
+    ],
+    bracelet: [
+      'If the original shot contains another bracelet or watch, replace it with the uploaded bracelet only.',
+      'Link shape, bead count, charm placement, clasp and width must match the reference image.',
+      'The bracelet must sit naturally on the wrist; do not add extra charms or layers.',
+    ],
+    bag: [
+      'If the original shot contains another bag, replace it with the uploaded bag only.',
+      'Bag silhouette, size, handle and strap structure, hardware, color and pattern must match the reference image.',
+      'Do not change the bag proportions or hardware layout.',
+    ],
+    shoes: [
+      'If the original shot contains other shoes, replace them with the uploaded shoes only.',
+      'Shoe silhouette, sole shape, upper material, lacing or straps, color blocks and pattern must match the reference image.',
+      'Keep a matching left-right pair with believable size on the foot.',
     ],
     general: [
       'Keep the exact product identity from the reference image and avoid replacing it with a similar generic item.',
@@ -4155,7 +4221,7 @@ async function refreshProductCanonicalSourceFromLibrary(input: { productId: stri
   if (!productRefs.length) throw new Error('当前商品没有可用于生成标准源的图片')
   const productKey = String(product.id || input.productId).trim()
   const signature = computeProductReferenceSignature(productRefs)
-  const prompt = getProductCanonicalSourcePrompt()
+  const prompt = (await productAnalysisBoardPromptVersionService.getActive()).prompt
   const directPath = String(productRefs[0] || '').trim()
   const boardFilePrefix = input.force ? `${product.id}_analysis_board_${now()}` : product.id
   const processingProduct = await productsRepo.upsert({
@@ -4229,6 +4295,7 @@ async function refreshProductCanonicalSourceFromLibrary(input: { productId: stri
           outDir: join(getAppPaths().tmpDir, 'product-library-analysis-board', processingProduct.id),
           filePrefix: boardFilePrefix,
           allowFallback: false,
+          prompt,
         })
         latestProductState = await productsRepo.upsert({
           ...latestProductState,
@@ -9134,15 +9201,18 @@ async function ensureAi666SegmentVideoTask(input: {
       submissionFingerprint,
       submitStartedAt,
     })
+    // Same category resolution as the prompt preview: the shot's own type, else the bound product.
+    const submitProductType = resolveShotPromptProductType(latestProject, latestShot)
+    const submitShot = { ...latestShot, productType: submitProductType }
     const finalApifoxPrompt = buildFinalShotVideoPositivePrompt({
-      shot: latestShot,
+      shot: submitShot,
       productIdentityText: String(latestShot.productIdentityText || latestShot.materialNeed || '').trim(),
-      productMode: detectProductMode(String(latestShot.productType || '').trim()),
+      productMode: detectProductMode(submitProductType),
       composeOptimizationPatch: getProjectComposeOptimizationPatch(latestProject),
       composeBodyUpgradePlan: getProjectComposeBodyUpgradePlan(latestProject),
     })
     const finalApifoxNegativePrompt = buildVideoNegativePrompt(
-      latestShot,
+      submitShot,
       String(latestShot.compiledNegativePrompt || '').trim(),
     )
     console.log('[clone-debug] final-shot-video-prompts', {
@@ -9494,6 +9564,39 @@ export const cloneService = {
     }
   },
 
+  /**
+   * A new draft that re-runs a sales-proven project's recipe: same reference video, with the scripts
+   * already produced from it (by the source and its earlier variants) recorded so script generation
+   * takes a different angle. The reference is re-analysed by the normal flow, so no generated state
+   * of the source project is carried over.
+   */
+  async createVariantDraftFromProject(input: { sourceProjectId: string; title?: string }) {
+    const sourceProjectId = String(input?.sourceProjectId || '').trim()
+    const source = sourceProjectId ? await cloneRepo.getProject(sourceProjectId) : null
+    if (!source) throw new Error('来源复刻项目不存在')
+    const referenceVideoPath = String(source.referenceVideoPath || '').trim()
+    if (!referenceVideoPath || !existsSync(referenceVideoPath)) throw new Error('来源复刻项目的参考视频已不存在，无法生成变体')
+    const siblings = (await cloneRepo.listProjects()).filter((item) => item.variantOf?.projectId === source.id)
+    const avoidScripts = collectVariantAvoidScripts([source, ...siblings])
+    const sourceTitle = String(source.title || '').trim() || source.referenceVideoName || source.id.slice(0, 6)
+    const draft = await this.createDraftProject({
+      locale: source.locale,
+      runMode: 'auto',
+      title: String(input?.title || '').trim() || `${sourceTitle} · 变体 ${siblings.length + 1}`,
+    })
+    const project = draft.project
+    project.referenceVideoPath = referenceVideoPath
+    project.referenceVideoName = source.referenceVideoName || basename(referenceVideoPath)
+    project.variantOf = { projectId: source.id, title: sourceTitle, avoidScripts }
+    const saved = await cloneRepo.upsertProject(project)
+    return {
+      project: saved,
+      summary: buildProjectSummary(saved),
+      productId: String((source as any).productId || '').trim() || undefined,
+      selectedModelIdentityId: String(source.selectedModelIdentityId || '').trim() || undefined,
+    }
+  },
+
   async createCloneBlueprintFromReference(input: {
       videoPath: string
       locale?: CloneLocale
@@ -9706,6 +9809,7 @@ export const cloneService = {
         },
         productReferenceImagePaths: boundProductRefs,
         productAnalysisText,
+        avoidScripts: project.variantOf?.avoidScripts,
       })
       const baseShots = [...baseBlueprint.shots].sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
       const referenceCandidate = buildReferenceScriptCandidate(baseShots)

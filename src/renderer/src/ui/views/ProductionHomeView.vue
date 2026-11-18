@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import UiCard from '../components/UiCard.vue'
-import { FolderKanban, LayoutTemplate, PlayCircle, PlusCircle } from 'lucide-vue-next'
+import { AlertTriangle, Clapperboard, Film, FolderKanban, LayoutTemplate, ListChecks, Loader, PlayCircle, PlusCircle, Sparkles } from 'lucide-vue-next'
+import { taskStatusTone as statusTone } from '@/lib/taskStatus'
 
 type TaskSummary = {
   id: string
@@ -32,11 +32,18 @@ const recentTasks = computed(() => tasks.value.slice(0, 6))
 
 const entryCards = computed(() => [
   {
-    title: t('production.home.entries.create.title'),
-    desc: t('production.home.entries.create.desc'),
-    metric: t('production.home.entries.create.metric'),
-    route: '/production/create',
-    icon: PlusCircle,
+    title: t('production.home.entries.mix.title'),
+    desc: t('production.home.entries.mix.desc'),
+    metric: t('production.home.entries.mix.metric'),
+    route: '/production/mix',
+    icon: Sparkles,
+  },
+  {
+    title: t('production.home.entries.pool.title'),
+    desc: t('production.home.entries.pool.desc'),
+    metric: t('production.home.entries.pool.metric'),
+    route: '/production/pool',
+    icon: Film,
   },
   {
     title: t('production.home.entries.tasks.title'),
@@ -53,6 +60,13 @@ const entryCards = computed(() => [
     icon: LayoutTemplate,
   },
 ])
+
+function statusLabel(status?: string) {
+  const value = String(status || 'queued')
+  const key = `production.tasks.status.${value}`
+  const label = t(key)
+  return label === key ? value : label
+}
 
 function go(path: string) {
   void router.push(path)
@@ -72,271 +86,96 @@ onMounted(refresh)
 </script>
 
 <template>
-  <div class="production-home-page">
-    <section class="production-home-hero">
-      <div class="production-home-hero__copy">
-        <span class="production-home-hero__tag">{{ t('production.home.kicker') }}</span>
+  <div class="vg-scope vg-page prod-home">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><Clapperboard :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>{{ t('production.home.title') }}</h1>
         <p>{{ t('production.home.desc') }}</p>
       </div>
-      <div class="production-home-hero__stats">
-        <div class="production-home-stat">
-          <span>{{ t('production.home.stats.totalTasks') }}</span>
-          <strong>{{ totalTaskCount }}</strong>
-        </div>
-        <div class="production-home-stat">
-          <span>{{ t('production.home.stats.running') }}</span>
-          <strong>{{ runningTaskCount }}</strong>
-        </div>
-        <div class="production-home-stat">
-          <span>{{ t('production.home.stats.failed') }}</span>
-          <strong>{{ failedTaskCount }}</strong>
-        </div>
-        <div class="production-home-stat">
-          <span>{{ t('production.home.stats.templates') }}</span>
-          <strong>{{ templateCount }}</strong>
-        </div>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn vg-btn--primary" type="button" @click="go('/production/mix')">
+          <PlusCircle :size="15" /> {{ t('production.home.entries.create.title') }}
+        </button>
+      </div>
+    </header>
+
+    <section class="vg-stats">
+      <div class="vg-stat">
+        <span class="vg-stat__icon"><ListChecks :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.home.stats.totalTasks') }}</span><span class="vg-stat__value">{{ totalTaskCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--blue"><Loader :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.home.stats.running') }}</span><span class="vg-stat__value">{{ runningTaskCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--red"><AlertTriangle :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.home.stats.failed') }}</span><span class="vg-stat__value">{{ failedTaskCount }}</span></span>
+      </div>
+      <div class="vg-stat">
+        <span class="vg-stat__icon vg-stat__icon--violet"><LayoutTemplate :size="17" /></span>
+        <span class="vg-stat__body"><span class="vg-stat__label">{{ t('production.home.stats.templates') }}</span><span class="vg-stat__value">{{ templateCount }}</span></span>
       </div>
     </section>
 
-    <section class="production-home-grid">
+    <section class="vg-grid vg-grid--4 prod-home__entries">
       <button
         v-for="item in entryCards"
         :key="item.title"
-        class="production-entry-card"
+        class="vg-card vg-card--interactive prod-entry"
         type="button"
         @click="go(item.route)"
       >
-        <div class="production-entry-card__icon">
-          <component :is="item.icon" class="h-5 w-5" />
-        </div>
-        <div class="production-entry-card__copy">
+        <span class="prod-entry__icon"><component :is="item.icon" :size="20" /></span>
+        <span class="prod-entry__copy">
           <strong>{{ item.title }}</strong>
-          <p>{{ item.desc }}</p>
-          <span>{{ item.metric }}</span>
-        </div>
+          <span>{{ item.desc }}</span>
+        </span>
+        <span class="vg-chip">{{ item.metric }}</span>
       </button>
     </section>
 
-    <section class="production-home-detail">
-      <UiCard class="production-home-panel">
-        <div class="production-home-panel__head">
-          <div>
-            <strong>{{ t('production.home.recent.title') }}</strong>
-            <span>{{ t('production.home.recent.desc') }}</span>
-          </div>
-          <PlayCircle class="h-5 w-5 text-emerald-200" />
+    <section class="prod-home__detail prod-home__detail--single">
+      <div class="vg-card">
+        <div class="vg-card__head">
+          <span class="vg-card__title"><PlayCircle :size="16" /> {{ t('production.home.recent.title') }} <small>{{ t('production.home.recent.desc') }}</small></span>
+          <button class="vg-btn vg-btn--sm" type="button" @click="go('/production/tasks')">{{ t('production.home.entries.tasks.title') }}</button>
         </div>
-        <div v-if="recentTasks.length" class="production-home-task-list">
+        <div v-if="recentTasks.length" class="vg-list">
           <button
             v-for="task in recentTasks"
             :key="task.id"
-            class="production-home-task-item"
+            class="vg-list__item vg-list__item--button"
             type="button"
             @click="go(`/production/tasks/${task.id}`)"
           >
-            <strong>{{ task.id.slice(0, 8) }}</strong>
-            <span>{{ task.status || 'queued' }}</span>
+            <span class="vg-list__main"><span class="vg-list__title vg-num">#{{ task.id.slice(0, 8) }}</span></span>
+            <span class="vg-pill vg-pill--dot" :class="`vg-pill--${statusTone(task.status)}`">{{ statusLabel(task.status) }}</span>
           </button>
         </div>
-        <div v-else class="production-home-empty">{{ t('production.home.recent.empty') }}</div>
-      </UiCard>
+        <div v-else class="vg-empty">
+          <span class="vg-empty__icon"><PlayCircle :size="24" /></span>
+          <p>{{ t('production.home.recent.empty') }}</p>
+        </div>
+      </div>
 
-      <UiCard class="production-home-panel">
-        <div class="production-home-panel__head">
-          <div>
-            <strong>{{ t('production.home.scope.title') }}</strong>
-            <span>{{ t('production.home.scope.desc') }}</span>
-          </div>
-          <FolderKanban class="h-5 w-5 text-violet-200" />
-        </div>
-        <div class="production-home-panel__list">
-          <div>
-            <strong>{{ t('production.home.scope.productionTitle') }}</strong>
-            <p>{{ t('production.home.scope.productionDesc') }}</p>
-          </div>
-          <div>
-            <strong>{{ t('production.home.scope.productsTitle') }}</strong>
-            <p>{{ t('production.home.scope.productsDesc') }}</p>
-          </div>
-        </div>
-        <small v-if="loading">{{ t('production.home.refreshing') }}</small>
-      </UiCard>
     </section>
   </div>
 </template>
 
 <style scoped>
-.production-home-page,
-.production-home-grid,
-.production-home-detail {
-  display: grid;
-  gap: 14px;
-}
-
-.production-home-hero,
-.production-home-panel,
-.production-entry-card {
-  border: 1px solid rgba(119, 137, 198, 0.14);
-  background: rgba(10, 16, 29, 0.92);
-  border-radius: 18px;
-}
-
-.production-home-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-}
-
-.production-home-hero__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.production-home-hero__tag {
-  color: #8ea6ff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.production-home-hero__copy h1 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.production-home-hero__copy p,
-.production-home-panel__head span,
-.production-entry-card__copy p,
-.production-home-panel__list p,
-.production-home-panel small,
-.production-home-empty {
-  margin: 0;
-  color: #98a6c7;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.production-home-hero__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(112px, 1fr));
-  gap: 10px;
-  min-width: 480px;
-}
-
-.production-home-stat {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.production-home-stat span {
-  color: #8fa1c6;
-  font-size: 11px;
-}
-
-.production-home-stat strong,
-.production-entry-card__copy strong,
-.production-home-panel__head strong,
-.production-home-panel__list strong,
-.production-home-task-item strong {
-  color: #eef3ff;
-}
-
-.production-home-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.production-entry-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px;
-  text-align: left;
-}
-
-.production-entry-card__icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: rgba(109, 93, 255, 0.16);
-  color: #e9e3ff;
-}
-
-.production-entry-card__copy {
-  display: grid;
-  gap: 5px;
-}
-
-.production-entry-card__copy span,
-.production-home-task-item span {
-  color: #b6c2df;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.production-home-detail {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.production-home-panel {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-}
-
-.production-home-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.production-home-panel__list,
-.production-home-task-list {
-  display: grid;
-  gap: 12px;
-}
-
-.production-home-task-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
-  text-align: left;
-}
-
-@media (max-width: 1080px) {
-  .production-home-hero,
-  .production-home-grid,
-  .production-home-detail {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .production-home-hero__stats {
-    min-width: 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .production-home-hero__stats {
-    grid-template-columns: 1fr;
-  }
+.prod-home__detail--single { grid-template-columns: minmax(0, 1fr) !important; }
+.prod-home { width: min(1408px, 100%); margin: 0 auto; }
+.prod-entry { display: flex; align-items: center; gap: 12px; text-align: left; color: var(--theme-text); }
+.prod-entry__icon { width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--vg-accent-soft); border: 1px solid var(--vg-accent-line); color: var(--vg-accent); }
+.prod-entry__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.prod-entry__copy strong { font-size: 14px; font-weight: 700; }
+.prod-entry__copy span { font-size: 12px; color: var(--theme-text-muted); }
+.prod-home__detail { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.prod-home__scope-desc { margin-bottom: 12px; font-size: 12px; }
+@media (max-width: 1100px) {
+  .prod-home__detail { grid-template-columns: 1fr; }
+  .prod-home__entries { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

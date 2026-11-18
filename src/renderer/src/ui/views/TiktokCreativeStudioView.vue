@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { openAssetLibraryPicker } from "@/lib/assetLibraryPicker";
@@ -7,8 +7,13 @@ import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
 import {
+  Activity,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowRight,
   Captions,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -17,12 +22,14 @@ import {
   Code2,
   Download,
   FileImage,
+  FileUp,
   Filter,
   FolderOpen,
   Grid2x2,
   Headphones,
   Heart,
   ImagePlus,
+  Info,
   KeyRound,
   LayoutGrid,
   List,
@@ -34,6 +41,7 @@ import {
   Pause,
   Pencil,
   Plus,
+  Power,
   Play,
   RefreshCcw,
   ScanLine,
@@ -142,6 +150,7 @@ type Shot = {
     imagePromptPreview?: unknown;
     replacementRegion?: ReplacementRegion;
     generationAttempts?: Array<{ outputPath?: string }>;
+    generationAttemptCount?: number;
     qualityReport?: QualityReport;
     generatedStillPath?: string;
   };
@@ -190,10 +199,21 @@ const activeTab = ref<"reference" | "library" | "publish">(
 const loading = ref(false);
 const creating = ref(false);
 const notice = ref("");
+// Success toasts close themselves; errors stay until dismissed.
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+watch(notice, (value) => {
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = value ? setTimeout(() => (notice.value = ""), 4000) : undefined;
+});
+onBeforeUnmount(() => {
+  if (noticeTimer) clearTimeout(noticeTimer);
+});
 const errorText = ref("");
 const products = ref<Product[]>([]);
 const materials = ref<Material[]>([]);
-const tasks = ref<Task[]>([]);
+// Library rows are replaced wholesale (never mutated in place), so a shallow
+// ref avoids deep-proxying hundreds of shot objects on every refresh.
+const tasks = shallowRef<Task[]>([]);
 const accounts = ref<Account[]>([]);
 const promptVersions = ref<PromptVersion[]>([]);
 const promptKind = ref<"image" | "video">("video");
@@ -401,6 +421,93 @@ const runtimeDialogOpen = computed({
 });
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let taskRefreshBusy = false;
+let stopCreativeChanges: (() => void) | undefined;
+let creativeFallbackTicks = 0;
+let creativeChangeTimer: ReturnType<typeof setTimeout> | undefined;
+const pendingChangedTaskIds = new Set<string>();
+// Full task records (logs, request traces) are only loaded for the task shown
+// in the runtime panel or the detail dialog; the library uses summary rows.
+const fullTasks = shallowRef<Record<string, Task>>({});
+function fullTaskOf(task?: Task | null) {
+  if (!task) return null;
+  return fullTasks.value[task.id] || task;
+}
+function fullShotOf(task?: Task | null, shot?: Shot | null) {
+  if (!task || !shot) return shot || null;
+  return (
+    fullTasks.value[task.id]?.shots.find((item) => item.shotId === shot.shotId) ||
+    shot
+  );
+}
+function openFullTaskIds() {
+  return Array.from(
+    new Set([detailTask.value?.id, runtimeTask.value?.id].filter(Boolean) as string[]),
+  );
+}
+async function loadFullTask(id: string) {
+  try {
+    const full = await window.api.tiktokCreative.getTask(id);
+    if (!openFullTaskIds().includes(id)) return;
+    const next = { ...fullTasks.value };
+    if (full) next[id] = full;
+    else delete next[id];
+    fullTasks.value = next;
+  } catch {
+    // Detail falls back to the summary row.
+  }
+}
+watch(
+  () => openFullTaskIds().join("|"),
+  () => {
+    const ids = openFullTaskIds();
+    const kept: Record<string, Task> = {};
+    for (const id of ids) if (fullTasks.value[id]) kept[id] = fullTasks.value[id];
+    fullTasks.value = kept;
+    for (const id of ids) void loadFullTask(id);
+  },
+);
+function scheduleCreativeChangeFlush() {
+  if (creativeChangeTimer) return;
+  creativeChangeTimer = setTimeout(() => {
+    creativeChangeTimer = undefined;
+    void flushCreativeChanges();
+  }, 300);
+}
+async function flushCreativeChanges() {
+  if (!pendingChangedTaskIds.size) return;
+  // While hidden, keep collecting ids and apply them once visible again.
+  if (document.hidden || taskRefreshBusy) return;
+  const ids = Array.from(pendingChangedTaskIds);
+  pendingChangedTaskIds.clear();
+  taskRefreshBusy = true;
+  try {
+    const rows = (await window.api.tiktokCreative.listSummary({ ids })) as Task[];
+    const byId = new Map((Array.isArray(rows) ? rows : []).map((row) => [row.id, row]));
+    const changed = new Set(ids);
+    const next = tasks.value
+      .filter((task) => !changed.has(task.id) || byId.has(task.id))
+      .map((task) => byId.get(task.id) || task);
+    const known = new Set(next.map((task) => task.id));
+    for (const row of byId.values()) if (!known.has(row.id)) next.push(row);
+    next.sort(
+      (left, right) =>
+        Number(right.createdAt || 0) - Number(left.createdAt || 0) ||
+        String(right.id).localeCompare(String(left.id)),
+    );
+    tasks.value = next;
+    syncRuntimeSelection();
+    if (libraryPage.value > totalPages.value) libraryPage.value = totalPages.value;
+    for (const id of openFullTaskIds()) if (changed.has(id)) void loadFullTask(id);
+  } catch {
+    for (const id of ids) pendingChangedTaskIds.add(id);
+  } finally {
+    taskRefreshBusy = false;
+  }
+  if (pendingChangedTaskIds.size) scheduleCreativeChangeFlush();
+}
+function handleCreativeVisibilityChange() {
+  if (!document.hidden && pendingChangedTaskIds.size) scheduleCreativeChangeFlush();
+}
 let publisherTaskRefreshBusy = false;
 
 const selectedProduct = computed(() =>
@@ -478,6 +585,20 @@ const filteredItems = computed(() =>
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredItems.value.length / libraryPageSize)),
 );
+const libraryFilterOptions = ["all", "running", "failed", "paused", "success_not_exported", "success_exported", "success_not_subtitled"] as const;
+const libraryFilterCounts = computed(() => {
+  const counts: Record<string, number> = { all: allShots.value.length, running: 0, failed: 0, paused: 0, success_not_exported: 0, success_exported: 0, success_not_subtitled: 0 };
+  for (const { shot } of allShots.value) {
+    if (shot.status === "running" || shot.remoteStatus === "processing" || shot.remoteStatus === "queued") counts.running += 1;
+    if (shot.status === "failed") counts.failed += 1;
+    if (shot.status === "requires_manual" || shot.remoteStatus === "paused_auth" || shot.remoteStatus === "paused_error") counts.paused += 1;
+    if (shot.status === "completed") {
+      if (shot.exportedVideoPath) counts.success_exported += 1; else counts.success_not_exported += 1;
+      if (!shot.subtitleVideoPath && !shot.subtitleAppliedAt) counts.success_not_subtitled += 1;
+    }
+  }
+  return counts;
+});
 const pagedItems = computed(() =>
   filteredItems.value.slice(
     (libraryPage.value - 1) * libraryPageSize,
@@ -720,9 +841,34 @@ const pagedPublisherTasks = computed(() =>
     publisherPage.value * publisherPageSize.value,
   ),
 );
+const publisherOverviewTabs = computed(() => [
+  { key: "all" as const, label: "全部", count: publisherTasks.value.length },
+  { key: "pending" as const, label: "待发布", count: publisherPendingTasks.value.length },
+  { key: "draft" as const, label: "草稿", count: publisherTasks.value.filter((item) => item.state === "draft").length },
+  { key: "published" as const, label: "已发布", count: publisherTasks.value.filter((item) => item.state === "published").length },
+]);
+const publisherFiltersActive = computed(() =>
+  Boolean(
+    publisherSearch.value.trim() ||
+      publisherAppliedFilters.status !== "all" ||
+      publisherAppliedFilters.account !== "all" ||
+      publisherAppliedFilters.product !== "all" ||
+      publisherAppliedFilters.date,
+  ),
+);
+const publisherSelectableIds = computed(() =>
+  filteredPublisherTasks.value
+    .filter((item) => item.state !== "published")
+    .map((item) => String(item.id)),
+);
+const publisherAllVisibleSelected = computed(
+  () =>
+    publisherSelectableIds.value.length > 0 &&
+    publisherSelectableIds.value.every((id) => publisherRowSelection.value.includes(id)),
+);
 const runtimeLogs = computed<LogItem[]>(() => {
-  const task = runtimeTask.value;
-  const shot = runtimeShot.value;
+  const task = fullTaskOf(runtimeTask.value);
+  const shot = fullShotOf(runtimeTask.value, runtimeShot.value);
   if (!task) return [];
   const requestLogs: LogItem[] = (shot?.requestTrace || []).map(
     (trace, index) => ({
@@ -827,11 +973,13 @@ const subtitlePresets = computed<
   },
 ]);
 
-function previewSrc(path?: string) {
+function previewSrc(path?: string, thumbWidth?: number) {
   const value = String(path || "").trim();
   if (!value) return "";
   if (/^(https?:|data:|blob:|vg:)/i.test(value)) return value;
-  return `vg://file?path=${encodeURIComponent(value)}`;
+  // `&w=` asks the vg:// protocol for a cached, downscaled thumbnail.
+  const thumb = thumbWidth ? `&w=${thumbWidth}` : "";
+  return `vg://file?path=${encodeURIComponent(value)}${thumb}`;
 }
 function generatedImagePath(shot?: Shot) {
   if (!shot) return "";
@@ -897,8 +1045,24 @@ function formatPublisherSchedule(value?: string | number) {
 function publisherStateLabel(state?: string) {
   if (state === "published") return "已发布";
   if (state === "draft") return "草稿";
-  if (state === "failed" || state === "result_unknown") return "发布失败";
+  if (state === "failed") return "发布失败";
+  if (state === "result_unknown") return "结果未知";
+  if (state === "scheduled") return "已排期";
+  if (state === "prechecking" || state === "uploading" || state === "queued" || state === "publishing") return "发布中";
   return "待发布";
+}
+function publisherStateTone(state?: string) {
+  if (state === "published") return "green";
+  if (state === "failed" || state === "result_unknown") return "red";
+  if (state === "scheduled" || state === "prechecking" || state === "uploading" || state === "queued" || state === "publishing") return "blue";
+  if (state === "draft") return "gray";
+  return "amber";
+}
+function publisherAccountName(item: any) {
+  if (item?.connectionName) return item.connectionName;
+  const uid = item?.connectionUid;
+  if (!uid) return "未选择账号";
+  return publisherConnections.value.find((account: any) => account.uid === uid)?.name || uid;
 }
 function publisherErrorText(item: any) {
   const error = item?.error;
@@ -962,7 +1126,7 @@ function statusTone(shot: Shot) {
         ? "status-paused"
         : "status-processing";
 }
-function libraryFilterLabel() {
+function libraryFilterLabel(value: string = libraryFilter.value) {
   const labels: Record<string, string> = {
     all: tr("autoUi.k_778fc8f99453"),
     failed: tr("autoUi.k_3e3c8068bb0e"),
@@ -973,7 +1137,15 @@ function libraryFilterLabel() {
     running: tr("autoUi.k_fcb979ef0b91"),
     paused: tr("autoUi.k_130448bce675"),
   };
-  return labels[libraryFilter.value] || labels.all;
+  return labels[value] || labels.all;
+}
+function shotStateClass(shot: Shot) {
+  const tone = statusTone(shot);
+  return tone === "status-completed" ? "ts-state--ok" : tone === "status-failed" ? "ts-state--err" : tone === "status-paused" ? "ts-state--warn" : "ts-state--run";
+}
+function setLibraryFilter(value: typeof libraryFilter.value) {
+  libraryFilter.value = value;
+  libraryPage.value = 1;
 }
 function accountState(account: Account) {
   if (!account.enabled) return tr("autoUi.k_6c7dcbb73a59");
@@ -988,6 +1160,13 @@ function accountState(account: Account) {
     });
   if (account.state === "error") return tr("autoUi.k_92d705e913f9");
   return tr("autoUi.k_b681ca1274b8");
+}
+function accountTone(account: Account) {
+  if (!account.enabled) return "";
+  if (account.state === "ready") return "ts-state--ok";
+  if (account.state === "insufficient_credit") return "ts-state--warn";
+  if (account.state === "expired" || account.state === "error") return "ts-state--err";
+  return "ts-state--run";
 }
 function setPromptVersion(id: string) {
   const item = promptVersions.value.find((version) => version.id === id);
@@ -1046,7 +1225,7 @@ async function refresh(silent = false) {
   try {
     const requestedPromptKind = promptKind.value;
     const [taskRows, productRows, accountResult, settings] = await Promise.all([
-      window.api.tiktokCreative.list(),
+      window.api.tiktokCreative.listSummary(),
       window.api.products.list(),
       window.api.tiktokCreative.listAccounts(),
       window.api.tiktokCreative.getSettings(),
@@ -1077,7 +1256,7 @@ async function refreshTaskRows() {
   if (taskRefreshBusy || document.hidden) return;
   taskRefreshBusy = true;
   try {
-    const taskRows = await window.api.tiktokCreative.list();
+    const taskRows = await window.api.tiktokCreative.listSummary();
     tasks.value = Array.isArray(taskRows) ? taskRows : [];
     syncRuntimeSelection();
     if (libraryPage.value > totalPages.value)
@@ -1382,7 +1561,11 @@ function canCorrectRegion(shot: Shot) {
   );
 }
 function imageAttemptCount(shot: Shot) {
-  return shot.imagePreparation?.generationAttempts?.length || 0;
+  return (
+    shot.imagePreparation?.generationAttempts?.length ??
+    shot.imagePreparation?.generationAttemptCount ??
+    0
+  );
 }
 function qualityScore(shot: Shot) {
   const score = Number(shot.imagePreparation?.qualityReport?.score);
@@ -1931,13 +2114,18 @@ function togglePublisherRow(id: string) {
 }
 function toggleAllPublisherRows() {
   publisherEditId.value = "";
-  const visibleIds = filteredPublisherTasks.value.map((item) => String(item.id));
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) =>
-    publisherRowSelection.value.includes(id),
-  );
+  const visibleIds = publisherSelectableIds.value;
+  const allVisibleSelected = publisherAllVisibleSelected.value;
   publisherRowSelection.value = allVisibleSelected
     ? publisherRowSelection.value.filter((id) => !visibleIds.includes(id))
     : Array.from(new Set([...publisherRowSelection.value, ...visibleIds]));
+}
+async function focusPublisherRow(item: any) {
+  if (item?.state === "published") return;
+  publisherRowSelection.value = [item.id];
+  publisherEditorFields.title = true;
+  publisherEditorFields.description = Boolean(item.description);
+  await editPublisherTask(item);
 }
 function setPublisherRowSchedule(item: any) {
   if (!item.scheduleAt)
@@ -2946,6 +3134,11 @@ onMounted(async () => {
   restorePublisherFavoriteMusic();
   await refresh();
   if (props.publisherOnly) await refreshPublisher();
+  stopCreativeChanges = window.api.tiktokCreative.onChanged(({ taskIds }) => {
+    for (const id of taskIds || []) pendingChangedTaskIds.add(id);
+    scheduleCreativeChangeFlush();
+  });
+  document.addEventListener("visibilitychange", handleCreativeVisibilityChange);
   refreshTimer = setInterval(() => {
     if (document.hidden) return;
     if (props.publisherOnly || activeTab.value === "publish") {
@@ -2960,6 +3153,9 @@ onMounted(async () => {
       ["queued", "processing", "running", "pending"].includes(String(item.status || "")),
     );
     if (!hasActiveCreativeTask) return;
+    // Safety net every ~60s; normal updates arrive via onChanged.
+    creativeFallbackTicks += 1;
+    if (creativeFallbackTicks % 6 !== 0) return;
     void refreshTaskRows();
   }, 10000);
 });
@@ -2967,6 +3163,9 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handlePublishUiClick);
   document.removeEventListener("input", handlePublishUiInput);
   if (refreshTimer) clearInterval(refreshTimer);
+  stopCreativeChanges?.();
+  if (creativeChangeTimer) clearTimeout(creativeChangeTimer);
+  document.removeEventListener("visibilitychange", handleCreativeVisibilityChange);
   publisherMusicAudio?.pause();
   publisherMusicAudio = null;
 });
@@ -2975,72 +3174,54 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="tiktok-page plugin-workspace-standard"
-    :class="{ 'publish-mode': activeTab === 'publish' }"
+    :class="{ 'publish-mode': activeTab === 'publish', 'ts-page': !props.publisherOnly && activeTab !== 'publish' }"
   >
-    <section v-if="!props.publisherOnly" class="live-workspace-head">
-      <div class="live-workspace-intro">
-        <div class="live-workspace-icon"><Sparkles class="h-5 w-5" /></div>
-        <div class="live-workspace-copy">
-          <h1>TikTok Creative Studio</h1>
+    <section v-if="!props.publisherOnly" class="vg-scope ts-top">
+      <header class="ts-head">
+        <div class="ts-head__icon"><Sparkles :size="22" /></div>
+        <div class="ts-head__text">
+          <h1>{{ tr('ai.nav.creativeStudio') }}</h1>
           <p>{{ tr("autoUi.k_c5d1c075a08a") }}</p>
         </div>
-        <div class="live-workspace-actions">
-          <button
-            class="ghost-button back-button"
-            type="button"
-            @click="router.push('/plugins')"
-          >
-            <ChevronLeft class="h-4 w-4" />{{
-              tr("autoUi.k_3966f952c1c0")
-            }}</button
-          ><button
-            class="ghost-button refresh-button"
-            type="button"
-            :disabled="loading"
-            @click="refresh()"
-          >
-            <RefreshCcw class="h-4 w-4" />{{ tr("autoUi.k_38108eaa1d32") }}
+        <div class="ts-head__actions">
+          <button class="vg-btn" type="button" :disabled="loading" @click="refresh()">
+            <RefreshCcw :size="15" :class="{ 'vg-spin': loading }" />{{ tr("autoUi.k_38108eaa1d32") }}
           </button>
         </div>
-      </div>
-      <section class="tab-bar live-workspace-tabs">
-        <button
-          class="tab-button"
-          :class="{ active: activeTab === 'reference' }"
-          type="button"
-          @click="setActiveTab('reference')"
-        >
-          <ImagePlus class="h-4 w-4" />{{ tr("autoUi.k_3a73e3f67a57") }}</button
-        ><button
-          class="tab-button"
-          :class="{ active: activeTab === 'library' }"
-          type="button"
-          @click="setActiveTab('library')"
-        >
-          <FolderOpen class="h-4 w-4" />{{ tr("autoUi.k_21eb39d9da89") }}
-          <span class="live-tab-count">{{ completedCount }}</span></button
-        ><button
-          class="tab-button account-tab"
-          type="button"
-          @click="accountDialogOpen = true"
-        >
-          <KeyRound class="h-4 w-4" />{{ tr("autoUi.k_9d4ca7f307e7") }}
-          <span class="live-tab-count">{{ accounts.length }}</span>
+      </header>
+      <nav class="ts-tabs" aria-label="Creative Studio">
+        <button class="ts-tab" :class="{ 'is-active': activeTab === 'reference' }" type="button" @click="setActiveTab('reference')">
+          <ImagePlus :size="15" />{{ tr("autoUi.k_3a73e3f67a57") }}
         </button>
-        <button class="tab-button" type="button" @click="retrySettingsOpen = true">
-          <Settings class="h-4 w-4" />{{ tr("tiktokCreative.retry.guard") }}
-          <span class="live-tab-count">{{ creativeSettings.imageRetryLimit }}</span>
+        <button class="ts-tab" :class="{ 'is-active': activeTab === 'library' }" type="button" @click="setActiveTab('library')">
+          <FolderOpen :size="15" />{{ tr("autoUi.k_21eb39d9da89") }}<em>{{ completedCount }}</em>
         </button>
-      </section>
+        <span class="ts-tabs__spacer" />
+        <button class="ts-util" type="button" @click="accountDialogOpen = true">
+          <KeyRound :size="14" />{{ tr("autoUi.k_9d4ca7f307e7") }}<em>{{ accounts.length }}</em>
+        </button>
+        <button class="ts-util" type="button" @click="retrySettingsOpen = true">
+          <ShieldCheck :size="14" />{{ tr("tiktokCreative.retry.guard") }}<em>{{ creativeSettings.imageRetryLimit }}</em>
+        </button>
+      </nav>
     </section>
-    <div v-if="notice" class="publisher-toast publisher-toast-success" role="status">
-      <CheckCircle2 class="h-4 w-4" /><span>{{ notice }}</span>
-      <button type="button" aria-label="关闭提示" @click="notice = ''">
-        <X class="h-4 w-4" />
-      </button>
-    </div>
-    <div v-if="errorText" class="publisher-toast publisher-toast-error">
-      <AlertTriangle class="h-4 w-4" />{{ errorText }}
+    <div class="vg-scope ts-toasts" aria-live="polite">
+      <Transition name="ts-toast">
+        <div v-if="errorText" class="vg-toast vg-toast--error ts-toast" role="alert">
+          <AlertTriangle :size="16" /><span class="ts-toast__text">{{ errorText }}</span>
+          <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭提示" @click="errorText = ''">
+            <X :size="14" />
+          </button>
+        </div>
+      </Transition>
+      <Transition name="ts-toast">
+        <div v-if="notice" class="vg-toast vg-toast--success ts-toast" role="status">
+          <CheckCircle2 :size="16" /><span class="ts-toast__text">{{ notice }}</span>
+          <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭提示" @click="notice = ''">
+            <X :size="14" />
+          </button>
+        </div>
+      </Transition>
     </div>
     <div
       v-if="publisherCredentialOpen"
@@ -3091,646 +3272,325 @@ onBeforeUnmount(() => {
         </footer>
       </section>
     </div>
-    <section v-if="activeTab === 'publish'" class="publisher-design-page">
-      <header class="publisher-design-head">
-        <div class="publisher-design-title">
-          <div class="publisher-design-logo"><Send class="h-5 w-5" /></div>
-          <div>
-            <h1>批量发布</h1>
-            <p>批量管理与发布 TikTok 视频</p>
-          </div>
+    <section v-if="activeTab === 'publish'" class="vg-scope pub">
+      <header class="pub-head">
+        <div class="pub-head__icon"><Send :size="20" /></div>
+        <div class="pub-head__text">
+          <h1>{{ tr('ai.nav.publish') }}</h1>
+          <p>批量编辑并发布 TikTok Shop 带货视频</p>
         </div>
-        <div class="publisher-design-actions">
-          <div class="publisher-api-chip publisher-design-api-chip">
-            <KeyRound class="h-4 w-4" /><span>Creatok API</span>
-            <i :class="{ ready: publisherConfigured }"></i>
-            <em>{{ publisherConfigured ? "已连接" : "未连接" }}</em>
-            <button
-              type="button"
-              @click="publisherCredentialOpen = !publisherCredentialOpen"
-            >{{ publisherConfigured ? "管理" : "连接" }}</button>
+        <div class="pub-head__actions">
+          <div class="pub-conn" :class="{ 'is-ready': publisherConfigured }">
+            <KeyRound :size="14" />
+            <span class="pub-conn__name">CreatOK API</span>
+            <span class="pub-conn__state"><i />{{ publisherConfigured ? "已连接" : "未连接" }}</span>
+            <button type="button" class="vg-link" @click="publisherCredentialOpen = !publisherCredentialOpen">
+              {{ publisherConfigured ? "管理" : "去连接" }}
+            </button>
           </div>
-          <button
-            class="publisher-music-library-button"
-            type="button"
-            @click="openPublisherMusicLibrary"
-          >
-            <Headphones class="h-4 w-4" />音乐库
-            <span v-if="publisherFavoriteMusic.length">{{
-              publisherFavoriteMusic.length
-            }}</span>
+          <span class="pub-head__sep" />
+          <button class="vg-btn" type="button" @click="openPublisherMusicLibrary">
+            <Headphones :size="15" />音乐库<span v-if="publisherFavoriteMusic.length" class="vg-count">{{ publisherFavoriteMusic.length }}</span>
           </button>
-          <button
-            class="publisher-design-secondary"
-            type="button"
-            @click="uploadPublisherVideos"
-          >
-            <FolderOpen class="h-4 w-4" />导入视频</button
-          ><button
-            class="publisher-design-secondary"
-            type="button"
-            @click="pickPublisherVideos"
-          >
-            <FolderOpen class="h-4 w-4" />从素材库选择</button
-          ><button
-            class="publisher-design-primary"
-            type="button"
-            @click="uploadPublisherVideos"
-          >
-            <ImagePlus class="h-4 w-4" />上传视频 <b>+</b>
+          <button class="vg-btn" type="button" @click="pickPublisherVideos">
+            <FolderOpen :size="15" />从素材库选择
+          </button>
+          <button class="vg-btn vg-btn--primary" type="button" @click="uploadPublisherVideos">
+            <FileUp :size="15" />导入本地视频
           </button>
         </div>
       </header>
-      <div v-if="publisherSyncError" class="publisher-design-error">
-        <AlertTriangle class="h-4 w-4" />{{ publisherSyncError }}
+
+      <div v-if="publisherSyncError" class="vg-notice vg-notice--danger pub-alert">
+        <AlertTriangle :size="15" /><span>{{ publisherSyncError }}</span>
+        <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭" @click="publisherSyncError = ''"><X :size="14" /></button>
       </div>
-      <div class="publisher-design-body">
-        <div class="publisher-design-left">
-          <div class="publisher-design-stats">
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'all' }"
-              @click="setPublisherOverviewFilter('all')"
-            >
-              <span
-                >全部视频 <strong>{{ publisherTasks.length }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'video' }"
-              @click="setPublisherOverviewFilter('video')"
-            >
-              <span
-                >视频 <strong>{{ publisherTasks.length }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'pending' }"
-              @click="setPublisherOverviewFilter('pending')"
-            >
-              <span
-                >待发布
-                <strong>{{
-                  publisherPendingTasks.length
-                }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'draft' }"
-              @click="setPublisherOverviewFilter('draft')"
-            >
-              <span
-                >草稿
-                <strong>{{
-                  publisherTasks.filter((item) => item.state === "draft").length
-                }}</strong></span
-              >
-            </button>
-            <button
-              type="button"
-              :class="{ active: publisherOverviewFilter === 'published' }"
-              @click="setPublisherOverviewFilter('published')"
-            >
-              <span
-                >已发布
-                <strong>{{
-                  publisherTasks.filter((item) => item.state === "published")
-                    .length
-                }}</strong></span
-              >
-            </button>
+
+      <div class="pub-body">
+        <section class="pub-main">
+          <div class="pub-bar">
+            <nav class="pub-tabs" aria-label="发布状态">
+              <button
+                v-for="tab in publisherOverviewTabs"
+                :key="tab.key"
+                type="button"
+                class="pub-tab"
+                :class="{ 'is-active': publisherOverviewFilter === tab.key }"
+                @click="setPublisherOverviewFilter(tab.key)"
+              >{{ tab.label }}<em>{{ tab.count }}</em></button>
+            </nav>
+            <label class="vg-search pub-search">
+              <Search :size="15" />
+              <input v-model="publisherSearch" class="vg-input" placeholder="搜索文件名、标题、商品" @input="publisherPage = 1" />
+            </label>
           </div>
-          <div class="publisher-design-filters">
-            <div class="publisher-design-search">
-              <Search class="h-4 w-4" /><input
-                v-model="publisherSearch"
-                placeholder="搜索视频、标题、标签..."
-                @input="publisherPage = 1"
-              />
-            </div>
-            <select
-              v-model="publisherFilterAccount"
-            >
+
+          <div class="pub-filters">
+            <Filter :size="14" class="pub-filters__icon" />
+            <select v-model="publisherFilterAccount" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部账号</option>
-              <option
-                v-for="account in publisherConnections"
-                :key="account.uid"
-                :value="account.uid"
-              >
-                {{ account.name || account.uid }}
-              </option></select
-            ><select
-              v-model="publisherFilterProduct"
-            >
+              <option v-for="account in publisherConnections" :key="account.uid" :value="account.uid">{{ account.name || account.uid }}</option>
+            </select>
+            <select v-model="publisherFilterProduct" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部商品</option>
-              <option
-                v-for="product in publisherProducts"
-                :key="product.id"
-                :value="product.id"
-              >
-                {{ product.title || product.name }}
-              </option></select
-            ><select
-              v-model="publisherFilterStatus"
-            >
+              <option v-for="product in publisherProducts" :key="product.id" :value="product.id">{{ product.title || product.name }}</option>
+            </select>
+            <select v-model="publisherFilterStatus" class="vg-select vg-select--sm" @change="applyPublisherFilters">
               <option value="all">全部状态</option>
               <option value="pending">待发布</option>
               <option value="draft">草稿</option>
-              <option value="published">已发布</option></select
-            >
-            <div class="publisher-filter-actions">
-              <button
-                class="publisher-date-button"
-                :class="{ active: publisherFilterDate }"
-                type="button"
-                @click="openPublisherDatePicker"
-              >
-                <Clock3 class="h-4 w-4" />{{
-                  publisherFilterDate || "选择日期"
-                }}
-              </button>
-              <input
-                ref="publisherDateInput"
-                v-model="publisherFilterDate"
-                class="publisher-date-input"
-                type="date"
-              />
-              <button
-                class="publisher-filter-apply"
-                type="button"
-                @click="applyPublisherFilters"
-              >
-                <Filter class="h-4 w-4" />筛选
-              </button>
-              <button type="button" @click="resetPublisherFilters">
-                <RefreshCcw class="h-4 w-4" />重置
-              </button>
-            </div>
-          </div>
-          <div
-            v-if="publisherRowSelection.length"
-            class="publisher-design-selection"
-          >
-            <button
-              class="publisher-selection-toggle"
-              type="button"
-              @click="toggleAllPublisherRows"
-            >
-              <CheckCircle2 class="h-4 w-4" />
-              {{
-                publisherRowSelection.length === filteredPublisherTasks.length
-                  ? "取消全选"
-                  : "全选"
-              }}
+              <option value="published">已发布</option>
+              <option value="failed">发布失败</option>
+            </select>
+            <input v-model="publisherFilterDate" class="vg-input vg-input--sm pub-date" type="date" title="按日期筛选" @change="applyPublisherFilters" />
+            <button v-if="publisherFiltersActive" type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="resetPublisherFilters">
+              <RefreshCcw :size="13" />清除筛选
             </button>
-            <span
-              >已选择
-              {{ publisherRowSelection.length }} 个视频</span
-            >
-            <span
-              v-if="publisherPrecheckState !== 'idle'"
-              class="publisher-precheck-status"
-              :class="`is-${publisherPrecheckState}`"
-            >{{ publisherPrecheckMessage }}</span>
-            <div>
-              <button type="button" @click="openPublisherDrawer">
-                批量编辑</button
-              ><button
-                type="button"
-                :disabled="publisherMusicRandomizing"
-                @click="applyRandomFavoriteMusic()"
-              >
-                <LoaderCircle
-                  v-if="publisherMusicRandomizing"
-                  class="h-3 w-3 animate-spin"
-                /><Shuffle v-else class="h-3 w-3" />随机收藏音乐
-                <small v-if="publisherFavoriteMusic.length"
-                  >({{ publisherFavoriteMusic.length }})</small
-                ></button
-              ><button
-                type="button"
-                @click="openPublisherBatchSelector('product')"
-              >
-                设置商品</button
-              ><button type="button" @click="preparePublisherScheduleSelection">
-                设置发布时间</button>
-              <label class="publisher-precheck-toggle">
-                <input v-model="publisherPrecheckEnabled" type="checkbox" />
-                发布前本地检查
-              </label>
-              <button
-                v-if="publisherPrecheckEnabled"
-                type="button"
-                @click="precheckPublisher"
-              >本地检查</button>
-            </div>
-            <button
-              class="publisher-design-primary publisher-submit-button"
-              type="button"
-              :disabled="publisherBusy"
-              @click="publishSelectedRows"
-            >
-              <Send class="h-4 w-4" />提交发布
-              ({{ publisherRowSelection.length }})
+            <span class="vg-toolbar__spacer" />
+            <span class="pub-filters__meta">共 <b>{{ filteredPublisherTasks.length }}</b> 个视频</span>
+          </div>
+
+          <div v-if="publisherRowSelection.length" class="pub-selbar">
+            <span class="pub-selbar__count">已选 <b>{{ publisherRowSelection.length }}</b> 个</span>
+            <button type="button" class="vg-link vg-link--muted" @click="publisherRowSelection = []">清空</button>
+            <span class="pub-selbar__sep" />
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="openPublisherBatchSelector('product')"><Package :size="14" />设置商品</button>
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="preparePublisherScheduleSelection"><Clock3 :size="14" />设置时间</button>
+            <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" :disabled="publisherMusicRandomizing" @click="applyRandomFavoriteMusic()">
+              <LoaderCircle v-if="publisherMusicRandomizing" :size="14" class="vg-spin" /><Shuffle v-else :size="14" />随机收藏音乐
+            </button>
+            <span class="vg-toolbar__spacer" />
+            <span v-if="publisherPrecheckState !== 'idle'" class="pub-precheck" :class="`is-${publisherPrecheckState}`">{{ publisherPrecheckMessage }}</span>
+            <label class="pub-precheck-toggle">
+              <input v-model="publisherPrecheckEnabled" type="checkbox" />发布前检查
+            </label>
+            <button v-if="publisherPrecheckEnabled" type="button" class="vg-btn vg-btn--sm" @click="precheckPublisher"><ShieldCheck :size="14" />检查</button>
+            <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :disabled="publisherBusy" @click="publishSelectedRows">
+              <LoaderCircle v-if="publisherBusy" :size="14" class="vg-spin" /><Send v-else :size="14" />提交发布
             </button>
           </div>
-          <main class="publisher-design-list">
-            <div class="publisher-design-list-head">
-              <span>选择</span><span>视频</span><span>标题</span
-              ><span>关联商品</span><span>发布时间</span><span>状态</span
-              ><span>操作</span>
+
+          <div class="pub-table" role="table">
+            <div class="pub-row pub-row--head" role="row">
+              <span class="pub-cell--chk">
+                <input
+                  type="checkbox"
+                  :checked="publisherAllVisibleSelected"
+                  :indeterminate.prop="publisherRowSelection.length > 0 && !publisherAllVisibleSelected"
+                  :disabled="!publisherSelectableIds.length"
+                  aria-label="全选"
+                  @change="toggleAllPublisherRows"
+                />
+              </span>
+              <span>视频</span><span>标题 / 描述</span><span>商品 / 音乐</span><span>发布时间</span><span>状态</span><span class="pub-cell--ops">操作</span>
             </div>
-            <div class="publisher-design-rows">
+            <div class="pub-table__body">
               <div
-                v-for="(item, index) in pagedPublisherTasks"
+                v-for="item in pagedPublisherTasks"
                 :key="item.id"
-                class="publisher-design-row"
-                :class="{ 'is-published': item.state === 'published' }"
+                class="pub-row"
+                role="row"
+                :class="{ 'is-selected': publisherRowSelection.includes(item.id), 'is-locked': item.state === 'published' }"
               >
-                <label
-                  ><input
+                <span class="pub-cell--chk">
+                  <input
                     type="checkbox"
                     :disabled="item.state === 'published'"
                     :checked="publisherRowSelection.includes(item.id)"
+                    :aria-label="`选择 ${fileName(item.sourceVideoPath)}`"
                     @change="togglePublisherRow(item.id)"
-                  /><b>{{ index + 1 }}</b></label
-                >
-                <div class="publisher-design-video">
-                  <span class="publisher-design-thumb"
-                  ><img
-                    v-if="publisherPosterSrc(item)"
-                    :src="publisherPosterSrc(item)"
-                    alt="video poster"
-                    loading="lazy"
-                  /><span v-else class="publisher-poster-placeholder"><Play class="h-4 w-4" /></span
-                    ><small>00:18</small></span
-                  ><span
-                    ><strong>{{ fileName(item.sourceVideoPath) }}</strong
-                    ><small>1080 x 1920 · 24.5MB</small></span
-                  >
+                  />
+                </span>
+                <div class="pub-video">
+                  <span class="pub-video__poster">
+                    <img v-if="publisherPosterSrc(item)" :src="publisherPosterSrc(item)" alt="" loading="lazy" />
+                    <Play v-else :size="14" />
+                  </span>
+                  <span class="pub-video__meta">
+                    <strong :title="item.sourceVideoPath">{{ fileName(item.sourceVideoPath) }}</strong>
+                    <small><UserRound :size="11" />{{ publisherAccountName(item) }}</small>
+                  </span>
                 </div>
-                <div class="publisher-design-title-cell">
-                  <span>{{ item.videoTitle || "未设置标题" }}</span
-                  ><button
-                    type="button"
-                    title="编辑"
-                    :disabled="item.state === 'published'"
-                    @click="
-                      editPublisherTask(item);
-                      openPublisherDrawer();
-                    "
-                  >
-                    <Pencil class="h-3 w-3" />
-                  </button>
+                <div class="pub-text">
+                  <span :class="{ 'is-empty': !item.videoTitle }">{{ item.videoTitle || "未设置标题" }}</span>
+                  <small v-if="item.description">{{ item.description }}</small>
                 </div>
-                <button
-                  class="publisher-design-product"
-                  type="button"
-                  :disabled="item.state === 'published'"
-                  @click="
-                    publisherEditId = item.id;
-                    openPublisherSelector('product');
-                  "
-                >
-                  <span class="publisher-design-product-thumb"
-                    ><Package class="h-3 w-3" /></span
-                  ><span>{{ item.productTitle || "选择商品" }}</span>
-                </button>
-                <span class="publisher-design-time">{{
-                  formatPublisherSchedule(item.scheduleAt)
-                }}</span
-                ><button
-                  type="button"
-                  class="publisher-design-state"
-                  :class="`state-${item.state}`"
-                  :title="publisherStateLabel(item.state)"
-                  @click="openPublisherStatusDetail(item)"
-                  ><i></i>{{ publisherStateLabel(item.state) }}</button
-                >
-                <div class="publisher-design-row-actions">
-                  <button
-                    type="button"
-                    title="编辑"
-                    :disabled="item.state === 'published'"
-                    @click="
-                      editPublisherTask(item);
-                      openPublisherDrawer();
-                    "
-                  >
-                    <Pencil class="h-4 w-4" /></button
-                  ><button
-                    type="button"
-                    title="删除发布任务"
-                    aria-label="删除发布任务"
-                    @click="removePublisherRow(item.id)"
-                  >
-                    <Trash2 class="h-4 w-4" />
+                <div class="pub-links">
+                  <button type="button" class="pub-link" :class="{ 'is-empty': !item.productTitle }" :disabled="item.state === 'published'" @click="publisherEditId = item.id; openPublisherSelector('product')">
+                    <Package :size="13" /><span>{{ item.productTitle || "选择商品" }}</span>
                   </button>
+                  <small v-if="item.music?.title" class="pub-links__music"><Music2 :size="11" />{{ item.music.title }}</small>
+                </div>
+                <span class="pub-time" :class="{ 'is-now': !item.scheduleAt }">{{ formatPublisherSchedule(item.scheduleAt) }}</span>
+                <span>
+                  <button type="button" class="vg-pill vg-pill--dot pub-state" :class="`vg-pill--${publisherStateTone(item.state)}`" :title="publisherErrorText(item) || publisherStateLabel(item.state)" @click="openPublisherStatusDetail(item)">
+                    {{ publisherStateLabel(item.state) }}
+                  </button>
+                </span>
+                <span class="pub-cell--ops">
+                  <button type="button" class="vg-icon-btn vg-icon-btn--sm" title="编辑" :disabled="item.state === 'published'" @click="focusPublisherRow(item)"><Pencil :size="14" /></button>
+                  <button type="button" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" title="删除发布任务" aria-label="删除发布任务" @click="removePublisherRow(item.id)"><Trash2 :size="14" /></button>
+                </span>
+              </div>
+              <div v-if="!pagedPublisherTasks.length" class="vg-empty pub-empty">
+                <span class="vg-empty__icon"><Send :size="24" /></span>
+                <h3>{{ publisherTasks.length ? "没有符合条件的视频" : "还没有发布任务" }}</h3>
+                <p>{{ publisherTasks.length ? "调整状态或筛选条件后再试" : "导入本地视频或从素材库选择，开始批量发布" }}</p>
+                <div v-if="publisherTasks.length" class="vg-row">
+                  <button type="button" class="vg-btn vg-btn--sm" @click="resetPublisherFilters(); setPublisherOverviewFilter('all')"><RefreshCcw :size="13" />查看全部</button>
+                </div>
+                <div v-else class="vg-row">
+                  <button type="button" class="vg-btn vg-btn--sm" @click="pickPublisherVideos"><FolderOpen :size="14" />从素材库选择</button>
+                  <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" @click="uploadPublisherVideos"><FileUp :size="14" />导入本地视频</button>
                 </div>
               </div>
-              <div
-                v-if="!pagedPublisherTasks.length"
-                class="publisher-design-empty"
-              >
-                <Package class="h-6 w-6" /><strong>还没有发布任务</strong
-                ><span>点击顶部按钮导入或选择视频</span>
-              </div>
             </div>
-            <div class="publisher-design-pager">
-              <button
-                type="button"
-                :disabled="publisherPage <= 1"
-                @click="setPublisherPage(publisherPage - 1)"
-              >
-              <ChevronLeft class="h-4 w-4" /></button
-              ><template v-for="page in publisherPaginationItems" :key="page">
-                <button
-                  v-if="typeof page === 'number'"
-                  :class="{ active: publisherPage === page }"
-                  type="button"
-                  @click="setPublisherPage(page)"
-                >
-                  {{ page }}
-                </button>
-                <span v-else class="publisher-design-pager__ellipsis" aria-hidden="true">...</span>
-              </template><button
-                type="button"
-                :disabled="publisherPage >= publisherPageCount"
-                @click="setPublisherPage(publisherPage + 1)"
-              >
-                <ChevronRight class="h-4 w-4" /></button
-              ><select
-                v-model.number="publisherPageSize"
-                @change="publisherPage = 1"
-              >
-                <option :value="20">每页 20 条</option>
-                <option :value="50">每页 50 条</option></select
-              ><span
-                >共 {{ filteredPublisherTasks.length }} 个视频，已选择
-                {{ publisherRowSelection.length }} 个</span
-              >
-            </div>
-          </main>
-        </div>
-        <aside class="publisher-design-editor">
-          <div class="publisher-design-editor-head">
+          </div>
+
+          <footer class="vg-pager pub-pager">
+            <span class="vg-pager__group">
+              每页
+              <select v-model.number="publisherPageSize" class="vg-select vg-select--sm" @change="publisherPage = 1">
+                <option :value="20">20</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+              条
+            </span>
+            <span class="vg-pager__group">
+              <button type="button" class="vg-pg" :disabled="publisherPage <= 1" aria-label="上一页" @click="setPublisherPage(publisherPage - 1)"><ChevronLeft :size="14" /></button>
+              <template v-for="page in publisherPaginationItems" :key="page">
+                <button v-if="typeof page === 'number'" type="button" class="vg-pg" :class="{ 'is-active': publisherPage === page }" @click="setPublisherPage(page)">{{ page }}</button>
+                <span v-else class="vg-pg is-gap" aria-hidden="true">…</span>
+              </template>
+              <button type="button" class="vg-pg" :disabled="publisherPage >= publisherPageCount" aria-label="下一页" @click="setPublisherPage(publisherPage + 1)"><ChevronRight :size="14" /></button>
+            </span>
+          </footer>
+        </section>
+
+        <aside class="pub-editor">
+          <header class="pub-editor__head">
             <div>
-              <Sparkles class="h-5 w-5" />
-              <div>
-                <h2>批量编辑</h2>
-                <p>已选择 {{ publisherRowSelection.length }} 个视频</p>
+              <h2><Sparkles :size="16" />批量编辑</h2>
+              <p v-if="publisherRowSelection.length">将应用到已选的 <b>{{ publisherRowSelection.length }}</b> 个视频</p>
+              <p v-else>未选择视频，将应用到全部 <b>{{ publisherPendingTasks.length }}</b> 个待发布视频</p>
+            </div>
+            <div v-if="publisherRowSelection.length" class="pub-stack">
+              <span v-for="item in publisherSelectedTasks.slice(0, 3)" :key="item.id" class="pub-stack__item">
+                <img v-if="publisherPosterSrc(item)" :src="publisherPosterSrc(item)" alt="" />
+                <Play v-else :size="11" />
+              </span>
+              <span v-if="publisherSelectedTasks.length > 3" class="pub-stack__item pub-stack__more">+{{ publisherSelectedTasks.length - 3 }}</span>
+            </div>
+          </header>
+
+          <div class="pub-editor__body">
+            <p class="pub-editor__hint">打开开关的字段才会被修改</p>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.title }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.title }">
+                <input v-model="publisherEditorFields.title" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">标题</span>
+              </label>
+              <div v-if="publisherEditorFields.title" class="pub-field__body">
+                <input v-model="publisherTitle" class="vg-input" maxlength="150" placeholder="输入视频标题" />
+                <small class="pub-field__count">{{ publisherTitle.length }}/150</small>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.description }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.description }">
+                <input v-model="publisherEditorFields.description" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">描述与话题</span>
+              </label>
+              <div v-if="publisherEditorFields.description" class="pub-field__body">
+                <textarea v-model="publisherDescription" class="vg-textarea" rows="4" maxlength="500" placeholder="输入视频描述，可插入话题标签" />
+                <small class="pub-field__count">{{ publisherDescription.length }}/500</small>
+                <div class="pub-topics">
+                  <button v-for="tag in publisherTags" :key="tag" type="button" class="vg-chip pub-topic" @click="insertPublisherTag(tag)">{{ tag }}</button>
+                  <button v-if="!publisherTagInputOpen" type="button" class="vg-chip pub-topic pub-topic--add" @click="addPublisherTag"><Plus :size="11" />话题</button>
+                </div>
+                <div v-if="publisherTagInputOpen" class="pub-inline">
+                  <input v-model="publisherTagDraft" class="vg-input vg-input--sm" placeholder="例如 jewelry" @keyup.enter="confirmPublisherTag" @keyup.esc="cancelPublisherTag" />
+                  <button type="button" class="vg-btn vg-btn--sm" @click="confirmPublisherTag">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.product }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.product }">
+                <input v-model="publisherEditorFields.product" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">关联商品</span>
+              </label>
+              <div v-if="publisherEditorFields.product" class="pub-field__body">
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('account')">
+                  <UserRound :size="15" /><span :class="{ 'is-empty': !publisherConnectionItem }">{{ publisherConnectionItem?.name || "选择发布账号" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('product')">
+                  <Package :size="15" /><span :class="{ 'is-empty': !publisherProductItem }">{{ publisherProductItem?.title || "选择商品" }}</span><ChevronRight :size="14" />
+                </button>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.schedule }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.schedule }">
+                <input v-model="publisherEditorFields.schedule" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">发布时间</span>
+              </label>
+              <div v-if="publisherEditorFields.schedule" class="pub-field__body">
+                <div class="pub-seg" role="radiogroup">
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'keep' }" @click="publisherScheduleMode = 'keep'">保持原时间</button>
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'unified' }" @click="publisherScheduleMode = 'unified'">统一时间</button>
+                  <button type="button" :class="{ 'is-on': publisherScheduleMode === 'sequence' }" @click="publisherScheduleMode = 'sequence'">按顺序间隔</button>
+                </div>
+                <input
+                  v-if="publisherScheduleMode !== 'keep'"
+                  v-model="publisherUnifiedSchedule"
+                  class="vg-input"
+                  type="datetime-local"
+                  @input="publisherSyncError = ''"
+                />
+                <label v-if="publisherScheduleMode === 'sequence'" class="pub-inline">
+                  <span class="pub-inline__label">每条间隔</span>
+                  <input v-model.number="publisherSequenceInterval" class="vg-input vg-input--sm" type="number" min="1" max="1440" />
+                  <span class="pub-inline__label">分钟</span>
+                </label>
+              </div>
+            </section>
+
+            <section class="pub-field" :class="{ 'is-on': publisherEditorFields.music }">
+              <label class="vg-switch pub-field__toggle" :class="{ 'is-on': publisherEditorFields.music }">
+                <input v-model="publisherEditorFields.music" type="checkbox" class="pub-sr" />
+                <span class="vg-switch__track" /><span class="pub-field__name">背景音乐</span>
+              </label>
+              <div v-if="publisherEditorFields.music" class="pub-field__body">
+                <button v-if="!publisherEditorFields.product" class="pub-picker" type="button" @click="openPublisherBatchSelector('account')">
+                  <UserRound :size="15" /><span :class="{ 'is-empty': !publisherConnectionItem }">{{ publisherConnectionItem?.name || "选择发布账号" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="pub-picker" type="button" @click="openPublisherBatchSelector('music')">
+                  <Music2 :size="15" /><span :class="{ 'is-empty': !publisherSelectedMusic }">{{ publisherSelectedMusic?.title || "选择音乐" }}</span><ChevronRight :size="14" />
+                </button>
+                <button class="vg-btn vg-btn--soft vg-btn--sm vg-btn--block" type="button" :disabled="publisherMusicRandomizing" @click="applyRandomFavoriteMusic()">
+                  <LoaderCircle v-if="publisherMusicRandomizing" :size="14" class="vg-spin" /><Shuffle v-else :size="14" />随机分配收藏音乐
+                  <span v-if="publisherFavoriteMusic.length" class="pub-muted">· {{ publisherFavoriteMusic.length }} 首</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <footer class="pub-editor__foot">
+            <div class="pub-apply">
+              <span class="pub-apply__label">应用方式</span>
+              <div class="pub-seg pub-seg--full" role="radiogroup">
+                <button type="button" :class="{ 'is-on': publisherApplyMode === 'empty' }" @click="publisherApplyMode = 'empty'">仅填充空白</button>
+                <button type="button" :class="{ 'is-on': publisherApplyMode === 'all' }" @click="publisherApplyMode = 'all'">覆盖已有内容</button>
               </div>
             </div>
-            <button class="publisher-editor-preview-button" type="button">
-              <Play class="h-4 w-4" />预览选中
-            </button>
-          </div>
-          <div class="publisher-design-preview">
-            <div
-              v-for="item in publisherSelectedTasks.slice(0, 3)"
-              :key="item.id"
-              class="publisher-design-preview-thumb"
-            >
-              <video
-                :src="previewSrc(item.sourceVideoPath)"
-                muted
-                preload="metadata"
-              ></video>
+            <div class="pub-editor__actions">
+              <button type="button" class="vg-btn" :disabled="!publisherRowSelection.length" @click="publisherRowSelection = []; publisherEditId = ''">取消选择</button>
+              <button type="button" class="vg-btn vg-btn--primary" :disabled="!publisherPendingTasks.length" @click="applyPublisherDefaults()"><Check :size="15" />应用修改</button>
             </div>
-            <span v-if="publisherSelectedTasks.length > 3"
-              >+{{ publisherSelectedTasks.length - 3 }}</span
-            >
-          </div>
-          <div class="publisher-editor-tabs publisher-editor-tabs-single">
-            <span class="active">批量设置</span>
-          </div>
-          <p class="publisher-design-hint">
-            选择要修改的内容 <small>未选择的字段不会被修改</small>
-          </p>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.title"
-              type="checkbox"
-            />标题</label
-          >
-          <div
-            v-if="publisherEditorFields.title"
-            class="publisher-design-field"
-          >
-            <input
-              v-model="publisherTitle"
-              maxlength="150"
-              placeholder="输入新的标题"
-            /><small>将应用到 {{ publisherRowSelection.length }} 个视频</small>
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  v-model="publisherOverwriteTitle"
-                  type="radio"
-                  :value="false"
-                />仅修改空白标题</label
-              ><label
-                ><input
-                  v-model="publisherOverwriteTitle"
-                  type="radio"
-                  :value="true"
-                />覆盖所有选中视频</label
-              >
-            </div>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.description"
-              type="checkbox"
-            />描述</label
-          >
-          <div
-            v-if="publisherEditorFields.description"
-            class="publisher-design-field"
-          >
-            <textarea
-              v-model="publisherDescription"
-              rows="3"
-              maxlength="500"
-              placeholder="输入视频描述..."
-            ></textarea
-            ><small>{{ publisherDescription.length }}/500</small>
-            <div class="publisher-description-tags">
-              <button
-                v-for="tag in publisherTags"
-                :key="tag"
-                type="button"
-                @click="insertPublisherTag(tag)"
-              >{{ tag }}</button>
-              <button type="button" @click="addPublisherTag">+ 添加标签</button>
-            </div>
-            <div v-if="publisherTagInputOpen" class="publisher-description-tag-input">
-              <input
-                v-model="publisherTagDraft"
-                placeholder="输入标签，例如 jewelry"
-                @keyup.enter="confirmPublisherTag"
-                @keyup.esc="cancelPublisherTag"
-              />
-              <button type="button" @click="confirmPublisherTag">添加</button>
-            </div>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.product"
-              type="checkbox"
-            />商品</label
-          >
-          <div
-            v-if="publisherEditorFields.product || publisherEditorFields.music"
-            class="publisher-design-field"
-          >
-            <span>发布账号</span>
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('account')"
-            >
-              <UserRound class="h-4 w-4" />{{
-                publisherConnectionItem?.name || "选择发布账号"
-              }}
-            </button>
-            <small>商品和音乐将使用此账号的数据</small>
-          </div>
-          <div
-            v-if="publisherEditorFields.product"
-            class="publisher-design-field"
-          >
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('product')"
-            >
-              <Package class="h-4 w-4" />{{
-                publisherProductItem?.title || "选择商品"
-              }}
-            </button>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.schedule"
-              type="checkbox"
-            />发布时间</label
-          >
-          <div
-            v-if="publisherEditorFields.schedule"
-            class="publisher-design-field"
-          >
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  type="radio"
-                  value="keep"
-                  v-model="publisherScheduleMode"
-                />保持原时间</label
-              ><label
-                ><input
-                  type="radio"
-                  value="unified"
-                  v-model="publisherScheduleMode"
-                />统一发布时间</label
-              ><label
-                ><input
-                  type="radio"
-                  value="sequence"
-                  v-model="publisherScheduleMode"
-                />按顺序发布</label
-              >
-            </div>
-            <div
-              v-if="publisherScheduleMode !== 'keep'"
-              class="publisher-schedule-input"
-            >
-              <Clock3 class="h-4 w-4" />
-              <input
-                v-model="publisherUnifiedSchedule"
-                type="datetime-local"
-                @input="publisherSyncError = ''"
-              />
-            </div>
-            <label
-              v-if="publisherScheduleMode === 'sequence'"
-              class="publisher-sequence-interval"
-            >
-              <span>发布间隔</span>
-              <input
-                v-model.number="publisherSequenceInterval"
-                type="number"
-                min="1"
-                max="1440"
-              />
-              <small>分钟</small>
-            </label>
-          </div>
-          <label class="publisher-design-check"
-            ><input
-              v-model="publisherEditorFields.music"
-              type="checkbox"
-            />音乐</label
-          >
-          <div
-            v-if="publisherEditorFields.music"
-            class="publisher-design-field"
-          >
-            <button
-              class="publisher-design-select"
-              type="button"
-              @click="openPublisherBatchSelector('music')"
-            >
-              <Music2 class="h-4 w-4" />{{
-                publisherSelectedMusic?.title || "选择音乐"
-              }}
-            </button>
-            <button
-              class="publisher-design-select publisher-random-music-button"
-              type="button"
-              :disabled="publisherMusicRandomizing"
-              @click="applyRandomFavoriteMusic()"
-            >
-              <LoaderCircle
-                v-if="publisherMusicRandomizing"
-                class="h-4 w-4 animate-spin"
-              /><Shuffle v-else class="h-4 w-4" />
-              随机分配收藏音乐
-              <small v-if="publisherFavoriteMusic.length"
-                >{{ publisherFavoriteMusic.length }} 首可用</small
-              >
-            </button>
-          </div>
-          <div class="publisher-editor-apply-mode">
-            <strong>应用方式</strong>
-            <div class="publisher-design-radio">
-              <label
-                ><input
-                  v-model="publisherApplyMode"
-                  type="radio"
-                  value="empty"
-                />仅填充空白字段</label
-              >
-              <label
-                ><input
-                  v-model="publisherApplyMode"
-                  type="radio"
-                  value="all"
-                />覆盖全部选中视频</label
-              >
-            </div>
-          </div>
-          <div class="publisher-design-apply">
-            <button type="button" @click="publisherRowSelection = []">
-              取消
-            </button>
-            <button type="button" @click="applyPublisherDefaults()">
-              应用修改
-            </button>
-          </div>
+          </footer>
         </aside>
       </div>
     </section>
@@ -3739,7 +3599,7 @@ onBeforeUnmount(() => {
         <div class="publisher-single-brand">
           <div class="publisher-single-icon"><Send class="h-5 w-5" /></div>
           <div>
-            <h1>批量发布</h1>
+            <h1>{{ tr('ai.nav.publish') }}</h1>
             <p>批量管理与发布 TikTok 视频</p>
           </div>
         </div>
@@ -5163,7 +5023,7 @@ onBeforeUnmount(() => {
               publisherPickerPage = 1;
             "
           >
-            动态照片
+            图生视频
           </button>
           <button
             type="button"
@@ -5174,7 +5034,7 @@ onBeforeUnmount(() => {
               publisherPickerPage = 1;
             "
           >
-            创意工作室
+            tk创意室
           </button>
         </div>
         <div class="publisher-picker-filter">
@@ -5286,954 +5146,430 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-    <section v-if="activeTab === 'reference'" class="workspace-grid">
-      <article class="panel-card reference-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">1</div>
-            <strong>{{ tr("autoUi.k_70076b55a369") }}</strong>
-          </div>
-          <span class="panel-head-note">{{ tr("autoUi.k_e6f568ddd540") }}</span>
-        </div>
-        <div class="generation-mode-control">
-          <span class="generation-mode-control__label">{{ tr("tiktokCreative.generationMode.label") }}</span>
-          <div class="generation-mode-control__options" role="group" :aria-label="tr('tiktokCreative.generationMode.label')">
-            <button type="button" :class="{ active: generationMode === 'reference_to_video' }" @click="generationMode = 'reference_to_video'">
-              {{ tr("tiktokCreative.generationMode.referenceToVideo") }}
+    <section v-if="activeTab === 'reference'" class="vg-scope ts-create">
+      <div class="ts-main">
+        <!-- reference images -->
+        <article class="ts-card ts-block">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_2132324c5c89") }}<em v-if="referenceImagePaths.length">{{ referenceImagePaths.length }}</em></h2>
+              <p>{{ tr("autoUi.k_4b7af20133a5") }}</p>
+            </div>
+            <div class="ts-block__tools">
+              <button class="vg-btn vg-btn--sm" type="button" data-testid="tiktok-pick-reference" @click="pickReferenceImages"><ImagePlus :size="14" />{{ tr("autoUi.k_f961c4d8b29f") }}</button>
+              <button class="vg-btn vg-btn--sm" type="button" @click="pickReferenceImagesFromAssetLibrary"><FolderOpen :size="14" />从素材库选图</button>
+              <button class="vg-btn vg-btn--sm" type="button" @click="openMaterialPicker"><LayoutGrid :size="14" />{{ tr("autoUi.k_f94d4eba3cbe") }}<em class="ts-btn-count">{{ materials.length }}</em></button>
+            </div>
+          </header>
+
+          <div v-if="referenceImagePaths.length" class="ts-refs">
+            <figure v-for="path in referenceImagePaths" :key="path" class="ts-ref" :title="path">
+              <img :src="previewSrc(path)" alt="reference" />
+              <figcaption>{{ fileName(path) }}</figcaption>
+              <button type="button" class="ts-ref__remove" :title="tr('autoUi.k_3755f56f2f83')" @click="referenceImagePaths = referenceImagePaths.filter((item) => item !== path)"><X :size="12" /></button>
+            </figure>
+            <button type="button" class="ts-ref ts-ref--add" @click="pickReferenceImages">
+              <span><Plus :size="20" /></span>
+              <small>{{ tr("autoUi.k_f961c4d8b29f") }}</small>
             </button>
-            <button type="button" :class="{ active: generationMode === 'image_to_video' }" @click="generationMode = 'image_to_video'">
-              {{ tr("tiktokCreative.generationMode.imageToVideo") }}
-            </button>
           </div>
-          <div v-if="generationMode === 'image_to_video'" class="generation-mode-control__details">
-            <div class="generation-mode-control__copy">
-              <span class="generation-mode-control__eyebrow">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
-              <small class="generation-mode-control__hint">
-                {{ tr("tiktokCreative.generationMode.imageToVideoHint", { p0: zoomPercent }) }}
-              </small>
-            </div>
-            <div class="generation-mode-control__zoom" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
-              <button
-                v-for="option in zoomPercentOptions"
-                :key="option"
-                type="button"
-                :class="{ active: zoomPercent === option }"
-                @click="zoomPercent = option"
-              >{{ option }}%</button>
-            </div>
-          </div>
-        </div>
-        <div class="field-stack">
-          <div class="field">
-            <span>{{ tr("autoUi.k_2132324c5c89") }}</span>
-            <div class="reference-source-grid">
-              <button
-                class="reference-source-card"
-                type="button"
-                data-testid="tiktok-pick-reference"
-                @click="pickReferenceImages"
-              >
-                <template v-if="referenceImagePaths[0]"
-                  ><img
-                    class="reference-source-card__preview"
-                    :src="previewSrc(referenceImagePaths[0])"
-                    alt="reference"
-                  />
-                  <div class="reference-source-card__copy">
-                    <strong>{{ tr("autoUi.k_a2256c3c5407") }}</strong
-                    ><small>{{ fileName(referenceImagePaths[0]) }}</small
-                    ><span
-                      >{{ referenceImagePaths.length }}
-                      {{ tr("autoUi.k_279cc8e03fe0") }}</span
-                    >
-                  </div></template
-                ><template v-else
-                  ><div class="reference-source-card__icon">
-                    <ImagePlus class="h-7 w-7" />
-                  </div>
-                  <div class="reference-source-card__copy">
-                    <strong>{{ tr("autoUi.k_f961c4d8b29f") }}</strong
-                    ><small>{{ tr("autoUi.k_4b7af20133a5") }}</small>
-                  </div></template
-                ></button
-              ><button
-                class="reference-source-card"
-                type="button"
-                @click="pickReferenceImagesFromAssetLibrary"
-              >
-                <div class="reference-source-card__icon">
-                  <ImagePlus class="h-7 w-7" />
+          <button v-else class="ts-dropzone" type="button" @click="pickReferenceImages">
+            <span class="ts-dropzone__icon"><ImagePlus :size="22" /></span>
+            <span class="ts-dropzone__copy">
+              <strong>{{ tr("autoUi.k_f961c4d8b29f") }}</strong>
+              <small>{{ tr("autoUi.k_4b7af20133a5") }} · 也可以从素材库或衍生图中选择</small>
+            </span>
+          </button>
+          <footer v-if="referenceImagePaths.length" class="ts-block__foot">
+            <span>{{ referenceImagePaths.length }} {{ tr("autoUi.k_279cc8e03fe0") }}</span>
+            <button type="button" class="ts-link" @click="referenceImagePaths = []"><Trash2 :size="12" />清空</button>
+          </footer>
+        </article>
+
+        <!-- generation settings -->
+        <article class="ts-card ts-block">
+          <header class="ts-block__head">
+            <div class="ts-block__title"><h2>生成设置</h2><p>{{ tr("autoUi.k_e6f568ddd540") }}</p></div>
+          </header>
+          <div class="ts-form">
+            <div class="ts-form__row">
+              <span class="ts-form__label">{{ tr("tiktokCreative.generationMode.label") }}</span>
+              <div class="ts-form__control">
+                <div class="ts-seg" role="group" :aria-label="tr('tiktokCreative.generationMode.label')">
+                  <button type="button" :class="{ 'is-on': generationMode === 'reference_to_video' }" @click="generationMode = 'reference_to_video'">{{ tr("tiktokCreative.generationMode.referenceToVideo") }}</button>
+                  <button type="button" :class="{ 'is-on': generationMode === 'image_to_video' }" @click="generationMode = 'image_to_video'">{{ tr("tiktokCreative.generationMode.imageToVideo") }}</button>
                 </div>
-                <div class="reference-source-card__copy">
-                  <strong>从素材库选图</strong>
-                  <small>选择电脑或手机上传的图片</small>
-                </div>
-              </button
-              ><button
-                class="reference-source-card"
-                type="button"
-                @click="openMaterialPicker"
-              >
-                <div class="reference-source-card__icon">
-                  <LayoutGrid class="h-7 w-7" />
-                </div>
-                <div class="reference-source-card__copy">
-                  <strong>{{ tr("autoUi.k_f94d4eba3cbe") }}</strong
-                  ><small>{{ tr("autoUi.k_64b63cea9090") }}</small
-                  ><span
-                    >{{ materials.length }}
-                    {{ tr("autoUi.k_2aac253f0f33") }}</span
-                  >
-                </div>
-              </button>
-            </div>
-          </div>
-          <div v-if="referenceImagePaths.length" class="clone-shot-list">
-            <div
-              v-for="path in referenceImagePaths"
-              :key="path"
-              class="clone-shot-row reference-task-row"
-            >
-              <div class="clone-shot-copy">
-                <strong>{{ fileName(path) }}</strong
-                ><small>{{ path }}</small>
               </div>
-              <button
-                class="ghost-button small danger"
-                type="button"
-                @click="
-                  referenceImagePaths = referenceImagePaths.filter(
-                    (item) => item !== path,
-                  )
-                "
-              >
-                <Trash2 class="h-4 w-4" />{{ tr("autoUi.k_3755f56f2f83") }}
-              </button>
+            </div>
+            <div v-if="generationMode === 'image_to_video'" class="ts-form__row">
+              <span class="ts-form__label">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
+              <div class="ts-form__control">
+                <div class="ts-seg" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
+                  <button v-for="option in zoomPercentOptions" :key="option" type="button" :class="{ 'is-on': zoomPercent === option }" @click="zoomPercent = option">{{ option }}%</button>
+                </div>
+                <small class="ts-form__hint">{{ tr("tiktokCreative.generationMode.imageToVideoHint", { p0: zoomPercent }) }}</small>
+              </div>
+            </div>
+            <div class="ts-form__row">
+              <span class="ts-form__label">{{ tr("autoUi.k_004922066efd") }}</span>
+              <div class="ts-form__control">
+                <button class="ts-product" type="button" @click="productPickerOpen = true">
+                  <span class="ts-product__thumb">
+                    <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="product" />
+                    <Package v-else :size="16" />
+                  </span>
+                  <span class="ts-product__name" :class="{ 'is-empty': !selectedProduct }">{{ selectedProduct?.name || tr("autoUi.k_f4d8d03ce5b4") }}</span>
+                  <ChevronDown :size="15" />
+                </button>
+              </div>
             </div>
           </div>
-          <label class="field"
-            ><span>{{ tr("autoUi.k_004922066efd") }}</span
-            ><button
-              class="product-picker product-picker-button"
-              type="button"
-              @click="productPickerOpen = true"
-            >
-              <div v-if="selectedProduct?.coverImagePath" class="product-thumb">
-                <img
-                  :src="previewSrc(selectedProduct.coverImagePath)"
-                  alt="product"
-                />
-              </div>
-              <div v-else class="product-thumb">
-                <Package class="h-4 w-4" />
-              </div>
-              <span class="product-picker-name">{{
-                selectedProduct?.name || tr("autoUi.k_f4d8d03ce5b4")
-              }}</span
-              ><ChevronDown class="picker-arrow h-4 w-4" /></button
-          ></label>
+        </article>
+
+        <!-- sticky action bar -->
+        <div class="ts-actionbar">
+          <div class="ts-actionbar__summary">
+            <span :class="{ 'is-ok': referenceImagePaths.length }"><Check v-if="referenceImagePaths.length" :size="13" /><i v-else />{{ tr("autoUi.k_2132324c5c89") }} {{ referenceImagePaths.length }}</span>
+            <span :class="{ 'is-ok': selectedProductId }"><Check v-if="selectedProductId" :size="13" /><i v-else />{{ selectedProduct?.name || tr("autoUi.k_004922066efd") }}</span>
+            <small><ShieldCheck :size="13" />{{ tr("autoUi.k_b8ef551f9203") }}</small>
+          </div>
           <button
-            class="primary-button create-button"
+            class="vg-btn vg-btn--primary vg-btn--lg ts-create-btn"
             type="button"
             data-testid="tiktok-create-reference"
-            :disabled="
-              creating || !referenceImagePaths.length || !selectedProductId
-            "
+            :disabled="creating || !referenceImagePaths.length || !selectedProductId"
             @click="createTasks"
           >
-            <LoaderCircle
-              v-if="creating"
-              class="h-4 w-4 animate-spin"
-            /><Sparkles v-else class="h-4 w-4" />{{
-              creating
-                ? tr("autoUi.k_14b16d7121c1")
-                : tr("autoUi.k_dbb37b794ab3", {
-                    p0: referenceImagePaths.length,
-                  })
-            }}
+            <LoaderCircle v-if="creating" :size="16" class="vg-spin" /><Sparkles v-else :size="16" />
+            {{ creating ? tr("autoUi.k_14b16d7121c1") : tr("autoUi.k_dbb37b794ab3", { p0: referenceImagePaths.length }) }}
           </button>
-          <div class="safe-note">
-            <ShieldCheck class="h-4 w-4" />{{ tr("autoUi.k_b8ef551f9203") }}
-          </div>
         </div>
-      </article>
-      <article class="panel-card rules-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">2</div>
-            <strong>{{ tr("autoUi.k_491d668880f6") }}</strong>
-          </div>
-          <span class="panel-head-note">{{ tr("autoUi.k_f25fdbd62c22") }}</span>
-        </div>
-        <div class="rules-box">
-          <div class="rule-row">
-            <div class="rule-icon">A</div>
-            <p>{{ tr("autoUi.k_8d16eb3cd4d4") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">+</div>
-            <p>{{ tr("autoUi.k_98daa93daba9") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">O</div>
-            <p>{{ tr("autoUi.k_d6908a205702") }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">*</div>
-            <p>{{ tr("autoUi.k_9b8309e541c9") }}</p>
-          </div>
-        </div>
-        <div class="output-note">
-          <div class="output-note-head">{{ tr("autoUi.k_d0117a565ea2") }}</div>
-          <p>{{ tr("autoUi.k_606d9a364dc7") }}</p>
-          <strong
-            >{{ enabledAccounts.length }} {{ tr("autoUi.k_95cab73b3bfa") }}
-            {{ runningCount }} {{ tr("autoUi.k_81897da3eeee") }}</strong
-          >
-        </div>
-        <div class="quality-control-card">
-          <div class="quality-control-card__head">
-            <div>
-              <strong>{{ tr("autoUi.k_e81f36aaa278") }}</strong
-              ><small>{{ tr("autoUi.k_467d65d2340b") }}</small>
+      </div>
+
+      <aside class="ts-side">
+        <section class="ts-card ts-block ts-block--compact">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_d0117a565ea2") }}</h2>
+              <p>{{ tr("autoUi.k_f25fdbd62c22") }}</p>
             </div>
-            <ShieldCheck class="h-5 w-5" />
+            <button class="vg-btn vg-btn--sm" type="button" @click="accountDialogOpen = true"><KeyRound :size="13" />{{ tr("autoUi.k_9d4ca7f307e7") }}</button>
+          </header>
+          <div class="ts-stats">
+            <div><strong>{{ enabledAccounts.length }}<small>/{{ accounts.length }}</small></strong><span>{{ tr("autoUi.k_9d4ca7f307e7") }}</span></div>
+            <button type="button" @click="setActiveTab('library')"><strong :class="{ 'is-live': runningCount > 0 }">{{ runningCount }}</strong><span>{{ tr("autoUi.k_fcb979ef0b91") }}</span></button>
+            <button type="button" @click="retrySettingsOpen = true"><strong>{{ creativeSettings.imageRetryLimit }}</strong><span>{{ tr("tiktokCreative.retry.guard") }}</span></button>
           </div>
-          <div class="prompt-version-editor">
-            <div class="prompt-kind-tabs" role="tablist">
-              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ tr("promptKind.image") }}</button>
-              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ tr("promptKind.video") }}</button>
+          <details class="ts-rules">
+            <summary>{{ tr("autoUi.k_491d668880f6") }}<ChevronDown :size="14" /></summary>
+            <p class="ts-note">{{ tr("autoUi.k_606d9a364dc7") }}</p>
+            <ul>
+              <li><Check :size="13" />{{ tr("autoUi.k_8d16eb3cd4d4") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_98daa93daba9") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_d6908a205702") }}</li>
+              <li><Check :size="13" />{{ tr("autoUi.k_9b8309e541c9") }}</li>
+            </ul>
+          </details>
+        </section>
+
+        <section class="ts-card ts-block ts-prompt">
+          <header class="ts-block__head">
+            <div class="ts-block__title">
+              <h2>{{ tr("autoUi.k_e81f36aaa278") }}</h2>
+              <p>{{ tr("autoUi.k_467d65d2340b") }}</p>
             </div>
-            <label class="field"
-              ><span>{{ tr("autoUi.k_e3ba534bb0ab") }}</span
-              ><select
-                v-model="selectedPromptVersionId"
-                @change="setPromptVersion(selectedPromptVersionId)"
-              >
-                <option
-                  v-for="version in promptVersions"
-                  :key="version.id"
-                  :value="version.id"
-                >
-                  V{{ version.version }} · {{ version.name
-                  }}{{ version.active ? tr("autoUi.k_b34ff6018a6b") : "" }}
-                </option>
-              </select></label
-            ><label class="field"
-              ><span>{{ tr("autoUi.k_ebb9cdd84ccb") }}</span
-              ><input v-model="promptEditorName" type="text" /></label
-            ><label class="field prompt-version-editor__prompt"
-              ><span>{{ tr("autoUi.k_b077056206b1") }}</span
-              ><textarea
-                v-model="promptEditorText"
-                rows="7"
-                spellcheck="false"
-              />
+          </header>
+          <div class="ts-seg ts-seg--full" role="tablist">
+            <button type="button" role="tab" :class="{ 'is-on': promptKind === 'image' }" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ tr("promptKind.image") }}</button>
+            <button type="button" role="tab" :class="{ 'is-on': promptKind === 'video' }" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ tr("promptKind.video") }}</button>
+          </div>
+          <div class="ts-prompt__grid">
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_e3ba534bb0ab") }}</span>
+              <select v-model="selectedPromptVersionId" class="vg-input vg-select" @change="setPromptVersion(selectedPromptVersionId)">
+                <option v-for="version in promptVersions" :key="version.id" :value="version.id">V{{ version.version }} · {{ version.name }}{{ version.active ? tr("autoUi.k_b34ff6018a6b") : "" }}</option>
+              </select>
             </label>
-            <div class="prompt-version-actions">
-              <button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('update')"
-              >
-                {{ tr("autoUi.k_f89efe3911d8") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('copy')"
-              >
-                {{ tr("autoUi.k_e13a96ddf104") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('activate')"
-              >
-                {{ tr("autoUi.k_05bfda1ea7be") }}</button
-              ><button
-                class="ghost-button small"
-                type="button"
-                :disabled="promptVersionBusy"
-                @click="savePrompt('rollback')"
-              >
-                {{ tr("autoUi.k_cb9de5c45477") }}
-              </button>
-            </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_ebb9cdd84ccb") }}</span>
+              <input v-model="promptEditorName" class="vg-input" type="text" />
+            </label>
           </div>
-        </div>
-      </article>
+          <label class="vg-field">
+            <span class="vg-field__label">{{ tr("autoUi.k_b077056206b1") }}</span>
+            <textarea v-model="promptEditorText" class="vg-textarea ts-prompt__text" rows="9" spellcheck="false" />
+          </label>
+          <div class="ts-prompt__actions">
+            <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptVersionBusy" @click="savePrompt('rollback')">{{ tr("autoUi.k_cb9de5c45477") }}</button>
+            <span class="ts-prompt__spacer" />
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy" @click="savePrompt('copy')">{{ tr("autoUi.k_e13a96ddf104") }}</button>
+            <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy" @click="savePrompt('activate')">{{ tr("autoUi.k_05bfda1ea7be") }}</button>
+            <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptVersionBusy" @click="savePrompt('update')">{{ tr("autoUi.k_f89efe3911d8") }}</button>
+          </div>
+        </section>
+      </aside>
     </section>
 
-    <section v-if="activeTab === 'library'" class="library-layout">
-      <div class="library-headline">
-        <div class="library-summary-row">
-          <div class="library-heading-cluster">
-            <div class="library-title-row">
-              <FolderOpen class="h-5 w-5" /><strong>{{
-                tr("autoUi.k_21eb39d9da89")
-              }}</strong
-              ><span class="library-count"
-                >{{ filteredItems.length }}
-                {{ tr("autoUi.k_64728a772742") }}</span
-              >
-            </div>
-            <span class="library-subtitle">{{
-              tr("autoUi.k_ec4fb1482924")
-            }}</span>
+    <section v-if="activeTab === 'library'" class="vg-scope ts-library">
+      <div class="ts-card ts-card--flush">
+        <div class="ts-libbar">
+          <div class="ts-libbar__title">
+            <h2>{{ tr("autoUi.k_21eb39d9da89") }}</h2>
+            <span>{{ filteredItems.length }} {{ tr("autoUi.k_64728a772742") }} · {{ tr("autoUi.k_ec4fb1482924") }}</span>
           </div>
-          <div class="library-head-tools">
-            <div class="library-view-toggle">
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'grid' }"
-                type="button"
-                @click="libraryViewMode = 'grid'"
-              >
-                <Grid2x2 class="h-4 w-4" /></button
-              ><button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'list' }"
-                type="button"
-                @click="libraryViewMode = 'list'"
-              >
-                <List class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="library-pagination">
-              <button
-                class="library-page-button"
-                type="button"
-                :disabled="libraryPage <= 1"
-                @click="libraryPage--"
-              >
-                <ChevronLeft class="h-4 w-4" /></button
-              ><span>{{ libraryPage }} / {{ totalPages }}</span
-              ><button
-                class="library-page-button"
-                type="button"
-                :disabled="libraryPage >= totalPages"
-                @click="libraryPage++"
-              >
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
+          <div class="ts-viewtoggle" role="group">
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'grid' }" @click="libraryViewMode = 'grid'"><Grid2x2 :size="15" /></button>
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'list' }" @click="libraryViewMode = 'list'"><List :size="15" /></button>
           </div>
         </div>
-        <div class="library-toolbar">
-          <div class="library-action-group">
-            <button class="toolbar-button" type="button" @click="cycleFilter">
-              <Filter class="h-4 w-4" />{{ tr("autoUi.k_21bd315911db") }}
-              {{
-                libraryFilter === "all"
-                  ? tr("autoUi.k_778fc8f99453")
-                  : libraryFilter === "completed"
-                    ? tr("autoUi.k_e99b48a29bdf")
-                    : libraryFilter === "running"
-                      ? tr("autoUi.k_fcb979ef0b91")
-                      : libraryFilter === "failed"
-                        ? tr("autoUi.k_3e3c8068bb0e")
-                        : tr("autoUi.k_130448bce675")
-              }}</button
-            ><button
-              class="toolbar-button"
-              type="button"
-              :disabled="!filteredItems.length"
-              @click="selectAllFiltered"
-            >
-              <CheckCircle2 class="h-4 w-4" />{{
-                selectedShotIds.length &&
-                selectedShotIds.length === filteredItems.length
-                  ? tr("autoUi.k_f02e9439542f")
-                  : tr("autoUi.k_3fca9c80cc8a")
-              }}
-            </button>
-          </div>
-          <div class="library-output-actions">
-            <button
-              class="toolbar-button batch-delete-button"
-              type="button"
-              :disabled="!selectedShotIds.length"
-              @click="openBatchDelete"
-            >
-              <Trash2 class="h-4 w-4" />{{ tr("autoUi.k_4edb066d4627")
-              }}{{ selectedShotIds.length }})</button
-            ><button
-              class="toolbar-button"
-              type="button"
-              :disabled="!subtitleEligibleItems.length"
-              @click="openSubtitleDialog"
-            >
-              <Captions class="h-4 w-4" />{{ tr("autoUi.k_4d25c03db6e0")
-              }}{{ subtitleEligibleItems.length }})</button
-            ><button
-              class="primary-button"
-              type="button"
-              :disabled="!selectedShotIds.length"
-              @click="exportSelected"
-            >
-              <Download class="h-4 w-4" />{{ tr("autoUi.k_6bd41d31e000")
-              }}{{ selectedShotIds.length }})
-            </button><button
-              v-if="selectedShotIds.length"
-              class="toolbar-button"
-              type="button"
-              @click="revertSelectedSubtitles"
-            >
-              <Captions class="h-4 w-4" />{{ tr("tiktokCreative.revertSubtitles") }}
-            </button>
-          </div>
-        </div>
-      </div>
-      <div v-if="!pagedItems.length" class="panel-card empty-card">
-        <FileImage class="h-8 w-8" /><strong>{{
-          tr("autoUi.k_15652e6de74c")
-        }}</strong>
-        <p>{{ tr("autoUi.k_54226874b463") }}</p>
-      </div>
-      <div v-else-if="libraryViewMode === 'grid'" class="live-console-grid">
-        <article
-          v-for="{ task, shot } in pagedItems"
-          :key="shot.shotId"
-          class="live-console-card"
-          :class="{ selected: selectedShotIds.includes(shot.shotId) }"
-        >
-          <div class="live-console-card__head">
-            <label class="live-console-row__check"
-              ><input
-                type="checkbox"
-                :checked="selectedShotIds.includes(shot.shotId)"
-                @change="toggleSelected(shot.shotId)" /><span
-            /></label>
-            <div class="live-console-card__badges">
-              <span
-                class="live-console-row__status"
-                :class="statusTone(shot)"
-                >{{ statusLabel(shot) }}</span
-              ><span
-                v-if="publishedShotMap.has(shot.shotId)"
-                class="publisher-published-badge"
-                >已发布 ·
-                {{
-                  formatTime(publishedShotMap.get(shot.shotId).updatedAt)
-                }}</span
-              ><span
-                v-if="shot.exportedAt"
-                class="exported-badge"
-                :title="formatTime(shot.exportedAt)"
-                ><Download class="h-3 w-3" />{{
-                  tr("autoUi.k_d3eaaf60ed1c")
-                }}</span
-              >
-            </div>
-          </div>
+        <div class="ts-filters" role="tablist">
           <button
-            class="live-console-card__preview"
+            v-for="option in libraryFilterOptions"
+            :key="option"
             type="button"
-            :disabled="shot.status !== 'completed' || !shot.resultVideoPath"
-            @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"
-          >
-            <div class="live-console-row__thumb">
-              <img
-                v-if="shotPreviewPath(shot)"
-                :src="previewSrc(shotPreviewPath(shot))"
-                alt="poster"
-              />
-              <div v-else class="live-console-row__thumb-empty">
-                <FileImage class="h-5 w-5" />
-              </div>
-              <span v-if="shot.status === 'completed'" class="preview-play"
-                ><Play class="h-4 w-4"
-              /></span>
-            </div>
-          </button>
-          <div class="live-console-card__metrics">
-            <div :title="tr('autoUi.k_d0d81b3ff3b0')">
-              <span>{{ tr("autoUi.k_e2d53a6d3a6a") }}</span
-              ><strong
-                >{{ shot.imageRetryCount || 0 }}/{{
-                  shot.imageRetryLimit ?? 2
-                }}</strong
-              >
-            </div>
-            <div :title="tr('autoUi.k_7b260b7dc1e5')">
-              <span>{{ tr("autoUi.k_82f516820cfe") }}</span
-              ><strong>{{ qualityScore(shot) }}</strong>
-            </div>
-          </div>
-          <div class="live-console-card__body">
-            <div class="live-console-row__titleline">
-              <h3>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</h3>
-              <span class="live-console-row__source">{{
-                tr("autoUi.k_5149ae9c3017")
-              }}</span
-              ><span
-                v-if="shot.subtitleVideoPath"
-                class="live-console-row__source"
-                >{{ tr("autoUi.k_83e422384f7f") }}</span
-              >
-            </div>
-            <div class="live-console-row__meta">
-              <Clock3 class="h-3 w-3" /><span
-                >{{ tr("autoUi.k_fcbd0932929e") }}
-                {{ formatTime(shot.createdAt) }}</span
-              >
-            </div>
-            <div class="live-console-row__subtitle">
-              {{ fileName(shot.referenceImagePath || shot.imagePath) }}
-            </div>
-            <div v-if="shot.lastError" class="live-console-row__error">
-              <AlertTriangle class="h-3 w-3" /><span
-                class="live-console-row__error-text"
-                >{{ shot.lastError }}</span
-              >
-            </div>
-          </div>
-          <div class="live-console-row__actions">
-            <button
-              class="live-console-row__link live-console-row__link--primary"
-              :title="tr('autoUi.k_faea8c1db9cc')"
-              type="button"
-              @click.stop="openDetail(task, shot)"
-            >
-              <PanelBottomOpen class="h-4 w-4" />{{
-                tr("autoUi.k_faea8c1db9cc")
-              }}</button
-            ><button
-              class="live-console-row__link"
-              :title="tr('autoUi.k_1f9ac54b152b')"
-              type="button"
-              @click.stop="
-                detailTask = task;
-                detailShot = shot;
-                detailTab = 'request';
-              "
-            >
-              <Code2 class="h-4 w-4" />{{ tr("autoUi.k_1f9ac54b152b") }}</button
-            ><button
-              class="live-console-row__link"
-              :title="tr('autoUi.k_b923b26d335a')"
-              type="button"
-              @click.stop="openLogs(task, shot)"
-            >
-              <Logs class="h-4 w-4" />{{ tr("autoUi.k_4de50894b8c1") }}</button
-            ><button
-              v-if="shot.resultVideoPath"
-              class="live-console-row__action live-console-row__action--play"
-              :title="tr('autoUi.k_21925350deba')"
-              type="button"
-              @click.stop="
-                openVideo(shot.subtitleVideoPath || shot.resultVideoPath)
-              "
-            >
-              <Play class="h-4 w-4" /></button
-            ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
-              <button
-                v-if="canRetryImageOnce(shot)"
-                class="image-retry-decision__button"
-                :title="tr('autoUi.k_031c7e12ddae')"
-                type="button"
-                @click.stop="retryShot(task, shot)"
-              >
-                <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
+            class="ts-filter"
+            :class="{ 'is-active': libraryFilter === option }"
+            @click="setLibraryFilter(option)"
+          >{{ libraryFilterLabel(option) }}<em>{{ libraryFilterCounts[option] }}</em></button>
+        </div>
+        <div class="ts-actionsbar">
+          <label class="ts-check">
+            <input type="checkbox" :checked="Boolean(filteredItems.length) && selectedShotIds.length === filteredItems.length" :disabled="!filteredItems.length" @change="selectAllFiltered" />
+            <span>{{ selectedShotIds.length ? `${selectedShotIds.length} / ${filteredItems.length}` : (selectedShotIds.length && selectedShotIds.length === filteredItems.length ? tr("autoUi.k_f02e9439542f") : tr("autoUi.k_3fca9c80cc8a")) }}</span>
+          </label>
+          <span class="ts-actionsbar__spacer" />
+          <button v-if="selectedShotIds.length" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles"><Captions :size="14" />{{ tr("tiktokCreative.revertSubtitles") }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="!subtitleEligibleItems.length" @click="openSubtitleDialog"><Captions :size="14" />{{ tr("autoUi.k_4d25c03db6e0") }}{{ subtitleEligibleItems.length }})</button>
+          <button class="vg-btn vg-btn--sm ts-danger" type="button" :disabled="!selectedShotIds.length" @click="openBatchDelete"><Trash2 :size="14" />{{ tr("autoUi.k_4edb066d4627") }}{{ selectedShotIds.length }})</button>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!selectedShotIds.length" @click="exportSelected"><Download :size="14" />{{ tr("autoUi.k_6bd41d31e000") }}{{ selectedShotIds.length }})</button>
+        </div>
+
+        <div v-if="!pagedItems.length" class="ts-empty">
+          <span class="ts-empty__icon"><FileImage :size="26" /></span>
+          <strong>{{ tr("autoUi.k_15652e6de74c") }}</strong>
+          <p>{{ tr("autoUi.k_54226874b463") }}</p>
+          <button class="vg-btn vg-btn--primary" type="button" @click="setActiveTab('reference')"><Sparkles :size="15" />{{ tr("autoUi.k_3a73e3f67a57") }}</button>
+        </div>
+
+        <div v-else-if="libraryViewMode === 'grid'" class="ts-grid">
+          <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="ts-item" :class="{ 'is-selected': selectedShotIds.includes(shot.shotId) }">
+            <div class="ts-item__media">
+              <button class="ts-item__preview" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot), 480)" alt="poster" loading="lazy" decoding="async" />
+                <FileImage v-else :size="22" />
+                <span v-if="shot.status === 'completed'" class="ts-item__play"><Play :size="16" /></span>
               </button>
-              <button
-                v-if="canContinueWithVideo(shot)"
-                class="image-retry-decision__button image-retry-decision__button--primary"
-                :title="tr('tiktokCreative.retry.continueWithVideo')"
-                type="button"
-                @click.stop="continueWithVideo(task, shot)"
-              >
-                <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
+              <label class="ts-check ts-item__check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /></label>
+              <span class="ts-state ts-item__state" :class="shotStateClass(shot)"><i />{{ statusLabel(shot) }}</span>
+            </div>
+            <div class="ts-item__body">
+              <div class="ts-item__title">
+                <strong :title="task.productName || tr('autoUi.k_0c5cc87ef67f')">{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</strong>
+              </div>
+              <div class="ts-item__marks">
+                <span class="ts-mark">{{ tr("autoUi.k_5149ae9c3017") }}</span>
+                <span v-if="shot.subtitleVideoPath" class="ts-mark">{{ tr("autoUi.k_83e422384f7f") }}</span>
+                <span v-if="shot.exportedAt" class="ts-mark ts-mark--ok exported-badge" :title="formatTime(shot.exportedAt)"><Download :size="11" />{{ tr("autoUi.k_d3eaaf60ed1c") }}</span>
+                <span v-if="publishedShotMap.has(shot.shotId)" class="ts-mark ts-mark--ok">已发布 · {{ formatTime(publishedShotMap.get(shot.shotId).updatedAt) }}</span>
+              </div>
+              <dl class="ts-item__stats">
+                <div :title="tr('autoUi.k_d0d81b3ff3b0')"><dt>{{ tr("autoUi.k_e2d53a6d3a6a") }}</dt><dd>{{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit ?? 2 }}</dd></div>
+                <div :title="tr('autoUi.k_7b260b7dc1e5')"><dt>{{ tr("autoUi.k_82f516820cfe") }}</dt><dd>{{ qualityScore(shot) }}</dd></div>
+              </dl>
+              <div class="ts-item__meta"><Clock3 :size="12" />{{ formatTime(shot.createdAt) }}</div>
+              <div class="ts-item__meta" :title="shot.referenceImagePath || shot.imagePath"><FileImage :size="12" />{{ fileName(shot.referenceImagePath || shot.imagePath) }}</div>
+              <div v-if="shot.lastError" class="ts-item__error" :title="shot.lastError"><AlertTriangle :size="12" /><span>{{ shot.lastError }}</span></div>
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+                <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
+                <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
+              </div>
+            </div>
+            <footer class="ts-item__foot">
+              <button class="vg-btn vg-btn--sm" type="button" @click.stop="openDetail(task, shot)"><PanelBottomOpen :size="13" />{{ tr("autoUi.k_faea8c1db9cc") }}</button>
+              <span class="ts-item__spacer" />
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_1f9ac54b152b')" type="button" @click.stop="detailTask = task; detailShot = shot; detailTab = 'request';"><Code2 :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_b923b26d335a')" type="button" @click.stop="openLogs(task, shot)"><Logs :size="14" /></button>
+              <button v-if="canCorrectRegion(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_323968104a8c')" type="button" @click.stop="openRegionEditor(task, shot)"><ScanLine :size="14" /></button>
+              <button v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_e2d53a6d3a6a')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" type="button" @click.stop="removeShot(task, shot)"><Trash2 :size="14" /></button>
+            </footer>
+          </article>
+        </div>
+
+        <div v-else class="ts-list">
+          <div class="ts-list__head">
+            <span />
+            <span>{{ tr("autoUi.k_0c5cc87ef67f") }}</span>
+            <span>{{ tr("autoUi.k_e2d53a6d3a6a") }}</span>
+            <span>{{ tr("autoUi.k_82f516820cfe") }}</span>
+            <span>{{ tr("autoUi.k_fcbd0932929e") }}</span>
+            <span class="is-end" />
+          </div>
+          <article v-for="{ task, shot } in pagedItems" :key="shot.shotId" class="ts-row" :class="{ 'is-selected': selectedShotIds.includes(shot.shotId) }">
+            <label class="ts-check"><input type="checkbox" :checked="selectedShotIds.includes(shot.shotId)" @change="toggleSelected(shot.shotId)" /></label>
+            <div class="ts-row__main">
+              <button class="ts-row__thumb" type="button" :disabled="shot.status !== 'completed' || !shot.resultVideoPath" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)">
+                <img v-if="shotPreviewPath(shot)" :src="previewSrc(shotPreviewPath(shot), 160)" alt="poster" loading="lazy" decoding="async" /><FileImage v-else :size="16" />
               </button>
-            </div><button
-              v-if="canCorrectRegion(shot)"
-              class="live-console-row__action live-console-row__action--region"
-              :title="tr('autoUi.k_323968104a8c')"
-              type="button"
-              @click.stop="openRegionEditor(task, shot)"
-            >
-              <ScanLine class="h-4 w-4" /></button
-            ><button
-              v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)"
-              class="live-console-row__action"
-              :title="tr('autoUi.k_e2d53a6d3a6a')"
-              type="button"
-              @click.stop="retryShot(task, shot)"
-            >
-              <RefreshCcw class="h-4 w-4" /></button
-            ><button
-              class="live-console-row__action live-console-row__action--danger"
-              :title="tr('autoUi.k_3755f56f2f83')"
-              type="button"
-              @click.stop="removeShot(task, shot)"
-            >
-              <Trash2 class="h-4 w-4" />
-            </button>
+              <div class="ts-row__copy">
+                <div class="ts-row__title">
+                  <strong>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</strong>
+                  <span class="ts-state" :class="shotStateClass(shot)"><i />{{ statusLabel(shot) }}</span>
+                </div>
+                <div class="ts-item__marks">
+                  <span class="ts-mark">{{ shot.resultVideoPath ? tr("autoUi.k_d50aa9bb954a") : tr("autoUi.k_e528ba2c704f") }}</span>
+                  <span v-if="shot.exportedAt" class="ts-mark ts-mark--ok exported-badge" :title="formatTime(shot.exportedAt)"><Download :size="11" />{{ tr("autoUi.k_d3eaaf60ed1c") }}</span>
+                  <span v-if="shot.subtitleAppliedAt" class="ts-mark">{{ tr("autoUi.k_aaa5f2e9f006") }} {{ formatTime(shot.subtitleAppliedAt) }}</span>
+                  <span class="ts-row__file">{{ fileName(shot.referenceImagePath || shot.imagePath) }}</span>
+                </div>
+                <div v-if="shot.lastError" class="ts-item__error" :title="shot.lastError"><AlertTriangle :size="12" /><span>{{ shot.lastError }}</span></div>
+              </div>
+            </div>
+            <span class="ts-row__num">{{ shot.imageRetryCount || 0 }}/{{ shot.imageRetryLimit ?? 2 }}</span>
+            <span class="ts-row__num">{{ qualityScore(shot) }}</span>
+            <span class="ts-row__time">{{ formatTime(shot.createdAt) }}</span>
+            <div class="ts-row__actions">
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+                <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
+                <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
+              </div>
+              <button class="vg-btn vg-btn--sm" type="button" @click="openDetail(task, shot)">{{ tr("autoUi.k_faea8c1db9cc") }}</button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_1f9ac54b152b')" type="button" @click="detailTask = task; detailShot = shot; detailTab = 'request';"><Code2 :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_b923b26d335a')" type="button" @click="openLogs(task, shot)"><Logs :size="14" /></button>
+              <button v-if="shot.resultVideoPath" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_21925350deba')" type="button" @click="openVideo(shot.subtitleVideoPath || shot.resultVideoPath)"><Play :size="14" /></button>
+              <button v-if="canCorrectRegion(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_323968104a8c')" type="button" @click="openRegionEditor(task, shot)"><ScanLine :size="14" /></button>
+              <button v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)" class="vg-icon-btn vg-icon-btn--sm" :title="tr('autoUi.k_e2d53a6d3a6a')" type="button" @click="retryShot(task, shot)"><RefreshCcw :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" :title="tr('autoUi.k_3755f56f2f83')" type="button" @click="removeShot(task, shot)"><Trash2 :size="14" /></button>
+            </div>
+          </article>
+        </div>
+
+        <footer v-if="pagedItems.length" class="ts-pager">
+          <span>{{ libraryPage }} / {{ totalPages }}</span>
+          <div>
+            <button class="vg-icon-btn" type="button" :disabled="libraryPage <= 1" @click="libraryPage--"><ChevronLeft :size="16" /></button>
+            <button class="vg-icon-btn" type="button" :disabled="libraryPage >= totalPages" @click="libraryPage++"><ChevronRight :size="16" /></button>
           </div>
-        </article>
-      </div>
-      <div v-else class="live-console-list">
-        <article
-          v-for="{ task, shot } in pagedItems"
-          :key="shot.shotId"
-          class="live-console-row"
-          :class="{ selected: selectedShotIds.includes(shot.shotId) }"
-        >
-          <label class="live-console-row__check"
-            ><input
-              type="checkbox"
-              :checked="selectedShotIds.includes(shot.shotId)"
-              @change="toggleSelected(shot.shotId)" /><span
-          /></label>
-          <div class="live-console-row__preview">
-            <div class="live-console-row__thumb">
-              <img
-                v-if="shotPreviewPath(shot)"
-                :src="previewSrc(shotPreviewPath(shot))"
-                alt="poster"
-              /><FileImage v-else class="h-5 w-5" />
-            </div>
-          </div>
-          <div class="live-console-row__main">
-            <div class="live-console-row__task">
-              <div class="live-console-row__titleline">
-                <h3>{{ task.productName || tr("autoUi.k_0c5cc87ef67f") }}</h3>
-                <span class="live-console-row__source">{{
-                  tr("autoUi.k_5149ae9c3017")
-                }}</span
-                ><span
-                  v-if="shot.subtitleVideoPath"
-                  class="live-console-row__source"
-                  >{{ tr("autoUi.k_83e422384f7f") }}</span
-                >
-              </div>
-              <div class="live-console-row__meta">
-                <Clock3 class="h-3 w-3" /><span
-                  >{{ tr("autoUi.k_fcbd0932929e") }}
-                  {{ formatTime(shot.createdAt) }}</span
-                >
-              </div>
-              <div class="live-console-row__subtitle">
-                {{ fileName(shot.referenceImagePath || shot.imagePath) }}
-              </div>
-              <div class="live-console-list__metrics">
-                <span
-                  >{{ tr("autoUi.k_e2d53a6d3a6a") }}
-                  {{ shot.imageRetryCount || 0 }}/{{
-                    shot.imageRetryLimit ?? 2
-                  }}</span
-                ><span
-                  >{{ tr("autoUi.k_82f516820cfe") }}
-                  {{ qualityScore(shot) }}</span
-                >
-              </div>
-              <div v-if="shot.lastError" class="live-console-row__error">
-                <AlertTriangle class="h-3 w-3" /><span
-                  class="live-console-row__error-text"
-                  >{{ shot.lastError }}</span
-                >
-              </div>
-            </div>
-            <div class="live-console-row__side">
-              <span
-                class="live-console-row__status"
-                :class="statusTone(shot)"
-                >{{ statusLabel(shot) }}</span
-              >
-            </div>
-          </div>
-          <div class="live-console-row__bottom">
-            <div class="live-console-row__quickrefs">
-              <span class="live-console-row__quickchip">{{
-                shot.resultVideoPath
-                  ? tr("autoUi.k_d50aa9bb954a")
-                  : tr("autoUi.k_e528ba2c704f")
-              }}</span
-              ><span
-                v-if="shot.exportedAt"
-                class="exported-badge"
-                :title="formatTime(shot.exportedAt)"
-                ><Download class="h-3 w-3" />{{
-                  tr("autoUi.k_d3eaaf60ed1c")
-                }}</span
-              ><span
-                v-if="shot.subtitleAppliedAt"
-                class="live-console-row__quickchip"
-                >{{ tr("autoUi.k_aaa5f2e9f006") }}
-                {{ formatTime(shot.subtitleAppliedAt) }}</span
-              >
-            </div>
-            <div class="live-console-row__actions">
-              <button
-                class="live-console-row__link live-console-row__link--primary"
-                type="button"
-                @click="openDetail(task, shot)"
-              >
-                {{ tr("autoUi.k_faea8c1db9cc") }}</button
-              ><button
-                class="live-console-row__link"
-                type="button"
-                @click="
-                  detailTask = task;
-                  detailShot = shot;
-                  detailTab = 'request';
-                "
-              >
-                <Code2 class="h-4 w-4" />{{
-                  tr("autoUi.k_1f9ac54b152b")
-                }}</button
-              ><button
-                class="live-console-row__link"
-                type="button"
-                @click="openLogs(task, shot)"
-              >
-                <Logs class="h-4 w-4" />{{
-                  tr("autoUi.k_b923b26d335a")
-                }}</button
-              ><button
-                v-if="shot.resultVideoPath"
-                class="live-console-row__action live-console-row__action--play"
-                type="button"
-                @click="
-                  openVideo(shot.subtitleVideoPath || shot.resultVideoPath)
-                "
-              >
-                <Play class="h-4 w-4" /></button
-              ><div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision">
-                <button
-                  v-if="canRetryImageOnce(shot)"
-                  class="image-retry-decision__button"
-                  :title="tr('autoUi.k_031c7e12ddae')"
-                  type="button"
-                  @click.stop="retryShot(task, shot)"
-                >
-                  <RefreshCcw class="h-4 w-4" />{{ tr('autoUi.k_031c7e12ddae') }}
-                </button>
-                <button
-                  v-if="canContinueWithVideo(shot)"
-                  class="image-retry-decision__button image-retry-decision__button--primary"
-                  :title="tr('tiktokCreative.retry.continueWithVideo')"
-                  type="button"
-                  @click.stop="continueWithVideo(task, shot)"
-                >
-                  <Play class="h-4 w-4" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}
-                </button>
-              </div><button
-                v-if="canCorrectRegion(shot)"
-                class="live-console-row__action live-console-row__action--region"
-                :title="tr('autoUi.k_323968104a8c')"
-                type="button"
-                @click="openRegionEditor(task, shot)"
-              >
-                <ScanLine class="h-4 w-4" /></button
-              ><button
-              v-else-if="shot.status !== 'completed' && !canRetryImageOnce(shot)"
-                class="live-console-row__action"
-                :title="tr('autoUi.k_e2d53a6d3a6a')"
-                type="button"
-                @click="retryShot(task, shot)"
-              >
-                <RefreshCcw class="h-4 w-4" /></button
-              ><button
-                class="live-console-row__action live-console-row__action--danger"
-                type="button"
-                @click="removeShot(task, shot)"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </article>
+        </footer>
       </div>
     </section>
 
-    <div v-if="accountDialogOpen" class="live-subtitle-dialog">
-      <div class="live-subtitle-dialog__panel account-dialog">
-        <div class="live-subtitle-dialog__head">
-          <div class="live-subtitle-dialog__titleblock">
-            <strong>{{ tr("autoUi.k_9d4ca7f307e7") }}</strong>
+    <div v-if="accountDialogOpen" class="vg-scope vg-backdrop ts-acct-mask" @click.self="accountDialogOpen = false">
+      <section class="ts-acct" role="dialog" aria-modal="true" :aria-label="tr('autoUi.k_9d4ca7f307e7')">
+        <header class="ts-acct__head">
+          <span class="ts-acct__icon"><KeyRound :size="20" /></span>
+          <div class="ts-acct__title">
+            <h2>{{ tr("autoUi.k_9d4ca7f307e7") }}</h2>
             <p>{{ tr("autoUi.k_630c37504d70") }}</p>
           </div>
-          <button
-            class="live-subtitle-dialog__close"
-            type="button"
-            @click="accountDialogOpen = false"
-          >
-            <X class="h-4 w-4" />
-          </button>
-        </div>
-        <div class="account-toolbar">
-          <label class="account-search">
-            <Search class="h-4 w-4" />
-            <input v-model="accountSearch" type="search" :placeholder="tr('tiktokCreative.account.search')" @input="accountPage = 1" />
-          </label>
-          <select v-model="accountStatusFilter" class="account-filter" @change="accountPage = 1">
-            <option value="all">{{ tr("tiktokCreative.account.allStatus") }}</option>
-            <option value="enabled">{{ tr("tiktokCreative.account.enabled") }}</option>
-            <option value="disabled">{{ tr("tiktokCreative.account.disabled") }}</option>
-          </select>
-          <button class="primary-button account-add-button" type="button" @click="resetAccountForm">
-            <Plus class="h-4 w-4" />{{ tr("tiktokCreative.account.add") }}
-          </button>
-        </div>
-        <div class="account-layout">
-          <div class="account-list">
-            <div class="account-list-header" aria-hidden="true">
-              <span>#</span>
-              <span>{{ tr("autoUi.k_3f2da24264f0") }}</span>
-              <span>{{ tr("tiktokCreative.account.cookieInfo") }}</span>
-              <span>{{ tr("tiktokCreative.account.statusLabel") }}</span>
-              <span>{{ tr("tiktokCreative.account.actions") }}</span>
+          <div class="ts-acct__sum">
+            <span class="ts-state ts-state--ok"><i />{{ accounts.filter((item) => item.enabled && item.state === "ready").length }} 可用</span>
+            <span class="ts-state ts-state--err"><i />{{ accounts.filter((item) => item.enabled && item.state !== "ready").length }} 异常</span>
+            <span class="ts-state"><i />{{ accounts.filter((item) => !item.enabled).length }} 已停用</span>
+          </div>
+          <button class="vg-icon-btn" type="button" :aria-label="tr('autoUi.k_6c14bd7f6f9e')" @click="accountDialogOpen = false"><X :size="18" /></button>
+        </header>
+
+        <div class="ts-acct__body">
+          <!-- list -->
+          <div class="ts-acct__list">
+            <div class="ts-acct__toolbar">
+              <label class="vg-search ts-acct__search">
+                <Search :size="15" />
+                <input v-model="accountSearch" class="vg-input vg-input--sm" type="search" :placeholder="tr('tiktokCreative.account.search')" @input="accountPage = 1" />
+              </label>
+              <div class="ts-seg">
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'all' }" @click="accountStatusFilter = 'all'; accountPage = 1">{{ tr("tiktokCreative.account.allStatus") }}</button>
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'enabled' }" @click="accountStatusFilter = 'enabled'; accountPage = 1">{{ tr("tiktokCreative.account.enabled") }}</button>
+                <button type="button" :class="{ 'is-on': accountStatusFilter === 'disabled' }" @click="accountStatusFilter = 'disabled'; accountPage = 1">{{ tr("tiktokCreative.account.disabled") }}</button>
+              </div>
+              <span class="ts-acct__spacer" />
+              <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click="resetAccountForm"><Plus :size="14" />{{ tr("tiktokCreative.account.add") }}</button>
             </div>
-            <article
-              v-for="account in pagedAccounts"
-              :key="account.id"
-              class="account-row"
-              :class="{
-                disabled: !account.enabled,
-                editing: editingAccountId === account.id,
-              }"
-            >
-              <div class="account-order">
-                <button
-                  type="button"
-                  :disabled="account.priority <= 0"
-                  @click="moveAccount(account, -1)"
-                >
-                  ↑</button
-                ><button
-                  type="button"
-                  :disabled="account.priority >= accounts.length - 1"
-                  @click="moveAccount(account, 1)"
-                >
-                  ↓
-                </button>
+
+            <div class="ts-acct__rows">
+              <article
+                v-for="account in pagedAccounts"
+                :key="account.id"
+                class="ts-acct-row"
+                :class="{ 'is-off': !account.enabled, 'is-editing': editingAccountId === account.id }"
+              >
+                <div class="ts-acct-row__order">
+                  <button type="button" :disabled="account.priority <= 0" :title="tr('tiktokCreative.account.priority')" @click="moveAccount(account, -1)"><ArrowUp :size="12" /></button>
+                  <b>{{ account.priority + 1 }}</b>
+                  <button type="button" :disabled="account.priority >= accounts.length - 1" :title="tr('tiktokCreative.account.priority')" @click="moveAccount(account, 1)"><ArrowDown :size="12" /></button>
+                </div>
+                <span class="ts-acct-row__avatar">{{ (account.name || "?").replace(/^\d+-?/, "").slice(0, 1).toUpperCase() || "#" }}</span>
+                <div class="ts-acct-row__main">
+                  <strong :title="account.name">{{ account.name }}</strong>
+                  <small :title="account.id">{{ account.id }}</small>
+                </div>
+                <div class="ts-acct-row__cookie">
+                  <strong>{{ account.cookieCount }}</strong>
+                  <small>Cookie</small>
+                </div>
+                <div class="ts-acct-row__state">
+                  <span class="ts-state" :class="accountTone(account)"><i />{{ accountState(account) }}</span>
+                  <small v-if="account.lastError" class="is-err" :title="account.lastError">{{ account.lastError }}</small>
+                  <small v-else>{{ account.enabled ? tr("tiktokCreative.account.ready") : tr("tiktokCreative.account.paused") }}</small>
+                </div>
+                <div class="ts-acct-row__actions">
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_a7f814c0a40d')" @click="editAccount(account)"><Pencil :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_0b5d7ed54bee')" @click="testAccount(account)"><Activity :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm" :class="{ 'is-on': account.enabled }" type="button" :title="account.enabled ? tr('autoUi.k_d989e55188c9') : tr('autoUi.k_d4e9ca3dd494')" @click="toggleAccount(account)"><Power :size="14" /></button>
+                  <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="tr('autoUi.k_3755f56f2f83')" @click="removeAccount(account)"><Trash2 :size="14" /></button>
+                </div>
+              </article>
+
+              <div v-if="!accounts.length" class="ts-acct__empty">
+                <span><KeyRound :size="22" /></span>
+                <strong>{{ tr("autoUi.k_e610551a276a") }}</strong>
               </div>
-              <div class="account-main">
-                <strong>{{ account.name }}</strong>
-                <small>{{ account.id }}</small>
+              <div v-else-if="!pagedAccounts.length" class="ts-acct__empty">
+                <span><Search :size="22" /></span>
+                <strong>{{ tr("tiktokCreative.account.noMatch") }}</strong>
               </div>
-              <div class="account-meta">
-                <strong>{{ account.cookieCount }} {{ tr("autoUi.k_69fd1d0af720") }}</strong>
-                <small>{{ tr("tiktokCreative.account.priority") }} {{ account.priority + 1 }}</small>
-              </div>
-              <div class="account-status-column">
-                <span class="account-state" :class="account.state">{{ accountState(account) }}</span>
-                <small v-if="account.lastError" class="account-error">{{ account.lastError }}</small>
-                <small v-else>{{ account.enabled ? tr("tiktokCreative.account.ready") : tr("tiktokCreative.account.paused") }}</small>
-              </div>
-              <div class="account-actions">
-                <button
-                  class="ghost-button small"
-                  type="button"
-                  @click="editAccount(account)"
-                >
-                  <Pencil class="h-3 w-3" />{{
-                    tr("autoUi.k_a7f814c0a40d")
-                  }}</button
-                ><button
-                  class="ghost-button small"
-                  type="button"
-                  @click="testAccount(account)"
-                >
-                  {{ tr("autoUi.k_0b5d7ed54bee") }}</button
-                ><button
-                  class="ghost-button small"
-                  type="button"
-                  @click="toggleAccount(account)"
-                >
-                  {{
-                    account.enabled
-                      ? tr("autoUi.k_d989e55188c9")
-                      : tr("autoUi.k_d4e9ca3dd494")
-                  }}</button
-                ><button
-                  class="ghost-button small danger"
-                  type="button"
-                  @click="removeAccount(account)"
-                >
-                  {{ tr("autoUi.k_3755f56f2f83") }}
-                </button>
-              </div>
-            </article>
-            <div v-if="!accounts.length" class="account-empty">
-              {{ tr("autoUi.k_e610551a276a") }}
             </div>
-            <div v-else-if="!pagedAccounts.length" class="account-empty">
-              {{ tr("tiktokCreative.account.noMatch") }}
-            </div>
-            <div class="account-pagination" v-else>
+
+            <footer v-if="pagedAccounts.length" class="ts-acct__pager">
               <span>{{ (accountPage - 1) * accountPageSize + 1 }}-{{ Math.min(accountPage * accountPageSize, filteredAccounts.length) }} / {{ filteredAccounts.length }}</span>
-              <div>
-                <button type="button" :disabled="accountPage <= 1" @click="accountPage -= 1"><ChevronLeft class="h-4 w-4" /></button>
-                <strong>{{ accountPage }}</strong>
-                <button type="button" :disabled="accountPage >= accountPageCount" @click="accountPage += 1"><ChevronRight class="h-4 w-4" /></button>
+              <div class="ts-acct__pages">
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="accountPage <= 1" @click="accountPage -= 1"><ChevronLeft :size="15" /></button>
+                <b>{{ accountPage }} / {{ accountPageCount }}</b>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="accountPage >= accountPageCount" @click="accountPage += 1"><ChevronRight :size="15" /></button>
               </div>
-              <select v-model.number="accountPageSize" @change="accountPage = 1"><option :value="8">8 / {{ tr("tiktokCreative.account.page") }}</option><option :value="12">12 / {{ tr("tiktokCreative.account.page") }}</option></select>
-            </div>
+              <select v-model.number="accountPageSize" class="vg-input vg-select vg-input--sm ts-acct__size" @change="accountPage = 1"><option :value="8">8 / {{ tr("tiktokCreative.account.page") }}</option><option :value="12">12 / {{ tr("tiktokCreative.account.page") }}</option></select>
+            </footer>
           </div>
-          <div class="account-form">
-            <strong>{{
-              editingAccountId
-                ? tr("autoUi.k_0009f81b767d")
-                : tr("autoUi.k_0d153e759c07")
-            }}</strong
-            ><label
-              >{{ tr("autoUi.k_3f2da24264f0")
-              }}<input
-                v-model="accountName"
-                type="text"
-                :placeholder="tr('autoUi.k_60ee315308b4')" /></label
-            ><label
-              >Cookie JSON<textarea
-                v-model="accountCookieJson"
-                rows="10"
-                :placeholder="
-                  editingAccountId
-                    ? tr('autoUi.k_bcb70996dabc')
-                    : tr('autoUi.k_70105d955b7f')
-                "
-              /></label
-            ><small v-if="editingAccountId" class="account-form-hint">{{
-              tr("autoUi.k_e75603d5853b")
-            }}</small
-            ><button
-              class="ghost-button small"
-              type="button"
-              @click="importCookieFile"
-            >
-              {{ tr("autoUi.k_58333db9405c") }}
-            </button>
-            <div class="dialog-actions">
-              <button
-                class="ghost-button"
-                type="button"
-                @click="resetAccountForm"
-              >
-                {{
-                  editingAccountId
-                    ? tr("autoUi.k_c698df948dd9")
-                    : tr("autoUi.k_84fcd70d4280")
-                }}</button
-              ><button
-                class="primary-button"
-                type="button"
-                :disabled="!editingAccountId && !accountCookieJson.trim()"
-                @click="saveAccount"
-              >
-                {{
-                  editingAccountId
-                    ? tr("autoUi.k_60b4ae9082a3")
-                    : tr("autoUi.k_dea49eba6b37")
-                }}
-              </button>
+
+          <!-- form -->
+          <aside class="ts-acct__form">
+            <div class="ts-acct__form-head">
+              <h3>{{ editingAccountId ? tr("autoUi.k_0009f81b767d") : tr("autoUi.k_0d153e759c07") }}</h3>
+              <span class="ts-state" :class="editingAccountId ? 'ts-state--run' : 'ts-state--ok'"><i />{{ editingAccountId ? tr("autoUi.k_a7f814c0a40d") : tr("tiktokCreative.account.add") }}</span>
             </div>
-          </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ tr("autoUi.k_3f2da24264f0") }}</span>
+              <input v-model="accountName" class="vg-input" type="text" :placeholder="tr('autoUi.k_60ee315308b4')" />
+            </label>
+            <label class="vg-field ts-acct__cookie">
+              <span class="vg-field__label">
+                Cookie JSON
+                <button class="ts-acct__import" type="button" @click.prevent="importCookieFile"><FileUp :size="13" />{{ tr("autoUi.k_58333db9405c") }}</button>
+              </span>
+              <textarea v-model="accountCookieJson" class="vg-textarea" spellcheck="false" :placeholder="editingAccountId ? tr('autoUi.k_bcb70996dabc') : tr('autoUi.k_70105d955b7f')" />
+            </label>
+            <p v-if="editingAccountId" class="ts-acct__hint"><Info :size="13" />{{ tr("autoUi.k_e75603d5853b") }}</p>
+            <p v-else class="ts-acct__hint"><ShieldCheck :size="13" />{{ tr("autoUi.k_630c37504d70") }}</p>
+            <div class="ts-acct__form-actions">
+              <button class="vg-btn" type="button" @click="resetAccountForm">{{ editingAccountId ? tr("autoUi.k_c698df948dd9") : tr("autoUi.k_84fcd70d4280") }}</button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="!editingAccountId && !accountCookieJson.trim()" @click="saveAccount"><Check :size="15" />{{ editingAccountId ? tr("autoUi.k_60b4ae9082a3") : tr("autoUi.k_dea49eba6b37") }}</button>
+            </div>
+          </aside>
         </div>
-      </div>
+      </section>
     </div>
+
     <div v-if="materialDialogOpen" class="live-subtitle-dialog">
       <div class="live-subtitle-dialog__panel">
         <div class="live-subtitle-dialog__head">
@@ -6488,11 +5824,11 @@ onBeforeUnmount(() => {
               <p>{{ tr("autoUi.k_d3d17e466cec") }}</p>
             </div>
             <span
-              >{{ detailShot.requestTrace?.length || 0 }}
+              >{{ fullShotOf(detailTask, detailShot)?.requestTrace?.length || 0 }}
               {{ tr("autoUi.k_9788a29c8270") }}</span
             >
           </div>
-          <pre>{{ requestTraceJson(detailShot) }}</pre>
+          <pre>{{ requestTraceJson(fullShotOf(detailTask, detailShot)) }}</pre>
         </div>
       </div>
     </div>
@@ -7164,10 +6500,10 @@ onBeforeUnmount(() => {
 }
 .publisher-batch-toolbar {
   padding: 18px 20px;
-  background: linear-gradient(180deg, #152337, #111c2c);
+  background: linear-gradient(180deg, var(--theme-tone-blue), var(--theme-panel-soft));
 }
 .publisher-batch-title {
-  color: #6ce8d2;
+  color: var(--theme-accent);
 }
 .publisher-batch-title svg {
   width: 22px;
@@ -7178,7 +6514,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.2px;
 }
 .publisher-batch-title p {
-  color: #95a8c2;
+  color: var(--theme-text-secondary);
 }
 .publisher-batch-actions .toolbar-button,
 .publisher-batch-actions .primary-button {
@@ -7187,55 +6523,55 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .publisher-batch-actions .toolbar-button {
-  border-color: #3c526d;
-  background: #172438;
-  color: #d8e5f3;
+  border-color: var(--theme-border-control);
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
 }
 .publisher-batch-actions .primary-button {
   min-width: 86px;
-  background: linear-gradient(135deg, #53e0c5, #3bc7b4);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
   border: 0;
-  color: #06231f;
+  color: var(--theme-text);
   box-shadow: 0 8px 18px rgba(52, 212, 186, 0.18);
 }
 .publisher-batch-head {
   padding: 12px 18px;
-  background: #0c1624;
-  color: #7f94ae;
+  background: var(--theme-panel);
+  color: var(--theme-text-secondary);
   font-size: 10px;
   letter-spacing: 0.2px;
 }
 .publisher-batch-list {
-  background: #0c1522;
+  background: var(--theme-panel);
   padding: 6px 10px 10px;
 }
 .publisher-batch-row {
   margin: 4px 0;
   padding: 12px 10px;
-  border: 1px solid rgba(76, 104, 136, 0.28);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: linear-gradient(100deg, #111e2e, #0f1928);
+  background: linear-gradient(100deg, var(--theme-tone-blue), var(--theme-panel-soft));
   box-shadow: 0 5px 15px rgba(2, 8, 16, 0.2);
   transition:
     border-color 0.16s,
     background 0.16s;
 }
 .publisher-batch-row:hover {
-  border-color: rgba(79, 214, 195, 0.55);
-  background: linear-gradient(100deg, #14263a, #101d2d);
+  border-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  background: linear-gradient(100deg, var(--theme-tone-blue), var(--theme-panel-soft));
 }
 .publisher-batch-select,
 .publisher-batch-input {
   height: 36px;
   border-radius: 8px;
-  border-color: #3a526d;
-  background: #0d1827;
-  color: #eaf2fb;
+  border-color: var(--theme-border-control);
+  background: var(--theme-panel);
+  color: var(--theme-text);
   outline: none;
 }
 .publisher-batch-select:focus,
 .publisher-batch-input:focus {
-  border-color: #4edfc7;
+  border-color: var(--theme-accent);
   box-shadow: 0 0 0 3px rgba(78, 223, 199, 0.1);
 }
 .publisher-batch-video {
@@ -7245,54 +6581,39 @@ onBeforeUnmount(() => {
   width: 34px;
   height: 38px;
   border-radius: 8px;
-  background: linear-gradient(145deg, #29245d, #1d1a45);
-  color: #c8b7ff;
+  background: linear-gradient(145deg, var(--theme-tone-blue), var(--theme-tone-blue));
+  color: var(--theme-tone-violet);
 }
 .publisher-batch-schedule {
   padding: 6px 8px;
-  border: 1px solid rgba(71, 97, 126, 0.25);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(9, 18, 30, 0.5);
+  background: color-mix(in srgb, var(--theme-panel) 50%, transparent);
 }
 .publisher-batch-state {
   justify-self: center;
   min-width: 48px;
   text-align: center;
-  background: rgba(28, 43, 60, 0.75);
+  background: color-mix(in srgb, var(--theme-tone-blue) 75%, transparent);
 }
 .publisher-batch-actions-cell .ghost-button {
   height: 30px;
   min-height: 30px;
   padding: 0 9px;
   border-radius: 7px;
-  border-color: #405872;
-  background: #17263a;
-  color: #cddbea;
+  border-color: var(--theme-border-control);
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
 }
 .publisher-batch-actions-cell .ghost-button:hover {
-  border-color: #53ddc5;
-  color: #8bf0dd;
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .publisher-batch-empty {
   margin: 10px;
-  border: 1px dashed #3d5871;
+  border: 1px dashed var(--theme-border-control);
   border-radius: 12px;
-  background: #0e1a29;
-}
-.publish-mode .publisher-stepper {
-  opacity: 0.78;
-}
-.publisher-step {
-  color: #8ea2bb !important;
-}
-.publisher-step.active {
-  color: #62e2cb !important;
-}
-.publisher-step.active b {
-  background: #36cbb4 !important;
-}
-.publisher-stepper > i {
-  background: linear-gradient(90deg, #2c485e, #1b2a3c) !important;
+  background: var(--theme-panel-soft);
 }
 .tiktok-page {
   display: grid;
@@ -7301,34 +6622,34 @@ onBeforeUnmount(() => {
   padding: 10px;
   box-sizing: border-box;
   align-content: start;
-  color: #f8fbff;
+  color: var(--theme-text);
   background:
     radial-gradient(
       circle at top left,
-      rgba(83, 58, 152, 0.12),
+      color-mix(in srgb, var(--theme-tone-violet) 12%, transparent),
       transparent 28%
     ),
-    linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%);
+    linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel-soft) 42%, var(--theme-panel) 100%);
 }
 .tiktok-page.publish-mode {
   padding: 8px 10px 14px;
   background:
     radial-gradient(
       circle at 75% 20%,
-      rgba(23, 105, 108, 0.1),
+      color-mix(in srgb, var(--theme-accent) 10%, transparent),
       transparent 30%
     ),
-    linear-gradient(180deg, #0b1420 0%, #101a27 52%, #0d1723 100%);
+    linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel-soft) 52%, var(--theme-panel) 100%);
 }
 .live-workspace-head,
 .panel-card,
 .library-export-card {
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   background: linear-gradient(
     180deg,
-    rgba(17, 21, 35, 0.98),
-    rgba(13, 17, 30, 0.98)
+    color-mix(in srgb, var(--theme-panel) 98%, transparent),
+    color-mix(in srgb, var(--theme-panel) 98%, transparent)
   );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
@@ -7342,12 +6663,12 @@ onBeforeUnmount(() => {
 }
 .live-workspace-intro,
 .live-workspace-tabs {
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   background: linear-gradient(
     180deg,
-    rgba(17, 21, 35, 0.98),
-    rgba(13, 17, 30, 0.98)
+    color-mix(in srgb, var(--theme-panel) 98%, transparent),
+    color-mix(in srgb, var(--theme-panel) 98%, transparent)
   );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
@@ -7375,8 +6696,8 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  color: #d8c8ff;
-  background: linear-gradient(180deg, #5c45ae, #392978);
+  color: var(--theme-tone-violet);
+  background: linear-gradient(180deg, var(--theme-tone-violet), var(--theme-tone-violet));
 }
 .live-workspace-copy {
   min-width: 0;
@@ -7389,7 +6710,7 @@ onBeforeUnmount(() => {
 }
 .live-workspace-copy p {
   margin: 6px 0 0;
-  color: rgba(197, 205, 225, 0.82);
+  color: var(--theme-text);
   font-size: 12px;
 }
 .live-workspace-actions {
@@ -7421,23 +6742,23 @@ onBeforeUnmount(() => {
 .ghost-button,
 .toolbar-button,
 .toolbar-icon {
-  border: 1px solid rgba(111, 123, 170, 0.2);
-  background: rgba(18, 23, 38, 0.8);
-  color: #eef5ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 80%, transparent);
+  color: var(--theme-text);
 }
 .tab-button.active,
 .toolbar-icon.active {
-  border-color: rgba(119, 92, 255, 0.38);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 38%, transparent);
   background: linear-gradient(
     180deg,
-    rgba(85, 68, 167, 0.78),
-    rgba(67, 49, 138, 0.78)
+    color-mix(in srgb, var(--theme-tone-violet) 78%, transparent),
+    color-mix(in srgb, var(--theme-tone-violet) 78%, transparent)
   );
 }
 .primary-button {
-  border: 1px solid rgba(145, 106, 255, 0.4);
-  background: linear-gradient(90deg, #6d5cff, #9b52ff);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 40%, transparent);
+  background: linear-gradient(90deg, var(--theme-tone-blue), var(--theme-tone-violet));
+  color: var(--theme-text);
 }
 .live-tab-count,
 .library-count {
@@ -7447,8 +6768,8 @@ onBeforeUnmount(() => {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(13, 148, 136, 0.14);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  color: var(--theme-accent);
   font-size: 11px;
 }
 .banner {
@@ -7461,69 +6782,54 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 .banner-success {
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.12);
-  color: #d1fae5;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-accent);
 }
 .banner-error {
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.12);
-  color: #fecaca;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  color: var(--theme-tone-red);
 }
-.publisher-toast {
+/* Toasts: built on the kit's .vg-toast, stacked bottom-center. */
+.ts-toasts {
   position: fixed;
-  top: 50%;
   left: 50%;
-  z-index: 150;
-  display: inline-flex;
+  bottom: 28px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
-  max-width: min(360px, calc(100vw - 44px));
-  padding: 10px 14px;
-  border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.4;
-  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.ts-toasts .ts-toast {
+  position: static;
+  transform: none;
+  max-width: 100%;
+  padding: 8px 8px 8px 14px;
+  line-height: 1.45;
   pointer-events: auto;
 }
-.publisher-toast-success {
-  border: 1px solid rgba(50, 215, 192, 0.48);
-  background: #102c32;
-  color: #8af0df;
+.ts-toast > svg:first-child {
+  flex: none;
 }
-.publisher-toast-error {
-  border: 1px solid rgba(255, 117, 117, 0.5);
-  background: #351b25;
-  color: #ffb4b4;
-}
-.publisher-toast > span {
+.ts-toast__text {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.publisher-toast > button {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: currentColor;
-  opacity: 0.78;
+.ts-toast-enter-active,
+.ts-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.publisher-toast > button:hover {
-  background: rgba(255, 255, 255, 0.12);
-  opacity: 1;
-}
-.publish-mode .publisher-toast {
-  top: 76px;
-  transform: translateX(-50%);
-}
-.publish-mode .publisher-design-error {
-  top: 76px;
-  z-index: 160;
+.ts-toast-enter-from,
+.ts-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 .workspace-grid {
   display: grid;
@@ -7552,7 +6858,7 @@ onBeforeUnmount(() => {
   font-size: 18px;
 }
 .panel-head-note {
-  color: #9097bd;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .step-badge {
@@ -7561,8 +6867,8 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #7568e8, #5a4fd0);
-  color: #fff;
+  background: linear-gradient(180deg, var(--theme-tone-blue), var(--theme-tone-blue));
+  color: var(--theme-text);
   font-weight: 700;
 }
 .field-stack,
@@ -7581,7 +6887,7 @@ onBeforeUnmount(() => {
 }
 
 .generation-mode-control__label {
-  color: #cbd5e1;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -7591,9 +6897,9 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 4px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.68);
+  background: color-mix(in srgb, var(--theme-panel) 68%, transparent);
 }
 
 .generation-mode-control__options button {
@@ -7601,19 +6907,19 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
 }
 
 .generation-mode-control__options button.active {
-  background: #14b8a6;
-  color: #042f2e;
+  background: var(--theme-accent);
+  color: var(--theme-text);
 }
 
 .generation-mode-control__hint {
-  color: #8fa2bd;
+  color: var(--theme-text-secondary);
   line-height: 1.45;
 }
 
@@ -7621,9 +6927,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 12px;
   padding: 13px 14px 14px;
-  border: 1px solid rgba(100, 116, 139, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(20, 30, 48, 0.8), rgba(12, 19, 33, 0.72));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 80%, transparent), color-mix(in srgb, var(--theme-panel) 72%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 8px 20px rgba(2, 6, 23, 0.12);
 }
 
@@ -7634,7 +6940,7 @@ onBeforeUnmount(() => {
 }
 
 .generation-mode-control__eyebrow {
-  color: #f1f5f9;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -7650,10 +6956,10 @@ onBeforeUnmount(() => {
   min-width: 0;
   height: 30px;
   padding: 0 4px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #94a3b8;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   font-size: 11px;
   font-weight: 800;
@@ -7661,20 +6967,20 @@ onBeforeUnmount(() => {
 }
 
 .generation-mode-control__zoom button:hover {
-  border-color: rgba(45, 212, 191, 0.55);
-  color: #d9fffa;
+  border-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  color: var(--theme-text);
   transform: translateY(-1px);
 }
 
 .generation-mode-control__zoom button.active {
-  border-color: rgba(45, 212, 191, 0.8);
-  background: linear-gradient(180deg, #19b9aa, #0f8f88);
-  color: #042f2e;
+  border-color: color-mix(in srgb, var(--theme-accent) 80%, transparent);
+  background: linear-gradient(180deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
   box-shadow: 0 4px 10px rgba(20, 184, 166, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .generation-mode-control__zoom button:focus-visible {
-  outline: 2px solid rgba(94, 234, 212, 0.85);
+  outline: 2px solid color-mix(in srgb, var(--theme-accent) 85%, transparent);
   outline-offset: 2px;
 }
 
@@ -7700,14 +7006,14 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   background: linear-gradient(
     180deg,
-    rgba(18, 23, 38, 0.82),
-    rgba(14, 19, 31, 0.92)
+    color-mix(in srgb, var(--theme-panel-soft) 82%, transparent),
+    color-mix(in srgb, var(--theme-panel) 92%, transparent)
   );
-  color: #eef5ff;
+  color: var(--theme-text);
   text-align: left;
   cursor: pointer;
 }
@@ -7717,8 +7023,8 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   display: grid;
   place-items: center;
-  color: #bba2ff;
-  background: rgba(106, 79, 209, 0.16);
+  color: var(--theme-tone-violet);
+  background: color-mix(in srgb, var(--theme-tone-violet) 16%, transparent);
 }
 .reference-source-card__preview {
   width: 72px;
@@ -7736,7 +7042,7 @@ onBeforeUnmount(() => {
 }
 .reference-source-card__copy small,
 .reference-source-card__copy span {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .clone-shot-list {
@@ -7752,8 +7058,8 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 11px;
   border-radius: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: rgba(18, 23, 38, 0.74);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 74%, transparent);
 }
 .clone-shot-copy {
   min-width: 0;
@@ -7766,7 +7072,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .clone-shot-copy small {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .ghost-button.small {
@@ -7775,7 +7081,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .danger {
-  color: #fecaca !important;
+  color: var(--theme-tone-red) !important;
 }
 .field input,
 .field select,
@@ -7784,10 +7090,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   min-height: 40px;
   padding: 9px 12px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(19, 24, 38, 0.92);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
 }
 .field textarea {
@@ -7802,9 +7108,9 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 50px;
   padding: 0 12px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(19, 24, 38, 0.92);
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
 }
 .product-picker select {
   appearance: none;
@@ -7819,7 +7125,7 @@ onBeforeUnmount(() => {
   height: 42px;
   border-radius: 11px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
   display: grid;
   place-items: center;
 }
@@ -7842,19 +7148,19 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: rgba(214, 223, 246, 0.78);
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.55;
 }
 .rules-box {
   display: grid;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   overflow: hidden;
   background: linear-gradient(
     180deg,
-    rgba(18, 22, 36, 0.86),
-    rgba(15, 18, 31, 0.9)
+    color-mix(in srgb, var(--theme-panel) 86%, transparent),
+    color-mix(in srgb, var(--theme-panel) 90%, transparent)
   );
 }
 .rule-row {
@@ -7863,7 +7169,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   align-items: start;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(111, 123, 170, 0.14);
+  border-bottom: 1px solid var(--theme-border);
 }
 .rule-row:last-child {
   border: 0;
@@ -7874,9 +7180,9 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #c39bff;
-  border: 1px solid rgba(164, 115, 255, 0.34);
-  background: rgba(122, 82, 255, 0.1);
+  color: var(--theme-tone-violet);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 34%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-violet) 10%, transparent);
   font-size: 13px;
   font-weight: 700;
 }
@@ -7884,7 +7190,7 @@ onBeforeUnmount(() => {
   margin: 0;
   line-height: 1.55;
   font-size: 13px;
-  color: rgba(233, 238, 251, 0.9);
+  color: var(--theme-text);
 }
 .output-note {
   display: grid;
@@ -7893,32 +7199,32 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   background: linear-gradient(
     180deg,
-    rgba(72, 54, 133, 0.82),
-    rgba(58, 44, 108, 0.94)
+    color-mix(in srgb, var(--theme-tone-violet) 82%, transparent),
+    color-mix(in srgb, var(--theme-tone-violet) 94%, transparent)
   );
-  border: 1px solid rgba(135, 102, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 24%, transparent);
 }
 .output-note-head {
   font-size: 15px;
   font-weight: 700;
-  color: #dfd5ff;
+  color: var(--theme-text);
 }
 .output-note p {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
-  color: rgba(220, 228, 246, 0.84);
+  color: var(--theme-text);
 }
 .quality-control-card {
   display: grid;
   gap: 12px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(79, 194, 168, 0.22);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, transparent);
   background: linear-gradient(
     180deg,
-    rgba(19, 61, 58, 0.36),
-    rgba(12, 28, 35, 0.6)
+    color-mix(in srgb, var(--theme-accent) 36%, transparent),
+    color-mix(in srgb, var(--theme-panel-soft) 60%, transparent)
   );
 }
 .quality-control-card__head {
@@ -7926,7 +7232,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  color: #8ef0c8;
+  color: var(--theme-accent);
 }
 .quality-control-card__head strong,
 .quality-control-card__head small {
@@ -7934,7 +7240,7 @@ onBeforeUnmount(() => {
 }
 .quality-control-card__head small {
   margin-top: 5px;
-  color: #98cfc0;
+  color: var(--theme-accent);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -8004,7 +7310,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 18px;
   padding: 8px 0 16px;
-  border-bottom: 1px solid rgba(111, 123, 170, 0.14);
+  border-bottom: 1px solid var(--theme-border);
 }
 .library-summary-row {
   display: flex;
@@ -8029,7 +7335,7 @@ onBeforeUnmount(() => {
   font-size: 18px;
 }
 .library-subtitle {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .library-head-tools {
@@ -8039,19 +7345,19 @@ onBeforeUnmount(() => {
   gap: 2px;
   padding: 2px;
   border-radius: 6px;
-  background: rgba(111, 123, 170, 0.08);
+  background: color-mix(in srgb, var(--theme-control-hover) 8%, transparent);
 }
 .library-pagination {
   font-size: 12px;
-  color: #aeb9d2;
+  color: var(--theme-text-secondary);
 }
 .library-page-button {
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(18, 23, 38, 0.8);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 80%, transparent);
+  color: var(--theme-text);
 }
 .library-page-button:disabled {
   opacity: 0.35;
@@ -8063,18 +7369,18 @@ onBeforeUnmount(() => {
 }
 .live-console-card,
 .live-console-row {
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   background: linear-gradient(
     180deg,
-    rgba(17, 21, 35, 0.98),
-    rgba(13, 17, 30, 0.98)
+    color-mix(in srgb, var(--theme-panel) 98%, transparent),
+    color-mix(in srgb, var(--theme-panel) 98%, transparent)
   );
   overflow: hidden;
 }
 .live-console-card.selected,
 .live-console-row.selected {
-  border-color: rgba(124, 92, 255, 0.72);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 72%, transparent);
 }
 .live-console-card__head,
 .live-console-card__body {
@@ -8090,7 +7396,7 @@ onBeforeUnmount(() => {
   height: 190px;
   border: 0;
   padding: 0;
-  background: rgba(5, 8, 16, 0.4);
+  background: color-mix(in srgb, var(--theme-input) 40%, transparent);
 }
 .live-console-row__thumb {
   position: relative;
@@ -8098,7 +7404,7 @@ onBeforeUnmount(() => {
   height: 100%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 .live-console-row__thumb img {
   width: 100%;
@@ -8108,7 +7414,7 @@ onBeforeUnmount(() => {
 .live-console-row__thumb-empty {
   display: grid;
   place-items: center;
-  color: #72809c;
+  color: var(--theme-text-muted);
 }
 .preview-play {
   position: absolute;
@@ -8120,8 +7426,8 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(10, 14, 25, 0.58);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel) 58%, transparent);
+  color: var(--theme-text);
 }
 .live-console-row__titleline {
   display: flex;
@@ -8146,8 +7452,8 @@ onBeforeUnmount(() => {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(122, 82, 255, 0.12);
-  color: #c9bdff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 12%, transparent);
+  color: var(--theme-tone-violet);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -8157,7 +7463,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
   min-width: 0;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .live-console-row__meta {
@@ -8167,24 +7473,24 @@ onBeforeUnmount(() => {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: #72809c;
+  background: var(--theme-control-hover);
 }
 .live-console-row__quickrefs {
   margin-top: 8px;
   flex-wrap: wrap;
 }
 .status-completed {
-  background: rgba(16, 101, 78, 0.18);
-  color: #68f0b9;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: var(--theme-accent);
 }
 .status-failed,
 .status-paused {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  color: var(--theme-tone-red);
 }
 .status-processing {
-  background: rgba(91, 118, 255, 0.18);
-  color: #cfd8ff;
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
+  color: var(--theme-text);
 }
 .live-console-row__actions {
   display: flex;
@@ -8199,9 +7505,9 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 34px;
   overflow: hidden;
-  border: 1px solid rgba(126, 143, 178, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(13, 19, 31, 0.72);
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
 }
 .image-retry-decision__button {
   display: inline-flex;
@@ -8216,7 +7522,7 @@ onBeforeUnmount(() => {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: #aebbd0;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -8228,18 +7534,18 @@ onBeforeUnmount(() => {
   flex-basis: 100%;
 }
 .image-retry-decision__button:hover {
-  background: rgba(255, 255, 255, 0.045);
-  color: #f4f7fc;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 .image-retry-decision__button--primary {
   flex-grow: 1.12;
-  border-left: 1px solid rgba(126, 143, 178, 0.16);
-  background: linear-gradient(90deg, rgba(38, 150, 130, 0.1), rgba(38, 150, 130, 0.18));
-  color: #79e5d2;
+  border-left: 1px solid var(--theme-border);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 10%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
+  color: var(--theme-accent);
 }
 .image-retry-decision__button--primary:hover {
-  background: linear-gradient(90deg, rgba(38, 150, 130, 0.16), rgba(38, 150, 130, 0.25));
-  color: #a0f3e5;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 16%, transparent), color-mix(in srgb, var(--theme-accent) 25%, transparent));
+  color: var(--theme-accent);
 }
 .live-console-row__link,
 .live-console-row__action {
@@ -8249,10 +7555,10 @@ onBeforeUnmount(() => {
   gap: 5px;
   min-height: 30px;
   padding: 0 9px;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(18, 23, 38, 0.8);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 80%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .live-console-row__action {
@@ -8260,7 +7566,7 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 .live-console-row__link--primary {
-  color: #d7cdff;
+  color: var(--theme-text);
 }
 .live-console-list {
   display: grid;
@@ -8297,7 +7603,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .live-console-row__bottom {
@@ -8306,7 +7612,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-top: 1px solid rgba(111, 123, 170, 0.12);
+  border-top: 1px solid var(--theme-border);
   padding-top: 8px;
 }
 .live-console-row__error {
@@ -8314,7 +7620,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 5px;
   margin-top: 7px;
-  color: #fecaca;
+  color: var(--theme-tone-red);
   font-size: 11px;
 }
 .live-console-row__error-text {
@@ -8326,7 +7632,7 @@ onBeforeUnmount(() => {
   min-height: 280px;
   place-items: center;
   text-align: center;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
 }
 .empty-card strong {
   font-size: 16px;
@@ -8343,7 +7649,7 @@ onBeforeUnmount(() => {
   place-items: center;
   box-sizing: border-box;
   padding: 28px;
-  background: rgba(3, 7, 15, 0.78);
+  background: color-mix(in srgb, var(--theme-input) 78%, transparent);
   backdrop-filter: blur(14px) saturate(115%);
 }
 .live-subtitle-dialog__panel {
@@ -8354,12 +7660,12 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 14px;
   padding: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
   background: linear-gradient(
     180deg,
-    rgba(18, 25, 40, 0.985),
-    rgba(10, 15, 27, 0.99)
+    color-mix(in srgb, var(--theme-panel-soft) 98%, transparent),
+    color-mix(in srgb, var(--theme-panel) 99%, transparent)
   );
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
@@ -8379,16 +7685,16 @@ onBeforeUnmount(() => {
 }
 .live-subtitle-dialog__titleblock p {
   margin: 0;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .live-subtitle-dialog__close {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 10px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
-  background: rgba(19, 24, 38, 0.92);
-  color: #fff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
+  color: var(--theme-text);
 }
 .account-layout {
   display: grid;
@@ -8423,13 +7729,13 @@ onBeforeUnmount(() => {
   height: 40px;
   box-sizing: border-box;
   padding: 0 12px;
-  border: 1px solid rgba(111, 145, 190, 0.28);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
   border-radius: 11px;
-  background: rgba(8, 15, 29, 0.72);
-  color: #7f93b2;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text-secondary);
 }
 .account-search:focus-within {
-  border-color: rgba(45, 212, 191, 0.72);
+  border-color: color-mix(in srgb, var(--theme-accent) 72%, transparent);
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
 }
 .account-search input {
@@ -8437,18 +7743,18 @@ onBeforeUnmount(() => {
   border: 0;
   outline: 0;
   background: transparent;
-  color: #f4f7fb;
+  color: var(--theme-text);
   font: inherit;
   font-size: 12px;
 }
 .account-filter,
 .account-pagination select {
   height: 40px;
-  border: 1px solid rgba(111, 145, 190, 0.28);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
   border-radius: 11px;
   padding: 0 12px;
-  background: rgba(8, 15, 29, 0.72);
-  color: #d7e1f1;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-tone-blue);
   font: inherit;
   font-size: 12px;
 }
@@ -8466,9 +7772,9 @@ onBeforeUnmount(() => {
   align-content: start;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(111, 145, 190, 0.18);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
   border-radius: 14px;
-  background: rgba(10, 17, 31, 0.72);
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
 }
 .account-list-header {
   display: grid;
@@ -8477,8 +7783,8 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 42px;
   padding: 0 12px;
-  border-bottom: 1px solid rgba(111, 145, 190, 0.17);
-  color: #7085a5;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-tone-blue) 17%, transparent);
+  color: var(--theme-text-secondary);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -8491,15 +7797,15 @@ onBeforeUnmount(() => {
   align-items: center;
   min-height: 72px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(111, 145, 190, 0.11);
-  background: rgba(17, 26, 43, 0.56);
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-tone-blue) 11%, transparent);
+  background: color-mix(in srgb, var(--theme-panel-soft) 56%, transparent);
   transition: background 140ms ease, box-shadow 140ms ease;
 }
 .account-row:hover {
-  background: rgba(24, 42, 62, 0.7);
+  background: color-mix(in srgb, var(--theme-tone-blue) 70%, transparent);
 }
 .account-row.editing {
-  background: linear-gradient(90deg, rgba(17, 111, 121, 0.32), rgba(17, 38, 57, 0.7));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 32%, transparent), color-mix(in srgb, var(--theme-tone-blue) 70%, transparent));
   box-shadow: inset 2px 0 0 #2dd4bf;
 }
 .account-row.disabled {
@@ -8516,14 +7822,14 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   cursor: pointer;
   line-height: 1;
 }
 .account-order button:hover:not(:disabled) {
-  border-color: rgba(45, 212, 191, 0.35);
-  background: rgba(45, 212, 191, 0.12);
-  color: #6ee7d5;
+  border-color: color-mix(in srgb, var(--theme-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-accent);
 }
 .account-order button:disabled {
   cursor: default;
@@ -8542,13 +7848,13 @@ onBeforeUnmount(() => {
 .account-main strong,
 .account-meta strong {
   overflow: hidden;
-  color: #f2f6fb;
+  color: var(--theme-text);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .account-main small {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
   overflow-wrap: anywhere;
 }
@@ -8557,13 +7863,13 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .account-meta strong {
-  color: #cbd7e8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .account-meta small,
 .account-status-column small {
   margin-top: 4px;
-  color: #7186a6;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .account-status-column {
@@ -8575,8 +7881,8 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(16, 101, 78, 0.18);
-  color: #68f0b9;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: var(--theme-accent);
   font-size: 10px;
   font-weight: 800;
   overflow: hidden;
@@ -8586,8 +7892,8 @@ onBeforeUnmount(() => {
 .account-state.expired,
 .account-state.insufficient_credit,
 .account-state.error {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  color: var(--theme-tone-red);
 }
 .account-actions {
   display: flex;
@@ -8607,7 +7913,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 48px;
   padding: 0 12px;
-  color: #7e93b3;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .account-pagination > div {
@@ -8620,10 +7926,10 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   place-items: center;
-  border: 1px solid rgba(111, 145, 190, 0.23);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 23%, transparent);
   border-radius: 8px;
-  background: rgba(18, 30, 48, 0.8);
-  color: #b9c9df;
+  background: color-mix(in srgb, var(--theme-tone-blue) 80%, transparent);
+  color: var(--theme-tone-blue);
 }
 .account-pagination button:disabled {
   opacity: 0.35;
@@ -8634,8 +7940,8 @@ onBeforeUnmount(() => {
   height: 28px;
   place-items: center;
   border-radius: 8px;
-  background: #22cdbd;
-  color: #062a30;
+  background: var(--theme-accent);
+  color: var(--theme-text);
 }
 .account-pagination select {
   width: auto;
@@ -8649,20 +7955,20 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-width: 0;
   padding: 18px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(23, 35, 55, 0.78), rgba(12, 20, 36, 0.88));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 78%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .account-form > strong {
   padding-bottom: 4px;
-  color: #f2f6fb;
+  color: var(--theme-text);
   font-size: 15px;
 }
 .account-form label {
   display: grid;
   gap: 5px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .account-form input,
@@ -8670,15 +7976,15 @@ onBeforeUnmount(() => {
   width: 100%;
   box-sizing: border-box;
   padding: 10px 11px;
-  border: 1px solid rgba(111, 145, 190, 0.26);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 26%, transparent);
   border-radius: 9px;
   outline: 0;
-  background: rgba(7, 14, 28, 0.72);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text);
 }
 .account-form input:focus,
 .account-form textarea:focus {
-  border-color: rgba(45, 212, 191, 0.68);
+  border-color: color-mix(in srgb, var(--theme-accent) 68%, transparent);
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
 }
 .dialog-actions {
@@ -8700,9 +8006,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin: 14px 0 12px;
   padding: 4px;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.72);
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
 }
 .material-picker-tabs {
   display: flex;
@@ -8718,7 +8024,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #8fa2bd;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   font-size: 11px;
   font-weight: 800;
@@ -8731,23 +8037,23 @@ onBeforeUnmount(() => {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #cbd5e1;
+  background: color-mix(in srgb, var(--theme-control-hover) 12%, transparent);
+  color: var(--theme-text);
   font-size: 10px;
 }
 .material-picker-tabs button.active {
-  background: #243047;
-  color: #f8fafc;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .material-picker-tabs button.active span {
-  background: rgba(45, 212, 191, 0.18);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: var(--theme-accent);
 }
 .material-picker-selection {
   flex: 0 0 auto;
   padding: 0 9px;
-  color: #64748b;
+  color: var(--theme-text-muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -8755,20 +8061,20 @@ onBeforeUnmount(() => {
   border: 2px solid transparent;
   border-radius: 11px;
   padding: 6px;
-  color: #bcc7d4;
-  background: #151d2a;
+  color: var(--theme-text-secondary);
+  background: var(--theme-panel-soft);
 }
 .material-grid .material-card {
   position: relative;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 .material-grid .material-card:hover {
-  background: #1a2637;
+  background: var(--theme-tone-blue);
   transform: translateY(-2px);
   box-shadow: 0 8px 18px rgba(2, 6, 23, 0.24);
 }
 .material-grid button.active {
-  border-color: #55dfca;
+  border-color: var(--theme-accent);
   box-shadow: 0 0 0 1px rgba(85, 223, 202, 0.2), 0 8px 18px rgba(20, 184, 166, 0.12);
 }
 .material-grid img {
@@ -8792,10 +8098,10 @@ onBeforeUnmount(() => {
   min-height: 20px;
   margin-top: 6px;
   padding: 0 9px;
-  border: 1px solid rgba(251, 191, 36, 0.42);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-amber) 42%, transparent);
   border-radius: 999px;
-  background: rgba(120, 82, 10, 0.16);
-  color: #fcd34d;
+  background: color-mix(in srgb, var(--theme-tone-amber) 16%, transparent);
+  color: var(--theme-tone-amber);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   font-size: 10px;
   font-weight: 700;
@@ -8810,15 +8116,15 @@ onBeforeUnmount(() => {
   content: "";
 }
 .material-usage-badge.used {
-  border-color: rgba(45, 212, 191, 0.42);
-  background: rgba(13, 148, 136, 0.14);
-  color: #70e2d0;
+  border-color: color-mix(in srgb, var(--theme-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  color: var(--theme-accent);
 }
 .material-grid-empty {
   padding: 24px;
-  border: 1px dashed rgba(111, 123, 170, 0.3);
+  border: 1px dashed var(--theme-border);
   border-radius: 12px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
   text-align: center;
 }
@@ -8832,9 +8138,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(18, 23, 38, 0.62);
+  background: color-mix(in srgb, var(--theme-panel-soft) 62%, transparent);
 }
 .retry-settings-icon {
   display: grid;
@@ -8842,8 +8148,8 @@ onBeforeUnmount(() => {
   height: 36px;
   place-items: center;
   border-radius: 8px;
-  background: rgba(85, 223, 202, 0.1);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  color: var(--theme-accent);
 }
 .retry-settings-hero div:nth-child(2) {
   display: grid;
@@ -8852,11 +8158,11 @@ onBeforeUnmount(() => {
 .retry-settings-hero span,
 .retry-settings-hero small,
 .retry-settings-field small {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .retry-settings-hero strong {
-  color: #f3f6ff;
+  color: var(--theme-text);
   font-size: 15px;
 }
 .retry-settings-field {
@@ -8865,9 +8171,9 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 20px;
   padding: 16px 0;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-width: 1px 0;
-  color: #dce5f6;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -8880,7 +8186,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .retry-settings-field input {
@@ -8888,16 +8194,16 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   min-height: 40px;
   padding: 7px 10px;
-  border: 1px solid rgba(111, 123, 170, 0.3);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   outline: 0;
-  background: rgba(9, 16, 27, 0.9);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-panel) 90%, transparent);
+  color: var(--theme-text);
   font-size: 15px;
   font-weight: 700;
 }
 .retry-settings-field input:focus {
-  border-color: #70e2d0;
+  border-color: var(--theme-accent);
   box-shadow: 0 0 0 3px rgba(112, 226, 208, 0.12);
 }
 .retry-settings-actions {
@@ -8908,9 +8214,9 @@ onBeforeUnmount(() => {
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 12px;
   padding: 10px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.74);
+  background: color-mix(in srgb, var(--theme-panel-soft) 74%, transparent);
 }
 .detail-shot img {
   width: 96px;
@@ -8920,12 +8226,12 @@ onBeforeUnmount(() => {
 }
 .detail-shot p {
   margin: 5px 0;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 .account-error {
-  color: #fecaca !important;
+  color: var(--theme-tone-red) !important;
   overflow-wrap: anywhere;
 }
 @media (max-width: 1080px) {
@@ -9026,7 +8332,7 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 .live-console-row__preview {
-  background: rgba(5, 8, 16, 0.4);
+  background: color-mix(in srgb, var(--theme-input) 40%, transparent);
 }
 .action-icon {
   width: 32px !important;
@@ -9041,46 +8347,13 @@ onBeforeUnmount(() => {
 .publish-mode .single-actions button {
   white-space: nowrap;
 }
-.publisher-credential-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(73, 209, 190, 0.3);
-  border-radius: 9px;
-  background: #0d2130;
-}
-.publisher-credential-bar > input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid #304963;
-  border-radius: 7px;
-  background: #0b1522;
-  color: #eef5ff;
-  font-size: 11px;
-}
-.publisher-credential-bar .toolbar-button {
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 10px;
-}
-.publisher-credential-ok {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #65e9c7;
-  font-size: 10px;
-  white-space: nowrap;
-}
 .single-product-button {
   display: block;
   width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
-  color: #9fb3ca;
+  color: var(--theme-text-secondary);
   text-align: left;
   font-size: 10px;
   overflow: hidden;
@@ -9089,7 +8362,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .single-product-button:hover {
-  color: #5ce4ce;
+  color: var(--theme-accent);
 }
 .publisher-editor-media-actions {
   display: grid;
@@ -9109,11 +8382,11 @@ onBeforeUnmount(() => {
 .publisher-random-music-button {
   justify-content: flex-start;
   gap: 7px;
-  color: #79e4d0 !important;
+  color: var(--theme-accent) !important;
 }
 .publisher-random-music-button small {
   margin-left: auto;
-  color: #8faabd;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publisher-random-music-button:disabled {
@@ -9139,10 +8412,6 @@ onBeforeUnmount(() => {
 }
 .publish-mode .publisher-single-page {
   overflow: hidden;
-}
-.publish-mode .publisher-credential-bar {
-  min-height: 34px;
-  padding: 4px 8px;
 }
 .publish-mode .publisher-single-head {
   padding: 2px 6px;
@@ -9346,7 +8615,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   padding: 10px;
   overflow: visible;
-  background: #07111d;
+  background: var(--theme-panel);
 }
 .publish-mode > .live-workspace-head {
   display: none !important;
@@ -9469,10 +8738,10 @@ onBeforeUnmount(() => {
   gap: 10px;
   overflow: hidden;
   padding: 10px;
-  border: 1px solid rgba(101, 137, 171, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: #0b1725;
-  color: #eef5ff;
+  background: var(--theme-panel);
+  color: var(--theme-text);
 }
 .publisher-single-head {
   display: flex;
@@ -9492,8 +8761,8 @@ onBeforeUnmount(() => {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(145deg, #23cdbb, #126c77);
-  color: #d9fffa;
+  background: linear-gradient(145deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
 }
 .publisher-single-brand h1 {
   margin: 0;
@@ -9501,7 +8770,7 @@ onBeforeUnmount(() => {
 }
 .publisher-single-brand p {
   margin: 5px 0 0;
-  color: #91a8c0;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publisher-single-head-actions {
@@ -9522,21 +8791,21 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 58px;
   padding: 0 14px;
-  border: 1px solid rgba(78, 112, 145, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: #0f1e2d;
+  background: var(--theme-panel-soft);
 }
 .publisher-single-stats svg {
-  color: #51e2ce;
+  color: var(--theme-accent);
 }
 .publisher-single-stats span {
   display: grid;
   gap: 3px;
-  color: #93a8c1;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-single-stats strong {
-  color: #f5f8ff;
+  color: var(--theme-text);
   font-size: 16px;
 }
 .publisher-single-filters {
@@ -9549,10 +8818,10 @@ onBeforeUnmount(() => {
   height: 34px;
   box-sizing: border-box;
   padding: 0 10px;
-  border: 1px solid #304964;
+  border: 1px solid var(--theme-tone-blue);
   border-radius: 8px;
-  background: #0d1827;
-  color: #dce8f5;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publisher-search {
@@ -9566,7 +8835,7 @@ onBeforeUnmount(() => {
   border: 0;
   outline: 0;
   background: transparent;
-  color: #fff;
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publisher-single-toolbar {
@@ -9574,16 +8843,16 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid rgba(73, 209, 190, 0.45);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
   border-radius: 9px;
-  background: #102536;
+  background: var(--theme-tone-blue);
 }
 .publisher-single-toolbar > span {
   display: flex;
   align-items: center;
   gap: 7px;
   white-space: nowrap;
-  color: #bfd0e2;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .publisher-single-toolbar > div {
@@ -9611,10 +8880,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(74, 107, 139, 0.3);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
   overflow: hidden;
-  background: #091522;
+  background: var(--theme-panel);
 }
 .publisher-single-list-head,
 .publisher-single-row {
@@ -9629,8 +8898,8 @@ onBeforeUnmount(() => {
   flex: none;
   min-height: 42px;
   padding: 0 10px;
-  background: #0f2030;
-  color: #8ba3bd;
+  background: var(--theme-tone-blue);
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-single-rows {
@@ -9642,9 +8911,9 @@ onBeforeUnmount(() => {
   min-height: 78px;
   margin-bottom: 6px;
   padding: 9px 10px;
-  border: 1px solid rgba(68, 100, 131, 0.35);
+  border: 1px solid var(--theme-border-control);
   border-radius: 9px;
-  background: #0b1826;
+  background: var(--theme-panel);
   font-size: 10px;
 }
 .publisher-single-row > label {
@@ -9655,7 +8924,7 @@ onBeforeUnmount(() => {
 .publisher-single-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #35d5bf;
+  accent-color: var(--theme-accent);
 }
 .single-video-info {
   display: flex;
@@ -9678,7 +8947,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .single-video-info small {
-  color: #7189a4;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .single-video-thumb {
@@ -9687,7 +8956,7 @@ onBeforeUnmount(() => {
   flex: none;
   border-radius: 7px;
   overflow: hidden;
-  background: #1a2c43;
+  background: var(--theme-tone-blue);
 }
 .single-video-thumb video {
   width: 100%;
@@ -9697,7 +8966,7 @@ onBeforeUnmount(() => {
 .single-duration,
 .single-product,
 .single-time {
-  color: #9fb3ca;
+  color: var(--theme-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9707,10 +8976,10 @@ onBeforeUnmount(() => {
   height: 32px;
   box-sizing: border-box;
   padding: 0 8px;
-  border: 1px solid #304963;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #0b1522;
-  color: #eef5ff;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 10px;
 }
 .single-tags {
@@ -9723,27 +8992,27 @@ onBeforeUnmount(() => {
 .single-tags b {
   padding: 3px 6px;
   border-radius: 9px;
-  background: #1b2b40;
-  color: #bfd0e4;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 9px;
   white-space: nowrap;
 }
 .single-tags b {
-  background: #24364e;
-  color: #8ea6bf;
+  background: var(--theme-tone-blue);
+  color: var(--theme-text-secondary);
 }
 .single-state {
   justify-self: start;
   padding: 4px 7px;
   border-radius: 9px;
-  background: #233247;
-  color: #bccbdd;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 9px;
   white-space: nowrap;
 }
 .single-state.state-published {
-  background: #123f38;
-  color: #68efc8;
+  background: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .single-actions {
   display: flex;
@@ -9761,9 +9030,9 @@ onBeforeUnmount(() => {
   gap: 11px;
   min-height: 0;
   padding: 14px;
-  border: 1px solid rgba(74, 107, 139, 0.3);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
-  background: #0e1c2b;
+  background: var(--theme-panel-soft);
   overflow: auto;
 }
 .publisher-single-edit-head {
@@ -9772,7 +9041,7 @@ onBeforeUnmount(() => {
   gap: 9px;
 }
 .publisher-single-edit-head svg {
-  color: #5ce4ce;
+  color: var(--theme-accent);
 }
 .publisher-single-edit-head strong,
 .publisher-single-edit-head small {
@@ -9780,25 +9049,25 @@ onBeforeUnmount(() => {
 }
 .publisher-single-edit-head small {
   margin-top: 3px;
-  color: #839bb5;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-edit-tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 2px;
-  border-bottom: 1px solid #263d56;
+  border-bottom: 1px solid var(--theme-tone-blue);
 }
 .publisher-edit-tabs button {
   height: 30px;
   border: 0;
   background: transparent;
-  color: #8fa6bf;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-edit-tabs button.active {
-  color: #5ce4ce;
-  border-bottom: 2px solid #3fd5bd;
+  color: var(--theme-accent);
+  border-bottom: 2px solid var(--theme-accent);
 }
 .publisher-edit-preview {
   display: flex;
@@ -9810,7 +9079,7 @@ onBeforeUnmount(() => {
   height: 88px;
   object-fit: cover;
   border-radius: 7px;
-  background: #08111c;
+  background: var(--theme-panel);
 }
 .publisher-single-edit .publisher-editor-field input {
   min-height: 36px;
@@ -9823,7 +9092,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  color: #829ab3;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-single-pager button {
@@ -9832,18 +9101,18 @@ onBeforeUnmount(() => {
 .pager-active {
   width: 28px;
   height: 28px;
-  border: 1px solid #39d5bf;
+  border: 1px solid var(--theme-accent);
   border-radius: 7px;
-  background: #123e3d;
-  color: #7ef3de;
+  background: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .publisher-single-pager select {
   margin-left: 10px;
   height: 30px;
-  border: 1px solid #304963;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #0d1827;
-  color: #dce8f5;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 10px;
 }
 @media (max-width: 1100px) {
@@ -9991,7 +9260,7 @@ onBeforeUnmount(() => {
   display: block;
   min-height: 100vh;
   padding: 12px 10px 14px;
-  background: #07111d;
+  background: var(--theme-panel);
   overflow: hidden;
 }
 .publish-mode .live-workspace-head {
@@ -10006,8 +9275,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   border-radius: 16px;
-  background: #0b1725;
-  border: 1px solid rgba(104, 133, 166, 0.28);
+  background: var(--theme-panel);
+  border: 1px solid var(--theme-border);
   box-shadow: 0 18px 46px rgba(1, 7, 14, 0.34);
 }
 .publish-mode .publisher-batch-toolbar {
@@ -10015,8 +9284,8 @@ onBeforeUnmount(() => {
   min-height: 96px;
   box-sizing: border-box;
   padding: 20px 26px;
-  background: #152338;
-  border-bottom: 1px solid rgba(114, 144, 178, 0.26);
+  background: var(--theme-tone-blue);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publish-mode .publisher-batch-title {
   gap: 12px;
@@ -10027,7 +9296,7 @@ onBeforeUnmount(() => {
 .publish-mode .publisher-batch-title p {
   margin-top: 6px;
   font-size: 12px;
-  color: #8ea7c4;
+  color: var(--theme-text-secondary);
 }
 .publish-mode .publisher-batch-actions {
   gap: 10px;
@@ -10049,8 +9318,8 @@ onBeforeUnmount(() => {
 .publish-mode .publisher-batch-editor {
   gap: 14px;
   padding: 22px 20px;
-  background: #0e1b2a;
-  border-right: 1px solid rgba(114, 144, 178, 0.24);
+  background: var(--theme-panel-soft);
+  border-right: 1px solid var(--theme-border);
   overflow: auto;
 }
 .publish-mode .publisher-editor-head {
@@ -10058,7 +9327,7 @@ onBeforeUnmount(() => {
 }
 .publish-mode .publisher-editor-head strong {
   font-size: 16px;
-  color: #edf5ff;
+  color: var(--theme-text);
 }
 .publish-mode .publisher-editor-head span {
   font-size: 12px;
@@ -10069,15 +9338,15 @@ onBeforeUnmount(() => {
 .publish-mode .publisher-editor-field > span,
 .publish-mode .publisher-editor-publish-time > span {
   font-size: 12px;
-  color: #c3d1e3;
+  color: var(--theme-tone-blue);
 }
 .publish-mode .publisher-editor-field input,
 .publish-mode .publisher-editor-field textarea {
   min-height: 42px;
   padding: 0 13px;
   border-radius: 10px;
-  background: #111c2c;
-  border-color: #2c4561;
+  background: var(--theme-panel-soft);
+  border-color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .publish-mode .publisher-editor-field textarea {
@@ -10117,7 +9386,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  background: #091421;
+  background: var(--theme-panel);
 }
 .publish-mode .publisher-batch-head,
 .publish-mode .publisher-batch-row {
@@ -10130,8 +9399,8 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   padding: 0 22px;
   align-items: center;
-  background: #0d1928;
-  color: #8fa7c3;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .publish-mode .publisher-batch-list {
@@ -10139,21 +9408,21 @@ onBeforeUnmount(() => {
   flex: 1;
   padding: 10px 14px 18px;
   overflow: auto;
-  background: #091421;
+  background: var(--theme-panel);
 }
 .publish-mode .publisher-batch-row {
   min-height: 118px;
   box-sizing: border-box;
   margin: 0 0 8px;
   padding: 16px 18px;
-  border: 1px solid rgba(76, 108, 141, 0.34);
+  border: 1px solid var(--theme-border-control);
   border-radius: 14px;
-  background: #0a1421;
+  background: var(--theme-panel);
   box-shadow: none;
 }
 .publish-mode .publisher-batch-row:hover {
-  background: #0d1b2b;
-  border-color: rgba(78, 218, 198, 0.52);
+  background: var(--theme-panel-soft);
+  border-color: color-mix(in srgb, var(--theme-accent) 52%, transparent);
 }
 .publish-mode .publisher-batch-check {
   gap: 8px;
@@ -10164,7 +9433,7 @@ onBeforeUnmount(() => {
 }
 .publish-mode .publisher-batch-check b {
   font-size: 12px;
-  color: #7792ad;
+  color: var(--theme-text-secondary);
 }
 .publish-mode .publisher-batch-video {
   gap: 10px;
@@ -10174,15 +9443,15 @@ onBeforeUnmount(() => {
   width: 38px;
   height: 48px;
   border-radius: 8px;
-  background: #172944;
+  background: var(--theme-tone-blue);
 }
 .publish-mode .publisher-batch-select,
 .publish-mode .publisher-batch-input {
   height: 42px;
   padding: 0 12px;
   border-radius: 10px;
-  border-color: #304a66;
-  background: #0d1726;
+  border-color: var(--theme-tone-blue);
+  background: var(--theme-panel);
   font-size: 12px;
 }
 .publish-mode .publisher-batch-schedule {
@@ -10203,10 +9472,10 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 34px;
   padding: 0 7px;
-  border: 1px solid #304a66;
+  border: 1px solid var(--theme-tone-blue);
   border-radius: 8px;
-  background: #0d1726;
-  color: #e9f1fb;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publish-mode .publisher-batch-state {
@@ -10245,21 +9514,21 @@ onBeforeUnmount(() => {
   align-content: start;
   gap: 12px;
   padding: 16px;
-  border-right: 1px solid rgba(108, 135, 167, 0.2);
-  background: linear-gradient(180deg, #101d2b, #0c1725);
+  border-right: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, var(--theme-panel-soft), var(--theme-panel));
 }
 .publisher-editor-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(108, 135, 167, 0.18);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-editor-head strong {
   font-size: 14px;
 }
 .publisher-editor-head span {
-  color: #6ee7d4;
+  color: var(--theme-accent);
   font-size: 10px;
 }
 .publisher-editor-field {
@@ -10269,7 +9538,7 @@ onBeforeUnmount(() => {
 }
 .publisher-editor-field > span,
 .publisher-editor-publish-time > span {
-  color: #aebbd0;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   font-weight: 700;
 }
@@ -10278,10 +9547,10 @@ onBeforeUnmount(() => {
   width: 100%;
   box-sizing: border-box;
   padding: 9px;
-  border: 1px solid #354e68;
+  border: 1px solid var(--theme-border-control);
   border-radius: 8px;
-  background: #0b1726;
-  color: #edf4ff;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 11px;
   outline: none;
 }
@@ -10293,7 +9562,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 8px;
   bottom: 8px;
-  color: #7387a1;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publisher-editor-tags {
@@ -10303,21 +9572,21 @@ onBeforeUnmount(() => {
 }
 .publisher-editor-tags button {
   padding: 4px 8px;
-  border: 1px solid #354e68;
+  border: 1px solid var(--theme-border-control);
   border-radius: 10px;
-  background: #17283c;
-  color: #cbd8e8;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 9px;
 }
 .publisher-editor-tags .tag-add {
   border-style: dashed;
-  color: #78e4d0;
+  color: var(--theme-accent);
 }
 .publisher-editor-publish-time {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  color: #b8c7d9;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-editor-publish-time > span {
@@ -10333,10 +9602,10 @@ onBeforeUnmount(() => {
   width: 100%;
   box-sizing: border-box;
   height: 32px;
-  border: 1px solid #354e68;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #0b1726;
-  color: #edf4ff;
+  background: var(--theme-panel);
+  color: var(--theme-text);
   font-size: 10px;
 }
 .publisher-apply-button {
@@ -10373,7 +9642,7 @@ onBeforeUnmount(() => {
   gap: 7px;
 }
 .publisher-batch-check b {
-  color: #7890aa;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   font-weight: 500;
 }
@@ -10388,7 +9657,7 @@ onBeforeUnmount(() => {
   }
   .publisher-batch-editor {
     border-right: 0;
-    border-bottom: 1px solid rgba(108, 135, 167, 0.2);
+    border-bottom: 1px solid var(--theme-border);
   }
   .publisher-batch-table-wrap {
     overflow-x: auto;
@@ -10405,7 +9674,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   margin-top: 6px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
   flex-wrap: wrap;
 }
@@ -10423,10 +9692,10 @@ onBeforeUnmount(() => {
   background:
     radial-gradient(
       circle at top right,
-      rgba(120, 96, 255, 0.12),
+      color-mix(in srgb, var(--theme-tone-blue) 12%, transparent),
       transparent 28%
     ),
-    linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98));
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.22);
 }
 .live-console-grid .live-console-card__head,
@@ -10446,10 +9715,10 @@ onBeforeUnmount(() => {
   gap: 4px;
   min-height: 22px;
   padding: 0 8px;
-  border: 1px solid rgba(74, 222, 128, 0.28);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 28%, transparent);
   border-radius: 999px;
-  background: rgba(22, 163, 74, 0.16);
-  color: #8df2ae;
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-tone-green);
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
@@ -10464,15 +9733,15 @@ onBeforeUnmount(() => {
   aspect-ratio: 9/16;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
 }
 .live-console-grid .live-console-card__metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid rgba(111, 123, 170, 0.14);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(8, 13, 23, 0.52);
+  background: color-mix(in srgb, var(--theme-panel) 52%, transparent);
 }
 .live-console-grid .live-console-card__metrics > div {
   display: grid;
@@ -10480,18 +9749,18 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: 5px 1px;
   text-align: center;
-  border-right: 1px solid rgba(111, 123, 170, 0.12);
+  border-right: 1px solid var(--theme-border);
 }
 .live-console-grid .live-console-card__metrics > div:last-child {
   border-right: 0;
 }
 .live-console-grid .live-console-card__metrics span {
-  color: #8290ad;
+  color: var(--theme-text-secondary);
   font-size: 9px;
   white-space: nowrap;
 }
 .live-console-grid .live-console-card__metrics strong {
-  color: #70e2d0;
+  color: var(--theme-accent);
   font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10516,7 +9785,7 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 .live-console-grid .live-console-row__subtitle {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
@@ -10552,23 +9821,23 @@ onBeforeUnmount(() => {
 }
 .live-console-grid .image-retry-decision__button {
   min-height: 38px;
-  border: 1px solid rgba(126, 143, 178, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(20, 27, 42, 0.8);
+  background: color-mix(in srgb, var(--theme-tone-blue) 80%, transparent);
 }
 .live-console-grid .image-retry-decision__button:not(.image-retry-decision__button--primary) {
   padding: 0;
   font-size: 0;
 }
 .live-console-grid .image-retry-decision__button--primary {
-  border: 1px solid rgba(77, 218, 194, 0.42);
-  background: linear-gradient(135deg, #197f72, #12645f);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 42%, transparent);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
   box-shadow: 0 7px 18px rgba(5, 57, 52, 0.22), inset 0 1px 0 rgba(210, 255, 247, 0.1);
-  color: #f3fffc;
+  color: var(--theme-text);
 }
 .live-console-grid .image-retry-decision__button--primary:hover {
-  background: linear-gradient(135deg, #1b8e7e, #157069);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
 }
 .live-console-grid .live-console-row__link,
 .live-console-grid .live-console-row__action {
@@ -10582,8 +9851,8 @@ onBeforeUnmount(() => {
   height: 15px;
 }
 .live-console-row__action--danger {
-  color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--theme-tone-red);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 20%, transparent);
 }
 .detail-dialog {
   width: min(980px, 100%);
@@ -10592,9 +9861,9 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   padding: 4px;
-  border: 1px solid rgba(111, 123, 170, 0.14);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.82);
+  background: color-mix(in srgb, var(--theme-panel-soft) 82%, transparent);
 }
 .detail-tabs button {
   display: inline-flex;
@@ -10605,11 +9874,11 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
 }
 .detail-tabs button.active {
-  color: #fff;
-  background: rgba(102, 88, 232, 0.24);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
 }
 .detail-shot {
   grid-template-columns: 220px minmax(0, 1fr);
@@ -10620,7 +9889,7 @@ onBeforeUnmount(() => {
   height: auto;
   aspect-ratio: 9/16;
   object-fit: contain;
-  background: rgba(5, 8, 16, 0.4);
+  background: color-mix(in srgb, var(--theme-input) 40%, transparent);
 }
 .detail-grid {
   display: grid;
@@ -10631,13 +9900,13 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 5px;
   padding: 11px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
-  background: rgba(9, 16, 28, 0.48);
+  background: color-mix(in srgb, var(--theme-panel) 48%, transparent);
   min-width: 0;
 }
 .detail-grid span {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .detail-grid strong {
@@ -10659,14 +9928,14 @@ onBeforeUnmount(() => {
 }
 .request-parameter-head p {
   margin: 4px 0 0;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .request-parameter-head span {
   padding: 4px 9px;
   border-radius: 999px;
-  background: rgba(13, 148, 136, 0.14);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  color: var(--theme-accent);
   font-size: 10px;
 }
 .request-parameter-panel pre {
@@ -10674,10 +9943,10 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow: auto;
   padding: 14px;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: #090e18;
-  color: #c9d6ef;
+  background: var(--theme-panel);
+  color: var(--theme-tone-blue);
   font:
     11px/1.6 ui-monospace,
     SFMono-Regular,
@@ -10698,20 +9967,20 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 4px;
   padding: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.72);
-  color: #dbeafe;
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-text);
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 .live-subtitle-dialog__close:hover {
-  border-color: rgba(94, 234, 212, 0.5);
-  background: rgba(30, 45, 66, 0.92);
+  border-color: color-mix(in srgb, var(--theme-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 92%, transparent);
   transform: translateY(-1px);
 }
 .subtitle-summary span {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .subtitle-summary strong {
@@ -10731,9 +10000,9 @@ onBeforeUnmount(() => {
   height: min(72vh, 720px);
   max-height: none;
   min-height: 360px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: #030711;
+  background: var(--theme-input);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025), 0 16px 36px rgba(0, 0, 0, 0.24);
 }
 .video-dialog__side {
@@ -10764,32 +10033,32 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 8px;
   padding-bottom: 18px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  border-bottom: 1px solid var(--theme-border);
 }
 .video-dialog__tags span {
   padding: 7px 11px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(30, 41, 59, 0.72);
-  color: #bfdbfe;
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 12px;
   font-weight: 800;
 }
 .video-dialog__tags span.is-ready {
-  border-color: rgba(45, 212, 191, 0.28);
-  background: rgba(13, 148, 136, 0.16);
-  color: #5eead4;
+  border-color: color-mix(in srgb, var(--theme-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-accent);
 }
 .video-dialog__info {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(18, 27, 43, 0.72);
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
 }
 .video-dialog__info-title {
-  color: #f8fafc;
+  color: var(--theme-text);
   font-size: 14px;
   font-weight: 800;
 }
@@ -10797,13 +10066,13 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  color: #8fa2bd;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .video-dialog__info-row strong {
   max-width: 210px;
   overflow: hidden;
-  color: #dbeafe;
+  color: var(--theme-text);
   font-weight: 700;
   text-align: right;
   text-overflow: ellipsis;
@@ -10814,7 +10083,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
@@ -10851,7 +10120,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 12px;
   padding-top: 6px;
-  border-top: 1px solid rgba(111, 123, 170, 0.12);
+  border-top: 1px solid var(--theme-border);
 }
 .live-subtitle-dialog__summary {
   display: flex;
@@ -10862,18 +10131,18 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 4px;
   padding: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.72);
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
 }
 .live-subtitle-dialog__summary-item span,
 .live-subtitle-dialog__field span {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .live-subtitle-dialog__summary-item strong {
   font-size: 14px;
-  color: #eef5ff;
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__tabs {
   display: inline-flex;
@@ -10881,8 +10150,8 @@ onBeforeUnmount(() => {
   width: fit-content;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.82);
-  border: 1px solid rgba(111, 123, 170, 0.14);
+  background: color-mix(in srgb, var(--theme-panel-soft) 82%, transparent);
+  border: 1px solid var(--theme-border);
 }
 .live-subtitle-dialog__tabs button {
   min-height: 34px;
@@ -10890,11 +10159,11 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
 }
 .live-subtitle-dialog__tabs button.active {
-  color: #fff;
-  background: rgba(102, 88, 232, 0.24);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
 }
 .live-subtitle-dialog__section {
   display: grid;
@@ -10905,12 +10174,12 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 .live-subtitle-dialog__kicker {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   text-transform: uppercase;
 }
 .live-subtitle-dialog__section-head strong {
-  color: #eef5ff;
+  color: var(--theme-text);
   font-size: 14px;
 }
 .live-subtitle-dialog__mode-pills {
@@ -10922,13 +10191,13 @@ onBeforeUnmount(() => {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: rgba(18, 23, 38, 0.72);
-  color: #eef5ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__mode-pills button.is-active {
-  border-color: rgba(124, 92, 255, 0.6);
-  background: rgba(65, 51, 145, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 60%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 .live-subtitle-dialog__field {
   display: grid;
@@ -10940,10 +10209,10 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 38px;
   padding: 10px 12px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(19, 24, 38, 0.92);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__textarea {
   min-height: 120px;
@@ -10952,8 +10221,8 @@ onBeforeUnmount(() => {
 .live-subtitle-dialog__inline-tip {
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(18, 23, 38, 0.68);
-  color: #b8c7e8;
+  background: color-mix(in srgb, var(--theme-panel-soft) 68%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -10967,18 +10236,18 @@ onBeforeUnmount(() => {
   gap: 4px;
   text-align: left;
   padding: 12px 14px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.7);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 70%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__preset.active {
-  border-color: rgba(124, 92, 255, 0.6);
-  background: rgba(65, 51, 145, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 60%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 .live-subtitle-dialog__preset span,
 .live-subtitle-dialog__preset-note {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -10998,22 +10267,22 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 .account-row.editing {
-  border-color: rgba(145, 106, 255, 0.64);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 64%, transparent);
   box-shadow: inset 0 0 0 1px rgba(145, 106, 255, 0.16);
 }
 .account-form-hint {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
   line-height: 1.5;
 }
 .product-picker-button {
   width: 100%;
-  color: #fff;
+  color: var(--theme-text);
   text-align: left;
   cursor: pointer;
 }
 .product-picker-button:hover {
-  border-color: rgba(85, 223, 202, 0.44);
+  border-color: color-mix(in srgb, var(--theme-accent) 44%, transparent);
 }
 .product-picker-name {
   min-width: 0;
@@ -11023,8 +10292,8 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .batch-delete-button {
-  color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.24);
+  color: var(--theme-tone-red);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 24%, transparent);
 }
 .delete-dialog {
   width: min(520px, 100%);
@@ -11035,9 +10304,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   align-items: start;
   padding: 14px;
-  border: 1px solid rgba(239, 68, 68, 0.18);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
   border-radius: 12px;
-  background: rgba(127, 29, 29, 0.12);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
 }
 .delete-dialog__icon {
   width: 44px;
@@ -11045,26 +10314,26 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: rgba(239, 68, 68, 0.16);
-  color: #fecaca;
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  color: var(--theme-tone-red);
 }
 .delete-dialog__body p {
   margin: 5px 0 0;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   line-height: 1.5;
 }
 .delete-confirm-button {
-  border-color: rgba(239, 68, 68, 0.38);
-  background: linear-gradient(90deg, #b42332, #dc3545);
+  border-color: color-mix(in srgb, var(--theme-tone-red) 38%, transparent);
+  background: linear-gradient(90deg, var(--theme-tone-red), var(--theme-tone-red));
 }
 .account-tab {
   margin-left: auto;
 }
 .live-console-row__action--region {
-  color: #8ef0c8;
-  border-color: rgba(79, 194, 168, 0.32);
-  background: rgba(19, 61, 58, 0.42);
+  color: var(--theme-accent);
+  border-color: color-mix(in srgb, var(--theme-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 42%, transparent);
 }
 .detail-region-action {
   align-items: start;
@@ -11083,9 +10352,9 @@ onBeforeUnmount(() => {
   max-width: 100%;
   margin: 0 auto;
   overflow: hidden;
-  border: 1px solid rgba(111, 123, 170, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: #090e18;
+  background: var(--theme-panel);
   touch-action: none;
   user-select: none;
   cursor: crosshair;
@@ -11101,8 +10370,8 @@ onBeforeUnmount(() => {
 .region-box {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid #55dfca;
-  background: rgba(85, 223, 202, 0.12);
+  border: 2px solid var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
   box-shadow: 0 0 0 9999px rgba(5, 8, 16, 0.46);
   cursor: move;
 }
@@ -11110,9 +10379,9 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 14px;
   height: 14px;
-  border: 2px solid #07121a;
+  border: 2px solid var(--theme-border);
   border-radius: 50%;
-  background: #55dfca;
+  background: var(--theme-accent);
 }
 .region-handle.is-nw {
   left: -8px;
@@ -11139,13 +10408,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
-}
-.publisher-panel {
-  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
-  gap: 14px;
-  align-items: stretch;
 }
 .publish-mode .publish-layout {
   display: none;
@@ -11153,8 +10417,8 @@ onBeforeUnmount(() => {
 .publisher-batch-workspace {
   padding: 0;
   overflow: hidden;
-  background: #101925;
-  border-color: rgba(103, 143, 175, 0.3);
+  background: var(--theme-panel-soft);
+  border-color: var(--theme-border);
 }
 .publisher-batch-toolbar {
   display: flex;
@@ -11162,22 +10426,22 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 14px;
   padding: 16px 18px;
-  border-bottom: 1px solid rgba(108, 135, 167, 0.22);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-batch-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #59e6ce;
+  color: var(--theme-accent);
 }
 .publisher-batch-title h2 {
   margin: 0;
-  color: #f0f5ff;
+  color: var(--theme-text);
   font-size: 18px;
 }
 .publisher-batch-title p {
   margin: 4px 0 0;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publisher-batch-actions {
@@ -11196,9 +10460,9 @@ onBeforeUnmount(() => {
 }
 .publisher-batch-head {
   padding: 10px 14px;
-  color: #8093ad;
+  color: var(--theme-text-secondary);
   font-size: 10px;
-  border-bottom: 1px solid rgba(108, 135, 167, 0.18);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-batch-list {
   overflow: auto;
@@ -11206,11 +10470,11 @@ onBeforeUnmount(() => {
 .publisher-batch-row {
   min-width: 1180px;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(108, 135, 167, 0.14);
-  background: rgba(8, 15, 26, 0.34);
+  border-bottom: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 34%, transparent);
 }
 .publisher-batch-row:hover {
-  background: rgba(24, 47, 64, 0.38);
+  background: color-mix(in srgb, var(--theme-tone-blue) 38%, transparent);
 }
 .publisher-batch-check {
   display: grid;
@@ -11219,7 +10483,7 @@ onBeforeUnmount(() => {
 .publisher-batch-check input {
   width: 16px;
   height: 16px;
-  accent-color: #50ddc5;
+  accent-color: var(--theme-accent);
 }
 .publisher-batch-select,
 .publisher-batch-input {
@@ -11227,10 +10491,10 @@ onBeforeUnmount(() => {
   height: 34px;
   box-sizing: border-box;
   padding: 0 8px;
-  border: 1px solid #344b66;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #111d2c;
-  color: #e6eef8;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 10px;
 }
 .publisher-batch-video {
@@ -11238,7 +10502,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: #e6eef8;
+  color: var(--theme-text);
   font-size: 10px;
 }
 .publisher-batch-video > span:last-child {
@@ -11253,13 +10517,13 @@ onBeforeUnmount(() => {
   height: 34px;
   flex: none;
   border-radius: 6px;
-  background: #221f4b;
-  color: #bea8ff;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-violet);
 }
 .publisher-batch-schedule {
   display: grid;
   gap: 5px;
-  color: #afbdd0;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publisher-batch-schedule label {
@@ -11269,19 +10533,19 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .publisher-batch-schedule input {
-  accent-color: #50ddc5;
+  accent-color: var(--theme-accent);
 }
 .publisher-batch-state {
   justify-self: start;
   padding: 4px 8px;
-  border: 1px solid #3e536c;
+  border: 1px solid var(--theme-border-control);
   border-radius: 10px;
-  color: #b8c6d7;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publisher-batch-state.state-ready {
-  border-color: #299b84;
-  color: #67e8d1;
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .publisher-batch-actions-cell {
   display: flex;
@@ -11292,11 +10556,11 @@ onBeforeUnmount(() => {
   place-items: center;
   gap: 9px;
   min-height: 240px;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .publisher-batch-empty strong {
-  color: #e7eef8;
+  color: var(--theme-text);
   font-size: 15px;
 }
 .publisher-batch-empty .primary-button {
@@ -11332,8 +10596,8 @@ onBeforeUnmount(() => {
   border-radius: 11px;
   display: grid;
   place-items: center;
-  color: #54ead1;
-  background: linear-gradient(145deg, #123f47, #0d292f);
+  color: var(--theme-accent);
+  background: linear-gradient(145deg, var(--theme-accent), var(--theme-panel-soft));
   box-shadow: inset 0 0 0 1px rgba(72, 226, 201, 0.22);
 }
 .publish-brand h1 {
@@ -11343,7 +10607,7 @@ onBeforeUnmount(() => {
 }
 .publish-brand p {
   margin: 5px 0 0;
-  color: #9aa9c0;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .publish-head-actions {
@@ -11358,15 +10622,15 @@ onBeforeUnmount(() => {
   height: 34px;
   padding: 0 13px;
   border-radius: 9px;
-  border: 1px solid rgba(79, 217, 195, 0.55);
-  background: rgba(18, 56, 63, 0.52);
-  color: #d8f9f1;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 52%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publish-guide {
-  border-color: rgba(122, 144, 180, 0.4);
-  background: rgba(22, 31, 47, 0.8);
-  color: #d3dced;
+  border-color: var(--theme-border-control);
+  background: color-mix(in srgb, var(--theme-tone-blue) 80%, transparent);
+  color: var(--theme-tone-blue);
 }
 .publish-help span {
   display: grid;
@@ -11386,8 +10650,8 @@ onBeforeUnmount(() => {
 .publish-left {
   padding: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #101d2b, #0e1927);
-  border-color: rgba(103, 143, 175, 0.28);
+  background: linear-gradient(180deg, var(--theme-panel-soft), var(--theme-panel-soft));
+  border-color: var(--theme-border);
 }
 .publish-section-head {
   display: flex;
@@ -11401,7 +10665,7 @@ onBeforeUnmount(() => {
 }
 .publish-section-head p {
   margin: 5px 0 0;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publish-section-icon {
@@ -11410,14 +10674,14 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  color: #59e6ce;
-  background: rgba(24, 157, 139, 0.22);
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
 }
 .publish-link {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: #77b7de;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .publish-key-row {
@@ -11430,60 +10694,60 @@ onBeforeUnmount(() => {
 .publish-key-row input {
   height: 36px;
   padding: 0 11px;
-  border: 1px solid #3a506c;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #101b29;
-  color: #edf4ff;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publish-save {
   border: 0;
   border-radius: 7px;
-  background: linear-gradient(90deg, #52e4ca, #54efd3);
-  color: #06241f;
+  background: linear-gradient(90deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
   font-weight: 800;
   font-size: 11px;
 }
 .publish-clear {
   padding: 0 14px;
-  border: 1px solid #6c4250;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #2a1a25;
-  color: #ffb2c0;
+  background: var(--theme-panel-soft);
+  color: var(--theme-tone-red);
   font-size: 11px;
 }
 .publish-test {
   padding: 0 14px;
-  background: #18263a;
-  color: #d7e3f1;
-  border: 1px solid #405571;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
+  border: 1px solid var(--theme-border-control);
 }
 .publish-credential {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 19px 14px;
-  color: #bdeed0;
+  color: var(--theme-accent);
   font-size: 11px;
 }
 .publish-credential code {
-  color: #8df2ae;
+  color: var(--theme-tone-green);
 }
 .publish-credential button {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: #ffadb9;
+  color: var(--theme-tone-red);
   font-size: 10px;
 }
 .publish-error {
   padding: 0 19px 12px;
-  color: #fca5a5;
+  color: var(--theme-tone-red);
   font-size: 10px;
 }
 .publish-divider {
   height: 1px;
-  background: rgba(108, 135, 167, 0.22);
+  background: color-mix(in srgb, var(--theme-control-hover) 22%, transparent);
 }
 .publish-form-grid {
   display: grid;
@@ -11499,13 +10763,13 @@ onBeforeUnmount(() => {
 }
 .publish-form-grid label > span,
 .publish-field > span {
-  color: #c2ccdc;
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
 }
 .publish-form-grid em,
 .publish-field em {
-  color: #ff6d8f;
+  color: var(--theme-tone-red);
   font-style: normal;
 }
 .publish-field {
@@ -11515,10 +10779,10 @@ onBeforeUnmount(() => {
 .publish-field textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #3a506c;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #101b29;
-  color: #edf4ff;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 11px;
   padding: 9px;
 }
@@ -11529,7 +10793,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 24px;
   bottom: 18px;
-  color: #7789a3;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publish-tags {
@@ -11539,16 +10803,16 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 .publish-tags button {
-  border: 1px solid rgba(95, 119, 151, 0.35);
+  border: 1px solid var(--theme-border-control);
   border-radius: 12px;
   padding: 4px 10px;
-  background: #1b2a3d;
-  color: #d5deeb;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .publish-tags button:last-child {
   border-style: dashed;
-  color: #9fb2c9;
+  color: var(--theme-text-secondary);
 }
 .publish-date {
   display: flex;
@@ -11568,15 +10832,15 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 13px 19px;
-  background: rgba(8, 16, 26, 0.5);
+  background: color-mix(in srgb, var(--theme-panel) 50%, transparent);
 }
 .publish-draft {
   height: 35px;
   padding: 0 14px;
-  border: 1px solid #405571;
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #152236;
-  color: #d8e2ef;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .publish-next {
@@ -11587,8 +10851,8 @@ onBeforeUnmount(() => {
   padding: 0 30px;
   border: 0;
   border-radius: 7px;
-  background: linear-gradient(90deg, #50ddc5, #50e8cb);
-  color: #05251f;
+  background: linear-gradient(90deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
   font-weight: 800;
   font-size: 12px;
 }
@@ -11600,15 +10864,15 @@ onBeforeUnmount(() => {
 .publish-queue {
   padding: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #101d2b, #0d1724);
-  border-color: rgba(103, 143, 175, 0.28);
+  background: linear-gradient(180deg, var(--theme-panel-soft), var(--theme-panel));
+  border-color: var(--theme-border);
 }
 .publish-card-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 17px;
-  border-bottom: 1px solid rgba(108, 135, 167, 0.22);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publish-card-title h2 {
   margin: 0;
@@ -11616,11 +10880,11 @@ onBeforeUnmount(() => {
 }
 .publish-card-title p {
   margin: 4px 0 0;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publish-live-dot {
-  color: #4fe3c9;
+  color: var(--theme-accent);
   font-size: 20px;
 }
 .publish-preview-body {
@@ -11633,10 +10897,10 @@ onBeforeUnmount(() => {
   height: 292px;
   border-radius: 15px;
   overflow: hidden;
-  background: #070d16;
+  background: var(--theme-panel);
   display: grid;
   place-items: center;
-  color: #91a1b7;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   text-align: center;
 }
@@ -11648,7 +10912,7 @@ onBeforeUnmount(() => {
 .publish-info-card {
   border-radius: 10px;
   padding: 10px;
-  background: rgba(26, 39, 57, 0.78);
+  background: color-mix(in srgb, var(--theme-tone-blue) 78%, transparent);
   display: grid;
   align-content: start;
   gap: 9px;
@@ -11665,7 +10929,7 @@ onBeforeUnmount(() => {
 .publish-info-head button {
   border: 0;
   background: transparent;
-  color: #aabbd0;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publish-info-row {
@@ -11673,24 +10937,24 @@ onBeforeUnmount(() => {
   grid-template-columns: 62px minmax(0, 1fr);
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px solid rgba(111, 136, 164, 0.18);
+  border-top: 1px solid var(--theme-border);
   font-size: 10px;
 }
 .publish-info-row span {
-  color: #8ea0b8;
+  color: var(--theme-text-secondary);
 }
 .publish-info-row strong {
-  color: #dce6f2;
+  color: var(--theme-text);
   font-weight: 500;
   line-height: 1.4;
 }
 .publish-count {
   font-size: 22px;
-  color: #f2f8ff;
+  color: var(--theme-text);
 }
 .publish-count small {
   font-size: 10px;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
 }
 .publish-demo-queue {
   padding: 10px 14px;
@@ -11703,15 +10967,15 @@ onBeforeUnmount(() => {
   gap: 9px;
   align-items: center;
   padding: 6px 8px;
-  border: 1px solid rgba(72, 98, 126, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(8, 17, 28, 0.58);
+  background: color-mix(in srgb, var(--theme-panel) 58%, transparent);
 }
 .publish-thumb {
   width: 30px;
   height: 34px;
   border-radius: 5px;
-  background: linear-gradient(145deg, #d7c2b5, #877268);
+  background: linear-gradient(145deg, var(--theme-control-hover), var(--theme-control-hover));
 }
 .publish-demo-row strong,
 .publish-demo-row small {
@@ -11719,44 +10983,44 @@ onBeforeUnmount(() => {
 }
 .publish-demo-row strong {
   font-size: 10px;
-  color: #e6edf7;
+  color: var(--theme-text);
 }
 .publish-demo-row small {
   margin-top: 3px;
-  color: #7288a2;
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publish-demo-row span {
   padding: 4px 8px;
   border-radius: 10px;
-  background: #263548;
-  color: #b8c5d5;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text-secondary);
   font-size: 9px;
 }
 .publish-demo-row .demo-0 {
-  background: rgba(22, 155, 133, 0.24);
-  color: #66e8d1;
+  background: color-mix(in srgb, var(--theme-accent) 24%, transparent);
+  color: var(--theme-accent);
 }
 .publish-demo-row .demo-2 {
-  background: rgba(128, 66, 193, 0.4);
-  color: #e2c2ff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 40%, transparent);
+  color: var(--theme-tone-violet);
 }
 .publish-demo-row i {
   width: 54px;
   height: 4px;
   border-radius: 3px;
-  background: linear-gradient(90deg, #50e2c5 68%, #223447 68%);
+  background: linear-gradient(90deg, var(--theme-accent) 68%, var(--theme-tone-blue) 68%);
 }
 .publish-demo-row button {
   height: 23px;
-  border: 1px solid #3e516a;
+  border: 1px solid var(--theme-border-control);
   border-radius: 5px;
-  background: #182537;
-  color: #c9d4e2;
+  background: var(--theme-tone-blue);
+  color: var(--theme-text);
   font-size: 9px;
 }
 .publish-demo-row b {
-  color: #a6b5c8;
+  color: var(--theme-text-secondary);
   font-size: 16px;
   font-weight: 400;
   text-align: center;
@@ -11765,10 +11029,10 @@ onBeforeUnmount(() => {
   height: 28px;
   width: 100px;
   padding: 0 8px;
-  border: 1px solid #3bdbc5;
+  border: 1px solid var(--theme-accent);
   border-radius: 8px;
-  background: #101b29;
-  color: #edf4ff;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 10px;
 }
 .publish-tag-confirm,
@@ -11779,14 +11043,14 @@ onBeforeUnmount(() => {
   font-size: 10px;
 }
 .publish-tag-confirm {
-  border: 1px solid #3bdbc5;
-  background: #163b3b;
-  color: #8cf3df;
+  border: 1px solid var(--theme-accent);
+  background: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .publish-tag-cancel {
-  border: 1px solid #405571;
-  background: #152236;
-  color: #b9c6d7;
+  border: 1px solid var(--theme-border-control);
+  background: var(--theme-tone-blue);
+  color: var(--theme-text-secondary);
 }
 .publish-step-dialog {
   position: fixed;
@@ -11795,7 +11059,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(3, 8, 16, 0.72);
+  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
   backdrop-filter: blur(8px);
 }
 .publish-step-dialog__panel {
@@ -11803,9 +11067,9 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 40px);
   overflow: auto;
   padding: 20px;
-  border: 1px solid rgba(85, 220, 200, 0.28);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 28%, transparent);
   border-radius: 16px;
-  background: #111b2a;
+  background: var(--theme-panel-soft);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
 .publish-step-dialog__head {
@@ -11816,19 +11080,19 @@ onBeforeUnmount(() => {
 }
 .publish-step-dialog__head h2 {
   margin: 0;
-  color: #f1f6ff;
+  color: var(--theme-text);
   font-size: 20px;
 }
 .publish-step-dialog__head p {
   margin: 6px 0 0;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 .publish-step-dialog__head button {
-  border: 1px solid #405571;
+  border: 1px solid var(--theme-border-control);
   border-radius: 8px;
-  background: #152236;
-  color: #d8e2ef;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   padding: 7px 12px;
 }
 .publish-step-dialog__body {
@@ -11844,7 +11108,7 @@ onBeforeUnmount(() => {
 }
 .publish-step-dialog .dialog-actions {
   padding-top: 14px;
-  border-top: 1px solid rgba(108, 135, 167, 0.22);
+  border-top: 1px solid var(--theme-border);
 }
 .publish-key-row input {
   flex: 1;
@@ -11915,215 +11179,21 @@ onBeforeUnmount(() => {
     height: 220px;
   }
 }
-.publisher-stepper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin: 2px 0 14px;
-  border: 1px solid rgba(128, 145, 190, 0.18);
-  border-radius: 12px;
-  background: rgba(11, 19, 32, 0.74);
-}
-.publisher-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: #7f8daf;
-  font-size: 11px;
-  font-weight: 700;
-}
-.publisher-step b {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #1a2638;
-  color: #9eacd0;
-  font-size: 11px;
-}
-.publisher-step.active {
-  color: #70e2d0;
-}
-.publisher-step.active b {
-  background: #32c8b1;
-  color: #06151a;
-  box-shadow: 0 0 0 4px rgba(50, 200, 177, 0.12);
-}
-.publisher-stepper > i {
-  height: 1px;
-  flex: 1;
-  background: linear-gradient(
-    90deg,
-    rgba(103, 215, 196, 0.35),
-    rgba(128, 145, 190, 0.12)
-  );
-}
-.publisher-step {
-  border: 0;
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-}
 .publish-pick {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid #405571;
+  border: 1px solid var(--theme-border-control);
   border-radius: 8px;
-  background: #152236;
-  color: #d8e2ef;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .publish-pick:hover {
-  border-color: #50ddc5;
-  color: #8cf3df;
-}
-.publisher-preview-strip {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 16px;
-  align-items: center;
-  padding: 14px;
-  margin-bottom: 14px;
-  border: 1px solid rgba(128, 145, 190, 0.18);
-  border-radius: 12px;
-  background: linear-gradient(
-    120deg,
-    rgba(20, 29, 47, 0.9),
-    rgba(12, 18, 31, 0.9)
-  );
-}
-.publisher-preview-strip__phone {
-  width: 150px;
-  height: 180px;
-  overflow: hidden;
-  border-radius: 10px;
-  background: #070d17;
-  display: grid;
-  place-items: center;
-  color: #8190ad;
-  font-size: 10px;
-  text-align: center;
-}
-.publisher-preview-strip__phone video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-preview-strip__phone > div {
-  display: grid;
-  gap: 7px;
-  place-items: center;
-}
-.publisher-preview-strip__info {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-.publisher-preview-strip__info h2 {
-  margin: 0;
-  font-size: 20px;
-}
-.publisher-preview-strip__info p {
-  margin: 0;
-  color: #9eacd0;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-preview-strip__info > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  color: #8290ad;
-  font-size: 10px;
-}
-.publisher-preview-strip__info strong {
-  color: #eef5ff;
-  font-size: 11px;
-  margin-right: 12px;
-}
-.publisher-overview {
-  display: grid;
-  gap: 18px;
-  margin: 4px 0 16px;
-}
-.publisher-overview-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 20px;
-}
-.publisher-overview-title h1 {
-  margin: 5px 0 0;
-  font-size: 30px;
-  line-height: 1.15;
-}
-.publisher-overview-title p {
-  margin: 8px 0 0;
-  color: #9eacd0;
-  font-size: 12px;
-}
-.publisher-overview-actions {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-.publisher-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-.publisher-stat {
-  display: grid;
-  gap: 5px;
-  min-height: 82px;
-  padding: 15px 16px;
-  border: 1px solid rgba(128, 145, 190, 0.18);
-  border-radius: 12px;
-  background: linear-gradient(
-    140deg,
-    rgba(20, 29, 47, 0.88),
-    rgba(12, 18, 31, 0.9)
-  );
-}
-.publisher-stat span {
-  color: #8290ad;
-  font-size: 10px;
-  font-weight: 700;
-}
-.publisher-stat strong {
-  font-size: 24px;
-  line-height: 1;
-  color: #f5f8ff;
-}
-.publisher-stat small {
-  color: #8e9aba;
-  font-size: 10px;
-}
-.publisher-stat--status strong {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 16px;
-}
-.publisher-stat--status i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #64748b;
-}
-.publisher-stat--status i.ready {
-  background: #4ade80;
-  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.13);
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .publisher-select-button {
   display: flex;
@@ -12132,10 +11202,10 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 40px;
   padding: 0 12px;
-  border: 1px solid rgba(128, 145, 190, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(8, 14, 26, 0.72);
-  color: #f5f8ff;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text);
   text-align: left;
   font-size: 12px;
 }
@@ -12150,7 +11220,7 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 .publisher-select-button:hover {
-  border-color: rgba(103, 215, 196, 0.58);
+  border-color: color-mix(in srgb, var(--theme-accent) 58%, transparent);
 }
 .publisher-selector-dialog {
   width: min(680px, 100%);
@@ -12161,46 +11231,28 @@ onBeforeUnmount(() => {
   gap: 8px;
   height: 40px;
   padding: 0 12px;
-  border: 1px solid rgba(128, 145, 190, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(8, 14, 26, 0.72);
-  color: #7f8daf;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text-secondary);
 }
 .publisher-selector-search input {
   flex: 1;
   border: 0;
   outline: 0;
   background: transparent;
-  color: #f5f8ff;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .publisher-selector-search button {
   height: 30px;
   padding: 0 14px;
-  border: 1px solid #2fd8c0;
+  border: 1px solid var(--theme-accent);
   border-radius: 6px;
-  background: #25d5bd;
-  color: #06231f;
+  background: var(--theme-accent);
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
-}
-.publisher-design-error {
-  position: fixed;
-  top: 88px;
-  left: 50%;
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 10px 14px;
-  border: 1px solid rgba(244, 118, 118, 0.48);
-  border-radius: 7px;
-  background: #2a1720;
-  color: #ffd8dd;
-  font-size: 12px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
-  transform: translateX(-50%);
 }
 .publisher-option-grid {
   display: grid;
@@ -12215,15 +11267,15 @@ onBeforeUnmount(() => {
   gap: 11px;
   min-height: 58px;
   padding: 10px 12px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
-  background: rgba(18, 23, 38, 0.72);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-text);
   text-align: left;
 }
 .publisher-option-card:hover {
-  border-color: rgba(85, 223, 202, 0.55);
-  background: rgba(19, 61, 58, 0.24);
+  border-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 24%, transparent);
 }
 .publisher-option-card strong,
 .publisher-option-card small {
@@ -12234,7 +11286,7 @@ onBeforeUnmount(() => {
 }
 .publisher-option-card small {
   margin-top: 4px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .publisher-option-icon {
@@ -12244,8 +11296,8 @@ onBeforeUnmount(() => {
   height: 34px;
   flex: none;
   border-radius: 9px;
-  background: rgba(106, 79, 209, 0.16);
-  color: #bba2ff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 16%, transparent);
+  color: var(--theme-tone-violet);
   overflow: hidden;
 }
 .publisher-option-icon img {
@@ -12273,7 +11325,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .publisher-option-check {
-  color: #55dfca;
+  color: var(--theme-accent);
 }
 .publisher-filter-pills {
   display: flex;
@@ -12283,29 +11335,16 @@ onBeforeUnmount(() => {
 .publisher-filter-pills button {
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(128, 145, 190, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  background: rgba(8, 14, 26, 0.6);
-  color: #aebbd5;
+  background: color-mix(in srgb, var(--theme-panel) 60%, transparent);
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-filter-pills button.active {
-  border-color: rgba(85, 223, 202, 0.62);
-  background: rgba(19, 61, 58, 0.34);
-  color: #d7fff5;
-}
-.publisher-published-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(74, 222, 128, 0.3);
-  border-radius: 999px;
-  background: rgba(22, 101, 52, 0.16);
-  color: #8df2ae;
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
+  border-color: color-mix(in srgb, var(--theme-accent) 62%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 34%, transparent);
+  color: var(--theme-text);
 }
 .publisher-picker-dialog {
   width: min(720px, 100%);
@@ -12313,17 +11352,17 @@ onBeforeUnmount(() => {
 .publisher-picker-filter {
   display: grid;
   gap: 7px;
-  color: #aab8d7;
+  color: var(--theme-tone-blue);
   font-size: 11px;
   font-weight: 700;
 }
 .publisher-picker-filter select {
   height: 40px;
   padding: 0 12px;
-  border: 1px solid rgba(128, 145, 190, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(8, 14, 26, 0.72);
-  color: #f5f8ff;
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
+  color: var(--theme-text);
 }
 .publisher-picker-list {
   display: grid;
@@ -12337,22 +11376,22 @@ onBeforeUnmount(() => {
   gap: 10px;
   align-items: center;
   padding: 9px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
-  background: rgba(18, 23, 38, 0.72);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-text);
   text-align: left;
 }
 .publisher-picker-row.selected {
-  border-color: rgba(85, 223, 202, 0.7);
-  background: rgba(19, 61, 58, 0.32);
+  border-color: color-mix(in srgb, var(--theme-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 32%, transparent);
 }
 .publisher-picker-row img {
   width: 56px;
   height: 70px;
   object-fit: cover;
   border-radius: 7px;
-  background: #090e18;
+  background: var(--theme-panel);
 }
 .publisher-picker-row strong,
 .publisher-picker-row span,
@@ -12365,7 +11404,7 @@ onBeforeUnmount(() => {
 .publisher-picker-row span,
 .publisher-picker-row small {
   margin-top: 4px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 10px;
 }
 .publisher-picker-check {
@@ -12373,253 +11412,31 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 20px;
   height: 20px;
-  border: 1px solid rgba(111, 123, 170, 0.35);
+  border: 1px solid var(--theme-border-control);
   border-radius: 6px;
-  color: #55dfca;
+  color: var(--theme-accent);
 }
 .publisher-picker-empty {
   display: grid;
   place-items: center;
   min-height: 180px;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
-.publisher-config-card,
-.publisher-queue-card {
+.publisher-config-card {
   min-height: 540px;
   gap: 0;
   padding: 0;
   overflow: hidden;
   background: linear-gradient(
     180deg,
-    rgba(20, 25, 42, 0.98),
-    rgba(13, 18, 31, 0.98)
+    color-mix(in srgb, var(--theme-tone-blue) 98%, transparent),
+    color-mix(in srgb, var(--theme-panel) 98%, transparent)
   );
-  border-color: rgba(128, 145, 190, 0.22);
+  border-color: var(--theme-border);
   box-shadow:
     0 16px 34px rgba(5, 9, 18, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-.publisher-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 22px 22px 18px;
-  border-bottom: 1px solid rgba(128, 145, 190, 0.14);
-}
-.publisher-card-head h2 {
-  margin: 5px 0 0;
-  font-size: 22px;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-.publisher-card-head p {
-  margin: 7px 0 0;
-  color: #9eacd0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.publisher-eyebrow {
-  color: #67d7c4;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-}
-.publisher-connection-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.55);
-  color: #aebbd5;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.publisher-connection-state.ready {
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(22, 101, 52, 0.16);
-  color: #8df2ae;
-}
-.publisher-state-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #64748b;
-  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12);
-}
-.publisher-connection-state.ready .publisher-state-dot {
-  background: #4ade80;
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.14);
-}
-.publisher-section {
-  display: grid;
-  gap: 13px;
-  padding: 19px 22px;
-  border-bottom: 1px solid rgba(128, 145, 190, 0.12);
-}
-.publisher-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-.publisher-section-title strong {
-  font-size: 13px;
-  color: #edf3ff;
-}
-.publisher-section-title small {
-  margin-left: auto;
-  color: #7f8daf;
-  font-size: 10px;
-  font-weight: 500;
-}
-.publisher-section-index {
-  display: grid;
-  place-items: center;
-  width: 23px;
-  height: 23px;
-  border: 1px solid rgba(103, 215, 196, 0.35);
-  border-radius: 7px;
-  background: rgba(31, 117, 108, 0.16);
-  color: #6ee7d4;
-  font:
-    700 10px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-.publisher-key-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px;
-}
-.publisher-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px;
-}
-.publisher-form-grid label {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-.publisher-form-grid label > span {
-  color: #aab8d7;
-  font-size: 11px;
-  font-weight: 700;
-}
-.publisher-form-grid input,
-.publisher-form-grid select,
-.publisher-key-row input {
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  box-sizing: border-box;
-  padding: 0 12px;
-  border: 1px solid rgba(128, 145, 190, 0.24);
-  border-radius: 10px;
-  background: rgba(8, 14, 26, 0.72);
-  color: #f5f8ff;
-  font-size: 12px;
-  outline: none;
-  transition:
-    border-color 0.18s,
-    box-shadow 0.18s,
-    background 0.18s;
-}
-.publisher-form-grid input:focus,
-.publisher-form-grid select:focus,
-.publisher-key-row input:focus {
-  border-color: rgba(103, 215, 196, 0.68);
-  background: rgba(10, 22, 34, 0.86);
-  box-shadow: 0 0 0 3px rgba(85, 223, 202, 0.1);
-}
-.publisher-form-grid select {
-  appearance: auto;
-}
-.publisher-field-wide {
-  grid-column: 1/-1;
-}
-.publisher-time-hint {
-  align-self: end;
-  padding: 0 2px 3px;
-  color: #7f8daf;
-  font-size: 10px;
-  line-height: 1.45;
-}
-.publisher-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding: 18px 22px;
-  background: rgba(8, 13, 24, 0.34);
-}
-.publisher-action-primary {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-.publisher-action-primary button,
-.publisher-action-bar > button {
-  min-height: 38px;
-}
-.publisher-queue-head {
-  align-items: center;
-}
-.publisher-queue-count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  color: #f3f6ff;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1;
-}
-.publisher-queue-count small {
-  color: #7f8daf;
-  font-size: 10px;
-  font-weight: 600;
-}
-.publisher-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 330px;
-  padding: 28px;
-  text-align: center;
-  flex-direction: column;
-  color: #f0f4ff;
-}
-.publisher-empty strong {
-  font-size: 15px;
-}
-.publisher-empty > span {
-  max-width: 230px;
-  color: #8795b5;
-  font-size: 11px;
-  line-height: 1.5;
-}
-.publisher-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  margin-bottom: 3px;
-  border: 1px solid rgba(103, 215, 196, 0.25);
-  border-radius: 17px;
-  background: rgba(31, 117, 108, 0.14);
-  color: #6ee7d4;
-}
-.publisher-empty .ghost-button {
-  margin-top: 4px;
 }
 .publisher-queue-list {
   display: grid;
@@ -12634,9 +11451,9 @@ onBeforeUnmount(() => {
   gap: 10px;
   align-items: center;
   padding: 11px 12px;
-  border: 1px solid rgba(128, 145, 190, 0.15);
+  border: 1px solid var(--theme-border);
   border-radius: 11px;
-  background: rgba(9, 16, 29, 0.64);
+  background: color-mix(in srgb, var(--theme-panel) 64%, transparent);
 }
 .publisher-row-icon {
   display: grid;
@@ -12644,8 +11461,8 @@ onBeforeUnmount(() => {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: rgba(106, 79, 209, 0.16);
-  color: #bba2ff;
+  background: color-mix(in srgb, var(--theme-tone-violet) 16%, transparent);
+  color: var(--theme-tone-violet);
 }
 .publisher-row-main {
   display: grid;
@@ -12660,10 +11477,10 @@ onBeforeUnmount(() => {
 }
 .publisher-row-main strong {
   font-size: 12px;
-  color: #eef3ff;
+  color: var(--theme-text);
 }
 .publisher-row-main span {
-  color: #8795b5;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-row-state {
@@ -12672,156 +11489,29 @@ onBeforeUnmount(() => {
   justify-content: center;
   min-height: 24px;
   padding: 0 8px;
-  border: 1px solid rgba(128, 145, 190, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  color: #aebbd5;
+  color: var(--theme-text-secondary);
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
 }
 .publisher-row-state.state-published {
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(22, 101, 52, 0.16);
-  color: #8df2ae;
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-tone-green);
 }
 .publisher-row-state.state-failed {
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(127, 29, 29, 0.16);
-  color: #fecaca;
-}
-.publisher-row-error {
-  grid-column: 2/-1;
-  color: #fca5a5;
-  font-size: 10px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-.publisher-design-row-error {
-  display: block;
-  grid-column: 6/8;
-  margin-top: 4px;
-  color: #fca5a5;
-  font-size: 10px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.publisher-credential-strip {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid rgba(74, 222, 128, 0.22);
-  border-radius: 12px;
-  background: rgba(22, 101, 52, 0.1);
-  color: #bdeed0;
-  font-size: 11px;
-}
-.publisher-credential-strip code {
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: rgba(5, 20, 14, 0.45);
-  color: #8df2ae;
-  font:
-    11px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-.publisher-credential-strip .ghost-button {
-  min-height: 30px;
-  padding: 0 10px;
-  margin-left: auto;
-}
-.publisher-credential-strip .ghost-button + .ghost-button {
-  margin-left: 0;
-}
-.publisher-sync-error {
-  color: #fca5a5;
-  font-size: 10px;
-  line-height: 1.4;
-}
-.publisher-key-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  grid-column: 1/-1;
-  min-height: 38px;
-  color: #bdeed0;
-  font-size: 11px;
-}
-.publisher-key-status code {
-  color: #8df2ae;
-  font:
-    11px ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
+  border-color: color-mix(in srgb, var(--theme-tone-red) 30%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  color: var(--theme-tone-red);
 }
 @media (max-width: 1080px) {
-  .publisher-panel {
-    grid-template-columns: 1fr;
-  }
-  .publisher-config-card,
-  .publisher-queue-card {
+  .publisher-config-card {
     min-height: 0;
   }
-  .publisher-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 @media (max-width: 700px) {
-  .publisher-stepper {
-    gap: 5px;
-    padding: 8px;
-  }
-  .publisher-step span {
-    display: none;
-  }
-  .publisher-stepper > i {
-    min-width: 8px;
-  }
-}
-@media (max-width: 700px) {
-  .publisher-card-head {
-    padding: 18px 16px 15px;
-    flex-direction: column;
-  }
-  .publisher-section {
-    padding: 16px;
-  }
-  .publisher-section-title {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .publisher-section-title small {
-    width: 100%;
-    margin: 0 0 0 32px;
-  }
-  .publisher-key-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  .publisher-key-row input {
-    grid-column: 1/-1;
-  }
-  .publisher-form-grid {
-    grid-template-columns: 1fr;
-  }
-  .publisher-field-wide {
-    grid-column: auto;
-  }
-  .publisher-action-bar {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 16px;
-  }
-  .publisher-action-primary {
-    margin-left: 0;
-  }
-  .publisher-action-primary button,
-  .publisher-action-bar > button {
-    flex: 1;
-  }
   .publisher-queue-list {
     padding: 12px;
   }
@@ -12835,9 +11525,6 @@ onBeforeUnmount(() => {
   .publisher-row-state {
     grid-column: 2;
     justify-self: start;
-  }
-  .publisher-row-error {
-    grid-column: 1/-1;
   }
 }
 @media (max-width: 700px) {
@@ -12859,75 +11546,19 @@ onBeforeUnmount(() => {
     grid-column: auto;
   }
 }
-.publisher-quick-tools {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid rgba(128, 145, 190, 0.18);
-  border-radius: 12px;
-  background: rgba(16, 23, 38, 0.72);
-}
-.publisher-music-search {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
-  gap: 8px;
-  flex: 1;
-}
-.publisher-music-search input,
-.publisher-music-search select {
-  height: 36px;
-  box-sizing: border-box;
-  padding: 0 10px;
-  border: 1px solid rgba(128, 145, 190, 0.24);
-  border-radius: 9px;
-  background: rgba(8, 14, 26, 0.72);
-  color: #eef5ff;
-  font-size: 11px;
-}
-.publisher-music-search select {
-  min-width: 0;
-}
-@media (max-width: 700px) {
-  .publisher-quick-tools {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .publisher-music-search {
-    grid-template-columns: 1fr;
-  }
-  .publisher-music-search button {
-    width: 100%;
-  }
-}
-@media (max-width: 700px) {
-  .publisher-overview-title {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .publisher-overview-title h1 {
-    font-size: 25px;
-  }
-  .publisher-overview-actions button {
-    flex: 1;
-  }
-  .publisher-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 .publisher-edit-dock {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border: 1px solid rgba(103, 215, 196, 0.25);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 25%, transparent);
   border-radius: 12px;
-  background: rgba(14, 39, 43, 0.35);
+  background: color-mix(in srgb, var(--theme-panel-soft) 35%, transparent);
 }
 .publisher-edit-dock__title {
   font-size: 12px;
   font-weight: 700;
-  color: #d7fff5;
+  color: var(--theme-text);
 }
 .publisher-edit-dock__file {
   flex: 1;
@@ -12935,7 +11566,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #aebbd5;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 @media (max-width: 700px) {
@@ -12950,10 +11581,10 @@ onBeforeUnmount(() => {
   gap: 7px;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid rgba(128, 145, 190, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(8, 14, 26, 0.55);
-  color: #aebbd5;
+  background: color-mix(in srgb, var(--theme-panel) 55%, transparent);
+  color: var(--theme-text-secondary);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -12961,46 +11592,21 @@ onBeforeUnmount(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #64748b;
+  background: var(--theme-control-hover);
 }
 .publisher-api-chip i.ready {
-  background: #4ade80;
+  background: var(--theme-accent);
 }
 .publisher-api-chip em {
   font-style: normal;
-  color: #8d9db7;
+  color: var(--theme-text-secondary);
 }
 .publisher-api-chip button {
   min-height: 24px !important;
   padding: 0 7px !important;
   border: 0;
   background: transparent;
-  color: #67d7c4;
-  font-size: 10px;
-}
-.publisher-credential-popover {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  align-self: end;
-  margin: -4px 8px 0 auto;
-  padding: 8px 10px;
-  width: min(520px, 100%);
-  box-sizing: border-box;
-  border: 1px solid rgba(128, 145, 190, 0.24);
-  border-radius: 9px;
-  background: #101c2b;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-}
-.publisher-credential-popover input {
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  border: 1px solid #304963;
-  border-radius: 7px;
-  background: #0b1522;
-  color: #eef5ff;
+  color: var(--theme-accent);
   font-size: 10px;
 }
 .publisher-credential-modal {
@@ -13010,17 +11616,17 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(3, 8, 16, 0.68);
+  background: color-mix(in srgb, var(--theme-input) 68%, transparent);
   backdrop-filter: blur(12px);
 }
 .publisher-credential-modal__panel {
   width: min(460px, calc(100vw - 32px));
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--theme-accent, #32d8c0) 22%, var(--theme-border, #304963));
+  border: 1px solid color-mix(in srgb, var(--theme-accent, var(--theme-accent)) 22%, var(--theme-border, var(--theme-border-control)));
   border-radius: 18px;
-  background: linear-gradient(180deg, var(--theme-panel-soft, #101b2a), var(--theme-panel, #0c1522));
+  background: linear-gradient(180deg, var(--theme-panel-soft, var(--theme-panel-soft)), var(--theme-panel, var(--theme-panel)));
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.48);
-  color: var(--theme-text, #eef5ff);
+  color: var(--theme-text, var(--theme-text));
 }
 .publisher-credential-modal__head {
   display: grid;
@@ -13028,7 +11634,7 @@ onBeforeUnmount(() => {
   align-items: start;
   gap: 12px;
   padding: 22px 22px 18px;
-  border-bottom: 1px solid var(--theme-divider, rgba(128, 145, 190, 0.16));
+  border-bottom: 1px solid var(--theme-divider, var(--theme-border));
 }
 .publisher-credential-modal__icon {
   display: grid;
@@ -13036,8 +11642,8 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: var(--theme-accent-soft, rgba(50, 216, 192, 0.13));
-  color: var(--theme-control-selected-text, #75f0dc);
+  background: var(--theme-accent-soft, color-mix(in srgb, var(--theme-accent) 13%, transparent));
+  color: var(--theme-control-selected-text, var(--theme-accent));
 }
 .publisher-credential-modal__head h2 {
   margin: 1px 0 4px;
@@ -13045,7 +11651,7 @@ onBeforeUnmount(() => {
 }
 .publisher-credential-modal__head p {
   margin: 0;
-  color: var(--theme-text-muted, #8fa1ba);
+  color: var(--theme-text-muted, var(--theme-text-secondary));
   font-size: 11px;
 }
 .publisher-credential-modal__close {
@@ -13053,10 +11659,10 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 34px;
   height: 34px;
-  border: 1px solid var(--theme-border-control, #304963);
+  border: 1px solid var(--theme-border-control, var(--theme-border-control));
   border-radius: 9px;
-  background: var(--theme-control, #101f30);
-  color: var(--theme-text-secondary, #c8d6e4);
+  background: var(--theme-control, var(--theme-tone-blue));
+  color: var(--theme-text-secondary, var(--theme-text));
 }
 .publisher-credential-modal__status {
   display: flex;
@@ -13064,23 +11670,23 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin: 18px 22px 0;
   padding: 11px 12px;
-  border: 1px solid rgba(255, 184, 91, 0.24);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-amber) 24%, transparent);
   border-radius: 10px;
-  background: rgba(117, 72, 28, 0.16);
+  background: color-mix(in srgb, var(--theme-tone-amber) 16%, transparent);
 }
 .publisher-credential-modal__status.ready {
-  border-color: rgba(70, 220, 176, 0.25);
-  background: rgba(20, 103, 86, 0.16);
+  border-color: color-mix(in srgb, var(--theme-accent) 25%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
 }
 .publisher-credential-modal__status-dot {
   width: 8px;
   height: 8px;
   flex: none;
   border-radius: 50%;
-  background: #f2b35e;
+  background: var(--theme-tone-amber);
 }
 .publisher-credential-modal__status.ready .publisher-credential-modal__status-dot {
-  background: #4ade80;
+  background: var(--theme-accent);
   box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.12);
 }
 .publisher-credential-modal__status strong,
@@ -13090,7 +11696,7 @@ onBeforeUnmount(() => {
 .publisher-credential-modal__status strong { font-size: 12px; }
 .publisher-credential-modal__status small {
   margin-top: 3px;
-  color: var(--theme-text-muted, #8fa1ba);
+  color: var(--theme-text-muted, var(--theme-text-secondary));
   font-size: 10px;
 }
 .publisher-credential-modal__field {
@@ -13099,7 +11705,7 @@ onBeforeUnmount(() => {
   margin: 20px 22px 0;
 }
 .publisher-credential-modal__field span {
-  color: var(--theme-text-secondary, #c8d6e4);
+  color: var(--theme-text-secondary, var(--theme-text));
   font-size: 11px;
   font-weight: 650;
 }
@@ -13108,19 +11714,19 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   height: 42px;
   padding: 0 12px;
-  border: 1px solid var(--theme-border-control, #304963);
+  border: 1px solid var(--theme-border-control, var(--theme-border-control));
   border-radius: 9px;
   outline: 0;
-  background: var(--theme-input, #0b1522);
-  color: var(--theme-text, #eef5ff);
+  background: var(--theme-input, var(--theme-panel));
+  color: var(--theme-text, var(--theme-text));
 }
 .publisher-credential-modal__field input:focus {
-  border-color: var(--theme-accent, #32d8c0);
+  border-color: var(--theme-accent, var(--theme-accent));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent, #32d8c0) 16%, transparent);
 }
 .publisher-credential-modal__hint {
   margin: 9px 22px 0;
-  color: var(--theme-text-muted, #8fa1ba);
+  color: var(--theme-text-muted, var(--theme-text-secondary));
   font-size: 10px;
 }
 .publisher-credential-modal__actions {
@@ -13130,7 +11736,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-top: 22px;
   padding: 14px 22px 18px;
-  border-top: 1px solid var(--theme-divider, rgba(128, 145, 190, 0.16));
+  border-top: 1px solid var(--theme-divider, var(--theme-border));
 }
 .publisher-credential-modal__actions button {
   min-height: 36px;
@@ -13139,19 +11745,19 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .publisher-credential-modal__danger {
-  border: 1px solid rgba(255, 117, 117, 0.35);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 35%, transparent);
   background: transparent;
-  color: #ff9eaa;
+  color: var(--theme-tone-red);
 }
 .publisher-credential-modal__secondary {
-  border: 1px solid var(--theme-border-control, #304963);
-  background: var(--theme-control, #101f30);
-  color: var(--theme-text-secondary, #c8d6e4);
+  border: 1px solid var(--theme-border-control, var(--theme-border-control));
+  background: var(--theme-control, var(--theme-tone-blue));
+  color: var(--theme-text-secondary, var(--theme-text));
 }
 .publisher-credential-modal__primary {
-  border: 1px solid var(--theme-accent, #32d8c0);
-  background: var(--theme-accent, #32d8c0);
-  color: var(--theme-on-accent, #06231f);
+  border: 1px solid var(--theme-accent, var(--theme-accent));
+  background: var(--theme-accent, var(--theme-accent));
+  color: var(--theme-on-accent, var(--theme-text));
   font-weight: 700;
 }
 @media (max-width: 560px) {
@@ -13167,7 +11773,7 @@ onBeforeUnmount(() => {
   z-index: 120;
   display: grid;
   place-items: center;
-  background: rgba(2, 7, 14, 0.48);
+  background: color-mix(in srgb, var(--theme-input) 48%, transparent);
   backdrop-filter: blur(3px);
 }
 .publisher-drawer {
@@ -13175,8 +11781,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   width: min(560px, calc(100vw - 32px));
   max-height: min(760px, calc(100vh - 48px));
-  background: var(--theme-panel, #0e1a29);
-  border: 1px solid var(--theme-border-control, rgba(128, 145, 190, 0.28));
+  background: var(--theme-panel, var(--theme-panel-soft));
+  border: 1px solid var(--theme-border-control, var(--theme-border));
   border-radius: 16px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
   overflow: hidden;
@@ -13190,7 +11796,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   padding: 20px;
-  border-bottom: 1px solid rgba(128, 145, 190, 0.16);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-drawer-head strong,
 .publisher-drawer-head small {
@@ -13198,7 +11804,7 @@ onBeforeUnmount(() => {
 }
 .publisher-drawer-head strong {
   font-size: 17px;
-  color: #f1f6ff;
+  color: var(--theme-text);
 }
 .publisher-drawer-tag-input {
   display: flex;
@@ -13209,61 +11815,20 @@ onBeforeUnmount(() => {
   flex: 1;
   height: 32px;
   padding: 0 9px;
-  border: 1px solid var(--theme-border-control, #304963);
+  border: 1px solid var(--theme-border-control, var(--theme-border-control));
   border-radius: 7px;
-  background: var(--theme-input, #0d1b2b);
-  color: var(--theme-text, #eef5ff);
+  background: var(--theme-input, var(--theme-panel-soft));
+  color: var(--theme-text, var(--theme-text));
 }
 .publisher-drawer-tag-input button {
   min-width: 56px;
-  border: 1px solid var(--theme-accent, #32d8c0);
+  border: 1px solid var(--theme-accent, var(--theme-accent));
   border-radius: 7px;
-  background: var(--theme-accent, #32d8c0);
-  color: var(--theme-on-accent, #ffffff);
+  background: var(--theme-accent, var(--theme-accent));
+  color: var(--theme-on-accent, var(--theme-text));
 }
 .publisher-selector-overlay {
   z-index: 180 !important;
-}
-.publisher-precheck-status {
-  color: var(--theme-text-muted, #8fa1ba);
-  font-size: 11px;
-  white-space: nowrap;
-}
-.publisher-precheck-status.is-passed { color: #45d7b8; }
-.publisher-precheck-status.is-failed { color: #ff9ba5; }
-.publisher-precheck-status.is-running { color: #f3c969; }
-.publisher-precheck-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--theme-text-muted, #8fa1ba);
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.publisher-precheck-toggle input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--theme-accent, #32d8c0);
-}
-.publisher-design-api-chip {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 8px 0 10px;
-}
-.publisher-design-api-chip button {
-  min-width: 38px;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid rgba(111, 123, 170, 0.28);
-  border-radius: 6px;
-  background: rgba(18, 27, 43, 0.9);
-  color: #dce9f4;
-  font-size: 10px;
-}
-.publisher-design-api-chip button:hover {
-  border-color: rgba(85, 223, 202, 0.56);
-  color: #75f0dc;
 }
 .publisher-selector-overlay .live-subtitle-dialog__panel {
   position: relative;
@@ -13285,7 +11850,7 @@ onBeforeUnmount(() => {
 }
 .publisher-drawer-head small {
   margin-top: 5px;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publisher-drawer-body {
@@ -13324,17 +11889,17 @@ onBeforeUnmount(() => {
   display: flex !important;
   align-items: center;
   gap: 7px;
-  color: #8fa1ba;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-drawer-check input,
 .publisher-drawer-radios input {
-  accent-color: #35d5bf;
+  accent-color: var(--theme-accent);
 }
 .publisher-drawer-radios {
   display: grid;
   gap: 8px;
-  color: #b8c6d8;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publisher-drawer-radios label {
@@ -13347,7 +11912,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid rgba(128, 145, 190, 0.16);
+  border-top: 1px solid var(--theme-border);
   margin-top: auto;
 }
 .publisher-drawer-actions .primary-button {
@@ -13363,653 +11928,13 @@ onBeforeUnmount(() => {
 .publish-mode .publisher-batch-workspace {
   display: none !important;
 }
-.publisher-design-page {
-  height: calc(100vh - 24px);
-  display: grid;
-  grid-template-rows: 64px 48px 42px 48px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid rgba(64, 96, 126, 0.42);
-  border-radius: 12px;
-  background: #091522;
-  color: #eef5ff;
-  overflow: hidden;
-}
-.publisher-design-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 8px;
-}
-.publisher-design-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.publisher-design-logo {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: linear-gradient(145deg, #1ecbb9, #146f7d);
-  color: #d7fffa;
-}
-.publisher-design-title h1 {
-  margin: 0;
-  font-size: 22px;
-}
-.publisher-design-title p {
-  margin: 4px 0 0;
-  color: #8fa8bf;
-  font-size: 11px;
-}
-.publisher-design-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.publisher-design-api {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #27415a;
-  border-radius: 8px;
-  background: #0c1928;
-  color: #c9d7e7;
-  font-size: 11px;
-}
-.publisher-design-api i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #64748b;
-}
-.publisher-design-api i.ready {
-  background: #35d5bf;
-}
-.publisher-design-api small {
-  color: #8fa8bf;
-}
-.publisher-design-api button {
-  border: 0;
-  background: transparent;
-  color: #6ce6d2;
-  font-size: 11px;
-}
-.publisher-design-secondary,
-.publisher-design-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 14px;
-  border-radius: 8px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.publisher-design-secondary {
-  border: 1px solid #2d465f;
-  background: #111f30;
-  color: #dce7f3;
-}
-.publisher-design-primary {
-  border: 1px solid #32d7c0;
-  background: #1ed4c0;
-  color: #06201f;
-  font-weight: 700;
-  box-shadow: 0 6px 18px rgba(31, 212, 192, 0.18);
-}
-.publisher-design-primary:disabled {
-  opacity: 0.5;
-}
-.publisher-design-stats {
-  display: flex;
-  border-top: 1px solid rgba(64, 96, 126, 0.35);
-  border-bottom: 1px solid rgba(64, 96, 126, 0.35);
-}
-.publisher-design-stats > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  padding: 0 14px;
-  border-right: 1px solid rgba(64, 96, 126, 0.35);
-  color: #90a7bd;
-  font-size: 11px;
-}
-.publisher-design-stats > div:last-child {
-  border-right: 0;
-}
-.publisher-design-stats strong {
-  margin-left: 4px;
-  color: #f4f8ff;
-  font-size: 16px;
-}
-.publisher-design-stats .active,
-.publisher-design-stats .active strong {
-  color: #32dbc3;
-}
-.publisher-design-filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 130px 130px 120px auto auto;
-  gap: 8px;
-}
-.publisher-design-filters select,
-.publisher-design-filters button,
-.publisher-design-search {
-  height: 36px;
-  border: 1px solid #29425a;
-  border-radius: 7px;
-  background: #0d1928;
-  color: #dbe7f4;
-  font-size: 11px;
-}
-.publisher-design-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-}
-.publisher-design-search input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #fff;
-}
-.publisher-design-filters button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
-}
-.publisher-design-selection {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  border: 1px solid rgba(55, 211, 190, 0.35);
-  border-radius: 8px;
-  background: #0e2230;
-}
-.publisher-design-selection > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-  color: #d8e8f3;
-  font-size: 11px;
-}
-.publisher-design-selection > div {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-}
-.publisher-design-selection button:not(.publisher-design-primary) {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid #29465f;
-  border-radius: 6px;
-  background: #132538;
-  color: #c7d6e6;
-  font-size: 10px;
-}
-.publisher-design-selection button:not(.publisher-design-primary) small {
-  color: #80cfc1;
-  font-size: 9px;
-}
-.publisher-design-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) 360px;
-  gap: 8px;
-  min-height: 0;
-}
-.publisher-design-list {
-  display: grid;
-  grid-template-rows: 40px minmax(0, 1fr) 38px;
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid rgba(64, 96, 126, 0.42);
-  border-radius: 9px;
-  overflow: hidden;
-  background: #091522;
-}
-.publisher-design-list-head,
-.publisher-design-row {
-  display: grid;
-  grid-template-columns:
-    42px minmax(150px, 1.25fr) minmax(120px, 1fr) minmax(120px, 1fr)
-    108px 112px 88px;
-  gap: 8px;
-  align-items: center;
-}
-.publisher-design-list-head {
-  padding: 0 10px;
-  background: #102236;
-  color: #87a5c1;
-  font-size: 10px;
-}
-.publisher-design-rows {
-  min-height: 0;
-  overflow: auto;
-  padding: 4px;
-}
-.publisher-design-row {
-  min-height: 72px;
-  margin-bottom: 4px;
-  padding: 6px 8px;
-  border: 1px solid rgba(56, 91, 121, 0.42);
-  border-radius: 8px;
-  background: #0b1a29;
-  font-size: 10px;
-}
-.publisher-design-row > label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.publisher-design-row input[type="checkbox"] {
-  accent-color: #30ddc4;
-}
-.publisher-design-video {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.publisher-design-thumb {
-  position: relative;
-  width: 40px;
-  height: 54px;
-  flex: none;
-  overflow: hidden;
-  border-radius: 6px;
-  background: #1b2e44;
-}
-.publisher-design-thumb video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-design-thumb small {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  padding: 1px 3px;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  font-size: 8px;
-}
-.publisher-design-video strong,
-.publisher-design-video span > small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-design-video strong {
-  color: #edf5ff;
-  font-size: 11px;
-}
-.publisher-design-video span > small {
-  margin-top: 4px;
-  color: #8098af;
-  font-size: 9px;
-}
-.publisher-design-title-cell {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-}
-.publisher-design-title-cell span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #dbe7f2;
-}
-.publisher-design-title-cell button,
-.publisher-design-row-actions button {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid #2e4862;
-  border-radius: 6px;
-  background: #102237;
-  color: #aec0d1;
-}
-.publisher-design-product {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: #dbe7f2;
-  text-align: left;
-  font-size: 10px;
-}
-.publisher-design-product span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.publisher-design-product-thumb {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 38px;
-  flex: none;
-  border-radius: 5px;
-  background: #1d334b;
-  color: #8ea7bc;
-}
-.publisher-design-tags {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-.publisher-design-tags span,
-.publisher-design-tags b {
-  padding: 4px 6px;
-  border-radius: 10px;
-  background: #172d44;
-  color: #bdd0e2;
-  font-size: 9px;
-  white-space: nowrap;
-}
-.publisher-design-tags b {
-  background: #223a55;
-}
-.publisher-design-tags .publisher-design-tags-empty {
-  background: transparent;
-  color: #71869a;
-}
-.publisher-design-time {
-  color: #9bb1c5;
-  line-height: 1.35;
-}
-.publisher-design-state {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #bdcddd;
-}
-.publisher-design-state:hover {
-  color: #f0f8ff;
-}
-.publisher-design-state i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #f5c542;
-}
-.publisher-design-state.state-published {
-  color: #4fe0c5;
-}
-.publisher-design-state.state-published i {
-  background: #29d9b9;
-}
-.publisher-design-state.state-failed,
-.publisher-design-state.state-result_unknown {
-  color: #ff9b9b;
-}
-.publisher-design-state.state-failed i,
-.publisher-design-state.state-result_unknown i {
-  background: #f06d77;
-}
-.publisher-design-state.state-draft {
-  color: #b6c6d8;
-}
-.publisher-design-row-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-  gap: 5px;
-}
-.publisher-design-row-actions button {
-  border: 0;
-  background: transparent;
-}
-.publisher-design-pager {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  color: #829ab2;
-  font-size: 10px;
-}
-.publisher-design-pager button,
-.publisher-design-pager select {
-  height: 30px;
-  border: 1px solid #29445d;
-  border-radius: 6px;
-  background: #0f2031;
-  color: #c7d6e5;
-}
-.publisher-design-pager button {
-  width: 30px;
-  display: grid;
-  place-items: center;
-}
-.publisher-design-pager button.active {
-  border-color: #2fd8c0;
-  background: #123e3d;
-  color: #58e7d1;
-}
-.publisher-design-pager__ellipsis,
 .publisher-single-pager__ellipsis {
   display: inline-grid;
   width: 20px;
   height: 30px;
   place-items: center;
-  color: #829ab2;
+  color: var(--theme-text-secondary);
   letter-spacing: 0;
-}
-.publisher-design-pager select {
-  margin-left: 8px;
-  padding: 0 8px;
-}
-.publisher-design-pager span {
-  margin-left: auto;
-}
-.publisher-design-editor {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 14px;
-  border: 1px solid rgba(64, 96, 126, 0.42);
-  border-radius: 9px;
-  background: #0b1a29;
-  overflow: auto;
-}
-.publisher-design-editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.3);
-}
-.publisher-design-editor-head > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.publisher-design-editor-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.publisher-design-editor-head p {
-  margin: 4px 0 0;
-  color: #8fa8bf;
-  font-size: 10px;
-}
-.publisher-design-preview {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 12px 0;
-}
-.publisher-design-preview-thumb {
-  width: 42px;
-  height: 52px;
-  overflow: hidden;
-  border-radius: 5px;
-  background: #1b2e44;
-}
-.publisher-design-preview-thumb video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.publisher-design-preview > span {
-  padding: 12px 8px;
-  border-radius: 5px;
-  background: #13283e;
-  color: #b9ccdd;
-  font-size: 11px;
-}
-.publisher-design-preview button {
-  margin-left: auto;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid #2c4963;
-  border-radius: 6px;
-  background: #102237;
-  color: #dbe7f2;
-  font-size: 10px;
-}
-.publisher-design-hint {
-  margin: 2px 0 10px;
-  color: #d7e4ef;
-  font-size: 11px;
-}
-.publisher-design-hint small {
-  margin-left: 5px;
-  color: #7f98ae;
-  font-size: 9px;
-}
-.publisher-design-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  color: #d4e1ec;
-  font-size: 11px;
-  border-top: 1px solid rgba(64, 96, 126, 0.18);
-}
-.publisher-design-check input {
-  accent-color: #32d8c0;
-}
-.publisher-design-field {
-  display: grid;
-  gap: 6px;
-  padding: 4px 0 8px;
-}
-.publisher-design-field input,
-.publisher-design-field textarea,
-.publisher-design-select {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 34px;
-  padding: 0 9px;
-  border: 1px solid #2b4862;
-  border-radius: 6px;
-  background: #0d1b2b;
-  color: #eef5ff;
-  font-size: 10px;
-}
-.publisher-design-field textarea {
-  padding-top: 8px;
-  resize: vertical;
-}
-.publisher-design-field small {
-  color: #7f98ae;
-  font-size: 9px;
-}
-.publisher-sequence-interval {
-  display: grid;
-  grid-template-columns: auto 72px auto;
-  align-items: center;
-  justify-content: start;
-  gap: 8px;
-  color: #96abc0;
-  font-size: 10px;
-}
-.publisher-sequence-interval input {
-  min-height: 30px;
-}
-.publisher-design-radio {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: #96abc0;
-  font-size: 9px;
-}
-.publisher-design-radio label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.publisher-design-tags.editor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.publisher-design-tags.editor button {
-  padding: 5px 7px;
-  border: 1px solid #29445d;
-  border-radius: 6px;
-  background: #14283c;
-  color: #c8d7e5;
-  font-size: 9px;
-}
-.publisher-design-select {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  justify-content: flex-start;
-}
-.publisher-design-apply {
-  display: flex;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid rgba(64, 96, 126, 0.3);
-}
-.publisher-design-apply button:first-child {
-  width: 88px;
-  height: 40px;
-  border: 1px solid #2b4862;
-  border-radius: 7px;
-  background: #102133;
-  color: #d4e1ec;
-}
-.publisher-design-apply .publisher-design-primary {
-  flex: 1;
 }
 .publish-mode .publisher-single-main {
   grid-template-columns: minmax(0, 3fr) minmax(320px, 1fr) !important;
@@ -14018,14 +11943,14 @@ onBeforeUnmount(() => {
   display: flex !important;
   gap: 0 !important;
   min-height: 52px !important;
-  border-bottom: 1px solid rgba(74, 107, 139, 0.24);
+  border-bottom: 1px solid var(--theme-border);
   background: transparent !important;
 }
 .publish-mode .publisher-single-stats > div {
   flex: 1;
   min-height: 52px !important;
   border: 0 !important;
-  border-right: 1px solid rgba(74, 107, 139, 0.24) !important;
+  border-right: 1px solid var(--theme-border) !important;
   border-radius: 0 !important;
   background: transparent !important;
   padding: 0 14px !important;
@@ -14034,7 +11959,7 @@ onBeforeUnmount(() => {
   border-right: 0 !important;
 }
 .publish-mode .publisher-single-stats > div.selected {
-  color: #61e6d0 !important;
+  color: var(--theme-accent) !important;
 }
 .publish-mode .publisher-single-filters {
   grid-template-columns:
@@ -14055,16 +11980,16 @@ onBeforeUnmount(() => {
   height: 32px !important;
 }
 .publish-mode .publisher-single-edit {
-  border-left: 1px solid rgba(74, 107, 139, 0.24);
+  border-left: 1px solid var(--theme-border);
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
   border-radius: 0;
-  background: #0b1725 !important;
+  background: var(--theme-panel) !important;
 }
 .publish-mode .publisher-single-edit-head {
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(74, 107, 139, 0.2);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publish-mode .publisher-edit-tabs button {
   font-size: 10px;
@@ -14075,18 +12000,18 @@ onBeforeUnmount(() => {
   box-shadow: none !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
-  color: #dbe8f5 !important;
+  color: var(--theme-text) !important;
 }
 .publish-mode .publisher-single-row > input:hover,
 .publish-mode .publisher-single-row > input:focus {
-  background: #0b1522 !important;
-  border-color: #304963 !important;
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
   padding-left: 8px !important;
   padding-right: 8px !important;
 }
 .publish-mode .publisher-single-page {
-  background: #091522 !important;
-  border-color: rgba(64, 96, 126, 0.42) !important;
+  background: var(--theme-panel) !important;
+  border-color: var(--theme-border-control) !important;
   gap: 8px !important;
   padding: 8px !important;
 }
@@ -14117,8 +12042,8 @@ onBeforeUnmount(() => {
   min-height: 48px !important;
   display: flex !important;
   align-items: stretch !important;
-  border-top: 1px solid rgba(64, 96, 126, 0.32) !important;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.32) !important;
+  border-top: 1px solid var(--theme-border-control) !important;
+  border-bottom: 1px solid var(--theme-border-control) !important;
 }
 .publish-mode .publisher-single-stats > div {
   height: 48px !important;
@@ -14126,10 +12051,10 @@ onBeforeUnmount(() => {
   justify-content: flex-start !important;
   gap: 8px !important;
   padding: 0 14px !important;
-  color: #9bb0c6 !important;
+  color: var(--theme-text-secondary) !important;
 }
 .publish-mode .publisher-single-stats > div.selected {
-  color: #39e1c7 !important;
+  color: var(--theme-accent) !important;
 }
 .publish-mode .publisher-single-stats span {
   display: flex !important;
@@ -14140,7 +12065,7 @@ onBeforeUnmount(() => {
 }
 .publish-mode .publisher-single-stats strong {
   font-size: 16px !important;
-  color: #f1f7ff !important;
+  color: var(--theme-text) !important;
 }
 .publish-mode .publisher-single-filters {
   height: 42px !important;
@@ -14159,27 +12084,27 @@ onBeforeUnmount(() => {
   gap: 8px !important;
 }
 .publish-mode .publisher-single-list {
-  border-color: rgba(64, 96, 126, 0.42) !important;
+  border-color: var(--theme-border-control) !important;
   border-radius: 9px !important;
 }
 .publish-mode .publisher-single-list-head {
   min-height: 40px !important;
-  background: #102236 !important;
-  color: #87a5c1 !important;
+  background: var(--theme-tone-blue) !important;
+  color: var(--theme-text-secondary) !important;
 }
 .publish-mode .publisher-single-row {
   min-height: 72px !important;
   margin-bottom: 4px !important;
   padding: 6px 8px !important;
-  border-color: rgba(56, 91, 121, 0.42) !important;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 42%, transparent) !important;
   border-radius: 8px !important;
-  background: #0b1a29 !important;
+  background: var(--theme-panel-soft) !important;
 }
 .publish-mode .publisher-single-row > input {
   background: transparent !important;
   border: 1px solid transparent !important;
   box-shadow: none !important;
-  color: #e5eef9 !important;
+  color: var(--theme-text) !important;
 }
 .publish-mode .publisher-single-edit {
   display: flex !important;
@@ -14187,9 +12112,9 @@ onBeforeUnmount(() => {
   max-width: 360px !important;
   min-width: 360px !important;
   padding: 14px !important;
-  border: 1px solid rgba(64, 96, 126, 0.42) !important;
+  border: 1px solid var(--theme-border-control) !important;
   border-radius: 9px !important;
-  background: #0b1a29 !important;
+  background: var(--theme-panel-soft) !important;
 }
 .publish-mode .publisher-single-edit-head strong {
   font-size: 16px !important;
@@ -14205,10 +12130,9 @@ onBeforeUnmount(() => {
   min-height: 48px !important;
   padding: 6px 8px !important;
   border-radius: 8px !important;
-  background: #0e2230 !important;
-  border-color: rgba(55, 211, 190, 0.34) !important;
+  background: var(--theme-tone-blue) !important;
+  border-color: color-mix(in srgb, var(--theme-accent) 34%, transparent) !important;
 }
-.publisher-design-radio label,
 .publisher-drawer-radios label {
   position: relative;
   display: inline-flex;
@@ -14217,7 +12141,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
   user-select: none;
 }
-.publisher-design-radio input[type="radio"],
 .publisher-drawer-radios input[type="radio"] {
   position: absolute !important;
   width: 1px !important;
@@ -14228,37 +12151,31 @@ onBeforeUnmount(() => {
   opacity: 0 !important;
   pointer-events: none !important;
 }
-.publisher-design-radio label::before,
 .publisher-drawer-radios label::before {
   content: "";
   flex: 0 0 14px;
   width: 14px;
   height: 14px;
   box-sizing: border-box;
-  border: 1px solid #70849a;
+  border: 1px solid var(--theme-border-control);
   border-radius: 50%;
-  background: #0d1b2b;
+  background: var(--theme-panel-soft);
   box-shadow: none;
 }
-.publisher-design-radio label:has(input[type="radio"]:checked)::before,
 .publisher-drawer-radios label:has(input[type="radio"]:checked)::before {
-  border-color: #32d8c0 !important;
-  background: radial-gradient(circle, #32d8c0 0 3px, #0d1b2b 4px) !important;
+  border-color: var(--theme-accent) !important;
+  background: radial-gradient(circle, var(--theme-accent) 0 3px, var(--theme-panel-soft) 4px) !important;
 }
-.publisher-design-radio label:has(input[type="radio"]:checked),
 .publisher-drawer-radios label:has(input[type="radio"]:checked) {
-  color: #dce9f4;
+  color: var(--theme-text);
 }
-.publisher-design-radio input[type="radio"]:focus-visible,
 .publisher-drawer-radios input[type="radio"]:focus-visible {
   outline: 0;
 }
-.publisher-design-radio label:has(input[type="radio"]:focus-visible)::before,
 .publisher-drawer-radios label:has(input[type="radio"]:focus-visible)::before {
-  outline: 2px solid rgba(50, 216, 192, 0.45);
+  outline: 2px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
   outline-offset: 2px;
 }
-.publisher-design-check input[type="checkbox"],
 .publisher-drawer-check input[type="checkbox"] {
   width: 14px !important;
   height: 14px !important;
@@ -14266,98 +12183,8 @@ onBeforeUnmount(() => {
   min-height: 14px !important;
   margin: 0;
 }
-.publisher-design-page ~ .publisher-drawer-backdrop {
-  display: none !important;
-}
 .publish-mode {
   overflow: hidden !important;
-}
-.publish-mode .publisher-design-page {
-  height: calc(100vh - 104px) !important;
-  max-height: calc(100vh - 104px) !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-page {
-  display: flex !important;
-  flex-direction: column !important;
-}
-.publish-mode .publisher-design-head,
-.publish-mode .publisher-design-stats,
-.publish-mode .publisher-design-filters,
-.publish-mode .publisher-design-selection {
-  flex: none !important;
-}
-.publish-mode .publisher-design-workspace {
-  display: grid !important;
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-list {
-  display: grid !important;
-  height: 100% !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  display: flex !important;
-  height: 100% !important;
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  position: relative !important;
-  padding-bottom: 72px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-.publish-mode .publisher-design-apply {
-  position: absolute !important;
-  left: 14px !important;
-  right: 14px !important;
-  bottom: 0 !important;
-  margin: 0 !important;
-  padding: 12px 0 !important;
-  background: #0b1a29 !important;
-  z-index: 5 !important;
-}
-.publish-mode .publisher-design-editor-head,
-.publish-mode .publisher-design-preview,
-.publish-mode .publisher-design-hint,
-.publish-mode .publisher-design-check,
-.publish-mode .publisher-design-field {
-  flex: none !important;
-}
-.publish-mode .publisher-design-editor .publisher-design-apply {
-  flex: none !important;
-  position: sticky !important;
-  bottom: 0 !important;
-}
-.publish-mode .publisher-design-workspace {
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-list,
-.publish-mode .publisher-design-editor {
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-.publish-mode .publisher-design-editor {
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-editor > *:not(.publisher-design-apply) {
-  flex-shrink: 0;
-}
-.publish-mode .publisher-design-apply {
-  position: sticky;
-  bottom: 0;
-  background: #0b1a29;
-  z-index: 3;
-}
-.publish-mode .publisher-design-rows {
-  min-height: 0 !important;
-  overflow-y: auto !important;
 }
 .tiktok-page.publish-mode {
   height: calc(100vh - 76px) !important;
@@ -14365,189 +12192,6 @@ onBeforeUnmount(() => {
   padding: 8px 10px !important;
   overflow: hidden !important;
   box-sizing: border-box !important;
-}
-.publish-mode .publisher-design-page {
-  height: 100% !important;
-  max-height: none !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-}
-.publish-mode .publisher-design-workspace {
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-.publish-mode .publisher-design-list {
-  min-height: 0 !important;
-}
-.publish-mode .publisher-design-editor {
-  min-height: 0 !important;
-}
-.publisher-design-page {
-  position: relative;
-  z-index: 2;
-}
-.publisher-design-workspace {
-  min-height: 420px !important;
-  height: auto !important;
-}
-.publisher-design-list,
-.publisher-design-editor {
-  min-height: 420px !important;
-}
-.publisher-design-rows {
-  min-height: 320px !important;
-}
-.publisher-editor-preview-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid #2c4963;
-  border-radius: 7px;
-  background: #102237;
-  color: #dbe7f2;
-  font-size: 10px;
-}
-.publisher-editor-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin: 0 -6px 8px;
-  border-radius: 6px;
-  background: #10243a;
-}
-.publisher-editor-tabs button {
-  height: 34px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: #8fa7bd;
-  font-size: 11px;
-}
-.publisher-editor-tabs button.active {
-  border-bottom-color: #2fe0c5;
-  color: #39e7cd;
-}
-.publisher-editor-apply-mode {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 12px 0 8px;
-  border-top: 1px solid rgba(64, 96, 126, 0.3);
-}
-.publisher-editor-apply-mode > strong {
-  font-size: 11px;
-  color: #d8e5ef;
-}
-.publish-mode .publisher-design-editor {
-  padding-bottom: 76px !important;
-}
-.publish-mode .publisher-design-editor {
-  padding-bottom: 14px !important;
-  overflow-y: auto !important;
-}
-.publish-mode .publisher-design-apply {
-  position: static !important;
-  left: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  margin-top: 12px !important;
-  flex-shrink: 0 !important;
-}
-.publish-mode .publisher-design-apply {
-  display: grid !important;
-  grid-template-columns: 80px 96px minmax(0, 1fr) !important;
-  gap: 8px !important;
-  left: 8px !important;
-  right: 8px !important;
-  padding: 10px 0 !important;
-}
-.publish-mode .publisher-design-apply > button {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 6px !important;
-  box-sizing: border-box !important;
-  width: auto !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  min-width: 0 !important;
-  padding: 0 8px !important;
-  border: 1px solid #2b4862;
-  border-radius: 7px;
-  background: #102133;
-  color: #d4e1ec;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  line-height: 1 !important;
-  box-shadow: none !important;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-apply > button:hover {
-  border-color: #426681;
-  background: #14283b;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button {
-  border-color: #2fe0c5 !important;
-  background: #28dac3 !important;
-  color: #061e1d !important;
-  font-weight: 700 !important;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button:hover {
-  border-color: #53ead5 !important;
-  background: #3ce1ca !important;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button:disabled {
-  opacity: 0.45;
-}
-.publish-mode .publisher-design-apply .publisher-submit-button {
-  min-width: 150px !important;
-  width: auto !important;
-  height: 36px !important;
-  min-height: 36px !important;
-  padding: 0 14px !important;
-  border-radius: 8px !important;
-  font-size: 12px !important;
-  gap: 6px !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-editor-tabs-single {
-  min-height: 34px !important;
-  border-bottom: 1px solid rgba(86, 112, 139, 0.28) !important;
-}
-.publish-mode .publisher-editor-tabs-single span {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 4px;
-  color: #72e0cb;
-  font-size: 12px;
-  font-weight: 700;
-}
-.publish-mode .publisher-schedule-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin-top: 8px;
-  padding: 0 10px;
-  border: 1px solid rgba(86, 112, 139, 0.42);
-  border-radius: 7px;
-  background: #0d1a28;
-  color: #72e0cb;
-}
-.publish-mode .publisher-schedule-input input[type="datetime-local"] {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: #e5eef6;
-  color-scheme: dark;
-  font-size: 12px;
-}
-.publish-mode .publisher-schedule-input input[type="datetime-local"]:focus {
-  outline: none;
 }
 .publisher-delete-modal {
   position: fixed;
@@ -14557,7 +12201,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(3, 8, 15, 0.72);
+  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
   backdrop-filter: blur(8px);
 }
 .publisher-confirm-modal {
@@ -14568,7 +12212,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(2, 8, 16, 0.76);
+  background: color-mix(in srgb, var(--theme-input) 76%, transparent);
   backdrop-filter: blur(10px);
 }
 .publisher-confirm-modal__panel {
@@ -14576,9 +12220,9 @@ onBeforeUnmount(() => {
   width: min(480px, 100%);
   overflow: hidden;
   padding: 26px;
-  border: 1px solid rgba(84, 224, 204, 0.32);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 32%, transparent);
   border-radius: 20px;
-  background: linear-gradient(145deg, #142c40 0%, #0a1727 72%);
+  background: linear-gradient(145deg, var(--theme-tone-blue) 0%, var(--theme-panel) 72%);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(91, 231, 211, 0.07);
 }
 .publisher-confirm-modal__glow {
@@ -14588,7 +12232,7 @@ onBeforeUnmount(() => {
   width: 210px;
   height: 180px;
   border-radius: 50%;
-  background: rgba(63, 214, 192, 0.16);
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
   filter: blur(34px);
   pointer-events: none;
 }
@@ -14600,35 +12244,35 @@ onBeforeUnmount(() => {
   width: 48px;
   height: 48px;
   margin-bottom: 18px;
-  border: 1px solid rgba(101, 237, 215, 0.36);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 36%, transparent);
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(47, 189, 169, 0.28), rgba(25, 94, 103, 0.18));
-  color: #72f2dc;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 28%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
+  color: var(--theme-accent);
 }
 .publisher-confirm-modal__content {
   position: relative;
 }
 .publisher-confirm-modal__eyebrow {
   margin-bottom: 7px;
-  color: #5ee3cc;
+  color: var(--theme-accent);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
 .publisher-confirm-modal__content h3 {
   margin: 0;
-  color: #f4fbff;
+  color: var(--theme-text);
   font-size: 21px;
   font-weight: 750;
 }
 .publisher-confirm-modal__content p {
   margin: 10px 0 16px;
-  color: #b7c9d9;
+  color: var(--theme-text-secondary);
   font-size: 13px;
   line-height: 1.65;
 }
 .publisher-confirm-modal__content p strong {
-  color: #75f0dc;
+  color: var(--theme-accent);
   font-size: 16px;
 }
 .publisher-confirm-modal__notice {
@@ -14636,17 +12280,17 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 9px;
   padding: 11px 12px;
-  border: 1px solid rgba(94, 157, 177, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(8, 24, 38, 0.56);
-  color: #91aec1;
+  background: color-mix(in srgb, var(--theme-panel) 56%, transparent);
+  color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 1.5;
 }
 .publisher-confirm-modal__notice svg {
   flex: 0 0 auto;
   margin-top: 1px;
-  color: #6ce6d0;
+  color: var(--theme-accent);
 }
 .publisher-confirm-modal__actions {
   position: relative;
@@ -14661,34 +12305,34 @@ onBeforeUnmount(() => {
   gap: 7px;
   flex: 1;
   height: 40px;
-  border: 1px solid rgba(109, 140, 163, 0.42);
+  border: 1px solid var(--theme-border-control);
   border-radius: 9px;
-  background: rgba(25, 43, 61, 0.86);
-  color: #d5e3ed;
+  background: color-mix(in srgb, var(--theme-tone-blue) 86%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 12px;
   font-weight: 700;
   transition: 0.18s ease;
 }
 .publisher-confirm-modal__actions button:hover {
-  border-color: rgba(112, 232, 211, 0.6);
-  background: rgba(35, 62, 79, 0.96);
+  border-color: color-mix(in srgb, var(--theme-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 96%, transparent);
 }
 .publisher-confirm-modal__actions button.primary {
-  border-color: rgba(99, 239, 216, 0.72);
-  background: linear-gradient(135deg, #32bda9, #198c91);
-  color: #f3fffd;
+  border-color: color-mix(in srgb, var(--theme-accent) 72%, transparent);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
   box-shadow: 0 8px 22px rgba(24, 166, 151, 0.24);
 }
 .publisher-confirm-modal__actions button.primary:hover {
-  background: linear-gradient(135deg, #43d7bf, #20a2a0);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
   transform: translateY(-1px);
 }
 .publisher-delete-modal__panel {
   width: min(420px, 100%);
   padding: 22px;
-  border: 1px solid rgba(104, 132, 160, 0.42);
+  border: 1px solid var(--theme-border-control);
   border-radius: 16px;
-  background: linear-gradient(155deg, #13283b 0%, #0b1725 100%);
+  background: linear-gradient(155deg, var(--theme-tone-blue) 0%, var(--theme-panel) 100%);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(50, 224, 196, 0.08);
 }
 .publisher-delete-modal__icon {
@@ -14698,27 +12342,27 @@ onBeforeUnmount(() => {
   width: 42px;
   height: 42px;
   margin-bottom: 14px;
-  border: 1px solid rgba(255, 112, 112, 0.36);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 36%, transparent);
   border-radius: 12px;
-  background: rgba(180, 52, 62, 0.16);
-  color: #ff8585;
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  color: var(--theme-tone-red);
 }
 .publisher-delete-modal__content h3 {
   margin: 0;
-  color: #f3f7fb;
+  color: var(--theme-text);
   font-size: 17px;
   font-weight: 700;
 }
 .publisher-delete-modal__content p {
   margin: 8px 0 6px;
-  color: #b9c8d7;
+  color: var(--theme-text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
 .publisher-delete-modal__content small {
   display: block;
   overflow: hidden;
-  color: #78dbc9;
+  color: var(--theme-accent);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14731,24 +12375,24 @@ onBeforeUnmount(() => {
 .publisher-delete-modal__actions button {
   flex: 1;
   height: 38px;
-  border: 1px solid rgba(100, 127, 153, 0.45);
+  border: 1px solid var(--theme-border-control);
   border-radius: 8px;
-  background: #172537;
-  color: #d9e5ef;
+  background: var(--theme-tone-blue);
+  color: var(--theme-tone-blue);
   font-size: 13px;
   font-weight: 650;
 }
 .publisher-delete-modal__actions button:hover {
-  border-color: rgba(123, 224, 207, 0.65);
-  background: #1c3045;
+  border-color: color-mix(in srgb, var(--theme-accent) 65%, transparent);
+  background: var(--theme-tone-blue);
 }
 .publisher-delete-modal__actions button.danger {
-  border-color: rgba(255, 112, 112, 0.68);
-  background: #b84552;
-  color: #fff;
+  border-color: color-mix(in srgb, var(--theme-tone-red) 68%, transparent);
+  background: var(--theme-tone-red);
+  color: var(--theme-text);
 }
 .publisher-delete-modal__actions button.danger:hover {
-  background: #d25864;
+  background: var(--theme-tone-red);
 }
 .publisher-status-modal {
   position: fixed;
@@ -14758,7 +12402,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(3, 8, 15, 0.68);
+  background: color-mix(in srgb, var(--theme-input) 68%, transparent);
   backdrop-filter: blur(7px);
 }
 .publisher-status-modal__panel {
@@ -14766,9 +12410,9 @@ onBeforeUnmount(() => {
   max-height: min(620px, 90vh);
   overflow: auto;
   padding: 20px;
-  border: 1px solid rgba(93, 143, 166, 0.42);
+  border: 1px solid var(--theme-border-control);
   border-radius: 14px;
-  background: #102235;
+  background: var(--theme-tone-blue);
   box-shadow: 0 24px 74px rgba(0, 0, 0, 0.48);
 }
 .publisher-status-modal__header {
@@ -14782,21 +12426,21 @@ onBeforeUnmount(() => {
   width: 38px;
   height: 38px;
   flex: 0 0 auto;
-  border: 1px solid rgba(112, 229, 208, 0.3);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
   border-radius: 10px;
-  background: rgba(35, 157, 143, 0.16);
-  color: #72e7d1;
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-accent);
 }
 .publisher-status-modal__icon.state-failed,
 .publisher-status-modal__icon.state-result_unknown {
-  border-color: rgba(255, 126, 126, 0.36);
-  background: rgba(180, 52, 62, 0.16);
-  color: #ff9696;
+  border-color: color-mix(in srgb, var(--theme-tone-red) 36%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  color: var(--theme-tone-red);
 }
 .publisher-status-modal__icon.state-draft {
-  border-color: rgba(126, 163, 194, 0.38);
-  background: rgba(76, 111, 142, 0.16);
-  color: #aec6dc;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 38%, transparent);
+  background: color-mix(in srgb, var(--theme-control-hover) 16%, transparent);
+  color: var(--theme-tone-blue);
 }
 .publisher-status-modal__header > div:nth-child(2) {
   min-width: 0;
@@ -14804,14 +12448,14 @@ onBeforeUnmount(() => {
 }
 .publisher-status-modal__eyebrow {
   margin-bottom: 3px;
-  color: #74d8c6;
+  color: var(--theme-accent);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.15em;
 }
 .publisher-status-modal__header h3 {
   margin: 0;
-  color: #f2f8fc;
+  color: var(--theme-text);
   font-size: 18px;
 }
 .publisher-status-modal__close {
@@ -14820,23 +12464,23 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  border: 1px solid rgba(108, 143, 165, 0.4);
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
   background: transparent;
-  color: #b9cbd8;
+  color: var(--theme-text);
 }
 .publisher-status-modal__close:hover {
-  border-color: rgba(116, 226, 207, 0.66);
-  color: #f0fffb;
+  border-color: color-mix(in srgb, var(--theme-accent) 66%, transparent);
+  color: var(--theme-text);
 }
 .publisher-status-modal__file {
   margin-top: 18px;
   padding: 10px 11px;
   overflow: hidden;
-  border: 1px solid rgba(89, 128, 151, 0.28);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(8, 20, 33, 0.52);
-  color: #e3eef5;
+  background: color-mix(in srgb, var(--theme-panel) 52%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14850,18 +12494,18 @@ onBeforeUnmount(() => {
 .publisher-status-modal__details > div {
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid rgba(89, 128, 151, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(16, 39, 58, 0.7);
+  background: color-mix(in srgb, var(--theme-tone-blue) 70%, transparent);
 }
 .publisher-status-modal__details dt {
-  color: #87a5b9;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-status-modal__details dd {
   margin: 4px 0 0;
   overflow: hidden;
-  color: #dcebf3;
+  color: var(--theme-text);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14872,10 +12516,10 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-top: 14px;
   padding: 10px 11px;
-  border: 1px solid rgba(255, 126, 126, 0.3);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 30%, transparent);
   border-radius: 8px;
-  background: rgba(127, 29, 29, 0.16);
-  color: #ffb0b0;
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  color: var(--theme-tone-red);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -14897,283 +12541,16 @@ onBeforeUnmount(() => {
   min-width: 82px;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid rgba(104, 151, 161, 0.45);
+  border: 1px solid var(--theme-border-control);
   border-radius: 7px;
-  background: #173246;
-  color: #d9edf0;
+  background: var(--theme-tone-blue);
+  color: var(--theme-accent);
   font-size: 11px;
   font-weight: 650;
 }
 .publisher-status-modal__actions button:hover {
-  border-color: rgba(116, 226, 207, 0.66);
-  background: #1c4050;
-}
-.publish-mode .publisher-design-apply {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
-.publish-mode .publisher-design-apply > button {
-  width: 100% !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button {
-  border-color: #32d7c0 !important;
-  background: #1ed4c0 !important;
-  color: #06201f !important;
-  box-shadow: 0 6px 16px rgba(31, 212, 192, 0.16) !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button:hover:not(:disabled) {
-  border-color: #70ead9 !important;
-  background: #32d7c0 !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-button.publisher-submit-button:disabled {
-  border-color: #315b62 !important;
-  background: #1a3d43 !important;
-  color: #7da9a6 !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-}
-.publish-mode .publisher-design-preview {
-  margin: 10px 0 !important;
-  padding: 0 !important;
-}
-.publish-mode .publisher-design-check {
-  min-height: 28px !important;
-}
-.publish-mode .publisher-design-field {
-  padding-bottom: 7px !important;
-}
-.publish-mode .publisher-design-page {
-  gap: 6px !important;
-  padding: 6px !important;
-  border-radius: 10px !important;
-}
-.publish-mode .publisher-design-head {
-  height: 60px !important;
-  min-height: 60px !important;
-  padding: 0 8px !important;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.34);
-}
-.publisher-design-body {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
-  gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-.publisher-design-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.publish-mode .publisher-design-stats {
-  flex: none !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  border: 0 !important;
-}
-.publish-mode .publisher-design-stats > div {
-  height: 40px !important;
-  min-height: 40px !important;
-  padding: 0 10px !important;
-  border-right: 1px solid rgba(64, 96, 126, 0.24) !important;
-}
-.publish-mode .publisher-design-stats > div:first-child {
-  border-bottom: 2px solid #2dd8bf !important;
-}
-.publish-mode .publisher-design-stats strong {
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: #173249;
-  font-size: 11px !important;
-}
-.publish-mode .publisher-design-filters {
-  grid-template-columns:
-    minmax(190px, 1fr)
-    104px 104px 104px 108px 74px 74px !important;
-  flex: none !important;
-  height: 38px !important;
-}
-.publish-mode .publisher-design-selection {
-  flex: none !important;
-  min-height: 44px !important;
-  gap: 10px !important;
-  padding: 5px 10px !important;
-}
-.publish-mode .publisher-design-selection > span {
-  flex: 0 0 auto;
-  margin-right: 2px;
-}
-.publish-mode .publisher-design-selection > div {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.publish-mode .publisher-design-selection > div button {
-  flex: 0 0 auto;
-  min-width: 76px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-selection .publisher-selection-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  min-width: 58px;
-  padding: 0 8px;
-  border: 1px solid #2d526b;
-  border-radius: 6px;
-  background: #12293b;
-  color: #b9d0df;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-selection .publisher-selection-toggle:hover {
-  border-color: #3d768d;
-  background: #17364a;
-  color: #eef7fc;
-}
-.publish-mode .publisher-design-selection > .publisher-submit-button {
-  flex: 0 0 auto;
-  min-width: 124px;
-  height: 32px;
-  margin-left: auto;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 11px !important;
-  box-shadow: none !important;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-list {
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 0 !important;
-  border-radius: 7px !important;
-}
-.publish-mode .publisher-design-editor {
-  width: auto !important;
-  max-width: none !important;
-  min-width: 0 !important;
-  height: 100% !important;
-  padding: 10px !important;
-  border-radius: 7px !important;
-  overflow-y: auto !important;
-}
-.publish-mode .publisher-design-row {
-  min-height: 64px !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.25) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-}
-.publish-mode .publisher-design-row:hover {
-  background: rgba(18, 42, 61, 0.62) !important;
-}
-@media (max-width: 1180px) {
-  .publisher-design-body {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-  .publish-mode .publisher-design-filters {
-    grid-template-columns:
-      minmax(140px, 1fr)
-      78px 78px 78px 82px 54px 54px !important;
-    gap: 6px !important;
-  }
-  .publish-mode .publisher-design-list-head,
-  .publish-mode .publisher-design-row {
-    grid-template-columns:
-      32px minmax(120px, 1.2fr) minmax(85px, 0.8fr) minmax(90px, 0.9fr)
-      70px 92px 70px !important;
-    gap: 6px !important;
-  }
-  .publish-mode .publisher-design-row {
-    padding-right: 6px !important;
-    padding-left: 6px !important;
-  }
-  .publish-mode .publisher-design-tags {
-    gap: 2px;
-  }
-  .publish-mode .publisher-design-tags span:nth-child(n + 2) {
-    display: none;
-  }
-}
-.publish-mode .publisher-design-page {
-  background: #08131f !important;
-  border-color: rgba(42, 70, 96, 0.58) !important;
-}
-.publish-mode .publisher-design-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 0;
-  background: rgba(18, 201, 183, 0.11);
-  color: #1dd6c1;
-  box-shadow: none;
-}
-.publish-mode .publisher-design-title {
-  gap: 14px;
-}
-.publish-mode .publisher-design-title h1 {
-  color: #f4f8fc;
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-.publish-mode .publisher-design-title p {
-  margin-top: 5px;
-  color: #7890a8;
-  font-size: 11px;
-  line-height: 1.2;
-}
-.publish-mode .publisher-design-actions {
-  gap: 10px;
-}
-.publish-mode .publisher-design-actions button {
-  height: 38px;
-  min-width: 108px;
-  padding: 0 14px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.publish-mode .publisher-design-actions .publisher-design-secondary {
-  border-color: #263b50 !important;
-  background: #101d2c !important;
-  color: #d8e3ee !important;
-  font-weight: 600 !important;
-}
-.publish-mode .publisher-design-actions .publisher-design-primary {
-  min-width: 142px;
-  border-color: #19dcca !important;
-  background: #21ddcb !important;
-  color: #052521 !important;
-  box-shadow: none !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-actions .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, #ffffff) !important;
-  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--theme-accent) 66%, transparent);
+  background: var(--theme-accent);
 }
 .publisher-source-tabs {
   display: flex;
@@ -15181,7 +12558,7 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
   margin: 14px 18px 0;
   padding: 4px;
   border-radius: 6px;
-  background: #0b1724;
+  background: var(--theme-panel);
 }
 .publisher-source-tabs button {
   flex: 1;
@@ -15189,13 +12566,13 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #8196aa;
+  color: var(--theme-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
 .publisher-source-tabs button.active {
-  background: #142738;
-  color: #35dfca;
+  background: var(--theme-tone-blue);
+  color: var(--theme-accent);
 }
 .publisher-picker-pagination {
   display: flex;
@@ -15203,8 +12580,8 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
   justify-content: space-between;
   min-height: 42px;
   padding: 6px 18px;
-  border-top: 1px solid rgba(64, 96, 126, 0.28);
-  color: #7f95aa;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .publisher-picker-pagination > div {
@@ -15217,65 +12594,13 @@ html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-d
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid #29425a;
+  border: 1px solid var(--theme-tone-blue);
   border-radius: 5px;
-  background: #0d1928;
-  color: #dbe7f4;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
 }
 .publisher-picker-pagination button:disabled {
   opacity: 0.35;
-}
-.publish-mode .publisher-design-actions .publisher-music-library-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 112px;
-  border: 1px solid #8978e8;
-  background: #6756c7;
-  color: #ffffff;
-  font-weight: 700;
-  line-height: 1;
-}
-.publish-mode .publisher-design-actions .publisher-music-library-button:hover {
-  border-color: #a497f1;
-  background: #7463d4;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-  .publisher-design-actions
-  button.publisher-music-library-button {
-  border-color: #8978e8 !important;
-  background: #6756c7 !important;
-  color: #ffffff !important;
-}
-html[data-app-theme]
-  body
-  #app
-  .app-shell
-  .tiktok-page.publish-mode
-  .publisher-design-actions
-  button.publisher-music-library-button:hover {
-  border-color: #a497f1 !important;
-  background: #7463d4 !important;
-}
-.publisher-music-library-button > svg {
-  flex: 0 0 auto;
-  display: block;
-}
-.publisher-music-library-button span {
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  font-size: 9px;
 }
 .publisher-music-library-dialog {
   display: flex;
@@ -15289,16 +12614,16 @@ html[data-app-theme]
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 10px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.28);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-music-library-toolbar > select {
   height: 40px;
   min-width: 0;
   padding: 0 10px;
-  border: 1px solid #2b4862;
+  border: 1px solid var(--theme-tone-blue);
   border-radius: 7px;
-  background: #0d1b2b;
-  color: #e4edf6;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text);
   font-size: 11px;
 }
 .publisher-music-library-content {
@@ -15311,7 +12636,7 @@ html[data-app-theme]
 }
 .publisher-music-group + .publisher-music-group {
   margin-top: 8px;
-  border-top: 1px solid rgba(64, 96, 126, 0.24);
+  border-top: 1px solid var(--theme-border);
 }
 .publisher-music-group-head {
   display: flex;
@@ -15320,11 +12645,11 @@ html[data-app-theme]
   margin-bottom: 8px;
 }
 .publisher-music-group-head strong {
-  color: #edf4fb;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .publisher-music-group-head span {
-  color: #7f98ae;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-music-list {
@@ -15337,7 +12662,7 @@ html[data-app-theme]
   gap: 10px;
   min-height: 58px;
   padding: 7px 4px;
-  border-bottom: 1px solid rgba(64, 96, 126, 0.2);
+  border-bottom: 1px solid var(--theme-border);
 }
 .publisher-music-row > img,
 .publisher-music-cover,
@@ -15346,12 +12671,12 @@ html[data-app-theme]
   height: 40px;
   border-radius: 6px;
   object-fit: cover;
-  background: #14283b;
+  background: var(--theme-tone-blue);
 }
 .publisher-music-cover {
   display: grid;
   place-items: center;
-  color: #7e91c7;
+  color: var(--theme-tone-blue);
 }
 .publisher-music-meta {
   min-width: 0;
@@ -15364,12 +12689,12 @@ html[data-app-theme]
   white-space: nowrap;
 }
 .publisher-music-meta strong {
-  color: #edf4fb;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .publisher-music-meta small {
   margin-top: 4px;
-  color: #8299ae;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-music-icon-button {
@@ -15378,19 +12703,19 @@ html[data-app-theme]
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid #2a435a;
+  border: 1px solid var(--theme-tone-blue);
   border-radius: 6px;
-  background: #101f30;
-  color: #c8d6e4;
+  background: var(--theme-tone-blue);
+  color: var(--theme-text);
 }
 .publisher-music-icon-button:hover {
-  border-color: #506a83;
-  background: #172b3e;
+  border-color: var(--theme-border-control);
+  background: var(--theme-tone-blue);
 }
 .publisher-music-icon-button.favorite.active {
-  border-color: #ad5474;
-  background: #3a2030;
-  color: #ff8caf;
+  border-color: var(--theme-tone-red);
+  background: var(--theme-panel-soft);
+  color: var(--theme-tone-red);
 }
 .publisher-music-icon-button.favorite.active svg {
   fill: currentColor;
@@ -15402,9 +12727,9 @@ html[data-app-theme]
   gap: 8px;
   min-height: 58px;
   padding: 5px 8px 5px 5px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(18, 23, 38, 0.72);
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
 }
 .publisher-music-option-main {
   display: grid;
@@ -15415,7 +12740,7 @@ html[data-app-theme]
   padding: 0;
   border: 0;
   background: transparent;
-  color: #eef5ff;
+  color: var(--theme-text);
   text-align: left;
 }
 .publisher-music-option-main > span {
@@ -15430,12 +12755,12 @@ html[data-app-theme]
 }
 .publisher-music-option-main small {
   margin-top: 4px;
-  color: #8195a9;
+  color: var(--theme-text-secondary);
   font-size: 10px;
 }
 .publisher-music-option-main small b {
   margin-left: 6px;
-  color: #ff8caf;
+  color: var(--theme-tone-red);
   font-size: 9px;
 }
 @media (max-width: 900px) {
@@ -15443,241 +12768,7 @@ html[data-app-theme]
     grid-template-columns: 1fr;
   }
 }
-.publish-mode .publisher-design-stats {
-  display: flex !important;
-  align-items: center;
-  gap: 6px;
-  height: 42px !important;
-  min-height: 42px !important;
-  padding: 4px;
-  border: 1px solid rgba(45, 70, 94, 0.58) !important;
-  border-radius: 7px;
-  background: #0a1724;
-}
-.publish-mode .publisher-design-stats > button {
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  justify-content: center;
-  height: 32px !important;
-  min-height: 32px !important;
-  min-width: 0;
-  padding: 0 10px !important;
-  border: 0 !important;
-  border-radius: 5px;
-  background: transparent !important;
-  color: #8fa7bc !important;
-  font-size: 11px;
-  cursor: pointer;
-}
-.publish-mode .publisher-design-stats > button:hover {
-  background: #12263a !important;
-  color: #dbe7f2 !important;
-}
-.publish-mode .publisher-design-stats > button.active {
-  background: #123a38 !important;
-  color: #48dfc9 !important;
-  box-shadow: inset 0 0 0 1px rgba(50, 219, 195, 0.28);
-}
-.publish-mode .publisher-design-stats > button span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-stats > button strong {
-  display: grid;
-  place-items: center;
-  min-width: 21px;
-  height: 20px;
-  margin: 0;
-  padding: 0 6px;
-  border-radius: 10px;
-  background: #173249;
-  color: #eaf2fa;
-  font-size: 10px !important;
-}
-.publish-mode .publisher-design-stats > button.active strong {
-  background: #1c5952;
-  color: #75f0dc;
-}
-.publish-mode .publisher-design-filters {
-  display: grid !important;
-  grid-template-columns: minmax(180px, 1fr) 102px 102px 96px auto !important;
-  align-items: center;
-  gap: 7px !important;
-  height: 38px !important;
-}
-.publisher-filter-actions {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.publish-mode .publisher-design-filters .publisher-filter-actions > button {
-  height: 36px;
-  min-width: 68px;
-  padding: 0 10px;
-  white-space: nowrap;
-}
-.publish-mode .publisher-design-filters .publisher-date-button {
-  min-width: 104px;
-}
-.publish-mode .publisher-design-filters .publisher-date-button.active {
-  border-color: #397c76;
-  color: #59dfcb;
-}
-.publish-mode .publisher-design-filters .publisher-filter-apply {
-  border-color: #317b72;
-  background: #123832;
-  color: #54dfca;
-}
-.publisher-date-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
 /* Keep the publisher surface aligned with the active application theme. */
-.publish-mode .publisher-design-page,
-.publish-mode .publisher-design-list,
-.publish-mode .publisher-design-editor {
-  border-color: var(--theme-border) !important;
-  background: var(--theme-panel) !important;
-  color: var(--theme-text) !important;
-}
-.publish-mode .publisher-design-list-head {
-  border-bottom: 1px solid var(--theme-divider) !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-row {
-  border-bottom-color: var(--theme-divider) !important;
-  background: var(--theme-panel) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-row:hover {
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-row.is-published {
-  border-left: 3px solid var(--theme-accent) !important;
-  background: color-mix(in srgb, var(--theme-accent-soft) 42%, var(--theme-panel)) !important;
-}
-.publish-mode .publisher-design-row.is-published .publisher-design-state {
-  font-weight: 700;
-}
-.publish-mode .publisher-design-row.is-published input[type="checkbox"],
-.publish-mode .publisher-design-row.is-published button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.publish-mode .publisher-design-title,
-.publish-mode .publisher-design-title h1,
-.publish-mode .publisher-design-editor-head h2,
-.publish-mode .publisher-design-check,
-.publish-mode .publisher-design-time,
-.publish-mode .publisher-design-state {
-  color: var(--theme-text) !important;
-}
-.publish-mode .publisher-design-title p,
-.publish-mode .publisher-design-editor-head p,
-.publish-mode .publisher-design-hint,
-.publish-mode .publisher-design-hint small,
-.publish-mode .publisher-design-pager {
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-filters select,
-.publish-mode .publisher-design-filters button,
-.publish-mode .publisher-design-search,
-.publish-mode .publisher-design-selection,
-.publish-mode .publisher-design-selection button:not(.publisher-design-primary),
-.publish-mode .publisher-design-pager button,
-.publish-mode .publisher-design-pager select {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-selection {
-  border-color: color-mix(in srgb, var(--theme-accent) 36%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-}
-.publish-mode .publisher-design-selection .publisher-submit-button,
-.publish-mode .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, #ffffff) !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-design-actions .publisher-design-primary {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, #ffffff) !important;
-  box-shadow: none !important;
-}
-.publish-mode .publisher-design-selection .publisher-submit-button:hover,
-.publish-mode .publisher-design-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-accent) 86%, #000) !important;
-}
-.publish-mode .publisher-design-product,
-.publish-mode .publisher-design-row-actions button,
-.publish-mode .publisher-design-title-cell button {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-.publish-mode .publisher-design-tags span,
-.publish-mode .publisher-design-tags b {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-.publish-mode .publisher-design-tags .publisher-design-tags-empty {
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--theme-text-muted) !important;
-}
-.publish-mode .publisher-design-empty {
-  display: grid;
-  min-height: 280px;
-  place-content: center;
-  justify-items: center;
-  gap: 8px;
-  margin: 16px;
-  padding: 34px 24px;
-  border: 1px dashed var(--theme-border-control);
-  border-radius: 12px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text-muted);
-  text-align: center;
-}
-.publish-mode .publisher-design-empty svg {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 2px;
-  color: var(--theme-control-selected-text);
-}
-.publish-mode .publisher-design-empty strong {
-  color: var(--theme-text);
-  font-size: 14px;
-}
-.publish-mode .publisher-design-empty span {
-  color: var(--theme-text-muted);
-  font-size: 11px;
-}
-.publish-mode .publisher-design-editor {
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-apply {
-  border-top: 1px solid var(--theme-divider) !important;
-  background: var(--theme-panel-soft) !important;
-}
-.publish-mode .publisher-design-apply > button:not(.publisher-design-primary) {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
 .publisher-picker-dialog {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   height: min(820px, calc(100vh - 32px));
@@ -15698,8 +12789,8 @@ html[data-app-theme]
   z-index: 2;
   min-height: 48px;
   padding-top: 10px;
-  border-top: 1px solid var(--theme-divider, rgba(100, 120, 140, 0.28));
-  background: var(--theme-panel, #ffffff);
+  border-top: 1px solid var(--theme-divider, var(--theme-border));
+  background: var(--theme-panel, var(--theme-panel));
 }
 .publisher-picker-dialog > .dialog-actions button {
   min-width: 120px;
@@ -15708,236 +12799,13 @@ html[data-app-theme]
 .publisher-picker-dialog > .dialog-actions .primary-button {
   border-color: var(--theme-accent) !important;
   background: var(--theme-accent) !important;
-  color: var(--theme-on-accent, #ffffff) !important;
-}
-.publish-mode .publisher-description-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-.publish-mode .publisher-description-tags span,
-.publish-mode .publisher-description-tags button {
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 999px;
-  background: var(--theme-control);
-  color: var(--theme-text-secondary);
-  font-size: 10px;
-}
-.publish-mode .publisher-description-tags span {
-  border-color: color-mix(in srgb, var(--theme-accent) 26%, var(--theme-border));
-  background: var(--theme-accent-soft);
-  color: var(--theme-control-selected-text);
-}
-.publish-mode .publisher-description-tags button:hover {
-  border-color: var(--theme-accent);
-  color: var(--theme-text);
-}
-.publish-mode .publisher-description-tag-input {
-  display: flex;
-  gap: 6px;
-  margin-top: 7px;
-}
-.publish-mode .publisher-description-tag-input input {
-  min-width: 0;
-  flex: 1;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border-control);
-  border-radius: 6px;
-  background: var(--theme-input);
-  color: var(--theme-text);
-}
-.publish-mode .publisher-description-tag-input button {
-  padding: 0 10px;
-  border: 1px solid var(--theme-accent);
-  border-radius: 6px;
-  background: var(--theme-accent);
-  color: var(--theme-on-accent, #ffffff);
+  color: var(--theme-on-accent, var(--theme-on-accent)) !important;
 }
 /* Final theme pass for editor text and controls. */
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-video strong,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-title-cell span,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-product,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-row > label {
-  color: var(--theme-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-video span > small,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-pager,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field small {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-editor-head,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-apply-mode {
-  border-color: var(--theme-divider) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single {
-  background: var(--theme-panel-soft) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-tabs-single span {
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-hint,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-check,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-editor-apply-mode > strong,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio {
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-hint small {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field input,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field textarea,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-select {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-input) !important;
-  color: var(--theme-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field input::placeholder,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-field textarea::placeholder {
-  color: var(--theme-text-muted) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio label::before {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-radio label:has(input[type="radio"]:checked)::before {
-  border-color: var(--theme-accent) !important;
-  background: radial-gradient(circle, var(--theme-accent) 0 3px, var(--theme-control) 4px) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-row-actions button,
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-title-cell button {
-  border-color: var(--theme-border-control) !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats strong {
-  background: var(--theme-control-selected) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-head {
-  border-bottom-color: var(--theme-divider) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats {
-  border: 1px solid var(--theme-border) !important;
-  border-radius: 9px !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > div {
-  border-right-color: var(--theme-divider) !important;
-  background: transparent !important;
-  color: var(--theme-text-secondary) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats > div:first-child {
-  border-bottom-color: var(--theme-accent) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-stats strong {
-  color: inherit !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-logo {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 28%, var(--theme-border)) !important;
-  background: var(--theme-accent-soft) !important;
-  color: var(--theme-control-selected-text) !important;
-}
-html[data-app-theme] body #app .app-shell .tiktok-page.publish-mode .publisher-design-page ~ .publisher-drawer-backdrop {
-  display: grid !important;
-}
-@media (max-width: 1180px) {
-  .publish-mode .publisher-design-filters {
-    grid-template-columns: minmax(130px, 1fr) 78px 78px 78px auto !important;
-  }
-  .publish-mode .publisher-design-filters .publisher-filter-actions > button {
-    min-width: 46px;
-    padding: 0 7px;
-    font-size: 10px;
-  }
-  .publish-mode .publisher-design-filters .publisher-date-button {
-    min-width: 82px;
-  }
-}
 /* Compact publishing header: keep the API status control from stretching the toolbar. */
-.publish-mode .publisher-design-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip {
-  flex: 0 1 238px;
-  width: 238px;
-  min-width: 0 !important;
-  height: 38px !important;
-  box-sizing: border-box;
-  padding: 0 6px 0 12px !important;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--theme-border-control) 78%, transparent) !important;
-  border-radius: 11px !important;
-  background: var(--theme-panel-soft) !important;
-  color: var(--theme-text-secondary) !important;
-  box-shadow: 0 4px 14px rgba(20, 35, 55, 0.08);
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > span {
-  overflow: hidden;
-  flex: 1 1 auto;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 650;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > em {
-  flex: 0 0 auto;
-  color: var(--theme-text-muted) !important;
-  font-size: 10px;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > button {
-  flex: 0 0 auto;
-  width: 66px !important;
-  min-width: 66px !important;
-  height: 30px !important;
-  min-height: 30px !important;
-  padding: 0 10px !important;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 18%, var(--theme-border-control)) !important;
-  border-radius: 8px !important;
-  background: var(--theme-control) !important;
-  color: var(--theme-control-selected-text) !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-}
-.publish-mode .publisher-design-actions > .publisher-design-api-chip > button:hover {
-  border-color: var(--theme-accent) !important;
-  background: var(--theme-accent-soft) !important;
-}
-@media (max-width: 980px) {
-  .publish-mode .publisher-design-head {
-    height: auto !important;
-    min-height: 60px !important;
-    padding: 10px 8px !important;
-    align-items: flex-start;
-  }
-  .publish-mode .publisher-design-actions {
-    max-width: 62%;
-    row-gap: 6px;
-  }
-  .publish-mode .publisher-design-actions > .publisher-design-api-chip {
-    flex-basis: 210px;
-    width: 210px;
-  }
-}
 .publisher-poster-placeholder { display: grid; width: 100%; height: 100%; place-items: center; color: var(--theme-text-muted); background: var(--theme-panel-soft); }
 
 /* Keep the light theme from inheriting the legacy purple music action. */
-:global(html[data-app-theme='light-teal']) .tiktok-page.publish-mode .publisher-design-actions button.publisher-music-library-button {
-  background: var(--theme-panel) !important;
-  border-color: var(--theme-border-control) !important;
-  color: var(--theme-text) !important;
-  box-shadow: none !important;
-}
 
 :global(html[data-app-theme='light-teal']) .tiktok-page .generation-mode-control__options {
   background: var(--theme-panel-soft) !important;

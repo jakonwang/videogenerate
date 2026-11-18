@@ -44,10 +44,10 @@ async function main() {
     { tab: 'help', title: null },
   ]
   const themes = [
+    // The three themes offered in Settings (themes.css tokens: --theme-shell / --theme-panel / --theme-accent).
     { key: 'dark-teal', shell: 'rgb(9, 14, 24)', panel: 'rgb(17, 19, 30)', accent: 'rgb(20, 184, 166)' },
-    { key: 'soft-mint', shell: 'rgb(243, 250, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(47, 148, 119)' },
-    { key: 'warm-paper', shell: 'rgb(246, 239, 223)', panel: 'rgb(255, 250, 240)', accent: 'rgb(173, 91, 0)' },
-    { key: 'clear-sky', shell: 'rgb(247, 247, 255)', panel: 'rgb(255, 255, 255)', accent: 'rgb(59, 130, 246)' },
+    { key: 'light-teal', shell: 'rgb(245, 246, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(0, 135, 90)' },
+    { key: 'mono', shell: 'rgb(247, 247, 248)', panel: 'rgb(255, 255, 255)', accent: 'rgb(23, 23, 23)' },
   ]
 
   try {
@@ -174,13 +174,13 @@ async function main() {
 
     for (const theme of themes) {
       await page.evaluate(() => { window.location.hash = '#/settings' })
-      await page.locator('.settings-console').waitFor({ state: 'visible' })
+      await page.locator('[data-testid="settings-page"]').waitFor({ state: 'visible' })
       await page.locator('[data-settings-section="appearance"]').click()
       await page.locator(`.theme-option--${theme.key}`).click()
       await page.waitForFunction((key) => document.documentElement.dataset.appTheme === key, theme.key)
       const settingsTheme = await page.evaluate(() => {
-        const icon = document.querySelector('.nav-item:not(.active) .nav-item__icon')
-        const activeIcon = document.querySelector('.nav-item.active .nav-item__icon')
+        const icon = document.querySelector('.settings-nav__item:not(.is-active) .settings-nav__icon')
+        const activeIcon = document.querySelector('.settings-nav__item.is-active .settings-nav__icon')
         const iconStyle = icon ? getComputedStyle(icon) : null
         const activeIconStyle = activeIcon ? getComputedStyle(activeIcon) : null
         const colorProbe = document.createElement('span')
@@ -196,9 +196,8 @@ async function main() {
           selectedText,
         }
       })
-      assert.equal(settingsTheme.iconColor, theme.accent)
+      assert.equal(settingsTheme.activeIconBackground, theme.accent)
       assert.notEqual(settingsTheme.iconBackground, 'rgba(0, 0, 0, 0)')
-      assert.equal(settingsTheme.activeIconColor, settingsTheme.selectedText)
       assert.notEqual(settingsTheme.activeIconBackground, 'rgba(0, 0, 0, 0)')
       await page.screenshot({ path: path.join(artifacts, `theme-${theme.key}-settings-1440x900.png`) })
 

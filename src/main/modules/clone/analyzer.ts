@@ -59,7 +59,7 @@ function mapRoleToPurpose(role: ViralShotRole): ShotPurpose {
   return 'cta'
 }
 
-async function detectSceneCuts(filePath: string): Promise<number[]> {
+export async function detectSceneCuts(filePath: string): Promise<number[]> {
   let ffmpeg = ''
   try {
     ffmpeg = getFfmpegExecutable()

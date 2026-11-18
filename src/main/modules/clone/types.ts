@@ -56,7 +56,17 @@ export type ImageProviderName = 'openai' | 'kling' | 'grsai' | 'apifox_hub'
 export type AiTaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 export type ConsistencyMode = 'soft' | 'hard'
 export type CloneQualityMode = 'fast' | 'standard' | 'high'
-export type CloneProductType = 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+export type CloneProductType =
+  | 'earrings'
+  | 'necklace'
+  | 'ring'
+  | 'bracelet'
+  | 'phone_case'
+  | 'clothes'
+  | 'bag'
+  | 'shoes'
+  | 'toy'
+  | 'general'
 export type StoryboardImageTemplateType = 'general' | 'jewelry' | 'ecommerce_packaging' | 'lifestyle_interaction'
 export type CloneProductMode = 'STRICT' | 'BALANCED' | 'EXPRESSIVE'
 export type ModelProfileOptions = import('../../../shared/modelProfileOptions').ModelProfileOptions
@@ -1109,6 +1119,11 @@ export type CloneProject = {
   }
   scriptVariantCandidates?: CloneScriptVariantCandidate[]
   selectedScriptVariantId?: string
+  /**
+   * Set when this project is a variant of a sales-proven one: same reference video, product and model,
+   * with a script that must differ from the ones already produced from that source.
+   */
+  variantOf?: { projectId: string; title?: string; avoidScripts: Array<{ title: string; summary: string }> }
   storyboardGridBatches?: CloneStoryboardGridBatch[]
   storyboardFrames?: CloneStoryboardFrame[]
   projectIdentityGridPath?: string

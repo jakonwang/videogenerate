@@ -10,15 +10,10 @@ import { resolveApifoxHubCredentials } from '../clone/apifoxProfile'
 import { hasStrictImageEditProviderCredential } from '../clone/gptImage'
 import { generateGptShotFrameImage } from '../clone/gptImage'
 import { assetLibraryService } from '../asset-library/service'
+import { PRODUCT_REPLACEMENT_PROMPT } from '../../../shared/productReplacementPrompt'
 import type { ProductReplacementBatch, ProductReplacementItem, ProductReplacementPromptVersion } from './types'
 
-const DEFAULT_PROMPT = [
-  'Image 1 is the scene to edit. Images 2 and onward show the target product from different angles.',
-  'Replace only the original product in Image 1 with the target product. Keep the scene composition, camera angle, background, people, hands, and unrelated objects unchanged.',
-  'Match the target product identity across the reference images, including its shape, proportions, color, material, and visible details. Do not blend features from the original product.',
-  'Fit the replacement naturally into the scene with accurate perspective, size, lighting, reflections, and contact shadows. Keep the output photorealistic and preserve the original image aspect ratio.',
-  'Do not add or remove unrelated objects, text, logos, watermarks, or extra products.',
-].join('\n')
+const DEFAULT_PROMPT = PRODUCT_REPLACEMENT_PROMPT
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif'])
 const MAX_PROMPT_LENGTH = 20000
 

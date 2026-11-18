@@ -13,14 +13,16 @@ import { videoParserDownloadService } from '../video-parser-download/service'
 import { tiktokListingService } from '../tiktok-listing/service'
 import { tiktokCreativeStudioService } from '../tiktok-creative-studio/service'
 import { splitVideoToSegmentFiles } from '../media/segmentSplit'
-import { geelarkPublisher } from '../web-platform/geelark'
 import { createBatchTasks } from '../tasks/createBatchTasks'
 import { taskQueue } from '../tasks/queue'
 import { templatesRepo } from '../templates/repo'
 import type { Template, TransitionConfig } from '../templates/types'
 import { MODEL_PROFILE_OPTION_GROUPS, type ModelProfileOptions } from '../../../shared/modelProfileOptions'
+import { contentHubCapabilityDefinitions, contentHubIntentCapabilities } from './contentHubCapabilities'
+import { pipelineProductIds, pipelineReferenceVideos } from './pipelineContext'
 import type {
   AgentArtifact,
+  AgentAdapterContext,
   AgentCapabilityBinding,
   AgentCapabilityDefinition,
   AgentCapabilityId,
@@ -42,8 +44,6 @@ const intentCapabilities: Record<AgentIntentType, AgentCapabilityId> = {
   'Intent.LivePhotoManage': 'LivePhoto.Manage',
   'Intent.SubtitleGenerate': 'Subtitle.Generate',
   'Intent.VideoSlice': 'Video.Slice',
-  'Intent.VideoPublish': 'Video.Publish',
-  'Intent.PublishingManage': 'Publishing.Manage',
   'Intent.SourceVideoImport': 'SourceVideo.Import',
   'Intent.SourceVideoManage': 'SourceVideo.Manage',
   'Intent.ListingGenerate': 'Listing.Generate',
@@ -57,7 +57,8 @@ const intentCapabilities: Record<AgentIntentType, AgentCapabilityId> = {
   'Intent.TemplateManage': 'Template.Manage',
   'Intent.ArtifactInspect': 'Artifact.Read',
   'Intent.ArtifactExport': 'Artifact.Export',
-}
+  ...(contentHubIntentCapabilities as Record<string, AgentCapabilityId>),
+} as unknown as Record<AgentIntentType, AgentCapabilityId>
 
 type AgentCapabilityDependencies = {
   importShareUrls: typeof videoParserDownloadService.importShareUrls
@@ -93,15 +94,6 @@ type AgentCapabilityDependencies = {
   failCreativeShot: typeof tiktokCreativeStudioService.markShotFailed
   removeCreativeTask: typeof tiktokCreativeStudioService.remove
   splitVideo: typeof splitVideoToSegmentFiles
-  publishVideo: typeof webPlatformService.publishGeelarkVideo
-  listPublishAccounts: typeof geelarkPublisher.listAccounts
-  savePublishAccount: typeof geelarkPublisher.upsertAccount
-  removePublishAccount: typeof geelarkPublisher.deleteAccount
-  listPublishTasks: typeof geelarkPublisher.listTasks
-  syncPublishTask: typeof geelarkPublisher.syncTask
-  listMusicPresets: typeof geelarkPublisher.listMusicPresets
-  saveMusicPreset: typeof geelarkPublisher.upsertMusicPreset
-  removeMusicPreset: typeof geelarkPublisher.deleteMusicPreset
   createProductionBatch: typeof createBatchTasks
   enqueueProductionTask: (task: any) => string
   saveProduct: typeof productsRepo.upsert
@@ -170,15 +162,6 @@ const defaultCapabilityDependencies: AgentCapabilityDependencies = {
   failCreativeShot: (input) => tiktokCreativeStudioService.markShotFailed(input),
   removeCreativeTask: (id) => tiktokCreativeStudioService.remove(id),
   splitVideo: (input) => splitVideoToSegmentFiles(input),
-  publishVideo: (token, input) => webPlatformService.publishGeelarkVideo(token, input),
-  listPublishAccounts: (userId) => geelarkPublisher.listAccounts(userId),
-  savePublishAccount: (userId, input) => geelarkPublisher.upsertAccount(userId, input),
-  removePublishAccount: (userId, id) => geelarkPublisher.deleteAccount(userId, id),
-  listPublishTasks: (userId) => geelarkPublisher.listTasks(userId),
-  syncPublishTask: (userId, id) => geelarkPublisher.syncTask(userId, id),
-  listMusicPresets: (userId) => geelarkPublisher.listMusicPresets(userId),
-  saveMusicPreset: (userId, input) => geelarkPublisher.upsertMusicPreset(userId, input),
-  removeMusicPreset: (userId, id) => geelarkPublisher.deleteMusicPreset(userId, id),
   createProductionBatch: (input) => createBatchTasks(input),
   enqueueProductionTask: (task) => {
     taskQueue.enqueue(task)
@@ -524,7 +507,24 @@ const productAnalyzeBinding: AgentCapabilityBinding = {
   estimateCost: async () => ({ quantity: 1, unit: 'product_analysis' }),
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
-    const productId = text(input.productId)
+    // Pipelines: analyse every product an earlier step created (research winners, link imports).
+    const pipelineIds = pipelineProductIds(input, context)
+    if (pipelineIds.length > 1) {
+      const results: AgentToolResult[] = []
+      for (const id of pipelineIds.slice(0, 12)) {
+        results.push(await productAnalyzeBinding.execute({ ...input, productId: id, productIds: [] }, { ...context, dependencyArtifacts: [], upstreamArtifacts: [] }))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? 'completed' : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.error ? [result.error.message] : result.warnings),
+        ...(ok.length ? {} : { error: results[0]?.error }),
+      })
+    }
+    const productId = pipelineIds[0] || ''
     if (!productId) return failed('missing_product', 'Select a product before refreshing its analysis.')
     const current = (await productsRepo.list()).find((item) => item.id === productId)
     if (!current) return failed('product_not_found', 'The selected product does not exist.')
@@ -723,16 +723,87 @@ const videoCloneBinding: AgentCapabilityBinding = {
   estimateCost: async (input) => ({ quantity: Math.max(1, Number(input.quantity || 1)), unit: 'video' }),
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
-    const referenceVideoPath = text(input.referenceVideoPath) || strings(input.videoPaths)[0]
+    // Batch mode (recipes): several reference videos and/or several products → one project per pair.
+    const batchReferences = Array.from(new Set([
+      ...strings(input.referenceVideoPaths),
+      ...context.dependencyArtifacts
+        .filter((artifact) => (artifact.kind === 'source_video' || artifact.kind === 'video') && artifact.localPath && existsSync(artifact.localPath))
+        .map((artifact) => text(artifact.localPath)),
+      ...pipelineReferenceVideos(context),
+    ]))
+    // Products created earlier in the same run are used when the request names none.
+    const inherited = strings(input.productIds).length || text(input.productId) ? [] : pipelineProductIds(input, context)
+    const batchProducts = strings(input.productIds).length ? strings(input.productIds) : inherited
+    if (inherited.length === 1) input = { ...input, productId: inherited[0] }
+    if (batchReferences.length > 1 || batchProducts.length > 1 || (batchReferences.length && !text(input.referenceVideoPath) && !strings(input.videoPaths).length)) {
+      const references = batchReferences.length ? batchReferences : [text(input.referenceVideoPath) || strings(input.videoPaths)[0]].filter(Boolean)
+      if (!references.length) return failed('missing_reference_video', 'Add a reference video before creating a video.')
+      const productIds = batchProducts.length ? batchProducts : [text(input.productId)]
+      const pairs = references.flatMap((reference) => productIds.map((productId) => ({ reference, productId }))).slice(0, 12)
+      const results: AgentToolResult[] = []
+      for (const pair of pairs) {
+        results.push(await videoCloneBinding.execute({
+          ...input,
+          referenceVideoPath: pair.reference,
+          videoPaths: [pair.reference],
+          referenceVideoPaths: [],
+          productIds: [],
+          productId: pair.productId || input.productId,
+          quantity: input.variantCount || input.quantity,
+        }, { ...context, dependencyArtifacts: [], upstreamArtifacts: [] }))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? (results.every((result) => result.status === 'completed') ? 'completed' : 'accepted') : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.warnings),
+        retryable: results.some((result) => result.retryable),
+        externalRefs: { projectIds: results.map((result) => result.externalRefs.projectId).filter(Boolean).join(',') },
+        ...(ok.length ? {} : { error: results[0]?.error || { code: 'clone_failed', message: 'All clone projects failed.' } }),
+      })
+    }
+    // Variants of a sales-proven project: one new project per variant, each told which scripts already exist.
+    const variantOfProjectId = text(input.variantOfProjectId)
+    const variantProjects = Math.max(1, Math.min(4, Math.floor(Number(input.variantProjects || 1)) || 1))
+    if (variantOfProjectId && variantProjects > 1) {
+      const results: AgentToolResult[] = []
+      // Sequential on purpose: each draft must see the previous one to count as an earlier variant.
+      for (let index = 0; index < variantProjects; index += 1) {
+        results.push(await videoCloneBinding.execute({ ...input, variantProjects: 1 }, context))
+      }
+      const ok = results.filter((result) => result.success)
+      return completed({
+        success: ok.length > 0,
+        status: ok.length === results.length ? (results.every((result) => result.status === 'completed') ? 'completed' : 'accepted') : ok.length ? 'partial' : 'failed',
+        artifactIds: results.flatMap((result) => result.artifactIds),
+        logs: results.flatMap((result) => result.logs),
+        warnings: results.flatMap((result) => result.warnings),
+        retryable: results.some((result) => result.retryable),
+        externalRefs: { projectIds: results.map((result) => result.externalRefs.projectId).filter(Boolean).join(',') },
+        ...(ok.length ? {} : { error: results[0]?.error || { code: 'clone_failed', message: 'All variant projects failed.' } }),
+      })
+    }
+    let variantDraft: Awaited<ReturnType<typeof cloneService.createVariantDraftFromProject>> | null = null
+    if (variantOfProjectId) {
+      try {
+        variantDraft = await cloneService.createVariantDraftFromProject({ sourceProjectId: variantOfProjectId })
+      } catch (error) {
+        return failed('variant_source_unavailable', String((error as Error)?.message || error))
+      }
+      if (!text(input.productId) && variantDraft.productId) input = { ...input, productId: variantDraft.productId }
+    }
+    const referenceVideoPath = variantDraft ? text(variantDraft.project.referenceVideoPath) : text(input.referenceVideoPath) || strings(input.videoPaths)[0]
     if (!referenceVideoPath) return failed('missing_reference_video', 'Add a reference video before creating a video.')
     const product = await resolveProduct(input)
     const productImagePaths = Array.from(new Set([...strings(input.productImagePaths), ...(product ? imagePathsFromProduct(product) : [])]))
-    const draft = await cloneService.createDraftProject({
+    const draft = variantDraft ?? await cloneService.createDraftProject({
       locale: 'zh-CN',
       runMode: 'auto',
       title: text(input.request).slice(0, 48) || 'Agent video task',
     })
-    await cloneService.bindProjectReferenceVideo({ cloneProjectId: draft.project.id, videoPath: referenceVideoPath })
+    if (!variantDraft) await cloneService.bindProjectReferenceVideo({ cloneProjectId: draft.project.id, videoPath: referenceVideoPath })
     if (product?.id) {
       await cloneService.bindProjectProduct({ cloneProjectId: draft.project.id, productId: product.id })
     } else if (productImagePaths.length) {
@@ -752,6 +823,8 @@ const videoCloneBinding: AgentCapabilityBinding = {
         variantCount: Math.max(1, Math.min(6, Number(input.quantity || 3))),
         productReferenceImagePaths: productImagePaths,
         autoBindModelPack: true,
+        // A variant keeps the proven video's model so the script is the only thing under test.
+        ...(variantDraft?.selectedModelIdentityId ? { selectedModelIdentityId: variantDraft.selectedModelIdentityId } : {}),
       })
       const project = result.project
       const finalPath = text(project?.finalCompose?.outputPath)
@@ -1000,7 +1073,7 @@ const modelIdentityManageBinding: AgentCapabilityBinding = {
       const generated = await capabilityDependencies.generateModelIdentity({
         purpose: 'model_library',
         productType: ['earrings', 'phone_case', 'clothes', 'toy', 'general'].includes(text(input.productType))
-          ? text(input.productType) as 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+          ? text(input.productType) as 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
           : 'general',
         productPoints: text(input.productPoints) || undefined,
         modelProfileOptions: modelProfileOptions(input.profile),
@@ -1106,11 +1179,17 @@ const livePhotoBinding: AgentCapabilityBinding = {
   execute: async (input, context) => {
     const product = await resolveProduct(input)
     if (!product) return failed('missing_product', 'Select a product before creating a live photo.')
-    const referenceImagePaths = Array.from(new Set([...strings(input.productImagePaths), ...imagePathsFromProduct(product)]))
+    // Scene images (recipes / asset library) take precedence; otherwise fall back to product references.
+    const sceneImagePaths = Array.from(new Set(strings(input.referenceImagePaths).filter((path) => existsSync(path))))
+    const referenceImagePaths = sceneImagePaths.length
+      ? sceneImagePaths
+      : Array.from(new Set([...strings(input.productImagePaths), ...imagePathsFromProduct(product)]))
     if (!referenceImagePaths.length) return failed('missing_reference_image', 'The selected product has no reference images.')
     const created = await livePhotoService.createFromReference({
       productId: product.id,
-      referenceImagePaths: referenceImagePaths.slice(0, Math.max(1, Number(input.quantity || 1))),
+      referenceImagePaths: sceneImagePaths.length
+        ? referenceImagePaths.slice(0, 50)
+        : referenceImagePaths.slice(0, Math.max(1, Number(input.quantity || 1))),
     })
     const items = Array.isArray(created) ? created : [created]
     const artifactIds = items.filter(Boolean).map((item: any) => {
@@ -1412,181 +1491,6 @@ const videoSliceBinding: AgentCapabilityBinding = {
   },
 }
 
-const publishBinding: AgentCapabilityBinding = {
-  id: 'binding.video.publish.geelark.v1',
-  capabilityId: 'Video.Publish',
-  capabilityVersion: 1,
-  adapterVersion: '1.0.0',
-  priority: 100,
-  lockMode: 'write',
-  resourceType: 'Publish',
-  isHealthy: async () => true,
-  estimateCost: async () => ({ credits: 0 }),
-  execute: async (input, context) => {
-    const source = [...context.dependencyArtifacts].reverse().find((item) => item.kind === 'video' && item.localPath)
-    const videoPath = text(input.videoPath) || text(source?.localPath)
-    const publishAccountId = text(input.publishAccountId)
-    if (!videoPath) return failed('missing_video_artifact', 'No video artifact is available for publishing.')
-    if (!publishAccountId) return failed('missing_publish_account', 'Select a publishing account in the run context.')
-    const result: any = await capabilityDependencies.publishVideo('', {
-      cloneProjectId: text(input.projectId) || text(source?.metadata?.projectId) || undefined,
-      videoPath,
-      publishAccountId,
-      videoDesc: text(input.videoDesc || input.request),
-      productId: text(input.productId) || undefined,
-      scheduleAt: Number(input.scheduleAt || Date.now()),
-    })
-    const artifactId = context.registerArtifact({
-      kind: 'publish_receipt',
-      name: 'Video publishing receipt',
-      uri: `agent-publish://${result.id}`,
-      metadata: { taskId: result.id, status: result.status, publishAccountId },
-      sourceArtifactIds: source ? [source.id] : [],
-      lifecycle: 'published',
-    })
-    return completed({ artifactIds: [artifactId], logs: [`Created publish task ${result.id}`], externalRefs: { publishTaskId: result.id } })
-  },
-}
-
-const publishingManageBinding: AgentCapabilityBinding = {
-  id: 'binding.publishing.manage.local.v1',
-  capabilityId: 'Publishing.Manage',
-  capabilityVersion: 1,
-  adapterVersion: '1.0.0',
-  priority: 100,
-  lockMode: 'write',
-  resourceType: 'Publish',
-  isHealthy: async () => true,
-  estimateCost: async () => ({ credits: 0 }),
-  execute: async (input, context) => {
-    const userId = 'desktop-local'
-    const action = text(input.action)
-    if (action === 'account_save') {
-      const accountId = text(input.publishAccountId || input.accountId)
-      const existing = accountId ? (await capabilityDependencies.listPublishAccounts(userId)).find((item) => item.id === accountId) : undefined
-      if (accountId && !existing) return failed('publish_account_not_found', 'The selected publishing account does not exist.')
-      const name = text(input.name) || existing?.name || ''
-      const cloudPhoneId = text(input.cloudPhoneId) || existing?.cloudPhoneId || ''
-      const cloudPhoneName = text(input.cloudPhoneName) || existing?.cloudPhoneName || ''
-      if (!name || !cloudPhoneId || !cloudPhoneName) {
-        return failed('missing_publish_account_fields', 'Publishing account name, cloud phone identifier, and cloud phone name are required.')
-      }
-      const saved = await capabilityDependencies.savePublishAccount(userId, {
-        ...(existing ? { id: existing.id } : {}),
-        name,
-        cloudPhoneId,
-        cloudPhoneName,
-        geelarkAccountId: text(input.externalAccountId) || existing?.geelarkAccountId,
-        remark: Object.prototype.hasOwnProperty.call(input, 'remark') ? text(input.remark) : existing?.remark,
-        status: text(input.status) === 'disabled' ? 'disabled' : 'active',
-      })
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: saved.name,
-        uri: `agent-publishing-account://${saved.id}`,
-        metadata: { action, publishAccountId: saved.id, status: saved.status, cloudPhoneId: saved.cloudPhoneId },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`${existing ? 'Updated' : 'Created'} publishing account ${saved.id}`], externalRefs: { publishAccountId: saved.id } })
-    }
-
-    if (action === 'account_delete') {
-      const accountId = text(input.publishAccountId || input.accountId)
-      if (!accountId) return failed('missing_publish_account', 'Select a publishing account before deletion.')
-      const existing = (await capabilityDependencies.listPublishAccounts(userId)).find((item) => item.id === accountId)
-      if (!existing) return failed('publish_account_not_found', 'The selected publishing account does not exist.')
-      await capabilityDependencies.removePublishAccount(userId, accountId)
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: `Deleted publishing account ${existing.name}`,
-        uri: `agent-publishing-account-action://${context.step.id}`,
-        metadata: { action, publishAccountId: accountId, deleted: true },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`Deleted publishing account ${accountId}`], externalRefs: { publishAccountId: accountId } })
-    }
-
-    if (action === 'music_save') {
-      const presetId = text(input.musicPresetId || input.presetId)
-      const existing = presetId ? (await capabilityDependencies.listMusicPresets(userId)).find((item) => item.id === presetId) : undefined
-      if (presetId && !existing) return failed('music_preset_not_found', 'The selected music preset does not exist.')
-      const label = text(input.label) || existing?.label || ''
-      const refVideoId = text(input.refVideoId) || existing?.refVideoId || ''
-      if (!label || !refVideoId) return failed('missing_music_preset_fields', 'Music preset label and reference video identifier are required.')
-      const saved = await capabilityDependencies.saveMusicPreset(userId, {
-        ...(existing ? { id: existing.id } : {}),
-        label,
-        refVideoId,
-        remark: Object.prototype.hasOwnProperty.call(input, 'remark') ? text(input.remark) : existing?.remark,
-      })
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: saved.label,
-        uri: `agent-publishing-music://${saved.id}`,
-        metadata: { action, musicPresetId: saved.id, refVideoId: saved.refVideoId },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`${existing ? 'Updated' : 'Created'} music preset ${saved.id}`], externalRefs: { musicPresetId: saved.id } })
-    }
-
-    if (action === 'music_delete') {
-      const presetId = text(input.musicPresetId || input.presetId)
-      if (!presetId) return failed('missing_music_preset', 'Select a music preset before deletion.')
-      const existing = (await capabilityDependencies.listMusicPresets(userId)).find((item) => item.id === presetId)
-      if (!existing) return failed('music_preset_not_found', 'The selected music preset does not exist.')
-      await capabilityDependencies.removeMusicPreset(userId, presetId)
-      const artifactId = context.registerArtifact({
-        kind: 'report',
-        name: `Deleted music preset ${existing.label}`,
-        uri: `agent-publishing-music-action://${context.step.id}`,
-        metadata: { action, musicPresetId: presetId, deleted: true },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: 'referenced',
-      })
-      return completed({ artifactIds: [artifactId], logs: [`Deleted music preset ${presetId}`], externalRefs: { musicPresetId: presetId } })
-    }
-
-    if (action === 'task_sync') {
-      const taskId = text(input.publishTaskId || input.taskId)
-      if (!taskId) return failed('missing_publish_task', 'Select a publishing task before synchronization.')
-      const existing = (await capabilityDependencies.listPublishTasks(userId)).find((item) => item.id === taskId)
-      if (!existing) return failed('publish_task_not_found', 'The selected publishing task does not exist.')
-      const synced = await capabilityDependencies.syncPublishTask(userId, taskId)
-      const artifactId = context.registerArtifact({
-        kind: 'publish_receipt',
-        name: `Publishing task ${taskId}`,
-        uri: `agent-publish://${taskId}`,
-        metadata: {
-          action,
-          taskId,
-          status: synced.status,
-          failCode: synced.failCode,
-          failDesc: synced.failDesc,
-          lastSyncAt: synced.lastSyncAt,
-          resultImages: synced.resultImages,
-        },
-        sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
-        lifecycle: synced.status === 'completed' ? 'published' : 'referenced',
-      })
-      return completed({
-        status: synced.status === 'failed' ? 'failed' : synced.status === 'waiting' || synced.status === 'in_progress' ? 'accepted' : 'completed',
-        success: synced.status !== 'failed',
-        artifactIds: [artifactId],
-        logs: [`Synchronized publishing task ${taskId}`],
-        warnings: synced.failDesc ? [synced.failDesc] : [],
-        retryable: synced.status === 'failed',
-        externalRefs: { publishTaskId: taskId, externalTaskId: text(synced.geelarkTaskId) },
-        ...(synced.status === 'failed' ? { error: { code: 'publish_task_failed', message: text(synced.failDesc) || 'Publishing task failed.' } } : {}),
-      })
-    }
-
-    return failed('unsupported_publishing_action', 'Choose account_save, account_delete, music_save, music_delete, or task_sync.')
-  },
-}
-
 const exportBinding: AgentCapabilityBinding = {
   id: 'binding.artifact.export.local.v1',
   capabilityId: 'Artifact.Export',
@@ -1795,7 +1699,12 @@ const listingGenerateBinding: AgentCapabilityBinding = {
   getModelSnapshot: safeModelSnapshot,
   execute: async (input, context) => {
     const listingId = text(input.listingId)
-    if (!listingId) return failed('missing_listing', 'Select a listing record before generation.')
+    if (!listingId) {
+      // Pipelines (autopilot): build a listing record for each product an earlier step prepared.
+      const productIds = pipelineProductIds(input, context)
+      if (!productIds.length) return failed('missing_listing', 'Select a listing record before generation.')
+      return await generateListingsForProducts(productIds, input, context)
+    }
     const item = await capabilityDependencies.generateListing({ id: listingId })
     const listingArtifactId = context.registerArtifact({
       kind: 'listing',
@@ -1839,6 +1748,72 @@ const listingGenerateBinding: AgentCapabilityBinding = {
       externalRefs: { listingId: item.id },
     })
   },
+}
+
+function productListingImage(product: Awaited<ReturnType<typeof productsRepo.list>>[number]) {
+  const images = product.images || []
+  const candidates = [
+    product.coverImagePath,
+    images.find((image) => image.isCover)?.filePath,
+    ...images.map((image) => image.filePath),
+    product.canonicalSourcePath,
+  ]
+  return candidates.map((value) => text(value)).find((value) => value && existsSync(value)) || ''
+}
+
+function listingSkuFor(product: { id: string; name: string }) {
+  const base = text(product.name).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 24)
+  return `${base || 'SKU'}-${product.id.slice(0, 6)}`.toUpperCase()
+}
+
+async function generateListingsForProducts(productIds: string[], input: Record<string, unknown>, context: AgentAdapterContext) {
+  const price = text(input.listingPrice || input.localDisplayPrice)
+  if (!price) return failed('missing_listing_price', 'Add a local display price so listing copy can be generated.')
+  const titleLanguage = listingLanguages.has(text(input.titleLanguage)) ? text(input.titleLanguage) : 'en-US'
+  const products = await productsRepo.list()
+  const existing = await capabilityDependencies.listListings()
+  const results: AgentToolResult[] = []
+  const warnings: string[] = []
+  for (const productId of productIds.slice(0, 12)) {
+    const product = products.find((item) => item.id === productId)
+    if (!product) {
+      warnings.push(`Product ${productId} no longer exists.`)
+      continue
+    }
+    if (!listingCategories.has(product.type)) {
+      warnings.push(`${product.name}: listing copy supports earrings, rings, necklaces, bracelets and phone cases only.`)
+      continue
+    }
+    const sourceImagePath = productListingImage(product)
+    if (!sourceImagePath) {
+      warnings.push(`${product.name}: add a product image before generating listing copy.`)
+      continue
+    }
+    const sku = listingSkuFor(product)
+    const current = existing.find((item) => item.sku === sku)
+    const saved = await capabilityDependencies.saveListing({
+      ...(current ? { id: current.id } : {}),
+      sourceImagePath,
+      referenceImagePaths: (product.images || []).map((image) => image.filePath).filter((path) => path !== sourceImagePath && existsSync(path)).slice(0, 4),
+      category: product.type as any,
+      sku,
+      localDisplayPrice: price,
+      titleLanguage: titleLanguage as any,
+    })
+    results.push(await listingGenerateBinding.execute({ ...input, listingId: saved.id }, context))
+  }
+  if (!results.length) {
+    return failed('no_listing_products', warnings[0] || 'No product in this run can be listed.')
+  }
+  const ok = results.filter((result) => result.success)
+  return completed({
+    success: ok.length > 0,
+    status: ok.length === results.length && !warnings.length ? 'completed' : ok.length ? 'partial' : 'failed',
+    artifactIds: results.flatMap((result) => result.artifactIds),
+    logs: results.flatMap((result) => result.logs),
+    warnings: [...warnings, ...results.flatMap((result) => result.warnings)],
+    ...(ok.length ? {} : { error: results[0]?.error }),
+  })
 }
 
 const listingExportBinding: AgentCapabilityBinding = {
@@ -2438,8 +2413,6 @@ export const capabilityDefinitions: AgentCapabilityDefinition[] = [
   { id: 'LivePhoto.Manage', version: 1, title: 'Manage live photo', description: 'Retry, pause, resume, subtitle, export, or delete existing Live Photo work.', intentType: 'Intent.LivePhotoManage', expectedArtifacts: ['report'], bindings: [livePhotoManageBinding] },
   { id: 'Subtitle.Generate', version: 1, title: 'Generate subtitles', description: 'Create subtitle packaging for an existing video.', intentType: 'Intent.SubtitleGenerate', expectedArtifacts: ['video'], bindings: [subtitleBinding] },
   { id: 'Video.Slice', version: 1, title: 'Split video', description: 'Split a long local video into reusable segment files.', intentType: 'Intent.VideoSlice', expectedArtifacts: ['video'], bindings: [videoSliceBinding] },
-  { id: 'Video.Publish', version: 1, title: 'Publish video', description: 'Submit an approved video to an approved account.', intentType: 'Intent.VideoPublish', expectedArtifacts: ['publish_receipt'], bindings: [publishBinding] },
-  { id: 'Publishing.Manage', version: 1, title: 'Manage publishing', description: 'Manage publishing accounts, music presets, and existing publishing tasks.', intentType: 'Intent.PublishingManage', expectedArtifacts: ['report', 'publish_receipt'], bindings: [publishingManageBinding] },
   { id: 'SourceVideo.Import', version: 1, title: 'Import source videos', description: 'Import source videos from approved sharing links.', intentType: 'Intent.SourceVideoImport', expectedArtifacts: ['source_video'], bindings: [sourceVideoImportBinding] },
   { id: 'SourceVideo.Manage', version: 1, title: 'Manage source videos', description: 'Retry or delete an existing source video.', intentType: 'Intent.SourceVideoManage', expectedArtifacts: ['report'], bindings: [sourceVideoManageBinding] },
   { id: 'Listing.Generate', version: 1, title: 'Generate listing', description: 'Generate listing copy and product images.', intentType: 'Intent.ListingGenerate', expectedArtifacts: ['listing', 'image'], bindings: [listingGenerateBinding] },
@@ -2453,6 +2426,7 @@ export const capabilityDefinitions: AgentCapabilityDefinition[] = [
   { id: 'Template.Manage', version: 1, title: 'Manage production template', description: 'Duplicate, delete, or edit an existing production template.', intentType: 'Intent.TemplateManage', expectedArtifacts: ['template'], bindings: [templateManageBinding] },
   { id: 'Artifact.Read', version: 1, title: 'Inspect artifacts', description: 'Read existing artifacts without changing them.', intentType: 'Intent.ArtifactInspect', expectedArtifacts: ['video'], bindings: [artifactReadBinding] },
   { id: 'Artifact.Export', version: 1, title: 'Export artifacts', description: 'Export existing artifacts.', intentType: 'Intent.ArtifactExport', expectedArtifacts: [], bindings: [exportBinding] },
+  ...contentHubCapabilityDefinitions,
 ]
 
 export function capabilityForIntent(intentType: AgentIntentType) {

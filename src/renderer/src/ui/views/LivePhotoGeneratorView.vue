@@ -27,6 +27,7 @@ import {
   PanelBottomOpen,
   PanelTopOpen,
   Package,
+  Pause,
   Play,
   RefreshCcw,
   ScanLine,
@@ -233,10 +234,10 @@ type SubtitleCaptionStyle = {
 }
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const uiText = computed(() => ({
-  workspaceTitle: 'Live Photo',
+  workspaceTitle: '图生视频',
   workspaceHint: t('livePhoto.workspace.hint'),
   heroTitle: t('livePhoto.hero.title'),
   heroDesc: t('livePhoto.hero.desc'),
@@ -295,6 +296,13 @@ const uiText = computed(() => ({
   referenceCreatedSuffix: t('livePhoto.workspace.referenceCreatedSuffix'),
   runtimeLogTitlePrefix: t('livePhoto.workspace.runtimeLogTitle'),
 }))
+
+/** Short labels for the reference-source buttons (previously hard-coded Chinese). */
+const lpText = computed(() => {
+  if (locale.value === 'en-US') return { localPick: 'Upload images', assetLibrary: 'From asset library' }
+  if (locale.value === 'vi-VN') return { localPick: 'Tai anh len', assetLibrary: 'Tu thu vien' }
+  return { localPick: '继续添加', assetLibrary: '从素材库选择' }
+})
 
 const loading = ref(false)
 const creatingReference = ref(false)
@@ -595,6 +603,16 @@ function liveTaskStatusTone(item: LivePhotoItem) {
   return 'is-draft'
 }
 
+/** Status dot class for the redesigned workspace (`.lp-state--*`). */
+function lpTone(item: LivePhotoItem) {
+  const tone = liveTaskStatusTone(item)
+  if (tone === 'is-success') return 'lp-state--ok'
+  if (tone === 'is-danger') return 'lp-state--err'
+  if (tone === 'is-warning') return 'lp-state--warn'
+  if (tone === 'is-running') return 'lp-state--run'
+  return ''
+}
+
 function liveTaskStepTone(step?: LivePhotoItem['workflow']['currentStep']) {
   if (step === 'image_generation') return 'tone-image'
   if (step === 'image_validation') return 'tone-validation'
@@ -855,7 +873,7 @@ function defaultSubtitleTitleForItems(items: LivePhotoItem[]) {
   return (
     items
       .map((item) => String(item.sourceShotLabel || item.sourceProjectTitle || item.productSnapshot?.name || item.id || '').trim())
-      .find(Boolean) || 'Live Photo'
+      .find(Boolean) || '图生视频'
   )
 }
 
@@ -2082,720 +2100,367 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 </script>
 
 <template>
-  <div class="live-photo-page plugin-workspace-standard" data-testid="live-photo-page">
-    <section class="live-workspace-head">
-      <div class="live-workspace-intro">
-        <div class="live-workspace-icon">
-          <Sparkles class="h-5 w-5" />
-        </div>
-        <div class="live-workspace-copy">
-          <h1>{{ uiText.workspaceTitle }}</h1>
-          <p>{{ uiText.workspaceHint }}</p>
-        </div>
-        <div class="live-workspace-actions">
-          <button class="ghost-button back-button" data-testid="live-photo-back" type="button" @click="router.push('/plugins?tab=installed&plugin=live-photo-generator')">
-            <ChevronLeft class="h-4 w-4" />
-            {{ t('livePhoto.hero.back') }}
-          </button>
-          <button class="ghost-button refresh-button" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
-            <RefreshCcw class="h-4 w-4" />
-            {{ t('livePhoto.hero.refresh') }}
-          </button>
-        </div>
-      </div>
+  <div class="live-photo-page lp" data-testid="live-photo-page">
+    <div class="vg-scope lp-main">
+      <!-- ============ head + tabs ============ -->
+      <section class="lp-top">
+        <header class="lp-head">
+          <div class="lp-head__icon"><Sparkles :size="20" /></div>
+          <div class="lp-head__text">
+            <h1>{{ uiText.workspaceTitle }}</h1>
+            <p>{{ uiText.workspaceHint }}</p>
+          </div>
+          <div class="lp-head__actions">
+            <button class="vg-btn" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
+              <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />{{ t('livePhoto.hero.refresh') }}
+            </button>
+          </div>
+        </header>
 
-      <section class="tab-bar live-workspace-tabs">
-        <button class="tab-button" data-testid="live-photo-tab-reference" :class="{ active: activeTab === 'reference' }" type="button" @click="activeTab = 'reference'">
-          <ImagePlus class="h-4 w-4" />
-          <span>{{ uiText.tabReference }}</span>
-        </button>
-        <button class="tab-button" data-testid="live-photo-tab-library" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
-          <FolderOpen class="h-4 w-4" />
-          <span>{{ uiText.tabLibrary }}</span>
-          <span class="live-tab-count">{{ libraryStats.total }}</span>
-        </button>
-        <button class="tab-button" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
-          <Settings class="h-4 w-4" />
-          <span>{{ t('livePhoto.workspace.retryGuard') }}</span>
-          <span class="live-tab-count">{{ livePhotoSettings.retryLimit ?? 0 }}</span>
-        </button>
+        <nav class="lp-tabs" role="tablist">
+          <button class="lp-tab" data-testid="live-photo-tab-reference" :class="{ 'is-active': activeTab === 'reference' }" role="tab" type="button" @click="activeTab = 'reference'">
+            <ImagePlus :size="15" />{{ uiText.tabReference }}
+          </button>
+          <button class="lp-tab" data-testid="live-photo-tab-library" :class="{ 'is-active': activeTab === 'library' }" role="tab" type="button" @click="activeTab = 'library'">
+            <FolderOpen :size="15" />{{ uiText.tabLibrary }}<em>{{ libraryStats.total }}</em>
+          </button>
+          <span class="lp-tabs__spacer" />
+          <button class="lp-util" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
+            <Settings :size="14" />{{ t('livePhoto.workspace.retryGuard') }}<em>{{ livePhotoSettings.retryLimit ?? 0 }}</em>
+          </button>
+        </nav>
       </section>
-    </section>
 
-    <div v-if="notice" class="banner banner-success" data-testid="live-photo-notice">{{ notice }}</div>
-    <div v-if="errorText" class="banner banner-error" data-testid="live-photo-error">{{ errorText }}</div>
-
-    <section v-if="activeTab === 'reference'" class="workspace-grid">
-      <article class="panel-card reference-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">1</div>
-            <strong>{{ uiText.referenceTitle }}</strong>
-          </div>
-          <span class="panel-head-note">{{ uiText.referenceNote }}</span>
-        </div>
-
-        <div class="field-stack">
-          <div class="field">
-            <span>{{ uiText.referenceImage }}</span>
-            <div class="reference-source-grid">
-              <button class="reference-source-card" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
-                <template v-if="primaryReferenceImage">
-                  <img class="reference-source-card__preview" :src="previewSrc(primaryReferenceImage)" alt="reference preview" />
-                  <div class="reference-source-card__copy">
-                    <strong>{{ uiText.referenceUploadTitle }}</strong>
-                    <small>{{ fileNameOf(primaryReferenceImage) }}</small>
-                    <span>{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</span>
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="reference-source-card__icon">
-                    <ImagePlus class="h-7 w-7" />
-                  </div>
-                  <div class="reference-source-card__copy">
-                    <strong>{{ uiText.referenceUploadTitle }}</strong>
-                    <small>{{ uiText.referenceUploadDesc }}</small>
-                  </div>
-                </template>
-              </button>
-              <button class="reference-source-card" type="button" @click="pickReferenceImageFromLibrary">
-                <div class="reference-source-card__icon"><ImagePlus class="h-7 w-7" /></div>
-                <div class="reference-source-card__copy"><strong>从素材库选择</strong><small>使用电脑或手机上传的图片</small></div>
-              </button>
-
-              <button class="reference-source-card" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
-                <div class="reference-source-card__icon">
-                  <LayoutGrid class="h-7 w-7" />
-                </div>
-                <div class="reference-source-card__copy">
-                  <strong>{{ uiText.materialLibrarySelect }}</strong>
-                  <small>{{ uiText.materialLibraryDesc }}</small>
-                  <span>{{ unboundMaterialOptions.length }} {{ uiText.itemUnit }}</span>
-                </div>
-              </button>
-            </div>
-            <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
-          </div>
-
-          <div v-if="referenceTaskRows.length" class="field">
-            <span>{{ uiText.pendingTasks }}</span>
-            <div class="clone-shot-list">
-              <div v-for="row in referenceTaskRows" :key="row.id" class="clone-shot-row active reference-task-row" :class="{ missing: row.missing }">
-                <div class="clone-shot-copy">
-                  <strong>{{ row.fileName }}</strong>
-                  <small>{{ row.path }}</small>
-                  <span v-if="row.missing" class="missing-pill">{{ uiText.missingImage }}</span>
-                </div>
-                <button class="ghost-button small danger" type="button" @click="removeReferenceImage(row.path)">
-                  <Trash2 class="h-4 w-4" />
-                  {{ uiText.delete }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="referenceCreatedItems.length" class="field">
-            <span>{{ uiText.referenceTaskList }}</span>
-            <div class="reference-status-list">
-              <article v-for="item in referenceCreatedItems" :key="item.id" class="reference-status-card">
-                <div class="reference-status-top">
-                  <strong>{{ referenceTaskTitle(item) }}</strong>
-                  <span class="status-pill" :class="`status-${item.packagingStatus}`">{{ itemStatusLabel(item.packagingStatus) }}</span>
-                </div>
-                <div class="reference-status-meta">
-                  <span>{{ item.productSnapshot?.name || '--' }}</span>
-                  <span>{{ formatTime(item.updatedAt) }}</span>
-                </div>
-                <small>{{ liveTaskMetaSummary(item) }}</small>
-              </article>
-            </div>
-          </div>
-
-          <label class="field">
-            <span>{{ uiText.product }}</span>
-            <button class="product-picker product-picker-button" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
-              <div v-if="selectedProduct?.coverImagePath" class="product-thumb">
-                <img :src="previewSrc(selectedProduct.coverImagePath)" alt="product cover" />
-              </div>
-              <div v-else class="product-thumb product-thumb-fallback">
-                <Package class="h-4 w-4" />
-              </div>
-              <span class="product-picker-name">{{ selectedProduct?.name || t('livePhoto.workspace.selectProduct') }}</span>
-              <ChevronDown class="picker-arrow h-4 w-4" />
-            </button>
-          </label>
-
-          <div class="field">
-            <span>{{ t('livePhoto.workspace.primaryImage') }}</span>
-            <div v-if="selectedProductLivePhotoRef" class="live-photo-master-ref">
-              <button class="live-photo-master-ref__preview" type="button" @click="openPath(selectedProductLivePhotoRef)">
-                <img :src="previewSrc(selectedProductLivePhotoRef)" alt="live photo master reference" />
-              </button>
-              <div class="live-photo-master-ref__copy">
-                <strong>{{ fileNameOf(selectedProductLivePhotoRef) }}</strong>
-                <small>{{ selectedProductLivePhotoRef }}</small>
-              </div>
-            </div>
-            <div v-else class="live-photo-master-ref live-photo-master-ref--missing">
-              <AlertTriangle class="h-4 w-4" />
-              <span>{{ t('livePhoto.workspace.primaryImageRequired') }}</span>
-            </div>
-          </div>
-
-          <button class="primary-button create-button" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
-            <Sparkles class="h-4 w-4" />
-            {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
-          </button>
-
-          <div class="safe-note">
-            <ShieldCheck class="h-4 w-4" />
-            <span>{{ uiText.referenceSafe }}</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel-card rules-card">
-        <div class="panel-head">
-          <div class="panel-title-wrap">
-            <div class="step-badge">2</div>
-            <strong>{{ uiText.rulesTitle }}</strong>
-          </div>
-          <span class="panel-head-note">{{ uiText.rulesVersion }}</span>
-        </div>
-        <div class="rules-box">
-          <div class="rule-row">
-            <div class="rule-icon">A</div>
-            <p>{{ uiText.ruleIdentity }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">+</div>
-            <p>{{ uiText.ruleReplace }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">O</div>
-            <p>{{ uiText.ruleMotion }}</p>
-          </div>
-          <div class="rule-row">
-            <div class="rule-icon">*</div>
-            <p>{{ uiText.rulePackage }}</p>
-          </div>
-        </div>
-        <div class="output-note">
-          <div class="output-note-head">{{ uiText.outputTitle }}</div>
-          <p>{{ uiText.outputDesc }}</p>
-        </div>
-        <div class="quality-control-card">
-          <div class="prompt-version-editor">
-            <div class="prompt-kind-tabs" role="tablist">
-              <button class="ghost-button small" :class="{ active: promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ t('promptKind.image') }}</button>
-              <button class="ghost-button small" :class="{ active: promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ t('promptKind.video') }}</button>
-            </div>
-            <label class="field">
-              <span>{{ t('livePhoto.workspace.promptVersion') }}</span>
-              <select v-model="selectedPromptVersionId" @change="selectPromptVersion(selectedPromptVersionId)">
-                <option v-for="version in promptVersions" :key="version.id" :value="version.id">
-                  V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${t('livePhoto.workspace.activeVersion')}` : '' }}
-                </option>
-              </select>
-            </label>
-            <label class="field">
-              <span>{{ t('livePhoto.workspace.versionName') }}</span>
-              <input v-model="promptEditorName" type="text" placeholder="Live Photo Product Replacement" />
-            </label>
-            <label class="field prompt-version-editor__prompt">
-              <span>{{ t('livePhoto.workspace.promptContent') }}</span>
-              <textarea v-model="promptEditorText" rows="7" spellcheck="false"></textarea>
-            </label>
-            <div class="prompt-version-actions">
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">{{ t('livePhoto.workspace.updateVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">{{ t('livePhoto.workspace.copyVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('livePhoto.workspace.activateVersion') }}</button>
-              <button class="ghost-button small" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion">{{ t('livePhoto.workspace.rollbackVersion') }}</button>
-            </div>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section v-else class="library-layout">
-      <div class="library-headline">
-        <div class="library-summary-row">
-          <div class="library-heading-cluster">
-            <div class="library-title-row">
-              <strong>{{ uiText.libraryTitle }}</strong>
-              <span class="library-count">{{ libraryStats.total }} {{ uiText.itemUnit }}</span>
-            </div>
-            <div class="library-overview">
-              <div class="library-overview__card is-running">
-                <span>{{ t('livePhoto.workspace.running') }}</span>
-                <strong>{{ libraryStats.running }}</strong>
-              </div>
-              <div class="library-overview__card is-failed">
-                <span>{{ t('livePhoto.status.failed') }}</span>
-                <strong>{{ libraryStats.failed }}</strong>
-              </div>
-              <div class="library-overview__card is-paused">
-                <span>{{ t('livePhoto.workspace.paused') }}</span>
-                <strong>{{ libraryStats.paused }}</strong>
-              </div>
-              <div class="library-overview__card is-selected">
-                <span>{{ t('livePhoto.workspace.selected') }}</span>
-                <strong>{{ selectedLibraryItems.length }}</strong>
-              </div>
-            </div>
-          </div>
-          <div class="library-head-tools">
-            <div class="library-view-toggle" :aria-label="t('livePhoto.workspace.viewMode')">
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'grid' }"
-                type="button"
-                :aria-label="t('livePhoto.workspace.gridView')"
-                :aria-pressed="libraryViewMode === 'grid'"
-                @click="libraryViewMode = 'grid'"
-              >
-                <Grid2x2 class="h-4 w-4" />
-              </button>
-              <button
-                class="toolbar-icon"
-                :class="{ active: libraryViewMode === 'list' }"
-                type="button"
-                :aria-label="t('livePhoto.workspace.listView')"
-                :aria-pressed="libraryViewMode === 'list'"
-                @click="libraryViewMode = 'list'"
-              >
-                <List class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="library-pagination">
-              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)">
-                <ChevronLeft class="h-4 w-4" />
-              </button>
-              <span class="library-pagination__text">{{ libraryPage }} / {{ libraryTotalPages }}</span>
-              <button class="library-page-button" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)">
-                <ChevronRight class="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="status-filter-tabs">
-          <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ active: libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
-        </div>
-        <div class="library-toolbar">
-          <div class="library-action-group">
-            <button class="toolbar-button" type="button" :disabled="!filteredLibraryItems.length" @click="toggleSelectAllFiltered">
-              <CheckCircle2 class="h-4 w-4" />
-              {{ selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length ? t('livePhoto.workspace.clearFiltered') : t('livePhoto.workspace.selectFiltered') }}
-            </button>
-          </div>
-          <div v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="library-action-group library-task-actions">
-            <button v-if="retryableFailedLibraryItems.length" class="toolbar-button" type="button" @click="retryFailedItems">
-              <RefreshCcw class="h-4 w-4" />
-              {{ t('livePhoto.workspace.retryFailed') }} {{ retryableFailedLibraryItems.length ? `(${retryableFailedLibraryItems.length})` : '' }}
-            </button>
-            <button v-if="pausedLibraryItems.length" class="toolbar-button" type="button" @click="resumePausedItems">
-              <Play class="h-4 w-4" />
-              {{ t('livePhoto.workspace.resumePaused') }} {{ pausedLibraryItems.length ? `(${pausedLibraryItems.length})` : '' }}
-            </button>
-            <button v-if="runningLibraryItems.length" class="toolbar-button" type="button" @click="pauseRunningItems">
-              <LoaderCircle class="h-4 w-4" />
-              {{ t('livePhoto.workspace.pauseRunning') }} {{ runningLibraryItems.length ? `(${runningLibraryItems.length})` : '' }}
-            </button>
-          </div>
-          <div v-if="selectedLibraryIds.length" class="library-output-actions">
-            <button
-              class="toolbar-button batch-delete-button"
-              type="button"
-              @click="openBatchDelete"
-            >
-              <Trash2 class="h-4 w-4" />
-              {{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
-            </button>
-            <button
-              v-if="subtitleEligibleSelectedCount"
-              class="toolbar-button"
-              type="button"
-              @click="openBatchSubtitleDialog"
-            >
-              <Sparkles class="h-4 w-4" />
-              {{ t('livePhoto.workspace.batchSubtitles') }} {{ subtitleEligibleSelectedCount ? `(${subtitleEligibleSelectedCount})` : '' }}
-            </button>
-            <button v-if="subtitleRevertEligibleSelectedCount" class="toolbar-button" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
-            <button class="primary-button export-selected-button" data-testid="live-photo-export-selected" type="button" :disabled="exporting" @click="exportSelected">
-              <Package class="h-4 w-4" />
-              {{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
-            </button>
-          </div>
-        </div>
+      <div v-if="notice" class="vg-notice vg-notice--accent lp-flash" data-testid="live-photo-notice">
+        <CheckCircle2 :size="15" /><span>{{ notice }}</span>
+        <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="notice = ''"><X :size="13" /></button>
+      </div>
+      <div v-if="errorText" class="vg-notice vg-notice--danger lp-flash" data-testid="live-photo-error">
+        <AlertTriangle :size="15" /><span>{{ errorText }}</span>
+        <button class="vg-icon-btn vg-icon-btn--sm" type="button" @click="errorText = ''"><X :size="13" /></button>
       </div>
 
-      <div v-if="!filteredLibraryItems.length" class="panel-card empty-card" data-testid="live-photo-empty">
-        <strong>{{ t('livePhoto.library.emptyTitle') }}</strong>
-        <p>{{ t('livePhoto.library.emptyDesc') }}</p>
-      </div>
+      <!-- ============ 从参考图创建 ============ -->
+      <section v-if="activeTab === 'reference'" class="lp-create">
+        <div class="lp-col">
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">1</span>
+              <div class="lp-card__title">
+                <h2>{{ uiText.referenceTitle }}</h2>
+                <p>{{ uiText.referenceNote }}</p>
+              </div>
+            </header>
 
-      <div v-else-if="libraryViewMode === 'list'" class="live-console-list">
-        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-row" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
-          <label class="live-console-row__check">
-            <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
-            <span></span>
-          </label>
+            <div class="lp-field">
+              <div class="lp-field__label">
+                <span>{{ uiText.referenceImage }}</span>
+                <small v-if="referenceImagePaths.length" class="vg-num">{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</small>
+              </div>
 
-            <div class="live-console-row__preview">
-              <div class="live-console-row__thumb">
-                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
-                <div v-else class="live-console-row__thumb-empty">
-                  <FileImage class="h-5 w-5" />
+              <div v-if="referenceTaskRows.length" class="lp-refs">
+                <div v-for="row in referenceTaskRows" :key="row.id" class="lp-ref" :class="{ 'is-missing': row.missing }" :title="row.path">
+                  <img v-if="!row.missing" :src="previewSrc(row.path)" alt="" loading="lazy" decoding="async" />
+                  <span v-else class="lp-ref__missing"><AlertTriangle :size="16" />{{ uiText.missingImage }}</span>
+                  <span class="lp-ref__name">{{ row.fileName }}</span>
+                  <button class="lp-ref__remove" type="button" :title="uiText.delete" :aria-label="uiText.delete" @click="removeReferenceImage(row.path)"><X :size="12" /></button>
                 </div>
-                <button
-                  v-if="livePhotoDisplayVideoPath(item)"
-                  class="preview-play"
-                  type="button"
-                  :aria-label="t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' })"
-                  @click.stop="openVideoDialog(item)"
-                >
-                  <Play class="h-4 w-4" />
+                <button class="lp-ref lp-ref--add" type="button" @click="pickReferenceImage"><ImagePlus :size="18" /></button>
+              </div>
+              <button v-else class="lp-drop" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
+                <span class="lp-drop__icon"><ImagePlus :size="22" /></span>
+                <strong>{{ uiText.referenceUploadTitle }}</strong>
+                <small>{{ uiText.referenceUploadDesc }}</small>
+              </button>
+
+              <div class="lp-row lp-row--fill">
+                <button v-if="referenceTaskRows.length" class="vg-btn" data-testid="live-photo-pick-reference" type="button" @click="pickReferenceImage">
+                  <ImagePlus :size="15" />{{ lpText.localPick }}
+                </button>
+                <button class="vg-btn" type="button" @click="pickReferenceImageFromLibrary">
+                  <FolderOpen :size="15" />{{ lpText.assetLibrary }}
+                </button>
+                <button class="vg-btn" data-testid="live-photo-open-material-picker" type="button" @click="openMaterialPicker">
+                  <LayoutGrid :size="15" />{{ uiText.materialLibrarySelect }}<em class="lp-btn-count">{{ unboundMaterialOptions.length }}</em>
                 </button>
               </div>
+              <input :value="primaryReferenceImage" data-testid="live-photo-reference-path" class="sr-only" readonly />
             </div>
 
-            <div class="live-console-row__main">
-              <div class="live-console-row__task">
-                <div class="live-console-row__titleline">
-                  <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                  <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
-                  <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
-                </div>
-                <div class="live-console-row__meta">
-                  <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
-                  <span class="live-console-row__dot"></span>
-                  <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
-                  <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                  <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
-                </div>
-                <div class="live-console-row__subtitle">
-                  <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
-                </div>
-                <div v-if="liveTaskErrorSummary(item)" class="live-console-row__error">
-                  <AlertTriangle class="h-3.5 w-3.5" />
-                  <span class="live-console-row__error-text">{{ liveTaskErrorSummary(item) }}</span>
-                </div>
-              </div>
-
-              <div class="live-console-row__side">
-                <div class="live-console-row__statuswrap">
-                  <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
-                  <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                </div>
-                <div class="live-console-row__updated-inline">
-                  <Clock3 class="h-3.5 w-3.5" />
-                  <span>{{ formatTime(item.updatedAt) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="live-console-row__bottom">
-              <div class="live-console-row__quickrefs">
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_a0f61f08d796') }} {{ item.imagePromptPreview?.referenceImagePaths?.length || 0 }}</span>
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_6925f0298cba') }} {{ item.videoPromptPreview?.referenceImagePaths?.length || 0 }}</span>
-                <span class="live-console-row__quickchip">{{ liveTaskProgressPercent(item) }}%</span>
-                <span class="live-console-row__quickchip">{{ liveTaskAutoSummary(item) }}</span>
-                <span class="live-console-row__quickchip">{{ t('autoUi.k_0a2489f651ae') }} {{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                <span v-if="extractLivePhotoTaskId(item)" class="live-console-row__quickchip">{{ t('autoUi.k_9b53e535acea') }} {{ extractLivePhotoTaskId(item) }}</span>
-                <span v-if="liveTaskWaitingHint(item)" class="live-console-row__quickchip live-console-row__quickchip--accent">{{ liveTaskWaitingHint(item) }}</span>
-              </div>
-
-              <div class="live-console-row__actions">
-                <button class="live-console-row__link live-console-row__link--primary" type="button" @click.stop="openTaskDetail(item)">
-                  <PanelBottomOpen class="h-4 w-4" /> {{ t('autoUi.k_faea8c1db9cc') }} </button>
-                <button class="live-console-row__link" type="button" @click.stop="openRuntimeLogs(item)">
-                  <Logs class="h-4 w-4" /> {{ t('autoUi.k_b923b26d335a') }} </button>
-                <button
-                  class="live-console-row__link"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="openSingleSubtitleDialog(item)"
-                >
-                  <Sparkles class="h-4 w-4" /> {{ t('autoUi.k_aaa5f2e9f006') }} </button>
-                <button
-                  v-if="itemHasAppliedSubtitle(item)"
-                  class="live-console-row__link"
-                  type="button"
-                  :disabled="subtitleDialogBusy"
-                  @click.stop="revertSubtitleFromItem(item)"
-                > {{ t('autoUi.k_6d32dea55ea6') }} </button>
-                <button
-                  :data-testid="`live-photo-preview-${item.id}`"
-                  class="live-console-row__action live-console-row__action--play"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="openVideoDialog(item)"
-                >
-                  <Play class="h-4 w-4" />
+            <div class="lp-field">
+              <div class="lp-field__label"><span>{{ uiText.product }}</span></div>
+              <div class="lp-product">
+                <button class="lp-product__pick" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
+                  <span class="lp-product__thumb">
+                    <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="" />
+                    <Package v-else :size="16" />
+                  </span>
+                  <span class="lp-product__name">
+                    <strong>{{ selectedProduct?.name || t('livePhoto.workspace.selectProduct') }}</strong>
+                    <small v-if="selectedProduct">{{ selectedProduct.type }}</small>
+                  </span>
+                  <ChevronDown :size="15" class="lp-product__chev" />
                 </button>
-                <button
-                  :data-testid="`live-photo-metadata-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="!item.packagingMetadataBridgePath"
-                  @click.stop="openPath(item.packagingMetadataBridgePath)"
-                >
-                  <Package class="h-4 w-4" />
-                </button>
-                <button
-                  :data-testid="`live-photo-reveal-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="!livePhotoDisplayVideoPath(item)"
-                  @click.stop="showPath(livePhotoDisplayVideoPath(item))"
-                >
-                  <FolderOpen class="h-4 w-4" />
-                </button>
-                <button
-                  v-if="canCorrectReplacementRegion(item)"
-                  :data-testid="`live-photo-region-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :title="t('autoUi.k_329d5e81ce23')"
-                  @click.stop="openReplacementRegionEditor(item)"
-                >
-                  <ScanLine class="h-4 w-4" />
-                </button>
-                <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
-                  <button
-                    v-if="canRetryImageOnce(item)"
-                    :data-testid="`live-photo-retry-${item.id}`"
-                    class="image-retry-decision__button"
-                    :title="t('autoUi.k_031c7e12ddae')"
-                    type="button"
-                    :disabled="item.packagingStatus === 'processing'"
-                    @click.stop="retryItem(item)"
-                  >
-                    <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                <div class="lp-master" :class="{ 'is-missing': !selectedProductLivePhotoRef }">
+                  <button v-if="selectedProductLivePhotoRef" class="lp-master__thumb" type="button" :title="selectedProductLivePhotoRef" @click="openPath(selectedProductLivePhotoRef)">
+                    <img :src="previewSrc(selectedProductLivePhotoRef)" alt="" />
                   </button>
-                  <button
-                    v-if="canContinueWithVideo(item)"
-                    class="image-retry-decision__button image-retry-decision__button--primary"
-                    :title="t('livePhoto.workspace.continueWithVideo')"
-                    type="button"
-                    @click.stop="continueWithVideo(item)"
-                  >
-                    <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
-                  </button>
+                  <span v-else class="lp-master__thumb"><AlertTriangle :size="15" /></span>
+                  <span class="lp-master__text">
+                    <small>{{ t('livePhoto.workspace.primaryImage') }}</small>
+                    <strong v-if="selectedProductLivePhotoRef" :title="selectedProductLivePhotoRef">{{ fileNameOf(selectedProductLivePhotoRef) }}</strong>
+                    <strong v-else>{{ t('livePhoto.workspace.primaryImageRequired') }}</strong>
+                  </span>
                 </div>
-                <button
-                  v-if="!canRetryImageOnce(item)"
-                  :data-testid="`live-photo-retry-${item.id}`"
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="item.packagingStatus === 'processing'"
-                  @click.stop="retryItem(item)"
-                >
-                  <RefreshCcw class="h-4 w-4" />
-                </button>
-                <button
-                  class="live-console-row__action"
-                  type="button"
-                  :disabled="item.packagingStatus === 'completed'"
-                  @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
-                >
-                  <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
-                </button>
-                <button
-                  :data-testid="`live-photo-remove-${item.id}`"
-                  class="live-console-row__action live-console-row__action--danger"
-                  type="button"
-                  @click.stop="removeItem(item.id)"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </button>
               </div>
             </div>
-        </article>
-      </div>
-      <div v-else class="live-console-grid">
-        <article v-for="item in pagedLibraryItems" :key="item.id" class="live-console-card" :class="{ selected: selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
-          <div class="live-console-card__head">
-            <label class="live-console-row__check">
-              <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
-              <span></span>
+
+            <footer class="lp-card__foot">
+              <span class="lp-safe"><ShieldCheck :size="14" />{{ uiText.referenceSafe }}</span>
+              <button class="vg-btn vg-btn--primary vg-btn--lg" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
+                <LoaderCircle v-if="creatingReference" :size="16" class="vg-spin" />
+                <Sparkles v-else :size="16" />
+                {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
+              </button>
+            </footer>
+          </article>
+
+          <article v-if="referenceCreatedItems.length" class="lp-card lp-card--flush">
+            <header class="lp-card__bar">
+              <h3>{{ uiText.referenceTaskList }}<em>{{ referenceCreatedItems.length }}</em></h3>
+              <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="activeTab = 'library'">{{ uiText.tabLibrary }}<ChevronRight :size="14" /></button>
+            </header>
+            <div class="lp-recent">
+              <div v-for="item in referenceCreatedItems" :key="item.id" class="lp-recent__row">
+                <span class="lp-recent__thumb">
+                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
+                  <FileImage v-else :size="15" />
+                </span>
+                <div class="lp-recent__main">
+                  <strong :title="referenceTaskTitle(item)">{{ referenceTaskTitle(item) }}</strong>
+                  <small>{{ item.productSnapshot?.name || '--' }} · {{ liveTaskMetaSummary(item) }}</small>
+                </div>
+                <span class="vg-num lp-recent__time">{{ formatTime(item.updatedAt) }}</span>
+                <span class="lp-state" :class="lpTone(item)"><i />{{ itemStatusLabel(item.packagingStatus) }}</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="lp-col">
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">2</span>
+              <div class="lp-card__title">
+                <h2>{{ uiText.rulesTitle }}</h2>
+                <p>{{ uiText.outputDesc }}</p>
+              </div>
+              <span class="vg-chip">{{ uiText.rulesVersion }}</span>
+            </header>
+            <ol class="lp-rules">
+              <li><span>1</span>{{ uiText.ruleIdentity }}</li>
+              <li><span>2</span>{{ uiText.ruleReplace }}</li>
+              <li><span>3</span>{{ uiText.ruleMotion }}</li>
+              <li><span>4</span>{{ uiText.rulePackage }}</li>
+            </ol>
+          </article>
+
+          <article class="lp-card">
+            <header class="lp-card__head">
+              <span class="lp-num">3</span>
+              <div class="lp-card__title">
+                <h2>{{ t('livePhoto.workspace.promptVersion') }}</h2>
+              </div>
+              <div class="lp-seg" role="tablist">
+                <button :class="{ 'is-on': promptKind === 'image' }" type="button" role="tab" :aria-selected="promptKind === 'image'" :disabled="promptVersionBusy" @click="switchPromptKind('image')">{{ t('promptKind.image') }}</button>
+                <button :class="{ 'is-on': promptKind === 'video' }" type="button" role="tab" :aria-selected="promptKind === 'video'" :disabled="promptVersionBusy" @click="switchPromptKind('video')">{{ t('promptKind.video') }}</button>
+              </div>
+            </header>
+            <div class="vg-form-grid">
+              <label class="vg-field">
+                <span class="vg-field__label">{{ t('livePhoto.workspace.promptVersion') }}</span>
+                <select v-model="selectedPromptVersionId" class="vg-select" @change="selectPromptVersion(selectedPromptVersionId)">
+                  <option v-for="version in promptVersions" :key="version.id" :value="version.id">
+                    V{{ version.version }} · {{ version.name }}{{ version.active ? ` · ${t('livePhoto.workspace.activeVersion')}` : '' }}
+                  </option>
+                </select>
+              </label>
+              <label class="vg-field">
+                <span class="vg-field__label">{{ t('livePhoto.workspace.versionName') }}</span>
+                <input v-model="promptEditorName" class="vg-input" type="text" placeholder="Live Photo Product Replacement" />
+              </label>
+            </div>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ t('livePhoto.workspace.promptContent') }}</span>
+              <textarea v-model="promptEditorText" class="vg-textarea lp-prompt" rows="10" spellcheck="false" />
             </label>
-            <div class="live-console-row__statuswrap">
-              <span class="live-console-row__status" :class="liveTaskStatusTone(item)">{{ liveTaskStatusLabel(item) }}</span>
-              <span class="live-console-row__stepbadge" :class="liveTaskStepTone(item.workflow?.currentStep)">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+            <footer class="lp-card__foot">
+              <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><RefreshCcw :size="13" />{{ t('livePhoto.workspace.rollbackVersion') }}</button>
+              <div class="lp-row">
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy || !promptEditorText.trim()" @click="createPromptVersion">{{ t('livePhoto.workspace.copyVersion') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="activatePromptVersion">{{ t('livePhoto.workspace.activateVersion') }}</button>
+                <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="updatePromptVersion">{{ t('livePhoto.workspace.updateVersion') }}</button>
+              </div>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============ 库 / 导出 ============ -->
+      <section v-else class="lp-card lp-card--flush lp-library">
+        <header class="lp-bar">
+          <div class="lp-bar__title">
+            <h2>{{ uiText.libraryTitle }}<em class="vg-num">{{ libraryStats.total }} {{ uiText.itemUnit }}</em></h2>
+            <div class="lp-stats">
+              <span class="lp-stat lp-stat--run"><i />{{ t('livePhoto.workspace.running') }} <b class="vg-num">{{ libraryStats.running }}</b></span>
+              <span class="lp-stat lp-stat--err"><i />{{ t('livePhoto.status.failed') }} <b class="vg-num">{{ libraryStats.failed }}</b></span>
+              <span class="lp-stat lp-stat--warn"><i />{{ t('livePhoto.workspace.paused') }} <b class="vg-num">{{ libraryStats.paused }}</b></span>
             </div>
           </div>
-
-          <button
-            class="live-console-card__preview"
-            type="button"
-            :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || 'Live Photo' }) : t('autoUi.k_fe0ccc53ab2b')"
-            @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
-          >
-            <div class="live-console-row__thumb">
-              <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="poster" loading="lazy" decoding="async" />
-              <div v-else class="live-console-row__thumb-empty">
-                <FileImage class="h-5 w-5" />
-              </div>
-              <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true">
-                <Play class="h-4 w-4" />
-              </span>
+          <div class="lp-bar__tools">
+            <div class="lp-seg">
+              <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ 'is-on': libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
             </div>
+            <div class="lp-seg" :aria-label="t('livePhoto.workspace.viewMode')">
+              <button :class="{ 'is-on': libraryViewMode === 'grid' }" type="button" :aria-label="t('livePhoto.workspace.gridView')" :aria-pressed="libraryViewMode === 'grid'" @click="libraryViewMode = 'grid'"><Grid2x2 :size="14" /></button>
+              <button :class="{ 'is-on': libraryViewMode === 'list' }" type="button" :aria-label="t('livePhoto.workspace.listView')" :aria-pressed="libraryViewMode === 'list'" @click="libraryViewMode = 'list'"><List :size="14" /></button>
+            </div>
+          </div>
+        </header>
+
+        <div class="lp-selbar" :class="{ 'is-live': selectedLibraryIds.length }">
+          <label class="lp-check">
+            <input type="checkbox" :disabled="!filteredLibraryItems.length" :checked="!!selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length" @change="toggleSelectAllFiltered" />
+            <span>{{ t('livePhoto.workspace.selectFiltered') }}</span>
+          </label>
+          <span class="vg-muted">{{ t('livePhoto.workspace.selected') }} <b class="vg-num">{{ selectedLibraryIds.length }}</b></span>
+          <template v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length">
+            <span class="lp-selbar__sep" />
+            <button v-if="retryableFailedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="retryFailedItems">
+              <RefreshCcw :size="13" />{{ t('livePhoto.workspace.retryFailed') }} ({{ retryableFailedLibraryItems.length }})
+            </button>
+            <button v-if="pausedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="resumePausedItems">
+              <Play :size="13" />{{ t('livePhoto.workspace.resumePaused') }} ({{ pausedLibraryItems.length }})
+            </button>
+            <button v-if="runningLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="pauseRunningItems">
+              <Pause :size="13" />{{ t('livePhoto.workspace.pauseRunning') }} ({{ runningLibraryItems.length }})
+            </button>
+          </template>
+          <span class="vg-toolbar__spacer" />
+          <template v-if="selectedLibraryIds.length">
+            <button v-if="subtitleRevertEligibleSelectedCount" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
+            <button v-if="subtitleEligibleSelectedCount" class="vg-btn vg-btn--sm" type="button" @click="openBatchSubtitleDialog">
+              <Captions :size="13" />{{ t('livePhoto.workspace.batchSubtitles') }} ({{ subtitleEligibleSelectedCount }})
+            </button>
+            <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" @click="openBatchDelete">
+              <Trash2 :size="13" />{{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
+            </button>
+          </template>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
+            <Package :size="13" />{{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
           </button>
+        </div>
 
-          <div class="live-console-card__body">
-            <div class="live-console-row__task">
-              <div class="live-console-row__titleline">
-                <h3>{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                <span class="live-console-row__source">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
-                <span v-if="itemHasSubtitle(item)" class="live-console-row__source">{{ t('autoUi.k_83e422384f7f') }}</span>
+        <div v-if="!filteredLibraryItems.length" class="vg-empty lp-empty" data-testid="live-photo-empty">
+          <span class="vg-empty__icon"><FolderOpen :size="22" /></span>
+          <h3>{{ t('livePhoto.library.emptyTitle') }}</h3>
+          <p>{{ t('livePhoto.library.emptyDesc') }}</p>
+          <button class="vg-btn vg-btn--primary" type="button" @click="activeTab = 'reference'"><ImagePlus :size="15" />{{ uiText.tabReference }}</button>
+        </div>
+
+        <div v-else class="lp-items" :class="libraryViewMode === 'list' ? 'lp-items--list' : 'lp-items--grid'">
+          <article v-for="item in pagedLibraryItems" :key="item.id" class="lp-item" :class="{ 'is-on': selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
+            <div class="lp-item__media">
+              <button
+                class="lp-item__thumb"
+                type="button"
+                :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || '图生视频' }) : t('autoUi.k_fe0ccc53ab2b')"
+                @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
+              >
+                <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
+                <FileImage v-else :size="22" />
+                <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true"><Play :size="16" /></span>
+              </button>
+              <label class="lp-item__check">
+                <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
+              </label>
+            </div>
+
+            <div class="lp-item__body">
+              <div class="lp-item__titleline">
+                <h3 :title="item.sourceShotLabel || item.productSnapshot?.name || item.id">{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
+                <span class="lp-state" :class="lpTone(item)"><i />{{ liveTaskStatusLabel(item) }}</span>
               </div>
-              <div class="live-console-row__meta">
-                <span class="live-console-row__text">{{ taskSourceSummary(item) }}</span>
-                <span class="live-console-row__dot"></span>
-                <span class="live-console-row__text">{{ metadataModeLabel(item) }}</span>
-                <span v-if="item.autoFlowStatus" class="live-console-row__dot"></span>
-                <span v-if="item.autoFlowStatus" class="live-console-row__text">{{ liveTaskRetryText(item) || t('autoUi.k_2a83614918bc') }}</span>
+              <div class="lp-item__meta">
+                <span class="vg-chip">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
+                <span v-if="itemHasSubtitle(item)" class="vg-chip">{{ t('autoUi.k_83e422384f7f') }}</span>
+                <span class="lp-item__text">{{ taskSourceSummary(item) }} · {{ metadataModeLabel(item) }}</span>
               </div>
-              <div class="live-console-row__subtitle">
-                <span>{{ fileNameOf(item.referenceImagePath) || item.sourceShotLabel || '--' }}</span>
+              <div v-if="liveTaskErrorSummary(item)" class="lp-item__error" :title="liveTaskErrorSummary(item)">
+                <AlertTriangle :size="13" /><span>{{ liveTaskErrorSummary(item) }}</span>
               </div>
-              <div v-if="liveTaskErrorSummary(item)" class="live-console-row__error">
-                <AlertTriangle class="h-3.5 w-3.5" />
-                <span class="live-console-row__error-text">{{ liveTaskErrorSummary(item) }}</span>
+              <div v-else-if="liveTaskWaitingHint(item)" class="lp-item__hint">{{ liveTaskWaitingHint(item) }}</div>
+              <div class="lp-item__progress">
+                <div class="vg-progress">
+                  <div class="vg-progress__bar"><div class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': lpTone(item) === 'lp-state--err' }" :style="{ width: `${liveTaskProgressPercent(item)}%` }" /></div>
+                </div>
+                <span class="lp-item__step">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
+                <span class="vg-num lp-item__time"><Clock3 :size="12" />{{ formatTime(item.updatedAt) }}</span>
               </div>
             </div>
 
-            <div class="live-console-row__progress">
-              <div class="live-console-row__progress-copy">
-                <strong>{{ item.workflow?.currentStep ? workflowStepIndex(item.workflow.currentStep) + 1 : 1 }}/{{ livePhotoSteps.length }}</strong>
-                <span>{{ formatElapsed(item.createdAt) }}</span>
-              </div>
-              <div class="live-console-row__progress-track">
-                <span :style="{ width: `${Math.max(16, ((workflowStepIndex(item.workflow?.currentStep) + 1) / livePhotoSteps.length) * 100)}%` }"></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="live-console-card__footer">
-            <div class="live-console-row__updated-inline">
-              <Clock3 class="h-3.5 w-3.5" />
-              <span>{{ formatTime(item.updatedAt) }}</span>
-            </div>
-            <div class="live-console-row__actions">
-              <button class="live-console-row__action" type="button" @click.stop="openTaskDetail(item)">
-                <PanelBottomOpen class="h-4 w-4" />
-              </button>
-              <button class="live-console-row__action" type="button" @click.stop="openRuntimeLogs(item)">
-                <Logs class="h-4 w-4" />
-              </button>
-              <button
-                class="live-console-row__action"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="openSingleSubtitleDialog(item)"
-              >
-                <Sparkles class="h-4 w-4" />
-              </button>
-              <button
-                v-if="itemHasAppliedSubtitle(item)"
-                class="live-console-row__action"
-                type="button"
-                :disabled="subtitleDialogBusy"
-                @click.stop="revertSubtitleFromItem(item)"
-              >
-                <RefreshCcw class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-preview-${item.id}`"
-                class="live-console-row__action live-console-row__action--play"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="openVideoDialog(item)"
-              >
-                <Play class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-metadata-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="!item.packagingMetadataBridgePath"
-                @click.stop="openPath(item.packagingMetadataBridgePath)"
-              >
-                <Package class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-reveal-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="!livePhotoDisplayVideoPath(item)"
-                @click.stop="showPath(livePhotoDisplayVideoPath(item))"
-              >
-                <FolderOpen class="h-4 w-4" />
-              </button>
-              <button
-                v-if="canCorrectReplacementRegion(item)"
-                :data-testid="`live-photo-region-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :title="t('autoUi.k_329d5e81ce23')"
-                @click.stop="openReplacementRegionEditor(item)"
-              >
-                <ScanLine class="h-4 w-4" />
-              </button>
+            <div class="lp-item__actions">
               <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
                 <button
                   v-if="canRetryImageOnce(item)"
                   :data-testid="`live-photo-retry-${item.id}`"
-                  class="image-retry-decision__button"
+                  class="vg-btn vg-btn--xs"
                   :title="t('autoUi.k_031c7e12ddae')"
                   type="button"
                   :disabled="item.packagingStatus === 'processing'"
                   @click.stop="retryItem(item)"
                 >
-                  <RefreshCcw class="h-4 w-4" /> {{ t('autoUi.k_031c7e12ddae') }}
+                  <RefreshCcw :size="12" />{{ t('autoUi.k_031c7e12ddae') }}
                 </button>
                 <button
                   v-if="canContinueWithVideo(item)"
-                  class="image-retry-decision__button image-retry-decision__button--primary"
+                  class="vg-btn vg-btn--xs vg-btn--primary"
                   :title="t('livePhoto.workspace.continueWithVideo')"
                   type="button"
                   @click.stop="continueWithVideo(item)"
                 >
-                  <Play class="h-4 w-4" /> {{ t('livePhoto.workspace.continueWithVideoShort') }}
+                  <Play :size="12" />{{ t('livePhoto.workspace.continueWithVideoShort') }}
                 </button>
               </div>
-              <button
-                v-if="!canRetryImageOnce(item)"
-                :data-testid="`live-photo-retry-${item.id}`"
-                class="live-console-row__action"
-                type="button"
-                :disabled="item.packagingStatus === 'processing'"
-                @click.stop="retryItem(item)"
-              >
-                <RefreshCcw class="h-4 w-4" />
-              </button>
-              <button
-                class="live-console-row__action"
-                type="button"
-                :disabled="item.packagingStatus === 'completed'"
-                @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)"
-              >
-                <component :is="item.autoFlowStatus?.paused ? Play : LoaderCircle" class="h-4 w-4" />
-              </button>
-              <button
-                :data-testid="`live-photo-remove-${item.id}`"
-                class="live-console-row__action live-console-row__action--danger"
-                type="button"
-                @click.stop="removeItem(item.id)"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
+              <div class="lp-item__icons">
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_faea8c1db9cc')" @click.stop="openTaskDetail(item)"><PanelBottomOpen :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_b923b26d335a')" @click.stop="openRuntimeLogs(item)"><Logs :size="14" /></button>
+                <button :data-testid="`live-photo-preview-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.preview" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openVideoDialog(item)"><Play :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_aaa5f2e9f006')" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openSingleSubtitleDialog(item)"><Captions :size="14" /></button>
+                <button v-if="itemHasAppliedSubtitle(item)" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_6d32dea55ea6')" :disabled="subtitleDialogBusy" @click.stop="revertSubtitleFromItem(item)"><RefreshCcw :size="14" /></button>
+                <button :data-testid="`live-photo-metadata-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.metadata" :disabled="!item.packagingMetadataBridgePath" @click.stop="openPath(item.packagingMetadataBridgePath)"><Package :size="14" /></button>
+                <button :data-testid="`live-photo-reveal-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.reveal" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="showPath(livePhotoDisplayVideoPath(item))"><FolderOpen :size="14" /></button>
+                <button v-if="canCorrectReplacementRegion(item)" :data-testid="`live-photo-region-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_329d5e81ce23')" @click.stop="openReplacementRegionEditor(item)"><ScanLine :size="14" /></button>
+                <button v-if="!canRetryImageOnce(item)" :data-testid="`live-photo-retry-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.regenerate" :disabled="item.packagingStatus === 'processing'" @click.stop="retryItem(item)"><RefreshCcw :size="14" /></button>
+                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="item.autoFlowStatus?.paused ? t('livePhoto.workspace.resumePaused') : t('livePhoto.workspace.pauseRunning')" :disabled="item.packagingStatus === 'completed'" @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)">
+                  <component :is="item.autoFlowStatus?.paused ? Play : Pause" :size="14" />
+                </button>
+                <button :data-testid="`live-photo-remove-${item.id}`" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="uiText.delete" @click.stop="removeItem(item.id)"><Trash2 :size="14" /></button>
+              </div>
             </div>
+          </article>
+        </div>
+
+        <footer v-if="filteredLibraryItems.length" class="vg-pager lp-pager">
+          <span class="vg-num">{{ libraryTotal || filteredLibraryItems.length }} {{ uiText.itemUnit }}</span>
+          <div class="vg-pager__group">
+            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)"><ChevronLeft :size="14" /></button>
+            <span class="vg-num lp-pager__pos">{{ libraryPage }} / {{ libraryTotalPages }}</span>
+            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)"><ChevronRight :size="14" /></button>
           </div>
-        </article>
-      </div>
-    </section>
+        </footer>
+      </section>
+    </div>
 
     <div
       v-if="materialPickerOpen"
@@ -3547,30 +3212,30 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   padding: 10px;
   box-sizing: border-box;
   align-content: start;
-  color: #f8fbff;
-  background: radial-gradient(circle at top left, rgba(83, 58, 152, 0.12), transparent 28%), linear-gradient(180deg, #111521 0%, #171a29 42%, #111624 100%);
+  color: var(--theme-text);
+  background: radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-violet) 12%, transparent), transparent 28%), linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel-soft) 42%, var(--theme-panel) 100%);
 }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
-.hero-shell, .panel-card, .library-export-card { border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; background: linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.hero-shell, .panel-card, .library-export-card { border: 1px solid var(--theme-border); border-radius: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
 .hero-shell { display: grid; gap: 8px; padding: 10px 12px; }
 .hero-toolbar { display: flex; justify-content: space-between; gap: 8px; }
-.hero-card { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 12px; padding-top: 10px; border-top: 1px solid rgba(111, 123, 170, 0.12); }
+.hero-card { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 12px; padding-top: 10px; border-top: 1px solid var(--theme-border); }
 .hero-copy { min-width: 0; }
 .hero-headline h1 { margin: 0; font-size: 18px; line-height: 1.28; font-weight: 800; letter-spacing: -0.02em; }
-.hero-desc { margin: 6px 0 0; max-width: 900px; font-size: 12px; line-height: 1.6; color: rgba(197, 205, 225, 0.82); }
-.stat-card { min-height: 82px; padding: 10px 12px; border-radius: 16px; background: linear-gradient(180deg, rgba(56, 28, 98, 0.62), rgba(27, 21, 42, 0.96)); display: grid; gap: 4px; }
-.stat-card span { font-size: 12px; color: rgba(232, 236, 249, 0.86); }
-.stat-card strong { font-size: 40px; line-height: 1; color: #b573ff; }
+.hero-desc { margin: 6px 0 0; max-width: 900px; font-size: 12px; line-height: 1.6; color: var(--theme-text); }
+.stat-card { min-height: 82px; padding: 10px 12px; border-radius: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 62%, transparent), color-mix(in srgb, var(--theme-panel-soft) 96%, transparent)); display: grid; gap: 4px; }
+.stat-card span { font-size: 12px; color: var(--theme-text); }
+.stat-card strong { font-size: 40px; line-height: 1; color: var(--theme-tone-violet); }
 .banner { padding: 10px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
-.banner-success { border: 1px solid rgba(34, 197, 94, 0.2); background: rgba(34, 197, 94, 0.12); color: #d1fae5; }
-.banner-error { border: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.12); color: #fecaca; }
+.banner-success { border: 1px solid color-mix(in srgb, var(--theme-accent) 20%, transparent); background: color-mix(in srgb, var(--theme-accent) 12%, transparent); color: var(--theme-accent); }
+.banner-error { border: 1px solid color-mix(in srgb, var(--theme-tone-red) 20%, transparent); background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent); color: var(--theme-tone-red); }
 .tab-bar { display: flex; gap: 8px; flex-wrap: wrap; }
 .tab-button, .primary-button, .ghost-button, .toolbar-button, .toolbar-icon { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 12px; font-size: 12px; font-weight: 700; }
-.tab-button, .ghost-button, .toolbar-button, .toolbar-icon { border: 1px solid rgba(111, 123, 170, 0.2); background: rgba(18, 23, 38, 0.8); color: #eef5ff; }
-.tab-button.active, .toolbar-icon.active { border-color: rgba(119, 92, 255, 0.38); background: linear-gradient(180deg, rgba(85, 68, 167, 0.78), rgba(67, 49, 138, 0.78)); box-shadow: 0 10px 28px rgba(81, 54, 167, 0.22); }
-.primary-button { border: 1px solid rgba(145, 106, 255, 0.4); background: linear-gradient(90deg, #6d5cff 0%, #9b52ff 100%); color: #fff; box-shadow: 0 12px 28px rgba(126, 82, 255, 0.22); }
+.tab-button, .ghost-button, .toolbar-button, .toolbar-icon { border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 80%, transparent); color: var(--theme-text); }
+.tab-button.active, .toolbar-icon.active { border-color: color-mix(in srgb, var(--theme-tone-blue) 38%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 78%, transparent), color-mix(in srgb, var(--theme-tone-violet) 78%, transparent)); box-shadow: 0 10px 28px rgba(81, 54, 167, 0.22); }
+.primary-button { border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 40%, transparent); background: linear-gradient(90deg, var(--theme-tone-blue) 0%, var(--theme-tone-violet) 100%); color: var(--theme-text); box-shadow: 0 12px 28px rgba(126, 82, 255, 0.22); }
 .ghost-button.small { min-height: 32px; font-size: 12px; padding: 0 10px; border-radius: 10px; }
-.ghost-button.danger { border-color: rgba(239, 68, 68, 0.2); color: #fecaca; }
+.ghost-button.danger { border-color: color-mix(in srgb, var(--theme-tone-red) 20%, transparent); color: var(--theme-tone-red); }
 .refresh-button { min-width: 84px; }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(330px, 0.92fr); gap: 10px; align-items: start; }
 .panel-card { display: grid; gap: 10px; padding: 12px; }
@@ -3578,62 +3243,62 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .panel-head, .library-toolbar, .clone-thumb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .panel-title-wrap { display: flex; align-items: center; gap: 10px; }
 .panel-title-wrap strong, .panel-head > strong { font-size: 18px; line-height: 1.2; }
-.live-photo-master-ref { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 12px; background: rgba(18, 23, 38, 0.72); }
-.live-photo-master-ref--missing { grid-template-columns: 16px minmax(0, 1fr); color: #fecaca; }
-.live-photo-master-ref__preview { width: 88px; height: 88px; padding: 0; overflow: hidden; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+.live-photo-master-ref { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent); }
+.live-photo-master-ref--missing { grid-template-columns: 16px minmax(0, 1fr); color: var(--theme-tone-red); }
+.live-photo-master-ref__preview { width: 88px; height: 88px; padding: 0; overflow: hidden; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--theme-text) 4%, transparent); }
 .live-photo-master-ref__preview img { width: 100%; height: 100%; object-fit: cover; }
 .live-photo-master-ref__copy { display: grid; gap: 4px; min-width: 0; }
-.live-photo-master-ref__copy strong { color: #eef5ff; }
-.live-photo-master-ref__copy small { color: #9fb1d8; font-size: 11px; word-break: break-all; }
+.live-photo-master-ref__copy strong { color: var(--theme-text); }
+.live-photo-master-ref__copy small { color: var(--theme-tone-blue); font-size: 11px; word-break: break-all; }
 .live-console-row__binding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.live-console-row__binding-card { display: grid; gap: 4px; padding: 12px; text-align: left; border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 12px; background: rgba(18, 23, 38, 0.8); color: #eef5ff; }
-.live-console-row__binding-card span { color: rgba(197, 205, 225, 0.82); font-size: 12px; }
-.live-console-row__binding-card small { color: #9fb1d8; font-size: 11px; word-break: break-all; }
-.panel-head-note { color: #9097bd; font-size: 12px; }
-.step-badge { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(180deg, #7568e8, #5a4fd0); color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 8px 18px rgba(98, 79, 210, 0.28); }
+.live-console-row__binding-card { display: grid; gap: 4px; padding: 12px; text-align: left; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-panel-soft) 80%, transparent); color: var(--theme-text); }
+.live-console-row__binding-card span { color: var(--theme-text); font-size: 12px; }
+.live-console-row__binding-card small { color: var(--theme-tone-blue); font-size: 11px; word-break: break-all; }
+.panel-head-note { color: var(--theme-text-secondary); font-size: 12px; }
+.step-badge { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(180deg, var(--theme-tone-blue), var(--theme-tone-blue)); color: var(--theme-text); font-size: 14px; font-weight: 700; box-shadow: 0 8px 18px rgba(98, 79, 210, 0.28); }
 .field-stack, .field, .clone-shot-list, .library-layout, .library-grid-six, .export-copy, .clone-selected-grid, .settings-grid, .export-grid, .rules-compact { display: grid; gap: 10px; }
-.field > span { font-size: 13px; font-weight: 700; color: rgba(240, 243, 255, 0.96); }
-.field input, .field select { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 12px; background: rgba(19, 24, 38, 0.92); color: #fff; font-size: 13px; }
-.upload-surface { min-height: 164px; border-radius: 16px; border: 1px solid rgba(111, 123, 170, 0.22); background: linear-gradient(180deg, rgba(18, 23, 38, 0.82), rgba(14, 19, 31, 0.92)); display: grid; place-items: center; gap: 10px; padding: 16px; color: #eef5ff; text-align: center; cursor: pointer; }
+.field > span { font-size: 13px; font-weight: 700; color: var(--theme-text); }
+.field input, .field select { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent); color: var(--theme-text); font-size: 13px; }
+.upload-surface { min-height: 164px; border-radius: 16px; border: 1px solid var(--theme-border); background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 82%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent)); display: grid; place-items: center; gap: 10px; padding: 16px; color: var(--theme-text); text-align: center; cursor: pointer; }
 .upload-copy strong { font-size: 15px; line-height: 1.35; }
-.upload-copy small { font-size: 12px; line-height: 1.6; color: rgba(197, 205, 225, 0.76); word-break: break-all; }
+.upload-copy small { font-size: 12px; line-height: 1.6; color: var(--theme-text); word-break: break-all; }
 .upload-preview { width: 100%; max-height: 132px; object-fit: contain; border-radius: 10px; }
 .reference-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.reference-source-card { min-width: 0; min-height: 164px; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 12px; background: rgba(18, 23, 38, 0.82); color: #eef5ff; text-align: left; cursor: pointer; }
-.reference-source-card__icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: rgba(85, 68, 167, 0.48); color: #d9d4ff; }
+.reference-source-card { min-width: 0; min-height: 164px; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-panel-soft) 82%, transparent); color: var(--theme-text); text-align: left; cursor: pointer; }
+.reference-source-card__icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--theme-tone-violet) 48%, transparent); color: var(--theme-text); }
 .reference-source-card__preview { width: 64px; height: 96px; object-fit: cover; border-radius: 8px; }
 .reference-source-card__copy { min-width: 0; display: grid; gap: 6px; }
 .reference-source-card__copy strong { font-size: 15px; line-height: 1.35; }
-.reference-source-card__copy small { color: #9fb1d8; font-size: 11px; line-height: 1.55; }
-.reference-source-card__copy span { color: #c8d2e8; font-size: 11px; }
+.reference-source-card__copy small { color: var(--theme-tone-blue); font-size: 11px; line-height: 1.55; }
+.reference-source-card__copy span { color: var(--theme-tone-blue); font-size: 11px; }
 .reference-material-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.reference-material-bar small { color: #9fb1d8; font-size: 11px; }
-.reference-material-picker { display: grid; gap: 12px; padding: 12px; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 16px; background: linear-gradient(180deg, rgba(20, 26, 43, 0.96), rgba(13, 18, 31, 0.96)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
-.reference-material-dialog { position: fixed; inset: var(--app-titlebar-height, 62px) 0 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: #080b13; }
-.reference-material-dialog__panel { width: min(980px, 100%); max-height: min(calc(100vh - var(--app-titlebar-height, 62px) - 36px), 820px); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; overflow: hidden; padding: 16px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 12px; background: #0f131f; }
+.reference-material-bar small { color: var(--theme-tone-blue); font-size: 11px; }
+.reference-material-picker { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--theme-border); border-radius: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 96%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); }
+.reference-material-dialog { position: fixed; inset: var(--app-titlebar-height, 62px) 0 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: var(--theme-panel); }
+.reference-material-dialog__panel { width: min(980px, 100%); max-height: min(calc(100vh - var(--app-titlebar-height, 62px) - 36px), 820px); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; overflow: hidden; padding: 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
 .reference-material-dialog__head, .reference-material-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .reference-material-dialog__title { display: grid; gap: 4px; }
 .reference-material-dialog__title strong { font-size: 18px; }
-.reference-material-dialog__title p { margin: 0; color: #9fb1d8; font-size: 12px; }
-.reference-material-dialog__empty { min-height: 260px; display: grid; place-items: center; color: #9fb1d8; font-size: 13px; }
-.reference-material-dialog__footer { padding-top: 12px; border-top: 1px solid rgba(111, 123, 170, 0.18); }
+.reference-material-dialog__title p { margin: 0; color: var(--theme-tone-blue); font-size: 12px; }
+.reference-material-dialog__empty { min-height: 260px; display: grid; place-items: center; color: var(--theme-tone-blue); font-size: 13px; }
+.reference-material-dialog__footer { padding-top: 12px; border-top: 1px solid var(--theme-border); }
 .reference-material-picker__hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 2px 0; }
 .reference-material-picker__hero-copy { display: grid; gap: 4px; }
-.reference-material-picker__hero-copy strong { color: #f3f6ff; font-size: 14px; }
-.reference-material-picker__hero-copy small { color: #9fb1d8; font-size: 11px; }
-.reference-material-picker__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0 2px; border-top: 1px solid rgba(111, 123, 170, 0.14); }
+.reference-material-picker__hero-copy strong { color: var(--theme-text); font-size: 14px; }
+.reference-material-picker__hero-copy small { color: var(--theme-tone-blue); font-size: 11px; }
+.reference-material-picker__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0 2px; border-top: 1px solid var(--theme-border); }
 .reference-material-picker__actions { display: inline-flex; align-items: center; gap: 8px; }
-.reference-material-picker__pager { display: inline-flex; align-items: center; gap: 8px; color: #9fb1d8; font-size: 11px; }
+.reference-material-picker__pager { display: inline-flex; align-items: center; gap: 8px; color: var(--theme-tone-blue); font-size: 11px; }
 .reference-material-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-height: 420px; overflow: auto; padding-right: 2px; }
-.reference-material-card { display: grid; gap: 8px; padding: 8px; border-radius: 14px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(14, 19, 32, 0.92); cursor: pointer; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
-.reference-material-card.active { border-color: rgba(124, 92, 255, 0.72); box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.38); }
-.reference-material-card:hover { transform: translateY(-1px); border-color: rgba(148, 160, 255, 0.34); }
+.reference-material-card { display: grid; gap: 8px; padding: 8px; border-radius: 14px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel) 92%, transparent); cursor: pointer; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+.reference-material-card.active { border-color: color-mix(in srgb, var(--theme-tone-violet) 72%, transparent); box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.38); }
+.reference-material-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--theme-tone-blue) 34%, transparent); }
 .reference-material-card input { margin: 0; }
-.reference-material-card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.reference-material-card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; background: color-mix(in srgb, var(--theme-text) 4%, transparent); }
 .reference-material-card__copy { display: grid; gap: 4px; min-width: 0; }
-.reference-material-card__copy strong { color: #eef5ff; font-size: 12px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.reference-material-card__copy small { color: #9fb1d8; font-size: 10px; }
-.field-select-mini { min-height: 30px; padding: 0 10px; border: 1px solid rgba(111, 123, 170, 0.24); border-radius: 10px; background: rgba(19, 24, 38, 0.92); color: #fff; font-size: 11px; }
+.reference-material-card__copy strong { color: var(--theme-text); font-size: 12px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reference-material-card__copy small { color: var(--theme-tone-blue); font-size: 10px; }
+.field-select-mini { min-height: 30px; padding: 0 10px; border: 1px solid var(--theme-border); border-radius: 10px; background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent); color: var(--theme-text); font-size: 11px; }
 .live-subtitle-dialog {
   position: fixed;
   inset: var(--app-titlebar-height, 62px) 0 0;
@@ -3641,7 +3306,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(5, 8, 16, 0.72);
+  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
   backdrop-filter: blur(8px);
 }
 .live-subtitle-dialog__panel {
@@ -3651,9 +3316,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   display: grid;
   gap: 14px;
   padding: 18px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(15, 19, 31, 0.98), rgba(12, 16, 27, 0.99));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 99%, transparent));
 }
 
 .live-photo-video-dialog {
@@ -3666,7 +3331,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 280px;
   max-height: 68vh;
   border-radius: 12px;
-  background: #050810;
+  background: var(--theme-input);
   object-fit: contain;
 }
 
@@ -3675,27 +3340,27 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: rgba(194, 204, 229, 0.78);
+  color: color-mix(in srgb, var(--theme-tone-blue) 78%, transparent);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 .live-subtitle-dialog__head, .live-subtitle-dialog__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .live-subtitle-dialog__titleblock { display: grid; gap: 4px; }
 .live-subtitle-dialog__head strong { font-size: 20px; line-height: 1.1; }
-.live-subtitle-dialog__head p { margin: 0; color: #9fb1d8; font-size: 12px; line-height: 1.5; }
-.live-subtitle-dialog__close { min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(111, 123, 170, 0.24); background: rgba(19, 24, 38, 0.92); color: #fff; }
+.live-subtitle-dialog__head p { margin: 0; color: var(--theme-tone-blue); font-size: 12px; line-height: 1.5; }
+.live-subtitle-dialog__close { min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent); color: var(--theme-text); }
 .live-subtitle-dialog__summary { display: flex; gap: 12px; }
-.live-subtitle-dialog__summary-item { flex: 1; display: grid; gap: 4px; padding: 12px; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 12px; background: rgba(18, 23, 38, 0.72); }
-.live-subtitle-dialog__summary-item span, .live-subtitle-dialog__field span { color: #9fb1d8; font-size: 12px; }
-.live-subtitle-dialog__summary-item strong { font-size: 14px; color: #eef5ff; }
+.live-subtitle-dialog__summary-item { flex: 1; display: grid; gap: 4px; padding: 12px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent); }
+.live-subtitle-dialog__summary-item span, .live-subtitle-dialog__field span { color: var(--theme-tone-blue); font-size: 12px; }
+.live-subtitle-dialog__summary-item strong { font-size: 14px; color: var(--theme-text); }
 .live-subtitle-dialog__tabs {
   display: inline-flex;
   gap: 4px;
   width: fit-content;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.82);
-  border: 1px solid rgba(111, 123, 170, 0.14);
+  background: color-mix(in srgb, var(--theme-panel-soft) 82%, transparent);
+  border: 1px solid var(--theme-border);
 }
 .live-subtitle-dialog__tabs button {
   min-height: 34px;
@@ -3703,16 +3368,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
 }
 .live-subtitle-dialog__tabs button.active {
-  color: #fff;
-  background: rgba(102, 88, 232, 0.24);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
 }
 .live-subtitle-dialog__section { display: grid; gap: 12px; }
 .live-subtitle-dialog__section-head { display: grid; gap: 4px; }
-.live-subtitle-dialog__kicker { color: #9fb1d8; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-.live-subtitle-dialog__section-head strong { color: #eef5ff; font-size: 14px; }
+.live-subtitle-dialog__kicker { color: var(--theme-tone-blue); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.live-subtitle-dialog__section-head strong { color: var(--theme-text); font-size: 14px; }
 .live-subtitle-dialog__mode-pills {
   display: flex;
   gap: 10px;
@@ -3722,13 +3387,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: rgba(18, 23, 38, 0.72);
-  color: #eef5ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__mode-pills button.is-active {
-  border-color: rgba(124, 92, 255, 0.6);
-  background: rgba(65, 51, 145, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 60%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
 .live-subtitle-dialog__field {
   display: grid;
@@ -3740,17 +3405,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   width: 100%;
   min-height: 38px;
   padding: 10px 12px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(19, 24, 38, 0.92);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__textarea { min-height: 120px; resize: vertical; }
 .live-subtitle-dialog__inline-tip {
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(18, 23, 38, 0.68);
-  color: #b8c7e8;
+  background: color-mix(in srgb, var(--theme-panel-soft) 68%, transparent);
+  color: var(--theme-tone-blue);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -3760,17 +3425,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 4px;
   text-align: left;
   padding: 12px 14px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(18, 23, 38, 0.7);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-panel-soft) 70%, transparent);
+  color: var(--theme-text);
 }
 .live-subtitle-dialog__preset.active {
-  border-color: rgba(124, 92, 255, 0.6);
-  background: rgba(65, 51, 145, 0.18);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 60%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
 }
-.live-subtitle-dialog__preset span { color: #9fb1d8; font-size: 11px; line-height: 1.45; }
-.live-subtitle-dialog__preset-note { color: #9fb1d8; font-size: 11px; line-height: 1.5; }
+.live-subtitle-dialog__preset span { color: var(--theme-tone-blue); font-size: 11px; line-height: 1.45; }
+.live-subtitle-dialog__preset-note { color: var(--theme-tone-blue); font-size: 11px; line-height: 1.5; }
 .live-subtitle-dialog__style-panel { display: grid; gap: 12px; }
 .live-subtitle-dialog__form-grid { display: grid; gap: 10px; }
 .live-subtitle-dialog__form-grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3779,7 +3444,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-subtitle-dialog__actions {
   justify-content: flex-end;
   padding-top: 6px;
-  border-top: 1px solid rgba(111, 123, 170, 0.12);
+  border-top: 1px solid var(--theme-border);
 }
 .live-subtitle-dialog__actions .ghost-button, .live-subtitle-dialog__actions .primary-button { min-width: 124px; }
 .live-photo-retry-settings-panel {
@@ -3792,9 +3457,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(18, 23, 38, 0.62);
+  background: color-mix(in srgb, var(--theme-panel-soft) 62%, transparent);
 }
 .live-photo-retry-settings-icon {
   display: grid;
@@ -3802,8 +3467,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   height: 36px;
   place-items: center;
   border-radius: 8px;
-  background: rgba(85, 223, 202, 0.1);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  color: var(--theme-accent);
 }
 .live-photo-retry-settings-hero div:nth-child(2) {
   display: grid;
@@ -3812,11 +3477,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-photo-retry-settings-hero span,
 .live-photo-retry-settings-hero small,
 .live-photo-retry-settings-field small {
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 11px;
 }
 .live-photo-retry-settings-hero strong {
-  color: #f3f6ff;
+  color: var(--theme-text);
   font-size: 15px;
 }
 .live-photo-retry-settings-field {
@@ -3825,9 +3490,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   justify-content: space-between;
   gap: 20px;
   padding: 16px 0;
-  border: 1px solid rgba(111, 123, 170, 0.2);
+  border: 1px solid var(--theme-border);
   border-width: 1px 0;
-  color: #dce5f6;
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -3840,7 +3505,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-  color: #9fb1d8;
+  color: var(--theme-tone-blue);
   font-size: 12px;
 }
 .live-photo-retry-settings-field input {
@@ -3848,47 +3513,47 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   box-sizing: border-box;
   min-height: 40px;
   padding: 7px 10px;
-  border: 1px solid rgba(111, 123, 170, 0.3);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   outline: 0;
-  background: rgba(9, 16, 27, 0.9);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--theme-panel) 90%, transparent);
+  color: var(--theme-text);
   font-size: 15px;
   font-weight: 700;
 }
 .live-photo-retry-settings-field input:focus {
-  border-color: #70e2d0;
+  border-color: var(--theme-accent);
   box-shadow: 0 0 0 3px rgba(112, 226, 208, 0.12);
 }
 .live-photo-retry-settings-actions {
   padding-top: 0;
 }
-.product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
+.product-picker { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 12px; border: 1px solid var(--theme-border); border-radius: 14px; background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent); }
 .product-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; }
-.project-picker { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 16px; border: 1px solid rgba(111, 123, 170, 0.22); border-radius: 14px; background: rgba(19, 24, 38, 0.92); }
-.project-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; color: #fff; }
-.picker-arrow { color: rgba(214, 223, 246, 0.76); pointer-events: none; }
-.product-thumb { width: 42px; height: 42px; border-radius: 11px; overflow: hidden; background: rgba(255, 255, 255, 0.06); display: grid; place-items: center; }
+.project-picker { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 10px; align-items: center; min-height: 50px; padding: 0 16px; border: 1px solid var(--theme-border); border-radius: 14px; background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent); }
+.project-picker select { appearance: none; border: 0; background: transparent; min-height: 50px; padding: 0; font-size: 14px; color: var(--theme-text); }
+.picker-arrow { color: var(--theme-text); pointer-events: none; }
+.product-thumb { width: 42px; height: 42px; border-radius: 11px; overflow: hidden; background: color-mix(in srgb, var(--theme-text) 6%, transparent); display: grid; place-items: center; }
 .product-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.product-thumb-fallback { color: rgba(214, 223, 246, 0.82); }
+.product-thumb-fallback { color: var(--theme-text); }
 .create-button { min-height: 48px; border-radius: 14px; font-size: 15px; font-weight: 800; }
-.safe-note { display: flex; align-items: center; justify-content: center; gap: 8px; color: rgba(214, 223, 246, 0.78); font-size: 12px; line-height: 1.55; }
-.rules-box { display: grid; border: 1px solid rgba(111, 123, 170, 0.2); border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, rgba(18, 22, 36, 0.86), rgba(15, 18, 31, 0.9)); }
-.rule-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-bottom: 1px solid rgba(111, 123, 170, 0.14); }
+.safe-note { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--theme-text); font-size: 12px; line-height: 1.55; }
+.rules-box { display: grid; border: 1px solid var(--theme-border); border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 86%, transparent), color-mix(in srgb, var(--theme-panel) 90%, transparent)); }
+.rule-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-bottom: 1px solid var(--theme-border); }
 .rule-row:last-child { border-bottom: 0; }
-.rule-icon { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #c39bff; border: 1px solid rgba(164, 115, 255, 0.34); background: rgba(122, 82, 255, 0.1); font-size: 13px; font-weight: 700; }
-.rule-row p, .compact-row p { margin: 0; line-height: 1.55; font-size: 13px; color: rgba(233, 238, 251, 0.9); }
-.output-note { padding: 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(72, 54, 133, 0.82), rgba(58, 44, 108, 0.94)); border: 1px solid rgba(135, 102, 255, 0.24); }
-.output-note-head { margin-bottom: 8px; font-size: 15px; font-weight: 700; color: #dfd5ff; }
-.output-note p { margin: 0; font-size: 12px; line-height: 1.6; color: rgba(220, 228, 246, 0.84); }
-.quality-control-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid rgba(79, 194, 168, 0.22); background: linear-gradient(180deg, rgba(19, 61, 58, 0.36), rgba(12, 28, 35, 0.6)); }
-.quality-control-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: #8ef0c8; }
-.quality-control-card__head strong { display: block; color: #e6fff5; font-size: 14px; }
-.quality-control-card__head small { display: block; margin-top: 5px; color: #98cfc0; font-size: 11px; line-height: 1.5; }
+.rule-icon { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--theme-tone-violet); border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 34%, transparent); background: color-mix(in srgb, var(--theme-tone-violet) 10%, transparent); font-size: 13px; font-weight: 700; }
+.rule-row p, .compact-row p { margin: 0; line-height: 1.55; font-size: 13px; color: var(--theme-text); }
+.output-note { padding: 14px; border-radius: 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 82%, transparent), color-mix(in srgb, var(--theme-tone-violet) 94%, transparent)); border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 24%, transparent); }
+.output-note-head { margin-bottom: 8px; font-size: 15px; font-weight: 700; color: var(--theme-text); }
+.output-note p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--theme-text); }
+.quality-control-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 36%, transparent), color-mix(in srgb, var(--theme-panel-soft) 60%, transparent)); }
+.quality-control-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: var(--theme-accent); }
+.quality-control-card__head strong { display: block; color: var(--theme-text); font-size: 14px; }
+.quality-control-card__head small { display: block; margin-top: 5px; color: var(--theme-accent); font-size: 11px; line-height: 1.5; }
 .quality-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.quality-metric-grid > div { display: grid; gap: 3px; padding: 9px; border-radius: 11px; background: rgba(3, 12, 20, 0.3); border: 1px solid rgba(122, 215, 185, 0.12); }
-.quality-metric-grid span { color: #8ebbb0; font-size: 10px; }
-.quality-metric-grid strong { color: #effff8; font-size: 15px; }
+.quality-metric-grid > div { display: grid; gap: 3px; padding: 9px; border-radius: 11px; background: color-mix(in srgb, var(--theme-panel) 30%, transparent); border: 1px solid color-mix(in srgb, var(--theme-accent) 12%, transparent); }
+.quality-metric-grid span { color: var(--theme-text-secondary); font-size: 10px; }
+.quality-metric-grid strong { color: var(--theme-text); font-size: 15px; }
 .prompt-version-editor { display: grid; gap: 9px; }
 .prompt-kind-tabs { display: inline-flex; width: fit-content; gap: 4px; padding: 4px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-surface-muted); }
 .prompt-kind-tabs .ghost-button { min-width: 72px; border: 1px solid transparent; background: transparent; color: var(--theme-text-secondary); }
@@ -3909,73 +3574,73 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .clone-project-card { grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
 .clone-preview-card { gap: 12px; }
 .clone-shot-list { max-height: 420px; overflow: auto; padding-right: 2px; align-content: start; }
-.clone-shot-row { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(18, 23, 38, 0.74); }
-.clone-shot-row.active { border-color: rgba(126, 96, 255, 0.42); box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18); }
-.reference-task-row.missing { border-color: rgba(239, 68, 68, 0.34); box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.12); }
+.clone-shot-row { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 74%, transparent); }
+.clone-shot-row.active { border-color: color-mix(in srgb, var(--theme-tone-violet) 42%, transparent); box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18); }
+.reference-task-row.missing { border-color: color-mix(in srgb, var(--theme-tone-red) 34%, transparent); box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.12); }
 .reference-task-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 .clone-shot-copy { min-width: 0; }
 .clone-shot-copy strong { font-size: 13px; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.clone-shot-copy small { font-size: 10px; color: rgba(197, 205, 225, 0.74); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.missing-pill { margin-top: 6px; min-height: 20px; width: fit-content; padding: 0 8px; border-radius: 999px; background: rgba(239, 68, 68, 0.16); color: #fecaca; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; }
-.secondary-create-button { min-height: 40px; border-radius: 12px; border: 1px solid rgba(124, 96, 255, 0.36); background: rgba(75, 54, 143, 0.2); color: #d9d3ff; font-size: 13px; font-weight: 700; }
+.clone-shot-copy small { font-size: 10px; color: var(--theme-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.missing-pill { margin-top: 6px; min-height: 20px; width: fit-content; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent); color: var(--theme-tone-red); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; }
+.secondary-create-button { min-height: 40px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 36%, transparent); background: color-mix(in srgb, var(--theme-tone-violet) 20%, transparent); color: var(--theme-text); font-size: 13px; font-weight: 700; }
 .clone-summary-head { display: grid; gap: 4px; justify-items: end; }
-.clone-summary-head strong { font-size: 13px; font-weight: 600; color: rgba(231, 235, 248, 0.9); }
+.clone-summary-head strong { font-size: 13px; font-weight: 600; color: var(--theme-text); }
 .clone-preview-main { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; align-items: start; }
-.clone-preview-frame { position: relative; height: 288px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(111, 123, 170, 0.18); background: linear-gradient(180deg, rgba(14, 18, 30, 0.92), rgba(11, 14, 24, 0.96)); display: flex; align-items: center; justify-content: center; }
+.clone-preview-frame { position: relative; height: 288px; border-radius: 16px; overflow: hidden; border: 1px solid var(--theme-border); background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 92%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)); display: flex; align-items: center; justify-content: center; }
 .clone-preview-frame img { width: auto; height: 100%; max-width: 100%; object-fit: contain; display: block; }
 .clone-fallback { width: 100%; height: 100%; min-height: 288px; }
-.preview-play { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.52); background: rgba(10, 14, 25, 0.58); color: #fff; display: grid; place-items: center; }
+.preview-play { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel) 58%, transparent); color: var(--theme-text); display: grid; place-items: center; }
 .clone-stat-stack { display: grid; gap: 8px; }
-.clone-stat-card { min-height: 64px; border-radius: 14px; border: 1px solid rgba(111, 123, 170, 0.16); background: rgba(18, 23, 38, 0.76); padding: 10px; display: grid; gap: 4px; }
+.clone-stat-card { min-height: 64px; border-radius: 14px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 76%, transparent); padding: 10px; display: grid; gap: 4px; }
 .clone-stat-card span { font-size: 12px; }
 .clone-stat-card strong { font-size: 28px; line-height: 1; }
 .clone-thumb-head strong, .clone-selected-section strong { font-size: 15px; }
 .clone-thumb-tools { display: flex; gap: 6px; }
-.thumb-tool { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(18, 23, 38, 0.7); color: rgba(214, 223, 246, 0.82); display: grid; place-items: center; }
+.thumb-tool { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 70%, transparent); color: var(--theme-text); display: grid; place-items: center; }
 .clone-thumb-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
-.clone-thumb-card, .clone-selected-card { position: relative; overflow: hidden; border-radius: 10px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(18, 23, 38, 0.74); min-height: 54px; aspect-ratio: 0.72 / 1; }
-.clone-thumb-card.active { border-color: rgba(126, 96, 255, 0.48); }
+.clone-thumb-card, .clone-selected-card { position: relative; overflow: hidden; border-radius: 10px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 74%, transparent); min-height: 54px; aspect-ratio: 0.72 / 1; }
+.clone-thumb-card.active { border-color: color-mix(in srgb, var(--theme-tone-violet) 48%, transparent); }
 .clone-thumb-card img, .clone-selected-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.clone-thumb-index { position: absolute; left: 6px; bottom: 6px; min-width: 22px; height: 18px; padding: 0 5px; border-radius: 999px; background: rgba(6, 10, 18, 0.72); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; }
-.clone-thumb-fallback { min-height: 54px; display: grid; place-items: center; color: rgba(214, 223, 246, 0.78); font-weight: 700; font-size: 10px; }
+.clone-thumb-index { position: absolute; left: 6px; bottom: 6px; min-width: 22px; height: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, var(--theme-panel) 72%, transparent); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--theme-text); }
+.clone-thumb-fallback { min-height: 54px; display: grid; place-items: center; color: var(--theme-text); font-weight: 700; font-size: 10px; }
 .clone-selected-grid { grid-template-columns: repeat(auto-fit, minmax(66px, 84px)); gap: 5px; }
 .clone-selected-card { min-height: 58px; }
-.clone-selected-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px; background: linear-gradient(180deg, transparent, rgba(5, 8, 14, 0.88)); display: grid; gap: 2px; }
+.clone-selected-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--theme-input) 88%, transparent)); display: grid; gap: 2px; }
 .clone-selected-meta span { font-size: 10px; font-weight: 700; }
-.clone-selected-meta small { font-size: 9px; color: rgba(226, 232, 248, 0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clone-selected-meta small { font-size: 9px; color: var(--theme-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clone-settings-card { gap: 12px; }
 .clone-rule-card { gap: 12px; padding-top: 14px; }
 .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.format-card { border-radius: 16px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(18, 23, 38, 0.72); padding: 14px 16px; display: grid; gap: 8px; min-height: 108px; align-content: start; }
-.format-card-active { border-color: rgba(126, 96, 255, 0.42); background: linear-gradient(180deg, rgba(52, 39, 108, 0.48), rgba(24, 28, 46, 0.86)); }
+.format-card { border-radius: 16px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent); padding: 14px 16px; display: grid; gap: 8px; min-height: 108px; align-content: start; }
+.format-card-active { border-color: color-mix(in srgb, var(--theme-tone-violet) 42%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 48%, transparent), color-mix(in srgb, var(--theme-panel-soft) 86%, transparent)); }
 .format-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .format-card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .format-card-title strong { font-size: 15px; line-height: 1.25; }
-.format-tag { min-height: 22px; padding: 0 9px; border-radius: 999px; background: rgba(255, 171, 76, 0.18); color: #ffcf92; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; }
-.format-card p { margin: 0; font-size: 12px; line-height: 1.75; color: rgba(197, 205, 225, 0.8); }
+.format-tag { min-height: 22px; padding: 0 9px; border-radius: 999px; background: color-mix(in srgb, var(--theme-tone-amber) 18%, transparent); color: var(--theme-tone-amber); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; }
+.format-card p { margin: 0; font-size: 12px; line-height: 1.75; color: var(--theme-text); }
 .export-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .rules-compact { gap: 14px; padding-top: 2px; }
 .compact-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
-.compact-dot { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(111, 123, 170, 0.26); color: rgba(221, 228, 246, 0.86); display: grid; place-items: center; font-size: 13px; }
+.compact-dot { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--theme-border); color: var(--theme-text); display: grid; place-items: center; font-size: 13px; }
 .clone-generate-button { min-height: 46px; border-radius: 14px; font-size: 15px; font-weight: 800; padding: 0 20px; justify-self: start; min-width: 320px; }
-.clone-safe-note { justify-content: flex-start; align-items: flex-start; border: 1px solid rgba(111, 123, 170, 0.18); border-radius: 16px; background: rgba(18, 23, 38, 0.72); padding: 14px 16px; }
+.clone-safe-note { justify-content: flex-start; align-items: flex-start; border: 1px solid var(--theme-border); border-radius: 16px; background: color-mix(in srgb, var(--theme-panel-soft) 72%, transparent); padding: 14px 16px; }
 .clone-safe-note span { display: block; font-size: 12px; line-height: 1.7; }
 .reference-status-list { display: grid; gap: 8px; max-height: 240px; overflow: auto; padding-right: 2px; }
-.reference-status-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(111, 123, 170, 0.18); background: rgba(18, 23, 38, 0.74); }
+.reference-status-card { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-panel-soft) 74%, transparent); }
 .reference-status-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reference-status-top strong { min-width: 0; font-size: 13px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.reference-status-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: rgba(215, 223, 243, 0.72); font-size: 11px; }
-.reference-status-card small { font-size: 10px; color: rgba(197, 205, 225, 0.68); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.status-pill.status-processing { background: rgba(91, 118, 255, 0.18); color: #cfd8ff; }
-.status-pill.status-failed { background: rgba(239, 68, 68, 0.18); color: #fecaca; }
-.status-pill.status-draft { background: rgba(148, 163, 184, 0.18); color: #e2e8f0; }
-.status-pill.status-completed { background: rgba(16, 101, 78, 0.18); color: #68f0b9; }
+.reference-status-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: color-mix(in srgb, var(--theme-tone-blue) 72%, transparent); font-size: 11px; }
+.reference-status-card small { font-size: 10px; color: var(--theme-text); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-pill.status-processing { background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent); color: var(--theme-text); }
+.status-pill.status-failed { background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent); color: var(--theme-tone-red); }
+.status-pill.status-draft { background: color-mix(in srgb, var(--theme-control-hover) 18%, transparent); color: var(--theme-text); }
+.status-pill.status-completed { background: color-mix(in srgb, var(--theme-accent) 18%, transparent); color: var(--theme-accent); }
 .library-layout { display: grid; gap: 14px; }
 .library-headline {
   display: grid;
   gap: 12px;
   padding: 8px 0 14px;
-  border-bottom: 1px solid rgba(111, 123, 170, 0.14);
+  border-bottom: 1px solid var(--theme-border);
 }
 .library-summary-row {
   display: flex;
@@ -4007,10 +3672,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .library-count {
   min-height: 27px;
   padding: 0 10px;
-  border: 1px solid rgba(45, 212, 191, 0.24);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 24%, transparent);
   border-radius: 999px;
-  background: rgba(13, 148, 136, 0.14);
-  color: #70e2d0;
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  color: var(--theme-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4026,7 +3691,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   flex-wrap: wrap;
   min-height: 44px;
   padding-top: 10px;
-  border-top: 1px solid rgba(111, 123, 170, 0.1);
+  border-top: 1px solid var(--theme-border);
 }
 .status-filter-tabs {
   display: flex;
@@ -4036,9 +3701,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   max-width: 100%;
   padding: 3px;
   overflow-x: auto;
-  border: 1px solid rgba(111, 123, 170, 0.12);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(111, 123, 170, 0.05);
+  background: color-mix(in srgb, var(--theme-control-hover) 5%, transparent);
 }
 .status-filter-tabs button {
   min-height: 30px;
@@ -4046,14 +3711,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #8999b7;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
   transition: background-color 160ms ease, color 160ms ease;
 }
-.status-filter-tabs button:hover { color: #dce6f8; background: rgba(111, 123, 170, 0.08); }
-.status-filter-tabs button.active { background: rgba(13, 148, 136, 0.2); color: #70e2d0; }
+.status-filter-tabs button:hover { color: var(--theme-text); background: color-mix(in srgb, var(--theme-control-hover) 8%, transparent); }
+.status-filter-tabs button.active { background: color-mix(in srgb, var(--theme-accent) 20%, transparent); color: var(--theme-accent); }
 .library-action-group,
 .library-output-actions,
 .library-head-tools,
@@ -4075,7 +3740,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 2px;
   padding: 2px;
   border-radius: 6px;
-  background: rgba(111, 123, 170, 0.08);
+  background: color-mix(in srgb, var(--theme-control-hover) 8%, transparent);
 }
 .library-pagination {
   display: flex;
@@ -4090,7 +3755,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   text-align: center;
   font-size: 11px;
   font-weight: 700;
-  color: #b7c6e4;
+  color: var(--theme-tone-blue);
   font-variant-numeric: tabular-nums;
 }
 .library-page-button {
@@ -4102,11 +3767,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #aebede;
+  color: var(--theme-tone-blue);
 }
 .library-page-button:hover:not(:disabled) {
-  background: rgba(111, 123, 170, 0.14);
-  color: #f8fbff;
+  background: color-mix(in srgb, var(--theme-control-hover) 14%, transparent);
+  color: var(--theme-text);
 }
 .library-page-button:disabled {
   opacity: 0.32;
@@ -4124,27 +3789,27 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 24px;
   padding: 0;
 }
-.library-overview__card span { font-size: 12px; line-height: 1; color: #7f91b2; }
-.library-overview__card strong { display: inline-flex; align-items: center; font-size: 12px; line-height: 1; color: #f8fbff; font-variant-numeric: tabular-nums; }
-.library-overview__card.is-running strong { color: #7dd3fc; }
-.library-overview__card.is-failed strong { color: #fca5a5; }
-.library-overview__card.is-paused strong { color: #fde68a; }
-.library-overview__card.is-selected strong { color: #70e2d0; }
+.library-overview__card span { font-size: 12px; line-height: 1; color: var(--theme-text-secondary); }
+.library-overview__card strong { display: inline-flex; align-items: center; font-size: 12px; line-height: 1; color: var(--theme-text); font-variant-numeric: tabular-nums; }
+.library-overview__card.is-running strong { color: var(--theme-accent); }
+.library-overview__card.is-failed strong { color: var(--theme-tone-red); }
+.library-overview__card.is-paused strong { color: var(--theme-tone-amber); }
+.library-overview__card.is-selected strong { color: var(--theme-accent); }
 .toolbar-button {
   min-width: 0;
   padding: 0 11px;
   min-height: 34px;
   white-space: nowrap;
-  border-color: rgba(111, 123, 170, 0.14);
-  background: rgba(111, 123, 170, 0.07);
+  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--theme-control-hover) 7%, transparent);
 }
 .library-toolbar .toolbar-button:disabled,
 .library-toolbar .primary-button:disabled {
   opacity: 0.38;
 }
 .toolbar-icon { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; }
-.toolbar-icon:hover { background: rgba(111, 123, 170, 0.12); }
-.toolbar-icon.active { background: rgba(13, 148, 136, 0.2); color: #70e2d0; }
+.toolbar-icon:hover { background: color-mix(in srgb, var(--theme-control-hover) 12%, transparent); }
+.toolbar-icon.active { background: color-mix(in srgb, var(--theme-accent) 20%, transparent); color: var(--theme-accent); }
 .export-selected-button { min-width: 132px; min-height: 36px; }
 .empty-card { min-height: 140px; place-items: center; text-align: center; }
 .metadata-card-select {
@@ -4157,13 +3822,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 40px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.24);
-  background: rgba(19, 24, 38, 0.92);
-  color: #fff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel-soft) 92%, transparent);
+  color: var(--theme-text);
   font-size: 13px;
 }
 .metadata-card-select small {
-  color: rgba(197, 205, 225, 0.72);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -4180,15 +3845,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 10px;
   padding: 14px;
   border-radius: 22px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at top right, rgba(120, 96, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98));
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.22);
 }
 
 .live-console-card.selected {
-  border-color: rgba(126, 96, 255, 0.46);
+  border-color: color-mix(in srgb, var(--theme-tone-violet) 46%, transparent);
   box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18);
 }
 
@@ -4204,8 +3869,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   padding: 0;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
-  background: rgba(9, 16, 28, 0.84);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 84%, transparent);
 }
 
 .live-console-card__body {
@@ -4224,13 +3889,13 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-items: start;
   padding: 14px;
   border-radius: 22px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
+  border: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at top right, rgba(120, 96, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(17, 21, 35, 0.98), rgba(13, 17, 30, 0.98));
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 18px 40px rgba(6, 10, 20, 0.22);
 }
-.live-console-row.selected { border-color: rgba(126, 96, 255, 0.46); box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18); }
+.live-console-row.selected { border-color: color-mix(in srgb, var(--theme-tone-violet) 46%, transparent); box-shadow: inset 0 0 0 1px rgba(126, 96, 255, 0.18); }
 .live-console-row__check {
   position: relative;
   display: grid;
@@ -4251,22 +3916,22 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
 }
 .live-console-row__check input:checked + span {
-  background: linear-gradient(90deg, #6d5cff 0%, #9b52ff 100%);
+  background: linear-gradient(90deg, var(--theme-tone-blue) 0%, var(--theme-tone-violet) 100%);
   border-color: transparent;
 }
 .live-console-row__check input:checked + span::after {
   content: '';
   width: 6px;
   height: 10px;
-  border: solid #fff;
+  border: solid var(--theme-border);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -4282,8 +3947,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   aspect-ratio: 9 / 16;
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 .live-console-row__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .live-console-row__thumb-empty {
@@ -4291,7 +3956,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   height: 100%;
   display: grid;
   place-items: center;
-  color: rgba(214, 223, 246, 0.72);
+  color: var(--theme-text);
 }
 .live-console-row__main {
   display: grid;
@@ -4305,7 +3970,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   margin: 0;
   font-size: 16px;
   line-height: 1.3;
-  color: #f5f8ff;
+  color: var(--theme-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -4315,18 +3980,18 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 22px;
   padding: 0 9px;
   border-radius: 999px;
-  background: rgba(130, 108, 255, 0.12);
-  color: #ddd5ff;
+  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
+  color: var(--theme-text);
   display: inline-flex;
   align-items: center;
   font-size: 10px;
   font-weight: 700;
 }
 .live-console-row__meta { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.live-console-row__dot { width: 4px; height: 4px; border-radius: 999px; background: rgba(143, 164, 206, 0.7); }
-.live-console-row__text { color: #8ea3c9; font-size: 11px; }
+.live-console-row__dot { width: 4px; height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--theme-tone-blue) 70%, transparent); }
+.live-console-row__text { color: var(--theme-tone-blue); font-size: 11px; }
 .live-console-row__subtitle {
-  color: rgba(197, 205, 225, 0.74);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.5;
   white-space: nowrap;
@@ -4338,7 +4003,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #fca5a5;
+  color: var(--theme-tone-red);
   font-size: 11px;
 }
 .live-console-row__error-text {
@@ -4360,16 +4025,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   justify-content: space-between;
   gap: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(111, 123, 170, 0.12);
+  border-top: 1px solid var(--theme-border);
 }
 .live-console-row__quickrefs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .live-console-row__quickchip {
   min-height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(113, 130, 168, 0.22);
-  background: rgba(255, 255, 255, 0.04);
-  color: #cedcff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   display: inline-flex;
   align-items: center;
   font-size: 10px;
@@ -4377,15 +4042,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   letter-spacing: 0.02em;
 }
 .live-console-row__quickchip--accent {
-  border-color: rgba(250, 204, 21, 0.24);
-  background: rgba(250, 204, 21, 0.1);
-  color: #fde68a;
+  border-color: color-mix(in srgb, var(--theme-tone-amber) 24%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-amber) 10%, transparent);
+  color: var(--theme-tone-amber);
 }
 .live-console-row__link {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #98b9ff;
+  color: var(--theme-tone-blue);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4396,8 +4061,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 34px;
   padding: 0 14px;
   border-radius: 999px;
-  background: rgba(95, 78, 255, 0.16);
-  border: 1px solid rgba(126, 96, 255, 0.28);
+  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 28%, transparent);
 }
 .live-console-row__detail-grid {
   display: grid;
@@ -4410,8 +4075,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-content: start;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 .live-console-row__detail-head {
   display: flex;
@@ -4419,17 +4084,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   justify-content: space-between;
   gap: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(111, 123, 170, 0.14);
+  border-bottom: 1px solid var(--theme-border);
 }
-.live-console-row__detail-head strong { font-size: 13px; color: #f4f7ff; }
-.live-console-row__detail-head span { font-size: 11px; color: #9cb1da; }
+.live-console-row__detail-head strong { font-size: 13px; color: var(--theme-text); }
+.live-console-row__detail-head span { font-size: 11px; color: var(--theme-tone-blue); }
 .live-console-row__detail-block { display: grid; gap: 6px; }
 .live-console-row__detail-block label {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8ea8d7;
+  color: var(--theme-tone-blue);
 }
 .live-console-row__detail-block pre {
   margin: 0;
@@ -4440,9 +4105,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   word-break: break-word;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.14);
-  background: rgba(7, 11, 20, 0.56);
-  color: #e8eefc;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 56%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.6;
 }
@@ -4459,14 +4124,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 10px;
 }
 .live-console-row__ref-preview {
-  border: 1px solid rgba(111, 123, 170, 0.14);
-  background: rgba(7, 11, 20, 0.42);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 42%, transparent);
   border-radius: 14px;
   padding: 8px;
   display: grid;
   gap: 8px;
   text-align: left;
-  color: #d4dff8;
+  color: var(--theme-text);
 }
 .live-console-row__ref-preview img {
   width: 100%;
@@ -4474,20 +4139,20 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   object-fit: cover;
   border-radius: 10px;
   display: block;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 .live-console-row__ref-preview span {
   font-size: 10px;
   line-height: 1.4;
   word-break: break-all;
-  color: #c9d7f5;
+  color: var(--theme-tone-blue);
 }
 .live-console-row__path-list li {
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.14);
-  background: rgba(7, 11, 20, 0.42);
-  color: #d4dff8;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 42%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.5;
   word-break: break-all;
@@ -4498,8 +4163,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 4px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(111, 123, 170, 0.14);
-  background: rgba(8, 12, 22, 0.42);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 42%, transparent);
 }
 .live-console-row__timeline-main {
   display: flex;
@@ -4507,12 +4172,12 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   justify-content: space-between;
   gap: 10px;
 }
-.live-console-row__timeline-main strong { font-size: 12px; color: #f4f7ff; }
-.live-console-row__timeline-main span { font-size: 11px; color: #9dc0ff; }
-.live-console-row__timeline-item small { font-size: 10px; color: #8295ba; }
+.live-console-row__timeline-main strong { font-size: 12px; color: var(--theme-text); }
+.live-console-row__timeline-main span { font-size: 11px; color: var(--theme-tone-blue); }
+.live-console-row__timeline-item small { font-size: 10px; color: var(--theme-text-secondary); }
 .live-console-row__timeline-error {
   margin: 0;
-  color: #fecaca;
+  color: var(--theme-tone-red);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -4529,19 +4194,19 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   font-weight: 700;
   white-space: nowrap;
 }
-.live-console-row__status.is-success { background: rgba(16, 185, 129, 0.14); color: #86efac; }
-.live-console-row__status.is-danger { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-.live-console-row__status.is-warning { background: rgba(251, 191, 36, 0.16); color: #fde68a; }
-.live-console-row__status.is-draft { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; }
-.live-console-row__status.is-running { background: rgba(59, 130, 246, 0.14); color: #93c5fd; }
-.live-console-row__stepbadge { border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(255, 255, 255, 0.035); color: #d8e5ff; }
-.live-console-row__stepbadge.tone-queue { color: #d8e5ff; }
-.live-console-row__stepbadge.tone-image { color: #f9a8d4; }
-.live-console-row__stepbadge.tone-validation { color: #fcd34d; }
-.live-console-row__stepbadge.tone-video { color: #93c5fd; }
-.live-console-row__stepbadge.tone-package { color: #fcd34d; }
-.live-console-row__stepbadge.tone-done { color: #86efac; }
-.live-console-row__updated-inline { display: flex; align-items: center; gap: 6px; color: #92a5ca; font-size: 11px; }
+.live-console-row__status.is-success { background: color-mix(in srgb, var(--theme-accent) 14%, transparent); color: var(--theme-accent); }
+.live-console-row__status.is-danger { background: color-mix(in srgb, var(--theme-tone-red) 14%, transparent); color: var(--theme-tone-red); }
+.live-console-row__status.is-warning { background: color-mix(in srgb, var(--theme-tone-amber) 16%, transparent); color: var(--theme-tone-amber); }
+.live-console-row__status.is-draft { background: color-mix(in srgb, var(--theme-control-hover) 14%, transparent); color: var(--theme-text); }
+.live-console-row__status.is-running { background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent); color: var(--theme-tone-blue); }
+.live-console-row__stepbadge { border: 1px solid var(--theme-border); background: color-mix(in srgb, var(--theme-text) 4%, transparent); color: var(--theme-text); }
+.live-console-row__stepbadge.tone-queue { color: var(--theme-text); }
+.live-console-row__stepbadge.tone-image { color: var(--theme-tone-red); }
+.live-console-row__stepbadge.tone-validation { color: var(--theme-tone-amber); }
+.live-console-row__stepbadge.tone-video { color: var(--theme-tone-blue); }
+.live-console-row__stepbadge.tone-package { color: var(--theme-tone-amber); }
+.live-console-row__stepbadge.tone-done { color: var(--theme-accent); }
+.live-console-row__updated-inline { display: flex; align-items: center; gap: 6px; color: var(--theme-text-secondary); font-size: 11px; }
 .live-console-row__actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .image-retry-decision {
   display: flex;
@@ -4549,9 +4214,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   width: 100%;
   min-height: 34px;
   overflow: hidden;
-  border: 1px solid rgba(126, 143, 178, 0.2);
+  border: 1px solid var(--theme-border);
   border-radius: 9px;
-  background: rgba(13, 19, 31, 0.72);
+  background: color-mix(in srgb, var(--theme-panel) 72%, transparent);
 }
 .image-retry-decision__button {
   display: inline-flex;
@@ -4565,7 +4230,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #aebbd0;
+  color: var(--theme-text-secondary);
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -4577,18 +4242,18 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   flex-basis: 100%;
 }
 .image-retry-decision__button:hover {
-  background: rgba(255, 255, 255, 0.045);
-  color: #f4f7fc;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 .image-retry-decision__button--primary {
   flex-grow: 1.12;
-  border-left: 1px solid rgba(126, 143, 178, 0.16);
-  background: linear-gradient(90deg, rgba(38, 150, 130, 0.1), rgba(38, 150, 130, 0.18));
-  color: #79e5d2;
+  border-left: 1px solid var(--theme-border);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 10%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
+  color: var(--theme-accent);
 }
 .image-retry-decision__button--primary:hover {
-  background: linear-gradient(90deg, rgba(38, 150, 130, 0.16), rgba(38, 150, 130, 0.25));
-  color: #a0f3e5;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 16%, transparent), color-mix(in srgb, var(--theme-accent) 25%, transparent));
+  color: var(--theme-accent);
 }
 .live-console-grid .image-retry-decision {
   grid-column: 1 / -1;
@@ -4603,23 +4268,23 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-console-grid .image-retry-decision__button {
   min-height: 38px;
-  border: 1px solid rgba(126, 143, 178, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: rgba(20, 27, 42, 0.8);
+  background: color-mix(in srgb, var(--theme-tone-blue) 80%, transparent);
 }
 .live-console-grid .image-retry-decision__button:not(.image-retry-decision__button--primary) {
   padding: 0;
   font-size: 0;
 }
 .live-console-grid .image-retry-decision__button--primary {
-  border: 1px solid rgba(77, 218, 194, 0.42);
-  background: linear-gradient(135deg, #197f72, #12645f);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 42%, transparent);
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
   box-shadow: 0 7px 18px rgba(5, 57, 52, 0.22), inset 0 1px 0 rgba(210, 255, 247, 0.1);
-  color: #f3fffc;
+  color: var(--theme-text);
 }
 .live-console-grid .image-retry-decision__button--primary:hover {
-  background: linear-gradient(135deg, #1b8e7e, #157069);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
+  color: var(--theme-text);
 }
 .live-console-grid .live-console-row__actions {
   width: 100%;
@@ -4631,12 +4296,12 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: #dce7ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  color: var(--theme-text);
 }
-.live-console-row__action--play { background: rgba(109, 92, 255, 0.14); }
-.live-console-row__action--danger { color: #fca5a5; }
+.live-console-row__action--play { background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent); }
+.live-console-row__action--danger { color: var(--theme-tone-red); }
 .replacement-region-dialog {
   position: fixed;
   inset: var(--app-titlebar-height, 62px) 0 0;
@@ -4644,7 +4309,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(4, 8, 16, 0.78);
+  background: color-mix(in srgb, var(--theme-input) 78%, transparent);
   backdrop-filter: blur(10px);
 }
 .replacement-region-dialog__panel {
@@ -4668,16 +4333,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 12px;
 }
 .replacement-region-dialog__head > div { display: grid; gap: 4px; }
-.replacement-region-dialog__head strong { color: #f8fbff; font-size: 18px; }
+.replacement-region-dialog__head strong { color: var(--theme-text); font-size: 18px; }
 .replacement-region-dialog__head span,
-.replacement-region-dialog__meta { color: #92a5ca; font-size: 12px; }
+.replacement-region-dialog__meta { color: var(--theme-text-secondary); font-size: 12px; }
 .replacement-region-dialog__head button {
   width: 38px;
   height: 38px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
 }
 .replacement-region-stage {
   position: relative;
@@ -4720,7 +4385,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   content: '';
   position: absolute;
   display: block;
-  background: #36d399;
+  background: var(--theme-accent);
   box-shadow: 0 0 0 1px rgba(7, 18, 14, 0.72);
 }
 .replacement-region-handle::before {
@@ -4767,7 +4432,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   content: '';
   position: fixed;
   inset: var(--app-titlebar-height, 62px) 0 0;
-  background: rgba(4, 8, 16, 0.72);
+  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
   backdrop-filter: blur(12px);
   z-index: -1;
 }
@@ -4776,10 +4441,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   max-height: calc(100vh - var(--app-titlebar-height, 62px) - 56px);
   overflow: auto;
   border-radius: 24px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
+  border: 1px solid var(--theme-border);
   background:
-    radial-gradient(circle at top right, rgba(110, 93, 255, 0.16), transparent 24%),
-    linear-gradient(180deg, rgba(18, 23, 38, 0.98), rgba(12, 16, 28, 0.98));
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-tone-blue) 16%, transparent), transparent 24%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
   padding: 18px;
 }
@@ -4791,15 +4456,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   margin-bottom: 16px;
 }
 .live-detail-dialog__title { display: grid; gap: 6px; }
-.live-detail-dialog__title strong { font-size: 22px; line-height: 1.2; color: #f8fbff; }
-.live-detail-dialog__title p { margin: 0; font-size: 12px; line-height: 1.6; color: #92a5ca; }
+.live-detail-dialog__title strong { font-size: 22px; line-height: 1.2; color: var(--theme-text); }
+.live-detail-dialog__title p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--theme-text-secondary); }
 .live-detail-dialog__close {
   min-height: 38px;
   padding: 0 14px;
   border-radius: 12px;
-  border: 1px solid rgba(111, 123, 170, 0.22);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -4815,12 +4480,12 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 88px;
   padding: 14px;
   border-radius: 18px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
-.live-detail-dialog__summary-card span { font-size: 11px; color: #8ea3c9; }
-.live-detail-dialog__summary-card strong { font-size: 20px; line-height: 1.15; color: #f8fbff; }
-.live-detail-dialog__summary-card small { font-size: 11px; color: #9cb1da; }
+.live-detail-dialog__summary-card span { font-size: 11px; color: var(--theme-tone-blue); }
+.live-detail-dialog__summary-card strong { font-size: 20px; line-height: 1.15; color: var(--theme-text); }
+.live-detail-dialog__summary-card small { font-size: 11px; color: var(--theme-tone-blue); }
 .live-detail-dialog__hero {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4834,8 +4499,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 0;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 2%, transparent));
 }
 .live-detail-dialog__hero-head {
   display: flex;
@@ -4843,8 +4508,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   justify-content: space-between;
   gap: 10px;
 }
-.live-detail-dialog__hero-head strong { font-size: 14px; color: #f4f7ff; }
-.live-detail-dialog__hero-head span { font-size: 11px; color: #92a5ca; }
+.live-detail-dialog__hero-head strong { font-size: 14px; color: var(--theme-text); }
+.live-detail-dialog__hero-head span { font-size: 11px; color: var(--theme-text-secondary); }
 .live-detail-dialog__hero-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4855,11 +4520,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 4px;
   padding: 12px;
   border-radius: 14px;
-  background: rgba(8, 12, 22, 0.42);
-  border: 1px solid rgba(111, 123, 170, 0.14);
+  background: color-mix(in srgb, var(--theme-panel) 42%, transparent);
+  border: 1px solid var(--theme-border);
 }
-.live-detail-dialog__metric span { font-size: 10px; color: #8ea3c9; }
-.live-detail-dialog__metric strong { font-size: 13px; line-height: 1.5; color: #f8fbff; }
+.live-detail-dialog__metric span { font-size: 10px; color: var(--theme-tone-blue); }
+.live-detail-dialog__metric strong { font-size: 13px; line-height: 1.5; color: var(--theme-text); }
 .live-result-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4870,8 +4535,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 12px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid rgba(111, 123, 170, 0.18);
-  background: rgba(7, 12, 22, 0.5);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 50%, transparent);
 }
 .live-result-card__head {
   display: grid;
@@ -4879,11 +4544,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-result-card__head strong {
   font-size: 14px;
-  color: #f8fbff;
+  color: var(--theme-text);
 }
 .live-result-card__head span {
   font-size: 11px;
-  color: #8ea3c9;
+  color: var(--theme-tone-blue);
   line-height: 1.5;
   word-break: break-all;
 }
@@ -4893,8 +4558,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 220px;
   max-height: 280px;
   border-radius: 16px;
-  border: 1px solid rgba(111, 123, 170, 0.16);
-  background: linear-gradient(180deg, rgba(9, 14, 24, 0.94), rgba(7, 11, 20, 0.98));
+  border: 1px solid var(--theme-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 94%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 .live-result-card__frame {
   padding: 0;
@@ -4910,8 +4575,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .live-result-card__empty {
   min-height: 220px;
   border-radius: 16px;
-  border: 1px dashed rgba(123, 138, 186, 0.28);
-  color: #8fa4cb;
+  border: 1px dashed var(--theme-border);
+  color: var(--theme-tone-blue);
   display: grid;
   place-items: center;
   gap: 8px;
@@ -4927,9 +4592,9 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(126, 96, 255, 0.24);
-  background: rgba(95, 78, 255, 0.12);
-  color: #d8d2ff;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-violet) 24%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   font-weight: 700;
 }
@@ -4945,28 +4610,28 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   gap: 6px;
   padding: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(111, 123, 170, 0.14);
-  background: rgba(8, 12, 22, 0.42);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-panel) 42%, transparent);
 }
-.live-detail-dialog__log-item.is-success { border-color: rgba(16, 185, 129, 0.22); }
-.live-detail-dialog__log-item.is-error { border-color: rgba(248, 113, 113, 0.22); }
+.live-detail-dialog__log-item.is-success { border-color: color-mix(in srgb, var(--theme-accent) 22%, transparent); }
+.live-detail-dialog__log-item.is-error { border-color: color-mix(in srgb, var(--theme-tone-red) 22%, transparent); }
 .live-detail-dialog__log-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #92a5ca;
+  color: var(--theme-text-secondary);
   font-size: 11px;
 }
 .live-detail-dialog__log-meta strong {
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #d9e3ff;
+  color: var(--theme-text);
   font-size: 10px;
 }
 .live-detail-dialog__log-item p {
   margin: 0;
-  color: #e7eefc;
+  color: var(--theme-text);
   font-size: 12px;
   line-height: 1.6;
   word-break: break-word;
@@ -4976,8 +4641,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
   display: grid;
   place-items: center;
   border-radius: 14px;
-  border: 1px dashed rgba(111, 123, 170, 0.2);
-  color: #92a5ca;
+  border: 1px dashed var(--theme-border);
+  color: var(--theme-text-secondary);
   font-size: 12px;
   text-align: center;
   padding: 16px;
@@ -5085,8 +4750,8 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
     align-items: stretch;
   }
 }
-.product-picker-button { width: 100%; color: #fff; text-align: left; cursor: pointer; }
-.product-picker-button:hover { border-color: rgba(85, 223, 202, 0.44); }
+.product-picker-button { width: 100%; color: var(--theme-text); text-align: left; cursor: pointer; }
+.product-picker-button:hover { border-color: color-mix(in srgb, var(--theme-accent) 44%, transparent); }
 .product-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
-.batch-delete-button { color: #fecaca; border-color: rgba(239, 68, 68, 0.24); }
+.batch-delete-button { color: var(--theme-tone-red); border-color: color-mix(in srgb, var(--theme-tone-red) 24%, transparent); }
 </style>

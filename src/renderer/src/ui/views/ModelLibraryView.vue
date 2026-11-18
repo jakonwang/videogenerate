@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -13,7 +14,10 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronDown,
+  CheckCircle2,
+  Copy,
+  AlertCircle,
+  Users,
   Download,
   Grid2x2,
   ImagePlus,
@@ -21,9 +25,11 @@ import {
   LoaderCircle,
   MoreHorizontal,
   Search,
-  Star,
   Wand2,
   X,
+  Pencil,
+  Sparkles,
+  Trash2,
 } from 'lucide-vue-next'
 
 type CloneProject = {
@@ -460,6 +466,56 @@ const selectedModel = computed(() => {
   return library.value.find((item) => item.id === selectedId.value) ?? pagedLibrary.value[0] ?? sortedLibrary.value[0] ?? null
 })
 
+const statusStats = computed(() => {
+  const rows = library.value
+  return [
+    { key: 'all' as const, label: t('modelLibrary.spec.total'), value: rows.length, tone: 'total' },
+    { key: 'done' as const, label: t('modelLibrary.spec.ready'), value: rows.filter((item) => item.status === 'done').length, tone: 'ready' },
+    { key: 'generating' as const, label: t('modelLibrary.spec.generating'), value: rows.filter((item) => item.status === 'generating').length, tone: 'generating' },
+    { key: 'failed' as const, label: t('modelLibrary.spec.failed'), value: rows.filter((item) => item.status === 'failed').length, tone: 'failed' },
+  ]
+})
+
+const activeImageIndex = ref(0)
+watch(selectedId, () => {
+  activeImageIndex.value = 0
+})
+const selectedImages = computed(() => {
+  const item = selectedModel.value
+  if (!item) return [] as string[]
+  const list = [item.coverImagePath, ...(item.imagePaths || [])].map((p) => String(p || '').trim()).filter(Boolean)
+  return Array.from(new Set(list))
+})
+const selectedHeroImage = computed(() => selectedImages.value[activeImageIndex.value] || selectedImages.value[0] || '')
+const selectedSpecs = computed(() => {
+  const item = selectedModel.value
+  if (!item) return []
+  return [
+    { key: 'gender', label: t('modelLibrary.spec.gender'), value: item.gender },
+    { key: 'age', label: t('modelLibrary.spec.age'), value: item.ageRange },
+    { key: 'market', label: t('modelLibrary.spec.market'), value: item.market },
+    { key: 'skin', label: t('modelLibrary.spec.skin'), value: item.skinTone },
+    { key: 'hair', label: t('modelLibrary.spec.hair'), value: item.hairStyle },
+    { key: 'outfit', label: t('modelLibrary.spec.outfit'), value: item.outfitStyle },
+    { key: 'mood', label: t('modelLibrary.spec.mood'), value: item.mood },
+    { key: 'scene', label: t('modelLibrary.spec.scene'), value: item.sceneStyle },
+  ].filter((row) => String(row.value || '').trim())
+})
+
+function setStatusFilter(value: LibraryStatusFilter) {
+  activeTab.value = 'all'
+  statusFilter.value = value
+}
+
+function cardMeta(item: ModelIdentityLibraryItem) {
+  return [item.ageRange, item.market].map((v) => String(v || '').trim()).filter(Boolean).join(' · ') || productTypeTag(item.productType)
+}
+
+function relativeDate(timestamp?: number) {
+  if (!timestamp) return '--'
+  return new Date(timestamp).toLocaleDateString(locale.value)
+}
+
 const pages = computed(() => Array.from({ length: Math.min(totalPages.value, 4) }, (_, index) => index + 1))
 
 watch([sortedLibrary, pageSize], () => {
@@ -491,6 +547,13 @@ function modelStatusText(status?: string) {
   if (status === 'generating') return t('modelLibrary.status.generating')
   if (status === 'failed') return t('modelLibrary.status.failed')
   return t('modelLibrary.status.incomplete')
+}
+
+function statusPill(status?: string) {
+  if (status === 'done') return 'vg-pill--green'
+  if (status === 'generating') return 'vg-pill--blue'
+  if (status === 'failed') return 'vg-pill--red'
+  return ''
 }
 
 function modelStatusTone(status?: string) {
@@ -1103,379 +1166,268 @@ watch([activeTab, statusFilter, search], () => {
 </script>
 
 <template>
-  <div class="models-library-page" data-testid="models-library-page">
-    <section class="models-shell">
-      <div class="models-shell__main">
-        <section class="models-hero">
-          <div class="models-hero__copy">
-            <h1>{{ t('modelLibrary.title') }}</h1>
-            <p>{{ t('modelLibrary.desc') }}</p>
-          </div>
-          <div class="models-hero__actions">
-            <button type="button" class="models-ghost-button" @click="openCreatePanel">
-              <span>{{ t('modelLibrary.import') }}</span>
-            </button>
-            <button type="button" class="models-top-primary" data-testid="models-open-create" @click="openCreatePanel">
-              <span>{{ t('modelLibrary.create') }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="models-layout">
-          <main class="models-panel models-catalog-panel">
-            <div class="models-tabs">
-              <button
-                v-for="tab in tabItems"
-                :key="tab.key"
-                type="button"
-                class="models-tab"
-                :class="{ active: activeTab === tab.key }"
-                @click="activeTab = tab.key"
-              >
-                <span>{{ tab.label }}</span>
-                <strong>{{ tab.count }}</strong>
-              </button>
-            </div>
-
-            <div class="models-toolbar">
-              <div class="models-toolbar__filters">
-                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'status' }">
-                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('status')">
-                    <span class="models-select-trigger__label">{{ statusFilterLabel }}</span>
-                    <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <div v-if="openDropdown === 'status'" class="models-select-menu">
-                    <button
-                      v-for="option in statusOptions"
-                      :key="option.value"
-                      type="button"
-                      class="models-select-option"
-                      :class="{ active: statusFilter === option.value }"
-                      @click="statusFilter = option.value; closeDropdown()"
-                    >
-                      {{ option.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="models-custom-select" :class="{ 'is-open': openDropdown === 'productType' }">
-                  <button type="button" class="models-select models-select-trigger" @click.stop="toggleDropdown('productType')">
-                    <span class="models-select-trigger__label">{{ productTypeLabel }}</span>
-                    <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <div v-if="openDropdown === 'productType'" class="models-select-menu">
-                    <button
-                      v-for="option in productTypeOptions"
-                      :key="option.value"
-                      type="button"
-                      class="models-select-option"
-                      :class="{ active: productType === option.value }"
-                      @click="productType = option.value; closeDropdown()"
-                    >
-                      {{ option.label }}
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              <div class="models-toolbar__search">
-                <div class="models-input models-input--search">
-                  <input v-model="search" type="text" :placeholder="t('modelLibrary.searchPlaceholder')" />
-                </div>
-                <div class="models-view-switch">
-                  <button type="button" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
-                    <Grid2x2 class="h-4 w-4" />
-                  </button>
-                  <button type="button" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">
-                    <LayoutList class="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="models-catalog-head">
-              <div class="models-catalog-head__summary">
-                <strong>{{ sortedLibrary.length }}</strong>
-                <div class="models-catalog-head__summary-copy">
-                  <b>{{ t('modelLibrary.modelsUnit') }}</b>
-                  <small>{{ t('modelLibrary.availableSummary') }}</small>
-                </div>
-              </div>
-              <div class="models-catalog-head__actions" :class="{ 'is-selection-active': selectedIds.length > 0 }">
-                <div v-if="selectedIds.length" class="models-selection-pill">
-                  <strong>{{ t('modelLibrary.selectedCount', { count: selectedIds.length }) }}</strong>
-                  <small>{{ allCurrentPageSelected ? t('modelLibrary.pageSelected') : t('modelLibrary.selecting') }}</small>
-                </div>
-                <button type="button" class="models-secondary-button models-secondary-button--compact" @click="toggleSelectCurrentPage">
-                  {{ allCurrentPageSelected ? t('modelLibrary.unselectPage') : t('modelLibrary.selectPage') }}
-                </button>
-                <button
-                  v-if="selectedIds.length"
-                  type="button"
-                  class="models-danger-button models-danger-button--compact"
-                  :disabled="dialogBusy"
-                  @click="deleteModelsBatch"
-                >
-                  {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.batchDelete', { count: selectedIds.length }) }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="pagedLibrary.length" class="models-card-grid" :class="{ 'is-list': viewMode === 'list' }">
-              <article
-                v-for="(item, index) in pagedLibrary"
-                :key="item.id"
-                class="models-library-card"
-                :class="{ active: selectedId === item.id, 'is-checked': selectedSet.has(item.id) }"
-                @click="selectedId = item.id"
-              >
-                <div class="models-library-card__media">
-                  <label class="models-library-card__check" @click.stop>
-                    <input
-                      type="checkbox"
-                      :checked="selectedSet.has(item.id)"
-                      @change="toggleSelected(item.id)"
-                    />
-                    <span></span>
-                  </label>
-                  <button type="button" class="models-library-card__favorite" @click.stop="copyText(item.id, t('modelLibrary.messages.idCopied'))">
-                    <Star class="h-4 w-4" />
-                  </button>
-                  <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="mediaUrl(item.coverImagePath || item.imagePaths?.[0])" :alt="item.name" />
-                  <div v-else class="models-library-card__fallback">AI</div>
-                  <div class="models-library-card__play">
-                    <ArrowRight class="h-4 w-4" />
-                  </div>
-                </div>
-
-                <div class="models-library-card__body">
-                  <div class="models-library-card__head">
-                    <div class="models-library-card__identity">
-                      <div class="models-library-card__meta-row">
-                        <div class="models-library-card__badge" :class="modelStatusTone(item.status)">
-                          {{ modelStatusText(item.status) }}
-                        </div>
-                        <div class="models-library-card__pro">Pro</div>
-                      </div>
-                      <h3>{{ modelTitle(item, index) }}</h3>
-                      <p class="models-library-card__desc">{{ t('modelLibrary.modelProvider') }}: {{ languageText(item) }}</p>
-                    </div>
-                    <div class="models-action-menu">
-                      <button type="button" class="models-library-card__more" @click.stop="toggleActionMenu(item.id)">
-                        <MoreHorizontal class="h-4 w-4" />
-                      </button>
-                      <div v-if="openActionMenu === item.id" class="models-action-menu__panel">
-                        <button type="button" @click="assignModelToProject(item)">{{ t('modelLibrary.actions.assign') }}</button>
-                        <button type="button" @click="openRenameDialog(item)">{{ t('modelLibrary.actions.rename') }}</button>
-                        <button type="button" @click="copyText(item.name || modelTitle(item, index), t('modelLibrary.messages.nameCopied'))">{{ t('modelLibrary.actions.copyName') }}</button>
-                        <button type="button" @click="revealModelImage(item)">{{ t('modelLibrary.actions.revealCover') }}</button>
-                        <button type="button" class="is-danger" @click="openDeleteDialog(item)">{{ t('modelLibrary.actions.delete') }}</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="models-tag-row models-tag-row--compact">
-                    <span>{{ item.mood || t('modelLibrary.defaults.mood') }}</span>
-                    <span>{{ item.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
-                    <span>{{ item.skinTone || t('modelLibrary.defaults.skin') }}</span>
-                  </div>
-                </div>
-              </article>
-            </div>
-            <div v-else class="models-empty-state">{{ t('modelLibrary.empty') }}</div>
-
-            <div class="models-pagination">
-              <div class="models-pagination__nav">
-                <button type="button" :disabled="page <= 1" @click="prevPage"><ArrowLeft class="h-4 w-4" /></button>
-                <button v-for="n in pages" :key="n" type="button" :class="{ active: page === n }" @click="setPage(n)">{{ n }}</button>
-                <button type="button" :disabled="page >= totalPages" @click="nextPage"><ArrowRight class="h-4 w-4" /></button>
-              </div>
-              <div class="models-pagination__meta">
-                <span>{{ t('modelLibrary.totalCount', { count: sortedLibrary.length }) }}</span>
-                <div class="models-custom-select models-custom-select--compact" :class="{ 'is-open': openDropdown === 'pageSize' }">
-                  <button type="button" class="models-select models-select--compact models-select-trigger" @click.stop="toggleDropdown('pageSize')">
-                    <span class="models-select-trigger__label">{{ pageSizeLabel }}</span>
-                    <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <div v-if="openDropdown === 'pageSize'" class="models-select-menu models-select-menu--compact models-select-menu--align-right">
-                    <button
-                      v-for="option in pageSizeOptions"
-                      :key="option.value"
-                      type="button"
-                      class="models-select-option"
-                      :class="{ active: pageSize === option.value }"
-                      @click="pageSize = option.value; closeDropdown()"
-                    >
-                      {{ option.label }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
-        </section>
+  <div class="vg-scope vg-page ml" data-testid="models-library-page">
+    <header class="ml-head">
+      <div class="ml-head__text">
+        <span class="ml-head__eyebrow"><Sparkles :size="13" /> AI Model Studio</span>
+        <h1>{{ t('modelLibrary.title') }}</h1>
+        <p>{{ t('modelLibrary.desc') }}</p>
       </div>
+      <div class="ml-head__actions">
+        <button type="button" class="vg-btn" @click="openCreatePanel"><Download :size="15" /> {{ t('modelLibrary.import') }}</button>
+        <button type="button" class="vg-btn vg-btn--primary" data-testid="models-open-create" @click="openCreatePanel">
+          <Wand2 :size="15" /> {{ t('modelLibrary.create') }}
+        </button>
+      </div>
+    </header>
 
-      <aside v-if="selectedModel" class="models-panel models-detail-panel">
-        <div class="models-detail-card">
-          <div class="models-detail-card__top">
-            <div class="models-detail-card__media">
-              <img v-if="selectedModel.coverImagePath || selectedModel.imagePaths?.[0]" :src="mediaUrl(selectedModel.coverImagePath || selectedModel.imagePaths?.[0])" :alt="selectedModel.name" />
-            </div>
+    <div class="ml-stats">
+      <button
+        v-for="stat in statusStats"
+        :key="stat.key"
+        type="button"
+        class="ml-stat"
+        :class="[`is-${stat.tone}`, { 'is-active': statusFilter === stat.key && activeTab === 'all' }]"
+        @click="setStatusFilter(stat.key)"
+      >
+        <span class="ml-stat__icon">
+          <Users v-if="stat.tone === 'total'" :size="16" />
+          <CheckCircle2 v-else-if="stat.tone === 'ready'" :size="16" />
+          <LoaderCircle v-else-if="stat.tone === 'generating'" :size="16" />
+          <AlertCircle v-else :size="16" />
+        </span>
+        <span class="ml-stat__body">
+          <b class="vg-num">{{ stat.value }}</b>
+          <small>{{ stat.label }}</small>
+        </span>
+      </button>
+    </div>
 
-            <div class="models-detail-card__top-copy">
-              <div class="models-detail-card__head">
-                <div>
-                  <div class="models-detail-card__title">
-                    <h3>{{ selectedModel.name || t('modelLibrary.unnamed') }}</h3>
-                    <span>Pro</span>
-                  </div>
-                  <div class="models-detail-card__online">
-                    <i></i>
-                    <span>{{ modelStatusText(selectedModel.status) }}</span>
-                  </div>
-                </div>
-                <button type="button" class="models-detail-close" @click="selectedId = ''">
-                  <X class="h-4 w-4" />
-                </button>
-              </div>
-
-              <p class="models-detail-summary">{{ modelMetrics(selectedModel) }}</p>
-
-              <div class="models-tag-row models-tag-row--compact">
-                <span>{{ selectedModel.mood || t('modelLibrary.defaults.mood') }}</span>
-                <span>{{ selectedModel.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
-                <span>{{ selectedModel.skinTone || t('modelLibrary.defaults.skin') }}</span>
-                <span>{{ selectedModel.gender || t('modelLibrary.defaults.gender') }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="models-detail-cta">
-            <button type="button" class="models-primary-button models-primary-button--inline" @click="openCloneWithModel(selectedModel)">{{ t('modelLibrary.actions.use') }}</button>
-            <button type="button" class="models-secondary-button" @click="openRenameDialog(selectedModel)">{{ t('modelLibrary.actions.edit') }}</button>
-            <div class="models-action-menu">
-              <button type="button" class="models-detail-more" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)">
-                <MoreHorizontal class="h-4 w-4" />
-              </button>
-              <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="models-action-menu__panel models-action-menu__panel--detail">
-                <button type="button" @click="assignModelToProject(selectedModel)">{{ t('modelLibrary.actions.assign') }}</button>
-                <button type="button" @click="openModelImage(selectedModel)">{{ t('modelLibrary.actions.openCover') }}</button>
-                <button type="button" @click="revealModelImage(selectedModel)">{{ t('modelLibrary.actions.revealCover') }}</button>
-                <button type="button" class="is-danger" @click="openDeleteDialog(selectedModel)">{{ t('modelLibrary.actions.delete') }}</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="models-detail-tabs">
-            <button type="button" class="active">{{ t('modelLibrary.details.tab') }}</button>
-          </div>
-        </div>
-
-        <div class="models-detail-section">
-          <h4>{{ t('modelLibrary.details.basic') }}</h4>
-          <div class="models-detail-time">
-            <div><span>{{ t('modelLibrary.details.id') }}</span><strong>{{ selectedModel.id || '--' }}</strong></div>
-            <div><span>{{ t('modelLibrary.details.createdAt') }}</span><strong>{{ formatDate(selectedModel.createdAt) }}</strong></div>
-            <div><span>{{ t('modelLibrary.details.updatedAt') }}</span><strong>{{ formatDate(selectedModel.updatedAt) }}</strong></div>
-            <div><span>{{ t('modelLibrary.modelProvider') }}</span><strong>{{ languageText(selectedModel) }}</strong></div>
-            <div><span>{{ t('modelLibrary.details.generationStatus') }}</span><strong>{{ modelStatusText(selectedModel.status) }}</strong></div>
-          </div>
-        </div>
-
-        <div class="models-detail-section">
-          <h4>{{ t('modelLibrary.details.tags') }}</h4>
-          <div class="models-tag-row">
-            <span>{{ selectedModel.mood || t('modelLibrary.defaults.mood') }}</span>
-            <span>{{ selectedModel.sceneStyle || t('modelLibrary.defaults.scene') }}</span>
-            <span>{{ selectedModel.skinTone || t('modelLibrary.defaults.skin') }}</span>
-            <span>{{ selectedModel.gender || t('modelLibrary.defaults.gender') }}</span>
-            <span>{{ productTypeTag(selectedModel.productType) }}</span>
-          </div>
-        </div>
-
-        <div v-if="selectedModel.error" class="models-hint is-error">{{ selectedModel.error }}</div>
-
-        <div class="models-detail-section">
-          <h4>{{ t('modelLibrary.details.description') }}</h4>
-          <p class="models-detail-desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
-        </div>
-
-          <div class="models-detail-section">
-            <h4>{{ t('modelLibrary.details.preview') }}</h4>
-            <div class="models-preview-strip">
-              <div v-for="(image, imageIndex) in selectedModel.imagePaths.slice(0, 4)" :key="`${selectedModel.id}-${imageIndex}`" class="models-preview-strip__item">
-                <img :src="mediaUrl(image)" :alt="`${selectedModel.name}-${imageIndex}`" />
-              </div>
-            </div>
-          </div>
-      </aside>
-    </section>
-
-    <transition name="fade">
-      <div v-if="createPanelOpen" class="models-dialog-backdrop" @click="closeCreatePanel">
-        <div class="models-dialog models-dialog--wide" data-testid="models-create-dialog" @click.stop>
-          <div class="models-dialog__head models-dialog__head--hero">
-            <div class="models-dialog__title-block">
-              <span class="models-dialog__eyebrow">Model Creation</span>
-              <h3>{{ t('modelLibrary.createDialog.title') }}</h3>
-              <p>{{ t('modelLibrary.createDialog.desc') }}</p>
-            </div>
-            <button type="button" class="models-dialog__close" @click="closeCreatePanel">
-              <X class="h-4 w-4" />
+    <div class="ml-layout" :class="{ 'has-detail': selectedModel }">
+      <!-- Catalog -->
+      <section class="ml-catalog">
+        <div class="ml-toolbar">
+          <label class="vg-search ml-search">
+            <Search :size="15" />
+            <input v-model="search" class="vg-input" type="text" :placeholder="t('modelLibrary.searchPlaceholder')" />
+          </label>
+          <span class="ml-toolbar__count"><b class="vg-num">{{ sortedLibrary.length }}</b> {{ t('modelLibrary.modelsUnit') }}</span>
+          <span class="vg-toolbar__spacer"></span>
+          <template v-if="selectedIds.length">
+            <span class="ml-toolbar__selected">{{ t('modelLibrary.selectedCount', { count: selectedIds.length }) }}</span>
+            <button type="button" class="vg-btn vg-btn--danger vg-btn--sm" :disabled="dialogBusy" @click="deleteModelsBatch">
+              <Trash2 :size="14" /> {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.batchDelete', { count: selectedIds.length }) }}
             </button>
+          </template>
+          <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="toggleSelectCurrentPage">
+            {{ allCurrentPageSelected ? t('modelLibrary.unselectPage') : t('modelLibrary.selectPage') }}
+          </button>
+          <div class="ml-view">
+            <button type="button" class="ml-view__btn" :class="{ 'is-active': viewMode === 'grid' }" @click="viewMode = 'grid'"><Grid2x2 :size="15" /></button>
+            <button type="button" class="ml-view__btn" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><LayoutList :size="15" /></button>
           </div>
+        </div>
 
-          <div class="models-create-grid models-create-grid--workspace">
-            <section class="models-create-section">
-              <div class="models-create-section__head">
-                <h4>{{ t('modelLibrary.createDialog.basic') }}</h4>
-                <p>{{ t('modelLibrary.createDialog.basicDesc') }}</p>
+        <div v-if="pagedLibrary.length" class="ml-grid" :class="{ 'is-list': viewMode === 'list' }">
+          <article
+            v-for="(item, index) in pagedLibrary"
+            :key="item.id"
+            class="ml-card"
+            :class="{ 'is-active': selectedModel?.id === item.id, 'is-checked': selectedSet.has(item.id) }"
+            @click="selectedId = item.id"
+          >
+            <div class="ml-card__media">
+              <img v-if="item.coverImagePath || item.imagePaths?.[0]" :src="thumbnailUrl(item.coverImagePath || item.imagePaths?.[0], 360)" :alt="item.name" loading="lazy" decoding="async" />
+              <span v-else class="ml-card__fallback">AI</span>
+              <span v-if="item.status !== 'done'" class="ml-card__badge" :class="modelStatusTone(item.status)">
+                <LoaderCircle v-if="item.status === 'generating'" :size="12" class="vg-spin" />
+                {{ modelStatusText(item.status) }}
+              </span>
+              <label class="ml-card__check" @click.stop>
+                <input type="checkbox" :checked="selectedSet.has(item.id)" @change="toggleSelected(item.id)" />
+              </label>
+            </div>
+
+            <div class="ml-card__body">
+              <div class="ml-card__main">
+                <h3 :title="modelTitle(item, index)">
+                  <span class="ml-dot" :class="modelStatusTone(item.status)"></span>
+                  <span class="vg-ellipsis">{{ modelTitle(item, index) }}</span>
+                </h3>
+                <p class="ml-card__meta" :title="cardMeta(item)">{{ cardMeta(item) }}</p>
               </div>
+              <span v-if="viewMode === 'list'" class="ml-card__date vg-num">{{ relativeDate(item.updatedAt || item.createdAt) }}</span>
+              <div class="vg-menu-wrap">
+                <button type="button" class="vg-icon-btn vg-icon-btn--sm" @click.stop="toggleActionMenu(item.id)"><MoreHorizontal :size="15" /></button>
+                <div v-if="openActionMenu === item.id" class="vg-menu" @click.stop>
+                  <button type="button" @click="assignModelToProject(item)">{{ t('modelLibrary.actions.assign') }}</button>
+                  <button type="button" @click="openRenameDialog(item)">{{ t('modelLibrary.actions.rename') }}</button>
+                  <button type="button" @click="copyText(item.name || modelTitle(item, index), t('modelLibrary.messages.nameCopied')); closeActionMenu()">{{ t('modelLibrary.actions.copyName') }}</button>
+                  <button type="button" @click="revealModelImage(item); closeActionMenu()">{{ t('modelLibrary.actions.revealCover') }}</button>
+                  <button type="button" class="danger" @click="openDeleteDialog(item)">{{ t('modelLibrary.actions.delete') }}</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div v-else class="vg-empty ml-empty">
+          <span class="vg-empty__icon"><Sparkles :size="24" /></span>
+          <p>{{ t('modelLibrary.empty') }}</p>
+          <button type="button" class="vg-btn vg-btn--primary" @click="openCreatePanel"><Wand2 :size="15" /> {{ t('modelLibrary.create') }}</button>
+        </div>
 
-              <label class="models-field">
-                <span>{{ t('modelLibrary.createDialog.profile') }}</span>
-                <div class="models-profile-summary">
-                  <div class="models-profile-summary__head">
-                    <strong>{{ t('modelLibrary.createDialog.summary') }}</strong>
-                    <small>{{ t('modelLibrary.createDialog.summaryHint') }}</small>
-                  </div>
-                  <p>{{ modelProfileSummaryText }}</p>
-                  <div v-if="modelProfileSummaryItems.length" class="models-profile-summary__chips">
-                    <span v-for="item in modelProfileSummaryItems" :key="item">{{ item }}</span>
+        <footer v-if="sortedLibrary.length" class="vg-pager ml-pager">
+          <div class="vg-pager__group">
+            <span>{{ t('modelLibrary.totalCount', { count: sortedLibrary.length }) }}</span>
+            <select v-model="pageSize" class="vg-select vg-select--sm" :aria-label="pageSizeLabel">
+              <option v-for="option in pageSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </div>
+          <div class="vg-pager__group">
+            <button type="button" class="vg-pg" :disabled="page <= 1" @click="prevPage"><ArrowLeft :size="14" /></button>
+            <button v-for="n in pages" :key="n" type="button" class="vg-pg" :class="{ 'is-active': page === n }" @click="setPage(n)">{{ n }}</button>
+            <button type="button" class="vg-pg" :disabled="page >= totalPages" @click="nextPage"><ArrowRight :size="14" /></button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- Detail -->
+      <aside v-if="selectedModel" class="ml-detail">
+        <div class="ml-detail__hero">
+          <img v-if="selectedHeroImage" :src="thumbnailUrl(selectedHeroImage, 720)" :alt="selectedModel.name" decoding="async" @dblclick="openModelImage(selectedModel)" />
+          <span v-else class="ml-card__fallback">AI</span>
+          <button type="button" class="ml-detail__close" :aria-label="t('common.cancel')" @click="selectedId = ''"><X :size="15" /></button>
+        </div>
+        <div v-if="selectedImages.length > 1" class="ml-detail__thumbs">
+          <button
+            v-for="(image, imageIndex) in selectedImages.slice(0, 6)"
+            :key="`${selectedModel.id}-${imageIndex}`"
+            type="button"
+            class="ml-detail__thumb"
+            :class="{ 'is-active': selectedHeroImage === image }"
+            @click="activeImageIndex = imageIndex"
+          >
+            <img :src="thumbnailUrl(image, 160)" :alt="`${selectedModel.name}-${imageIndex}`" decoding="async" />
+          </button>
+        </div>
+
+        <div class="ml-detail__title">
+          <div class="ml-detail__name">
+            <h2>{{ selectedModel.name || t('modelLibrary.unnamed') }}</h2>
+            <span class="vg-pill vg-pill--dot" :class="statusPill(selectedModel.status)">{{ modelStatusText(selectedModel.status) }}</span>
+          </div>
+          <p>{{ t('modelLibrary.spec.updated', { time: formatDate(selectedModel.updatedAt || selectedModel.createdAt) }) }}</p>
+        </div>
+
+        <div class="ml-detail__actions">
+          <button type="button" class="vg-btn vg-btn--primary" @click="openCloneWithModel(selectedModel)">{{ t('modelLibrary.actions.use') }}</button>
+          <button type="button" class="vg-btn" @click="openRenameDialog(selectedModel)"><Pencil :size="14" /> {{ t('modelLibrary.actions.edit') }}</button>
+          <div class="vg-menu-wrap">
+            <button type="button" class="vg-btn ml-detail__more" @click.stop="toggleActionMenu(`detail:${selectedModel.id}`)"><MoreHorizontal :size="16" /></button>
+            <div v-if="openActionMenu === `detail:${selectedModel.id}`" class="vg-menu" @click.stop>
+              <button type="button" @click="assignModelToProject(selectedModel)">{{ t('modelLibrary.actions.assign') }}</button>
+              <button type="button" @click="openModelImage(selectedModel); closeActionMenu()">{{ t('modelLibrary.actions.openCover') }}</button>
+              <button type="button" @click="revealModelImage(selectedModel); closeActionMenu()">{{ t('modelLibrary.actions.revealCover') }}</button>
+              <button type="button" class="danger" @click="openDeleteDialog(selectedModel)">{{ t('modelLibrary.actions.delete') }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedModel.error" class="vg-notice vg-notice--danger"><span>{{ selectedModel.error }}</span></div>
+
+        <section v-if="selectedSpecs.length" class="ml-detail__section">
+          <h4>{{ t('modelLibrary.spec.profile') }}</h4>
+          <dl class="ml-spec">
+            <div v-for="row in selectedSpecs" :key="row.key" class="ml-spec__item">
+              <dt>{{ row.label }}</dt>
+              <dd :title="row.value">{{ row.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="ml-detail__section">
+          <h4>{{ t('modelLibrary.details.description') }}</h4>
+          <p class="ml-detail__desc">{{ modelDescriptionPreview(selectedModel.description) }}</p>
+        </section>
+
+        <section class="ml-detail__section">
+          <h4>{{ t('modelLibrary.spec.meta') }}</h4>
+          <dl class="ml-meta">
+            <dt>{{ t('modelLibrary.details.id') }}</dt>
+            <dd class="ml-meta__id">
+              <code :title="selectedModel.id">{{ selectedModel.id || '--' }}</code>
+              <button type="button" class="vg-icon-btn vg-icon-btn--sm" :title="t('modelLibrary.spec.copyId')" @click="copyText(selectedModel.id, t('modelLibrary.messages.idCopied'))"><Copy :size="13" /></button>
+            </dd>
+            <dt>{{ t('modelLibrary.modelProvider') }}</dt><dd>{{ languageText(selectedModel) }}</dd>
+            <dt>{{ t('modelLibrary.details.createdAt') }}</dt><dd class="vg-num">{{ formatDate(selectedModel.createdAt) }}</dd>
+            <dt>{{ t('modelLibrary.spec.gallery') }}</dt><dd>{{ t('modelLibrary.spec.images', { count: selectedImages.length }) }}</dd>
+          </dl>
+        </section>
+      </aside>
+    </div>
+
+    <!-- Create dialog -->
+    <Teleport to="body">
+      <transition name="fade">
+        <div v-if="createPanelOpen" class="vg-scope vg-backdrop" @click="closeCreatePanel">
+          <div class="vg-dialog vg-dialog--xl ml-create" data-testid="models-create-dialog" @click.stop>
+            <header class="vg-dialog__head">
+              <div class="vg-dialog__title">
+                <span class="vg-dialog__title-icon"><Wand2 :size="19" /></span>
+                <div>
+                  <h2>{{ t('modelLibrary.createDialog.title') }}</h2>
+                  <p>{{ t('modelLibrary.createDialog.desc') }}</p>
+                </div>
+              </div>
+              <button type="button" class="vg-icon-btn" @click="closeCreatePanel"><X :size="18" /></button>
+            </header>
+
+            <div class="vg-dialog__body ml-create__body">
+              <section class="vg-stack">
+                <div>
+                  <div class="vg-section-title">{{ t('modelLibrary.createDialog.basic') }}</div>
+                  <p class="vg-muted ml-create__hint">{{ t('modelLibrary.createDialog.basicDesc') }}</p>
+                </div>
+
+                <div class="vg-notice vg-notice--accent ml-create__summary">
+                  <Sparkles :size="16" />
+                  <div>
+                    <b>{{ t('modelLibrary.createDialog.summary') }}</b> <span class="vg-muted">{{ t('modelLibrary.createDialog.summaryHint') }}</span>
+                    <p>{{ modelProfileSummaryText }}</p>
+                    <div v-if="modelProfileSummaryItems.length" class="vg-row ml-create__chips">
+                      <span v-for="item in modelProfileSummaryItems" :key="item" class="vg-chip">{{ item }}</span>
+                    </div>
                   </div>
                 </div>
-                <div class="models-profile-sections models-profile-sections--compact">
+
+                <div class="vg-tabs">
                   <button
                     v-for="section in modelProfileSections"
                     :key="section.key"
                     type="button"
-                    class="models-profile-section-tab"
-                    :class="{ active: activeProfileSection === section.key }"
+                    class="vg-tabs__btn"
+                    :class="{ 'is-active': activeProfileSection === section.key }"
+                    :title="section.description"
                     @click="activeProfileSection = section.key"
                   >
-                    <strong>{{ section.label }}</strong>
-                    <small>{{ section.description }}</small>
+                    {{ section.label }}
                   </button>
                 </div>
-                <div class="models-profile-groups models-profile-groups--flat">
+
+                <div class="vg-stack ml-create__groups">
                   <div
                     v-for="group in modelProfileSections.find((section) => section.key === activeProfileSection)?.groups || []"
                     :key="group.key"
-                    class="models-profile-group"
+                    class="ml-group"
                   >
-                    <div class="models-profile-group__head">
-                      <strong>{{ group.label }}</strong>
-                      <small>{{ group.description }}</small>
-                    </div>
-                    <div class="models-profile-group__options">
+                    <div class="ml-group__head"><strong>{{ group.label }}</strong> <small class="vg-muted">{{ group.description }}</small></div>
+                    <div class="vg-row ml-group__options">
                       <button
                         v-for="option in group.options"
                         :key="option.value"
                         type="button"
-                        class="models-profile-chip"
-                        :class="{ active: modelProfileOptions[group.key] === option.value }"
+                        class="vg-btn vg-btn--sm"
+                        :class="{ 'is-active': modelProfileOptions[group.key] === option.value }"
                         @click="selectModelProfileOption(group.key, option.value)"
                       >
                         {{ option.label }}
@@ -1483,1921 +1435,301 @@ watch([activeTab, statusFilter, search], () => {
                     </div>
                   </div>
                 </div>
-              </label>
 
-              <div class="models-field">
-                <span>{{ t('modelLibrary.createDialog.batchCount') }}</span>
-                <div class="models-chip-row">
-                  <button
-                    v-for="option in batchGenerateOptions"
-                    :key="option.value"
-                    type="button"
-                    class="models-profile-chip models-profile-chip--lg"
-                    :class="{ active: batchGenerateCount === option.value }"
-                    :disabled="busy"
-                    @click="batchGenerateCount = option.value"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section class="models-create-section models-create-section--soft">
-              <div class="models-section-heading">
-                <h4>{{ t('modelLibrary.createDialog.reference') }}</h4>
-                <p>{{ t('modelLibrary.createDialog.referenceDesc') }}</p>
-              </div>
-
-              <div class="models-upload-panel">
-                <div class="models-upload-panel__lead">
-                  <div class="models-upload-panel__icon">
-                    <ImagePlus class="h-4 w-4" />
-                  </div>
-                  <div class="models-upload-panel__copy">
-                    <strong>{{ t('modelLibrary.createDialog.uploadPanel') }}</strong>
-                    <p>{{ t('modelLibrary.createDialog.uploadDesc') }}</p>
-                  </div>
-                </div>
-
-                <div class="models-upload-panel__actions">
-                  <button type="button" data-testid="models-upload-main" @click="pickModelReferenceImage"><ImagePlus class="h-4 w-4" />{{ t('modelLibrary.createDialog.upload') }}</button>
-                </div>
-              </div>
-
-              <div class="models-upload-preview">
-                <div class="models-upload-preview__hero" :class="{ 'is-empty': !uploadPreviewHero }">
-                  <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
-                  <div v-else class="models-upload-preview__empty">
-                    <span>{{ t('modelLibrary.createDialog.previewHint') }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="models-stats-row">
-                <div class="models-stat-card"><span>{{ t('modelLibrary.createDialog.reference') }}</span><strong>{{ modelReferenceImages.length }}</strong></div>
-              </div>
-
-              <div v-if="activeModelTask" class="models-hint models-hint--floating">
-                {{ t('modelLibrary.createDialog.currentTask') }}: {{ activeModelTask.title }} · {{ activeModelTask.status }}
-              </div>
-
-              <div v-if="message" class="models-hint models-hint--floating">
-                {{ message }}
-              </div>
-              <div v-if="imageProviderMissingText" class="models-hint is-error">{{ imageProviderMissingText }}</div>
-
-              <div class="models-prompt-preview">
-                <div class="models-prompt-preview__head">
-                  <div>
-                    <strong>{{ t('modelLibrary.createDialog.promptTitle') }}</strong>
-                    <small>{{ t('modelLibrary.createDialog.promptDesc') }}</small>
-                  </div>
-                  <div class="models-prompt-preview__actions">
-                    <button type="button" class="models-secondary-button" :disabled="promptPreviewBusy" @click="previewModelPrompt">
-                      <span>{{ promptPreviewBusy ? t('modelLibrary.status.generating') : t('modelLibrary.createDialog.viewPrompt') }}</span>
-                    </button>
+                <div class="ml-group">
+                  <div class="ml-group__head"><strong>{{ t('modelLibrary.createDialog.batchCount') }}</strong></div>
+                  <div class="vg-seg">
                     <button
+                      v-for="option in batchGenerateOptions"
+                      :key="option.value"
                       type="button"
-                      class="models-secondary-button"
-                      :disabled="!(promptPreview?.prompt || '')"
-                      @click="copyText(promptPreview?.prompt || '', t('modelLibrary.messages.promptCopied'))"
+                      class="vg-seg__btn"
+                      :class="{ 'is-active': batchGenerateCount === option.value }"
+                      :disabled="busy"
+                      @click="batchGenerateCount = option.value"
                     >
-                      {{ t('modelLibrary.createDialog.copyPrompt') }}
+                      {{ option.label }}
                     </button>
                   </div>
                 </div>
-                <div v-if="promptPreview" class="models-prompt-preview__body">
-                  <div class="models-tag-row models-tag-row--compact">
-                    <span>{{ promptPreview.profile.gender || t('modelLibrary.createDialog.unsetGender') }}</span>
-                    <span>{{ promptPreview.profile.market || t('modelLibrary.createDialog.unsetMarket') }}</span>
-                    <span>{{ promptPreview.profile.outfitStyle || t('modelLibrary.createDialog.unsetOutfit') }}</span>
-                    <span>{{ promptPreview.profile.sceneStyle || t('modelLibrary.createDialog.unsetScene') }}</span>
-                    <span>{{ t('modelLibrary.createDialog.referenceCount', { count: (promptPreview as any).modelReferenceImageCount || 0 }) }}</span>
-                  </div>
-                  <p class="models-prompt-preview__summary">{{ promptPreview.description }}</p>
-                  <textarea :value="promptPreview.prompt" readonly class="models-prompt-preview__textarea"></textarea>
+              </section>
+
+              <section class="vg-card vg-card--soft vg-stack ml-create__side">
+                <div>
+                  <div class="vg-section-title">{{ t('modelLibrary.createDialog.reference') }} <span class="vg-count">{{ modelReferenceImages.length }}</span></div>
+                  <p class="vg-muted ml-create__hint">{{ t('modelLibrary.createDialog.referenceDesc') }}</p>
                 </div>
-                <p v-else class="models-prompt-preview__empty">{{ t('modelLibrary.createDialog.promptEmpty') }}</p>
+
+                <div class="ml-upload">
+                  <div class="ml-upload__preview">
+                    <img v-if="uploadPreviewHero" :src="mediaUrl(uploadPreviewHero)" alt="upload-preview" />
+                    <span v-else class="vg-muted">{{ t('modelLibrary.createDialog.previewHint') }}</span>
+                  </div>
+                  <div class="ml-upload__copy">
+                    <strong>{{ t('modelLibrary.createDialog.uploadPanel') }}</strong>
+                    <p class="vg-muted">{{ t('modelLibrary.createDialog.uploadDesc') }}</p>
+                    <button type="button" class="vg-btn vg-btn--soft vg-btn--sm" data-testid="models-upload-main" @click="pickModelReferenceImage">
+                      <ImagePlus :size="14" /> {{ t('modelLibrary.createDialog.upload') }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="activeModelTask" class="vg-notice"><LoaderCircle :size="15" class="vg-spin" /><span>{{ t('modelLibrary.createDialog.currentTask') }}: {{ activeModelTask.title }} · {{ activeModelTask.status }}</span></div>
+                <div v-if="message" class="vg-notice vg-notice--accent"><span>{{ message }}</span></div>
+                <div v-if="imageProviderMissingText" class="vg-notice vg-notice--danger"><span>{{ imageProviderMissingText }}</span></div>
+
+                <div class="ml-prompt">
+                  <div class="ml-prompt__head">
+                    <div>
+                      <strong>{{ t('modelLibrary.createDialog.promptTitle') }}</strong>
+                      <small class="vg-muted">{{ t('modelLibrary.createDialog.promptDesc') }}</small>
+                    </div>
+                    <div class="vg-row">
+                      <button type="button" class="vg-btn vg-btn--sm" :disabled="promptPreviewBusy" @click="previewModelPrompt">
+                        {{ promptPreviewBusy ? t('modelLibrary.status.generating') : t('modelLibrary.createDialog.viewPrompt') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="vg-btn vg-btn--sm"
+                        :disabled="!(promptPreview?.prompt || '')"
+                        @click="copyText(promptPreview?.prompt || '', t('modelLibrary.messages.promptCopied'))"
+                      >
+                        {{ t('modelLibrary.createDialog.copyPrompt') }}
+                      </button>
+                    </div>
+                  </div>
+                  <template v-if="promptPreview">
+                    <div class="vg-row ml-create__chips">
+                      <span class="vg-chip">{{ promptPreview.profile.gender || t('modelLibrary.createDialog.unsetGender') }}</span>
+                      <span class="vg-chip">{{ promptPreview.profile.market || t('modelLibrary.createDialog.unsetMarket') }}</span>
+                      <span class="vg-chip">{{ promptPreview.profile.outfitStyle || t('modelLibrary.createDialog.unsetOutfit') }}</span>
+                      <span class="vg-chip">{{ promptPreview.profile.sceneStyle || t('modelLibrary.createDialog.unsetScene') }}</span>
+                      <span class="vg-chip">{{ t('modelLibrary.createDialog.referenceCount', { count: (promptPreview as any).modelReferenceImageCount || 0 }) }}</span>
+                    </div>
+                    <p class="vg-secondary ml-prompt__summary">{{ promptPreview.description }}</p>
+                    <textarea :value="promptPreview.prompt" readonly class="vg-textarea ml-prompt__text"></textarea>
+                  </template>
+                  <p v-else class="vg-muted ml-prompt__empty">{{ t('modelLibrary.createDialog.promptEmpty') }}</p>
+                </div>
+              </section>
+            </div>
+
+            <footer class="vg-dialog__foot">
+              <span class="vg-muted ml-create__hint">{{ t('modelLibrary.createDialog.batchCount') }}: {{ batchGenerateCount }}</span>
+              <div class="vg-dialog__foot-actions">
+                <button type="button" class="vg-btn" @click="closeCreatePanel">{{ t('common.cancel') }}</button>
+                <button class="vg-btn vg-btn--primary" data-testid="models-generate-submit" type="button" :disabled="busy || !hasModelReferenceInput" @click="generateModelsBatch">
+                  <LoaderCircle v-if="busy" :size="15" class="vg-spin" /><Wand2 v-else :size="15" />
+                  {{ busy ? t('modelLibrary.createDialog.generating') : t('modelLibrary.createDialog.generate') }}
+                </button>
               </div>
-
-              <button class="models-primary-button models-primary-button--wide" data-testid="models-generate-submit" type="button" :disabled="busy || !hasModelReferenceInput" @click="generateModelsBatch">
-                <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin" />
-                <span>{{ busy ? t('modelLibrary.createDialog.generating') : t('modelLibrary.createDialog.generate') }}</span>
-              </button>
-            </section>
+            </footer>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
 
-    <transition name="fade">
-      <div v-if="dialogMode && dialogTarget" class="models-dialog-backdrop" @click="closeDialog">
-        <div class="models-dialog" @click.stop>
-          <div class="models-dialog__head">
-            <h3>{{ dialogMode === 'rename' ? t('modelLibrary.renameDialog.title') : t('modelLibrary.deleteDialog.title') }}</h3>
-            <button type="button" class="models-dialog__close" @click="closeDialog">
-              <X class="h-4 w-4" />
-            </button>
-          </div>
-
-          <div v-if="dialogMode === 'rename'" class="models-dialog__body">
-            <p class="models-dialog__desc">{{ t('modelLibrary.renameDialog.desc') }}</p>
-            <label class="models-field">
-              <span>{{ t('modelLibrary.renameDialog.name') }}</span>
-              <input v-model="renameDraft" type="text" :placeholder="t('modelLibrary.renameDialog.placeholder')" />
-            </label>
-          </div>
-
-          <div v-else class="models-dialog__body">
-            <p class="models-dialog__desc">{{ t('modelLibrary.deleteDialog.desc', { name: dialogTarget.name || t('modelLibrary.unnamed') }) }}</p>
-          </div>
-
-          <div class="models-dialog__footer">
-            <button type="button" class="models-secondary-button models-secondary-button--dialog" :disabled="dialogBusy" @click="closeDialog">{{ t('common.cancel') }}</button>
-            <button
-              v-if="dialogMode === 'rename'"
-              type="button"
-              class="models-primary-button models-primary-button--dialog"
-              :disabled="dialogBusy || !renameDraft.trim()"
-              @click="renameModel(dialogTarget)"
-            >
-              <LoaderCircle v-if="dialogBusy" class="h-4 w-4 animate-spin" />
-              <span>{{ dialogBusy ? t('modelLibrary.renameDialog.saving') : t('modelLibrary.renameDialog.save') }}</span>
-            </button>
-            <button v-else type="button" class="models-danger-button" :disabled="dialogBusy" @click="deleteModel(dialogTarget)">
-              <span>{{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.deleteDialog.confirm') }}</span>
-            </button>
+      <!-- Rename / delete -->
+      <transition name="fade">
+        <div v-if="dialogMode && dialogTarget" class="vg-scope vg-backdrop" @click="closeDialog">
+          <div class="vg-dialog" role="dialog" aria-modal="true" @click.stop>
+            <header class="vg-dialog__head">
+              <div class="vg-dialog__title">
+                <span class="vg-dialog__title-icon" :class="{ 'ml-danger-icon': dialogMode !== 'rename' }">
+                  <Pencil v-if="dialogMode === 'rename'" :size="18" /><Trash2 v-else :size="18" />
+                </span>
+                <div>
+                  <h2>{{ dialogMode === 'rename' ? t('modelLibrary.renameDialog.title') : t('modelLibrary.deleteDialog.title') }}</h2>
+                  <p v-if="dialogMode === 'rename'">{{ t('modelLibrary.renameDialog.desc') }}</p>
+                </div>
+              </div>
+              <button type="button" class="vg-icon-btn" @click="closeDialog"><X :size="18" /></button>
+            </header>
+            <div class="vg-dialog__body">
+              <div v-if="dialogMode === 'rename'" class="vg-field">
+                <label for="ml-rename">{{ t('modelLibrary.renameDialog.name') }}</label>
+                <input id="ml-rename" v-model="renameDraft" class="vg-input" type="text" :placeholder="t('modelLibrary.renameDialog.placeholder')" />
+              </div>
+              <p v-else class="vg-secondary">{{ t('modelLibrary.deleteDialog.desc', { name: dialogTarget.name || t('modelLibrary.unnamed') }) }}</p>
+            </div>
+            <footer class="vg-dialog__foot">
+              <div class="vg-dialog__foot-actions">
+                <button type="button" class="vg-btn" :disabled="dialogBusy" @click="closeDialog">{{ t('common.cancel') }}</button>
+                <button
+                  v-if="dialogMode === 'rename'"
+                  type="button"
+                  class="vg-btn vg-btn--primary"
+                  :disabled="dialogBusy || !renameDraft.trim()"
+                  @click="renameModel(dialogTarget)"
+                >
+                  <LoaderCircle v-if="dialogBusy" :size="15" class="vg-spin" />
+                  {{ dialogBusy ? t('modelLibrary.renameDialog.saving') : t('modelLibrary.renameDialog.save') }}
+                </button>
+                <button v-else type="button" class="vg-btn vg-btn--danger" :disabled="dialogBusy" @click="deleteModel(dialogTarget)">
+                  {{ dialogBusy ? t('modelLibrary.deleting') : t('modelLibrary.deleteDialog.confirm') }}
+                </button>
+              </div>
+            </footer>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
 
-    <transition name="fade">
-      <div v-if="message" class="models-toast">
-        <span>{{ message }}</span>
-        <button type="button" @click="closeMessage"><X class="h-4 w-4" /></button>
-      </div>
-    </transition>
+      <transition name="vg-toast">
+        <div v-if="message" class="vg-scope vg-toast vg-toast--success models-toast">
+          <span>{{ message }}</span>
+          <button type="button" class="vg-icon-btn vg-icon-btn--sm" @click="closeMessage"><X :size="14" /></button>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.models-prompt-preview {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.4);
-}
-
-.models-prompt-preview__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.models-prompt-preview__head small {
-  display: block;
-  margin-top: 4px;
-  color: rgba(226, 232, 240, 0.7);
-}
-
-.models-prompt-preview__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.models-prompt-preview__body {
-  display: grid;
-  gap: 10px;
-}
-
-.models-prompt-preview__summary,
-.models-prompt-preview__empty {
-  margin: 0;
-  color: rgba(226, 232, 240, 0.82);
-  line-height: 1.6;
-}
-
-.models-prompt-preview__textarea {
-  width: 100%;
-  min-height: 220px;
-  resize: vertical;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(2, 6, 23, 0.72);
-  color: #e2e8f0;
-  padding: 12px 14px;
-  line-height: 1.6;
-}
-
-.models-library-page {
-  display: grid;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  align-content: start;
-  color: #f4f8ff;
-}
-
-.models-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 344px;
-  gap: 18px;
-  align-items: start;
-  min-height: 0;
-}
-
-.models-shell__main,
-.models-layout {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  min-height: 0;
-}
-
-.models-panel,
-.models-hero {
-  border: 1px solid rgba(81, 99, 146, 0.24);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 84% 10%, rgba(95, 74, 240, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(12, 20, 36, 0.98), rgba(10, 18, 34, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 42px rgba(2, 7, 18, 0.24);
-}
-
-.models-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px 16px;
-}
-
-.models-hero__copy h1 {
-  margin: 0;
-  color: #fff;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1.12;
-}
-
-.models-hero__copy p {
-  max-width: 700px;
-  margin: 8px 0 0;
-  color: #a8b6cb;
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.models-hero__actions {
-  display: flex;
-  gap: 12px;
-}
-
-.models-ghost-button,
-.models-top-primary,
-.models-primary-button,
-.models-secondary-button,
-.models-danger-button,
-.models-link-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.models-ghost-button {
-  height: 38px;
-  padding: 0 16px;
-  border: 1px solid rgba(100, 118, 162, 0.3);
-  background: rgba(18, 27, 48, 0.9);
-  color: #eff5ff;
-}
-
-.models-top-primary,
-.models-primary-button {
-  height: 38px;
-  padding: 0 18px;
-  border: 1px solid rgba(157, 132, 255, 0.34);
-  background: linear-gradient(135deg, #5e43f3, #7d4fff);
-  color: #fff;
-  box-shadow: 0 14px 28px rgba(94, 67, 243, 0.28);
-}
-
-.models-panel {
-  padding: 18px;
-}
-
-.models-catalog-panel {
-  padding: 0;
-  overflow: visible;
-}
-
-.models-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 18px;
-  border-bottom: 1px solid rgba(75, 96, 139, 0.22);
-}
-
-.models-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  border: 0;
-  background: transparent;
-  color: #b4c0d4;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.models-tab strong {
-  color: #dfe7f5;
-  font-weight: 700;
-}
-
-.models-tab.active {
-  color: #a98cff;
-  box-shadow: inset 0 -2px 0 #6c53ff;
-}
-
-.models-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px 12px;
-}
-
-.models-toolbar__filters,
-.models-toolbar__search,
-.models-pagination__meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.models-custom-select {
-  position: relative;
-}
-
-.models-input,
-.models-select,
-.models-field textarea {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  border: 1px solid rgba(81, 99, 146, 0.24);
-  border-radius: 12px;
-  background: rgba(10, 18, 33, 0.94);
-  color: #eef4ff;
-}
-
-.models-select,
-.models-input {
-  height: 34px;
-  padding: 0 12px;
-}
-
-.models-select {
-  justify-content: space-between;
-  min-width: 104px;
-}
-
-.models-select--compact {
-  min-width: 118px;
-}
-
-.models-select--static {
-  cursor: default;
-}
-
-.models-input--search {
-  min-width: 210px;
-  width: 210px;
-}
-
-.models-input input,
-.models-field textarea {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: #eef4ff;
-  outline: none;
-}
-
-.models-input input::placeholder,
-.models-field textarea::placeholder {
-  color: #7587a2;
-}
-
-.models-field textarea {
-  min-height: 76px;
-  padding: 12px 14px;
-  resize: none;
-}
-
-.models-select-trigger__label {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: #edf4ff;
-  font-size: 13px;
-  text-align: left;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.models-select-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 30;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid rgba(81, 99, 146, 0.3);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(16, 24, 41, 0.99), rgba(11, 18, 33, 0.99));
-  box-shadow: 0 18px 48px rgba(2, 6, 14, 0.38);
-}
-
-.models-select-menu--compact {
-  min-width: 116px;
-}
-
-.models-select-menu--align-right {
-  left: auto;
-}
-
-.models-select-menu--scroll {
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.models-select-option {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #dce6f3;
-  font-size: 12px;
-  text-align: left;
-}
-
-.models-select-option:hover {
-  background: rgba(99, 78, 223, 0.16);
-}
-
-.models-select-option.active {
-  background: linear-gradient(135deg, rgba(110, 87, 245, 0.92), rgba(139, 99, 255, 0.92));
-  color: #fff;
-}
-
-.models-select-option--multiline {
-  line-height: 1.5;
-  white-space: normal;
-}
-
-.models-catalog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 4px 18px 16px;
-  border-bottom: 1px solid rgba(71, 86, 128, 0.18);
-}
-
-.models-catalog-head__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  flex-shrink: 0;
-  justify-content: flex-end;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  white-space: nowrap;
-}
-
-.models-catalog-head__actions.is-selection-active {
-  filter: saturate(1.02);
-}
-
-.models-catalog-head__summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: #f4f8ff;
-}
-
-.models-catalog-head__summary strong {
-  font-size: 34px;
-  line-height: 0.88;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  color: #f7fbff;
-}
-
-.models-catalog-head__summary-copy {
-  display: grid;
-  gap: 1px;
-  align-self: end;
-  padding-bottom: 3px;
-}
-
-.models-catalog-head__summary-copy b {
-  color: #eef4ff;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.models-catalog-head__summary small {
-  color: #7e90b2;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.models-selection-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(128, 111, 255, 0.22);
-  background: linear-gradient(180deg, rgba(56, 48, 108, 0.24), rgba(36, 32, 80, 0.16));
-  color: #eef2ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  white-space: nowrap;
-}
-
-.models-selection-pill strong {
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.models-selection-pill small {
-  color: #b7c3f0;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-@media (max-width: 1380px) {
-  .models-catalog-head {
-    gap: 12px;
-  }
-
-  .models-catalog-head__summary strong {
-    font-size: 28px;
-  }
-
-  .models-catalog-head__actions {
-    gap: 8px;
-  }
-
-  .models-selection-pill,
-  .models-secondary-button--compact,
-  .models-danger-button--compact {
-    min-height: 36px;
-    height: 36px;
-  }
-}
-
-.models-view-switch {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.models-view-switch button,
-.models-pagination__nav button,
-.models-library-card__more,
-.models-detail-more,
-.models-detail-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  border-radius: 12px;
-  background: rgba(16, 25, 44, 0.94);
-  color: #dbe4f0;
-}
-
-.models-view-switch button {
-  width: 34px;
-  height: 34px;
-}
-
-.models-view-switch button.active,
-.models-pagination__nav button.active {
-  background: linear-gradient(135deg, rgba(94, 67, 243, 0.96), rgba(125, 79, 255, 0.96));
-  border-color: rgba(157, 132, 255, 0.34);
-  color: #fff;
-}
-
-.models-card-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  padding: 0 18px 18px;
-}
-
-.models-card-grid.is-list {
-  grid-template-columns: 1fr;
-}
-
-.models-library-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  border: 1px solid rgba(79, 94, 132, 0.16);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(13, 21, 37, 0.94), rgba(10, 18, 31, 0.96));
-  padding: 8px;
-  text-align: left;
-  min-width: 0;
-  cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.models-library-card.active {
-  border-color: rgba(104, 121, 172, 0.3);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), 0 14px 28px rgba(9, 15, 27, 0.2);
-}
-
-.models-library-card.is-checked {
-  border-color: rgba(126, 103, 255, 0.38);
-  box-shadow: inset 0 0 0 1px rgba(136, 113, 255, 0.12), 0 18px 36px rgba(52, 43, 115, 0.18);
-  transform: translateY(-1px);
-}
-
-.models-library-card__media {
-  position: relative;
-  overflow: hidden;
-  aspect-ratio: 0.8;
-  border-radius: 14px;
-  background: rgba(8, 16, 28, 0.92);
-}
-
-.models-library-card__check {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.models-library-card__check input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.models-library-card__check span {
-  width: 20px;
-  height: 20px;
-  border-radius: 7px;
-  border: 1px solid rgba(206, 216, 235, 0.4);
-  background: rgba(8, 14, 24, 0.78);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.16);
-}
-
-.models-library-card__check input:checked + span {
-  border-color: rgba(145, 122, 255, 0.58);
-  background: linear-gradient(135deg, rgba(90, 67, 231, 0.92), rgba(120, 87, 246, 0.9));
-}
-
-.models-library-card__media img,
-.models-detail-card__media img,
-.models-preview-strip__item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.models-library-card__favorite,
-.models-library-card__play {
-  position: absolute;
-  z-index: 2;
-}
-
-.models-library-card__favorite,
-.models-library-card__play {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: rgba(13, 22, 40, 0.62);
-  color: #e8eefc;
-  backdrop-filter: blur(10px);
-}
-
-.models-library-card__favorite {
-  top: 10px;
-  right: 38px;
-}
-
-.models-library-card__play {
-  right: 12px;
-  bottom: 12px;
-}
-
-.models-library-card__fallback {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  color: rgba(226, 235, 244, 0.38);
-  font-size: 30px;
-  font-weight: 800;
-}
-
-.models-library-card__body {
-  display: grid;
-  gap: 8px;
-  padding: 2px 6px 6px;
-}
-
-.models-library-card__head,
-.models-detail-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.models-library-card__identity,
-.models-library-card__title-row,
-.models-detail-card__title {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.models-library-card__meta-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.models-library-card__badge,
-.models-library-card__pro,
-.models-library-card__more {
-  border-radius: 999px;
-  border: 1px solid rgba(86, 102, 145, 0.2);
-  background: rgba(18, 29, 49, 0.78);
-  color: #dce5f8;
-}
-
-.models-library-card__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 10px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.models-library-card__pro {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 9px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.models-library-card__more {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.models-library-card__badge.is-done {
-  border-color: rgba(62, 176, 129, 0.18);
-  background: rgba(23, 72, 56, 0.42);
-  color: #b9f2d8;
-}
-
-.models-library-card__badge.is-generating {
-  border-color: rgba(117, 101, 255, 0.22);
-  background: rgba(52, 43, 115, 0.34);
-  color: #ddd5ff;
-}
-
-.models-library-card__badge.is-failed {
-  border-color: rgba(210, 92, 122, 0.18);
-  background: rgba(88, 27, 43, 0.36);
-  color: #ffc4d0;
-}
-
-.models-library-card__badge.is-idle {
-  border-color: rgba(112, 127, 168, 0.16);
-  background: rgba(28, 39, 62, 0.42);
-  color: #c6d2eb;
-}
-
-.models-library-card__head h3 {
-  margin: 0;
-  color: #f5f8ff;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.models-library-card__desc {
-  margin: 0;
-  color: #8ea1c4;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.models-detail-card__title h3 {
-  margin: 0;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.models-detail-card__title span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 8px;
-  background: rgba(101, 75, 231, 0.34);
-  color: #d9ceff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.models-library-card__meta,
-.models-library-card__desc,
-.models-detail-summary,
-.models-detail-desc {
-  margin: 0;
-  color: #a8b6cb;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.models-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.models-tag-row span,
-.models-link-button {
-  border: 1px solid rgba(91, 105, 154, 0.2);
-  border-radius: 8px;
-  background: rgba(21, 31, 51, 0.9);
-  padding: 4px 7px;
-  color: #dbe7f5;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.models-tag-row--compact span {
-  font-size: 11px;
-}
-
-.models-link-button {
-  background: rgba(24, 35, 56, 0.64);
-}
-
-.models-library-card__badge.is-done {
-  background: rgba(34, 197, 94, 0.18);
-  color: #aaf0c1;
-}
-
-.models-library-card__badge.is-generating {
-  background: rgba(110, 87, 245, 0.18);
-  color: #d8cdff;
-}
-
-.models-library-card__badge.is-failed {
-  background: rgba(239, 68, 68, 0.18);
-  color: #ffc6ca;
-}
-
-.models-library-card__badge.is-idle {
-  background: rgba(59, 130, 246, 0.18);
-  color: #bed4ff;
-}
-
-.models-action-menu {
-  position: relative;
-}
-
-.models-library-card__more,
-.models-detail-more,
-.models-detail-close {
-  width: 36px;
-  height: 36px;
-}
-
-.models-action-menu__panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 35;
-  display: grid;
-  min-width: 168px;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid rgba(81, 99, 146, 0.3);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(16, 24, 41, 0.99), rgba(11, 18, 33, 0.99));
-  box-shadow: 0 18px 48px rgba(2, 6, 14, 0.4);
-}
-
-.models-action-menu__panel--detail {
-  top: calc(100% + 10px);
-}
-
-.models-action-menu__panel button {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #dce6f3;
-  font-size: 12px;
-  text-align: left;
-}
-
-.models-action-menu__panel button:hover {
-  background: rgba(99, 78, 223, 0.16);
-}
-
-.models-action-menu__panel button.is-danger {
-  color: #ffb8c1;
-}
-
-.models-empty-state {
-  display: grid;
-  place-items: center;
-  min-height: 320px;
-  margin: 0 18px 18px;
-  border: 1px dashed rgba(108, 128, 158, 0.16);
-  border-radius: 18px;
-  color: #7d90a8;
-}
-
-.models-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 18px 18px;
-}
-
-.models-pagination__nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.models-pagination__nav button {
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.models-pagination__meta span {
-  color: #8ea2bb;
-  font-size: 12px;
-}
-
-.models-detail-panel {
-  position: sticky;
-  top: 0;
-  display: grid;
-  gap: 14px;
-  padding: 14px 14px 16px;
-}
-
-.models-detail-card {
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  border-radius: 16px;
-  background: rgba(8, 16, 30, 0.76);
-  padding: 14px;
-}
-
-.models-detail-card__top {
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
-  gap: 12px;
-}
-
-.models-detail-card__media {
-  overflow: hidden;
-  width: 104px;
-  height: 114px;
-  border-radius: 12px;
-  background: rgba(8, 16, 28, 0.92);
-}
-
-.models-detail-card__top-copy {
-  min-width: 0;
-}
-
-.models-detail-card__online {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  color: #d7e0ef;
-  font-size: 12px;
-}
-
-.models-detail-card__online i {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #22c55e;
-}
-
-.models-detail-cta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.models-primary-button {
-  width: 100%;
-  height: 36px;
-}
-
-.models-primary-button--inline,
-.models-secondary-button {
-  width: 100%;
-  height: 36px;
-}
-
-.models-secondary-button {
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  background: rgba(21, 33, 50, 0.94);
-  color: #dbe4f0;
-}
-
-.models-detail-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(81, 99, 146, 0.18);
-}
-
-.models-detail-tabs button {
-  border: 0;
-  background: transparent;
-  color: #b2bfd3;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.models-detail-tabs button.active {
-  color: #a98cff;
-  box-shadow: inset 0 -2px 0 #6c53ff;
-}
-
-.models-detail-section {
-  padding: 0 4px;
-}
-
-.models-detail-section h4 {
-  margin: 0 0 10px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.models-detail-time {
-  display: grid;
-  gap: 10px;
-}
-
-.models-detail-time div {
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.models-detail-time span {
-  color: #8397b0;
-  font-size: 11px;
-}
-
-.models-detail-time strong {
-  color: #f3f7ff;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.models-detail-time strong.is-available {
-  color: #86efac;
-}
-
-.models-preview-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.models-preview-strip__item {
-  overflow: hidden;
-  aspect-ratio: 0.86;
-  border-radius: 8px;
-  background: rgba(8, 16, 28, 0.92);
-}
-
-.models-field {
-  display: grid;
-  gap: 8px;
-}
-
-.models-field span,
-.models-panel__subhead p,
-.models-dialog__desc {
-  color: #9caec3;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.models-panel__subhead h3,
-.models-dialog__head h3 {
-  margin: 0;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.models-upload-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.models-upload-grid button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 40px;
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  border-radius: 12px;
-  background: rgba(17, 29, 46, 0.88);
-  color: #dbe4f0;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.models-create-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 16px;
-}
-
-.models-create-grid--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.models-create-grid--workspace {
-  grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
-  align-items: start;
-  gap: 14px;
-  margin-top: 10px;
-}
-
-.models-create-column {
-  display: grid;
-  gap: 14px;
-}
-
-.models-create-section {
-  display: grid;
-  gap: 10px;
-  padding: 13px 15px;
-  border: 1px solid rgba(81, 99, 146, 0.14);
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    linear-gradient(180deg, rgba(12, 21, 37, 0.96), rgba(9, 17, 31, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.models-create-section--soft {
-  background:
-    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(10, 18, 32, 0.9), rgba(8, 15, 28, 0.9));
-  position: sticky;
-  top: 0;
-  gap: 9px;
-}
-
-.models-create-section__head {
-  display: grid;
-  gap: 2px;
-}
-
-.models-create-section__head h4 {
-  margin: 0;
-  color: #f8fbff;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-
-.models-create-section__head p {
-  margin: 0;
-  color: #8ea2bb;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.models-profile-groups {
-  display: grid;
-  gap: 8px;
-  padding: 8px 0 0;
-}
-
-.models-profile-groups--flat {
-  padding-top: 4px;
-}
-
-.models-profile-sections {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.models-profile-sections--compact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 3px;
-  border: 1px solid rgba(81, 99, 146, 0.12);
-  border-radius: 16px;
-  background: rgba(6, 12, 23, 0.58);
-}
-
-.models-profile-summary {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border: 1px solid rgba(81, 99, 146, 0.12);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
-    rgba(9, 18, 32, 0.52);
-}
-
-.models-profile-summary__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.models-profile-summary__head strong {
-  color: #f8fbff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.models-profile-summary__head small {
-  color: #7f95af;
-  font-size: 10px;
-}
-
-.models-profile-summary p {
-  margin: 0;
-  color: #d6e0ee;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.models-profile-summary__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.models-profile-summary__chips span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(22, 39, 61, 0.82);
-  border: 1px solid rgba(93, 119, 160, 0.2);
-  color: #dfe9f8;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.models-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.models-profile-section-tab {
-  display: grid;
-  gap: 2px;
-  min-height: 46px;
-  padding: 8px 10px;
-  text-align: left;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  transition: 160ms ease, transform 160ms ease;
-}
-
-.models-profile-section-tab strong {
-  color: #f3f7ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.models-profile-section-tab small {
-  color: #8397b0;
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.models-profile-section-tab.active {
-  border-color: rgba(34, 211, 238, 0.24);
-  background: rgba(20, 47, 63, 0.58);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  transform: translateY(-1px);
-}
-
-.models-profile-group {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(81, 99, 146, 0.1);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(8, 15, 28, 0.34), rgba(8, 15, 28, 0.2));
-}
-
-.models-profile-group__head {
-  display: grid;
-  gap: 2px;
-}
-
-.models-profile-group__head strong {
-  color: #f3f7ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.models-profile-group__head small {
-  color: #8397b0;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.models-profile-group__options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.models-profile-chip {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(81, 99, 146, 0.14);
-  border-radius: 999px;
-  background: rgba(17, 29, 46, 0.34);
-  color: #dbe4f0;
-  font-size: 11px;
-  transition: 160ms ease, transform 160ms ease;
-}
-
-.models-profile-chip.active {
-  border-color: rgba(34, 211, 238, 0.46);
-  background: linear-gradient(180deg, rgba(22, 82, 107, 0.44), rgba(14, 54, 74, 0.44));
-  color: #e8fbff;
-  transform: translateY(-1px);
-}
-
-.models-profile-chip--lg {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.models-upload-panel {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(81, 99, 146, 0.12);
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
-    rgba(9, 18, 32, 0.58);
-}
-
-.models-upload-panel__lead {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-}
-
-.models-upload-panel__icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  border: 1px solid rgba(34, 211, 238, 0.2);
-  background: linear-gradient(180deg, rgba(18, 53, 73, 0.5), rgba(13, 34, 47, 0.5));
-  color: #a9f0ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.models-upload-panel__copy {
-  display: grid;
-  gap: 4px;
-}
-
-.models-upload-panel__copy strong {
-  color: #f3f8ff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.models-upload-panel__copy p {
-  margin: 0;
-  color: #8ea2bb;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.models-upload-panel__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.models-upload-panel__actions button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 74px;
-  padding: 12px 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(81, 99, 146, 0.16);
-  background: rgba(9, 18, 32, 0.72);
-  color: #f3f8ff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: center;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease;
-}
-
-.models-upload-panel__actions button svg {
-  width: 18px;
-  height: 18px;
-  color: #8fe8ff;
-}
-
-.models-upload-panel__actions button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(124, 92, 255, 0.34);
-  background: rgba(18, 28, 48, 0.92);
-}
-
-.models-upload-preview {
-  display: grid;
-  gap: 10px;
-}
-
-.models-upload-preview__hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 108px;
-  border-radius: 18px;
-  border: 1px solid rgba(81, 99, 146, 0.14);
-  background: rgba(8, 15, 27, 0.9);
-}
-
-.models-upload-preview__hero img {
-  width: 100%;
-  height: 100%;
-  min-height: 108px;
-  object-fit: cover;
-  display: block;
-}
-
-.models-upload-preview__hero.is-empty {
-  background:
-    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 30%),
-    rgba(8, 15, 27, 0.9);
-}
-
-.models-upload-preview__empty {
-  display: grid;
-  place-items: center;
-  gap: 8px;
-  min-height: 108px;
-  color: #87a0bd;
-  font-size: 11px;
-  text-align: center;
-}
-
-.models-upload-preview__groups {
-  display: grid;
-  gap: 6px;
-}
-
-.models-upload-preview__group {
-  display: grid;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(81, 99, 146, 0.12);
-  background: rgba(11, 20, 35, 0.72);
-}
-
-.models-upload-preview__group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.models-upload-preview__group-head strong {
-  color: #f4f8ff;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.models-upload-preview__group-head small {
-  color: #87a0bd;
-  font-size: 10px;
-}
-
-.models-upload-preview__thumbs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.models-upload-preview__thumbs img,
-.models-upload-preview__thumbs span {
-  width: 100%;
-  aspect-ratio: 1.15 / 1;
-  border-radius: 12px;
-}
-
-.models-upload-preview__thumbs img {
-  object-fit: cover;
-  border: 1px solid rgba(81, 99, 146, 0.14);
-  background: rgba(8, 15, 27, 0.9);
-}
-
-.models-upload-preview__thumbs span {
-  display: grid;
-  place-items: center;
-  border: 1px dashed rgba(81, 99, 146, 0.2);
-  color: #7287a4;
-  font-size: 10px;
-  background: rgba(8, 15, 27, 0.48);
-}
-
-.models-create-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.models-stat-card {
-  border: 1px solid rgba(81, 99, 146, 0.12);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    rgba(20, 31, 48, 0.3);
-  padding: 10px 12px;
-}
-
-.models-stat-card span {
-  display: block;
-  color: #95a9c0;
-  font-size: 11px;
-}
-
-.models-stat-card strong {
-  display: block;
-  margin-top: 4px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.models-hint {
-  border: 1px solid rgba(245, 158, 11, 0.18);
-  border-radius: 14px;
-  background: rgba(76, 48, 10, 0.22);
-  padding: 8px 10px;
-  color: #f4cf92;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.models-hint--floating {
-  border-color: rgba(96, 165, 250, 0.24);
-  background: rgba(20, 54, 96, 0.26);
-  color: #cfe4ff;
-}
-
-.models-hint.is-error {
-  border-color: rgba(239, 68, 68, 0.22);
-  background: rgba(82, 20, 31, 0.24);
-  color: #f4b6bb;
-}
-
-.models-toast {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 80;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 320px;
-  max-width: 520px;
-  border: 1px solid rgba(157, 132, 255, 0.22);
-  border-radius: 16px;
-  padding: 12px 14px;
-  background: rgba(13, 24, 40, 0.96);
-  color: #eef4ff;
-}
-
-.models-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  overflow-y: auto;
-  padding: 24px;
-  background: rgba(3, 8, 15, 0.62);
-  backdrop-filter: blur(14px);
-}
-
-.models-dialog {
-  width: min(420px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  border: 1px solid rgba(81, 99, 146, 0.22);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at top right, rgba(109, 93, 255, 0.14), transparent 24%),
-    radial-gradient(circle at top left, rgba(34, 211, 238, 0.06), transparent 18%),
-    linear-gradient(180deg, rgba(17, 28, 44, 0.99), rgba(11, 19, 33, 0.99));
-  box-shadow: 0 26px 72px rgba(2, 6, 14, 0.46);
-  padding: 14px;
-  overflow-y: auto;
-}
-
-.models-dialog--wide {
-  width: min(1040px, calc(100vw - 40px));
-}
-
-.models-dialog__head,
-.models-dialog__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.models-dialog__head--hero {
-  align-items: flex-start;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(81, 99, 146, 0.14);
-}
-
-.models-dialog__title-block {
-  display: grid;
-  gap: 4px;
-}
-
-.models-dialog__title-block p {
-  margin: 0;
-  color: #91a6bf;
-  font-size: 12px;
-  line-height: 1.45;
-  max-width: 560px;
-}
-
-.models-dialog__eyebrow {
-  color: #8edfff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.models-dialog__close {
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(81, 99, 146, 0.18);
-  border-radius: 14px;
-  background: rgba(21, 33, 50, 0.62);
-  color: #dbe4f0;
-}
-
-.models-dialog__body {
-  margin-top: 16px;
-}
-
-.models-dialog__footer {
-  justify-content: flex-end;
-  margin-top: 18px;
-}
-
-.models-primary-button--wide {
-  width: 100%;
-  height: 40px;
-  margin-top: 2px;
-  justify-content: center;
-  letter-spacing: 0.01em;
-}
-
-.models-secondary-button--dialog,
-.models-primary-button--dialog,
-.models-danger-button {
-  min-width: 118px;
-  height: 40px;
-}
-
-.models-danger-button {
-  padding: 0 18px;
-  border: 1px solid rgba(235, 98, 128, 0.26);
-  background: linear-gradient(135deg, rgba(169, 36, 67, 0.94), rgba(208, 62, 92, 0.94));
-  color: #fff6f8;
-}
-
-.models-secondary-button--compact,
-.models-danger-button--compact {
-  min-width: 0;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  line-height: 1;
-}
-
-.models-secondary-button--compact {
-  border: 1px solid rgba(96, 112, 154, 0.2);
-  background: rgba(17, 27, 46, 0.58);
-  color: #d7e1f3;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.models-secondary-button--compact:hover {
-  border-color: rgba(126, 144, 198, 0.28);
-  background: rgba(22, 33, 56, 0.76);
-}
-
-.models-danger-button--compact {
-  min-width: 122px;
-  justify-content: center;
-  border-color: rgba(210, 92, 122, 0.18);
-  background: linear-gradient(180deg, rgba(126, 35, 59, 0.72), rgba(108, 28, 50, 0.84));
-  color: #fff3f6;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(95, 22, 42, 0.14);
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-@media (max-width: 1380px) {
-  .models-card-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1240px) {
-  .models-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .models-detail-panel {
-    position: static;
-  }
-
-  .models-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .models-toolbar,
-  .models-hero {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .models-toolbar__filters,
-  .models-toolbar__search,
-  .models-pagination,
-  .models-pagination__meta {
-    flex-wrap: wrap;
-  }
-}
-
-@media (max-width: 820px) {
-  .models-card-grid,
-  .models-create-grid,
-  .models-detail-cta,
-  .models-detail-tabs,
-  .models-preview-strip,
-  .models-detail-card__top {
-    grid-template-columns: 1fr;
-  }
-
-  .models-input--search {
-    min-width: 0;
-  }
-
-  .models-profile-sections--compact,
-  .models-create-stats,
-  .models-upload-preview__thumbs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1100px) {
-  .models-create-grid--workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .models-create-section--soft {
-    position: static;
-  }
+.ml { width: min(1560px, 100%); margin: 0 auto; gap: 18px; padding-top: 22px; }
+
+/* Header */
+.ml-head { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+.ml-head__text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ml-head__eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--vg-accent); }
+.ml-head h1 { font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; color: var(--theme-text); }
+.ml-head p { font-size: 13px; color: var(--theme-text-muted); }
+.ml-head__actions { margin-left: auto; display: inline-flex; gap: 10px; }
+.ml-head__actions .vg-btn { height: 38px; padding: 0 18px; border-radius: 10px; }
+
+/* Stats */
+.ml-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ml-stat { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); color: var(--theme-text); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; --tone: var(--theme-text-secondary); }
+.ml-stat.is-total { --tone: var(--vg-accent); }
+.ml-stat.is-ready { --tone: var(--vg-green); }
+.ml-stat.is-generating { --tone: var(--vg-blue); }
+.ml-stat.is-failed { --tone: var(--vg-red); }
+.ml-stat:hover { border-color: var(--theme-border-control); }
+.ml-stat.is-active { border-color: color-mix(in srgb, var(--tone) 55%, transparent); background: color-mix(in srgb, var(--tone) 7%, var(--theme-panel)); }
+.ml-stat__icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); flex-shrink: 0; }
+.ml-stat__body { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.ml-stat__body b { font-size: 20px; font-weight: 700; }
+.ml-stat__body small { font-size: 12px; color: var(--theme-text-muted); margin-top: 3px; }
+
+/* Layout */
+.ml-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.ml-layout.has-detail { grid-template-columns: minmax(0, 1fr) 360px; }
+
+/* Catalog */
+.ml-catalog { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ml-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ml-search { width: 300px; }
+.ml-search .vg-input { height: 36px; border-radius: 10px; background: var(--theme-panel); }
+.ml-toolbar__count { font-size: 12px; color: var(--theme-text-muted); }
+.ml-toolbar__count b { font-size: 14px; color: var(--theme-text); margin-right: 2px; }
+.ml-toolbar__selected { font-size: 12px; color: var(--vg-accent); font-weight: 600; }
+.ml-view { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--theme-border); border-radius: 9px; background: var(--theme-panel); }
+.ml-view__btn { display: grid; place-items: center; width: 28px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; }
+.ml-view__btn:hover { color: var(--theme-text); }
+.ml-view__btn.is-active { background: var(--theme-panel-soft); color: var(--theme-text); box-shadow: inset 0 0 0 1px var(--theme-border); }
+
+/* Grid cards */
+.ml-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 22px 18px; }
+.ml-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; cursor: pointer; }
+.ml-card__media { position: relative; aspect-ratio: 3 / 4; border-radius: 14px; overflow: hidden; background: var(--theme-panel-soft); outline: 1px solid var(--theme-border); outline-offset: -1px; transition: box-shadow .2s, outline-color .2s; }
+.ml-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s ease; }
+.ml-card:hover .ml-card__media img { transform: scale(1.03); }
+.ml-card:hover .ml-card__media { box-shadow: var(--theme-shadow-float); }
+.ml-card.is-active .ml-card__media { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
+.ml-card__fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; color: var(--vg-accent); background: var(--vg-accent-soft); }
+.ml-card__badge { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff; background: rgba(15, 18, 24, .62); backdrop-filter: blur(8px); }
+.ml-card__badge.is-failed { background: color-mix(in srgb, var(--vg-red) 82%, #000); }
+.ml-card__check { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(15, 18, 24, .5); backdrop-filter: blur(8px); cursor: pointer; opacity: 0; transition: opacity .15s; }
+.ml-card:hover .ml-card__check, .ml-card.is-checked .ml-card__check { opacity: 1; }
+.ml-card.is-checked .ml-card__media { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
+.ml-card__body { display: flex; align-items: flex-start; gap: 8px; padding: 0 2px; min-width: 0; }
+.ml-card__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ml-card__main h3 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--theme-text); min-width: 0; }
+.ml-card__meta { font-size: 12px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-card__date { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; }
+.ml-card .vg-menu-wrap .vg-icon-btn { margin-top: -3px; }
+.ml-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--vg-gray); }
+.ml-dot.is-done { background: var(--vg-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vg-green) 18%, transparent); }
+.ml-dot.is-generating { background: var(--vg-blue); }
+.ml-dot.is-failed { background: var(--vg-red); }
+
+/* List view */
+.ml-grid.is-list { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); overflow: visible; }
+.ml-grid.is-list .ml-card { flex-direction: row; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--theme-divider); }
+.ml-grid.is-list .ml-card:last-child { border-bottom: 0; }
+.ml-grid.is-list .ml-card:hover { background: var(--theme-panel-soft); }
+.ml-grid.is-list .ml-card.is-active { background: var(--vg-accent-soft); }
+.ml-grid.is-list .ml-card__media { width: 48px; border-radius: 8px; flex-shrink: 0; }
+.ml-grid.is-list .ml-card.is-active .ml-card__media { outline-width: 1px; outline-offset: -1px; }
+.ml-grid.is-list .ml-card__badge, .ml-grid.is-list .ml-card__check { display: none; }
+.ml-grid.is-list .ml-card__body { flex: 1; align-items: center; }
+
+.ml-empty { border: 1px dashed var(--theme-border-control); border-radius: 14px; padding: 60px 16px; }
+.ml-pager { padding-top: 14px; border-top: 1px solid var(--theme-divider); }
+
+/* Detail */
+.ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; scrollbar-width: thin; }
+.ml-detail > * { flex-shrink: 0; }
+.ml-detail__hero { position: relative; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; background: var(--theme-panel-soft); }
+.ml-detail__hero img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.ml-detail__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; color: #fff; background: rgba(15, 18, 24, .5); backdrop-filter: blur(8px); cursor: pointer; }
+.ml-detail__close:hover { background: rgba(15, 18, 24, .75); }
+.ml-detail__thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: -6px; }
+.ml-detail__thumb { padding: 0; aspect-ratio: 1; border: 0; border-radius: 7px; overflow: hidden; background: var(--theme-panel-soft); cursor: pointer; opacity: .6; outline: 1px solid var(--theme-border); outline-offset: -1px; transition: opacity .15s; }
+.ml-detail__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ml-detail__thumb:hover { opacity: 1; }
+.ml-detail__thumb.is-active { opacity: 1; outline: 2px solid var(--vg-accent); }
+.ml-detail__title { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+.ml-detail__name { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ml-detail__name h2 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ml-detail__title p { font-size: 12px; color: var(--theme-text-muted); }
+.ml-detail__actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+.ml-detail__actions .vg-btn { height: 38px; border-radius: 10px; }
+.ml-detail__more { width: 38px; padding: 0; }
+.ml-detail__section { display: flex; flex-direction: column; gap: 10px; padding: 14px 2px 0; border-top: 1px solid var(--theme-divider); }
+.ml-detail__section h4 { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--theme-text-muted); }
+.ml-spec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.ml-spec__item { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: 9px; background: var(--theme-panel-soft); min-width: 0; }
+.ml-spec__item dt { font-size: 11px; color: var(--theme-text-muted); }
+.ml-spec__item dd { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--theme-text); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ml-detail__desc { font-size: 12.5px; line-height: 1.7; color: var(--theme-text-secondary); }
+.ml-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 9px 16px; margin: 0; font-size: 12.5px; }
+.ml-meta dt { color: var(--theme-text-muted); }
+.ml-meta dd { margin: 0; text-align: right; color: var(--theme-text); min-width: 0; }
+.ml-meta__id { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.ml-meta__id code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--theme-text-secondary); }
+.ml-meta__id .vg-icon-btn { margin: -4px -4px -4px 0; }
+
+/* Create dialog */
+.ml-create { max-height: 92vh; }
+.ml-create__body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ml-create__hint { font-size: 12px; margin-top: 2px; }
+.ml-create__summary p { margin-top: 4px; color: var(--theme-text); }
+.ml-create__chips { gap: 4px; margin-top: 6px; }
+.ml-group { display: flex; flex-direction: column; gap: 8px; }
+.ml-group__head strong { font-size: 13px; }
+.ml-group__head small { font-size: 11px; margin-left: 4px; }
+.ml-group__options { gap: 6px; }
+.ml-create__side { gap: 12px; }
+.ml-upload { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; align-items: center; }
+.ml-upload__preview { display: flex; align-items: center; justify-content: center; aspect-ratio: 3 / 4; border: 1px dashed var(--theme-border-control); border-radius: var(--vg-radius-sm); background: var(--theme-panel); overflow: hidden; padding: 6px; text-align: center; font-size: 11px; }
+.ml-upload__preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+.ml-upload__copy { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ml-upload__copy p { font-size: 12px; }
+.ml-prompt { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--theme-divider); }
+.ml-prompt__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ml-prompt__head strong { display: block; font-size: 13px; }
+.ml-prompt__head small { font-size: 11px; }
+.ml-prompt__summary { font-size: 12px; }
+.ml-prompt__text { min-height: 140px; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.ml-prompt__empty { font-size: 12px; }
+.ml-danger-icon { background: color-mix(in srgb, var(--vg-red) 14%, transparent); border-color: color-mix(in srgb, var(--vg-red) 40%, transparent); color: var(--vg-red); }
+
+.fade-enter-active, .fade-leave-active { transition: opacity .18s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+@media (max-width: 1180px) {
+  .ml-layout.has-detail { grid-template-columns: minmax(0, 1fr); }
+  .ml-detail { position: static; max-height: none; }
+  .ml-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ml-create__body { grid-template-columns: 1fr; }
 }
 </style>
-

@@ -30,6 +30,7 @@ export function registerAssetLibraryIpc(ipcMain: IpcMain) {
     return results
   })
   ipcMain.handle('assetLibrary:listFolders', async (_event, parentId?: string | null) => assetLibraryService.listFolders(parentId || null))
+  ipcMain.handle('assetLibrary:listAllFolders', async () => assetLibraryService.listAllFolders())
   ipcMain.handle('assetLibrary:getFolderPath', async (_event, folderId?: string | null) => assetLibraryService.getFolderPath(folderId || null))
   ipcMain.handle('assetLibrary:createFolder', async (_event, payload: { name?: string; parentId?: string | null }) => assetLibraryService.createFolder(String(payload?.name || ''), payload?.parentId || null))
   ipcMain.handle('assetLibrary:renameFolder', async (_event, payload: { id?: string; name?: string }) => assetLibraryService.renameFolder(String(payload?.id || ''), String(payload?.name || '')))

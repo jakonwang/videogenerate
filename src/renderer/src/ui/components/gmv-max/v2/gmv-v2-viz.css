@@ -1,0 +1,21 @@
+/* GMV MAX V2 chart tokens. Categorical slots 1–2 and the fixed status palette are validated
+   (scripts/validate_palette.js) against the light panel (#ffffff) and the dark-teal panel (#11131e). */
+.gv-viz {
+  --surface-1: var(--theme-panel, #ffffff);
+  --text-primary: var(--theme-text, #0b0b0b);
+  --text-secondary: var(--theme-text-secondary, #52514e);
+  --text-muted: var(--theme-text-muted, #77756f);
+  --grid: color-mix(in srgb, var(--theme-text, #0b0b0b) 9%, transparent);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --status-neutral: var(--theme-text-muted, #77756f);
+}
+
+html[data-app-theme='dark-teal'] .gv-viz {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+}

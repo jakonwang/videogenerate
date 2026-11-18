@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -51,7 +52,6 @@ const pluginChecking = ref(true)
 const pluginReady = ref(false)
 const runningJob = ref(false)
 const controllingJob = ref(false)
-const pushingToGeelark = ref(false)
 const showAllOutputs = ref(false)
 const notice = ref('')
 const errorText = ref('')
@@ -763,7 +763,10 @@ async function ensurePluginReady() {
   pluginChecking.value = true
   pluginReady.value = false
   try {
-    const plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    let plugin = await webApiClient.getPlugin('video-batch-subtitle')
+    // Built-in tool: silently activate it instead of sending the user to an install screen.
+    if (plugin.status !== 'installed') plugin = (await webApiClient.installPlugin('video-batch-subtitle')).plugin
+    if (plugin.runtimeState !== 'enabled') plugin = (await webApiClient.enablePlugin('video-batch-subtitle')).plugin
     pluginReady.value = plugin.status === 'installed' && plugin.runtimeState === 'enabled'
   } catch {
     pluginReady.value = false
@@ -1031,24 +1034,6 @@ async function controlQueueJob(job: BatchSubtitleJob, action: 'pause' | 'resume'
   }
 }
 
-async function pushToGeelark() {
-  if (!selectedJobId.value) {
-    errorText.value = tr('autoUi.k_3c87aaf622b1')
-    return
-  }
-  pushingToGeelark.value = true
-  errorText.value = ''
-  try {
-    const result = await webApiClient.pushBatchSubtitleOutputsToGeelarkPool(selectedJobId.value)
-    notice.value = tr('autoUi.k_82a2909e8fe7', { p0: result.outputCount })
-    await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
-  } finally {
-    pushingToGeelark.value = false
-  }
-}
-
 function loadJobIntoDraft(job: BatchSubtitleJob) {
   draft.name = job.name
   draft.titleRenderMode = job.titleRenderMode || 'overlay_image'
@@ -1129,7 +1114,7 @@ onBeforeUnmount(() => {
       <p>{{ tr('autoUi.k_a27ab48c49f9') }}</p>
       <button class="ghost-button" type="button" @click="router.push('/plugins')">
         <ArrowLeft class="h-4 w-4" />
-        <span>{{ tr('autoUi.k_ee7023263319') }}</span>
+        <span>{{ tr('ai.tools.back') }}</span>
       </button>
     </section>
 
@@ -1231,8 +1216,10 @@ onBeforeUnmount(() => {
           >
             <img
               v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-              :src="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
+              :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
               :alt="item.fileName"
+              loading="lazy"
+              decoding="async"
             />
             <div class="source-list-item__copy">
               <strong>{{ item.fileName }}</strong>
@@ -1345,8 +1332,10 @@ onBeforeUnmount(() => {
             >
               <img
                 v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-                :src="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
+                :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
                 :alt="item.fileName"
+                loading="lazy"
+                decoding="async"
               />
               <span class="preview-thumbs__overlay"></span>
               <span class="preview-thumbs__label">{{ shortFileName(item.fileName) }}</span>
@@ -1661,7 +1650,9 @@ onBeforeUnmount(() => {
               ></video>
               <img
                 v-else-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
-                :src="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
+                :src="thumbnailUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath, 320)"
+                loading="lazy"
+                decoding="async"
                 :alt="item.selectedTitle || tr('autoUi.k_7da807cf5fc2')"
               />
               <span class="result-thumb__badge" :class="{ 'is-failed': item.renderStatus === 'failed' }">
@@ -1678,12 +1669,6 @@ onBeforeUnmount(() => {
             </div>
           </article>
         </div>
-
-        <button class="publish-button" type="button" :disabled="pushingToGeelark" @click="pushToGeelark">
-          <LoaderCircle v-if="pushingToGeelark" class="h-4 w-4 animate-spin" />
-          <Play v-else class="h-4 w-4" />
-          <span>{{ pushingToGeelark ? tr('autoUi.k_a2c7d6921412') : tr('autoUi.k_1e8bebacd67c', { p0: successfulOutputs.length }) }}</span>
-        </button>
 
         <section v-if="failedOutputSummary.length" class="failed-summary">
           <div class="section-heading">
@@ -1713,25 +1698,25 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .subtitle-workbench-page {
-  --bg: #070d18;
-  --panel-bg: linear-gradient(180deg, rgba(17, 23, 38, 0.88), rgba(11, 15, 25, 0.94));
-  --panel-edge: rgba(255, 255, 255, 0.08);
-  --panel-edge-strong: rgba(142, 122, 255, 0.34);
-  --panel-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
-  --text-main: #f6f7fb;
-  --text-soft: rgba(230, 235, 247, 0.72);
-  --text-faint: rgba(207, 214, 230, 0.48);
-  --accent: #7a63f7;
-  --accent-soft: rgba(122, 99, 247, 0.22);
+  --bg: color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel));
+  --panel-bg: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel)), color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel)));
+  --panel-edge: color-mix(in srgb, var(--theme-panel) 8%, transparent);
+  --panel-edge-strong: color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel));
+  --panel-shadow: 0 30px 80px color-mix(in srgb, var(--theme-panel) 28%, transparent);
+  --text-main: var(--theme-text);
+  --text-soft: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
+  --text-faint: color-mix(in srgb, var(--theme-text) 48%, transparent);
+  --accent: var(--theme-tone-blue);
+  --accent-soft: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
   display: grid;
   gap: 14px;
   min-height: calc(100vh - 120px);
   padding: 14px 16px 22px;
   color: var(--text-main);
   background:
-    radial-gradient(circle at top right, rgba(122, 99, 247, 0.18), transparent 24%),
-    radial-gradient(circle at 15% 18%, rgba(75, 127, 255, 0.12), transparent 22%),
-    linear-gradient(180deg, #09111f 0%, #070d18 100%);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-tone-blue) 18%, transparent), transparent 24%),
+    radial-gradient(circle at 15% 18%, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 22%),
+    linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel) 100%);
   overflow-y: auto;
 }
 
@@ -1782,7 +1767,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: rgba(193, 180, 255, 0.88);
+  color: color-mix(in srgb, var(--theme-tone-violet) 88%, transparent);
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -1856,9 +1841,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .hero-kpi--compact {
@@ -1906,10 +1891,10 @@ onBeforeUnmount(() => {
   gap: 14px;
   min-height: 72px;
   padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
   color: var(--text-soft);
-  background: linear-gradient(180deg, rgba(24, 29, 44, 0.72), rgba(18, 21, 34, 0.72));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 72%, transparent), color-mix(in srgb, var(--theme-panel) 72%, transparent));
   text-align: left;
   cursor: default;
 }
@@ -1922,9 +1907,9 @@ onBeforeUnmount(() => {
 
 .step-chip.is-active,
 .step-chip.is-done {
-  border-color: rgba(150, 131, 255, 0.28);
-  background: linear-gradient(180deg, rgba(58, 43, 114, 0.86), rgba(34, 27, 70, 0.9));
-  color: #fff;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 86%, transparent), color-mix(in srgb, var(--theme-tone-blue) 90%, transparent));
+  color: var(--theme-text);
 }
 
 .step-chip__index {
@@ -1933,8 +1918,8 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
+  border: 1px solid var(--theme-border);
   font-weight: 700;
 }
 
@@ -1980,15 +1965,15 @@ onBeforeUnmount(() => {
 }
 
 .page-message--success {
-  border: 1px solid rgba(72, 193, 125, 0.16);
-  background: rgba(47, 129, 79, 0.15);
-  color: #cff3da;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+  color: var(--theme-tone-green);
 }
 
 .page-message--error {
-  border: 1px solid rgba(244, 114, 114, 0.16);
-  background: rgba(127, 29, 29, 0.18);
-  color: #ffd0d0;
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
+  color: var(--theme-text);
 }
 
 .workspace-grid,
@@ -2038,9 +2023,9 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .segmented-tabs button,
@@ -2055,7 +2040,6 @@ onBeforeUnmount(() => {
 .preview-thumbs__item,
 .preview-thumbs__more,
 .row-action,
-.publish-button,
 .align-segment button,
 .mode-pills button {
   border: 0;
@@ -2073,8 +2057,8 @@ onBeforeUnmount(() => {
 }
 
 .segmented-tabs button.is-active {
-  color: #fff;
-  background: linear-gradient(180deg, rgba(116, 94, 255, 0.44), rgba(92, 74, 214, 0.44));
+  color: var(--theme-text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 44%, transparent), color-mix(in srgb, var(--theme-tone-blue) 44%, transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -2092,7 +2076,7 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 0 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
   color: var(--text-main);
   transition: background 0.2s ease, border-color 0.2s ease;
 }
@@ -2111,7 +2095,7 @@ onBeforeUnmount(() => {
 .align-segment button,
 .row-action,
 .minor-button {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
 }
 
 .ghost-button:hover,
@@ -2123,11 +2107,10 @@ onBeforeUnmount(() => {
 .source-list-item:hover,
 .clone-picker__item:hover,
 .preview-thumbs__item:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: color-mix(in srgb, var(--theme-text) 7%, transparent);
 }
 
-.primary-button,
-.publish-button {
+.primary-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2135,23 +2118,17 @@ onBeforeUnmount(() => {
   min-height: 42px;
   border-radius: 14px;
   padding: 0 16px;
-  color: #fff;
+  color: var(--theme-text);
   font-weight: 600;
 }
 
 .primary-button {
-  background: linear-gradient(90deg, #6c58f4 0%, #8a6ef8 100%);
+  background: linear-gradient(90deg, var(--theme-tone-blue) 0%, var(--theme-tone-violet) 100%);
   box-shadow: 0 18px 40px rgba(108, 88, 244, 0.28);
 }
 
-.publish-button {
-  width: 100%;
-  background: linear-gradient(90deg, rgba(80, 60, 183, 0.92), rgba(120, 88, 236, 0.96));
-  box-shadow: 0 18px 40px rgba(89, 66, 209, 0.24);
-}
 
 .primary-button:disabled,
-.publish-button:disabled,
 .minor-button:disabled,
 .row-action:disabled,
 .strategy-card:disabled {
@@ -2165,9 +2142,9 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 156px;
   padding: 18px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--theme-border);
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(17, 22, 33, 0.72), rgba(10, 13, 22, 0.88));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 72%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
   text-align: center;
   cursor: pointer;
 }
@@ -2178,8 +2155,8 @@ onBeforeUnmount(() => {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: rgba(122, 99, 247, 0.14);
-  color: #a99aff;
+  background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
+  color: var(--theme-tone-blue);
 }
 
 .upload-zone strong {
@@ -2231,9 +2208,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 10px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .minor-button--full {
@@ -2248,7 +2225,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 6px 8px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
   border: 1px solid transparent;
   text-align: left;
 }
@@ -2256,7 +2233,7 @@ onBeforeUnmount(() => {
 .clone-picker__item.is-selected,
 .source-list-item.is-active {
   border-color: var(--panel-edge-strong);
-  background: rgba(122, 99, 247, 0.12);
+  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
 }
 
 .clone-picker__item img,
@@ -2268,7 +2245,7 @@ onBeforeUnmount(() => {
   height: 72px;
   border-radius: 10px;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
 }
 
 .clone-picker__copy,
@@ -2309,7 +2286,7 @@ onBeforeUnmount(() => {
 
 .text-button {
   padding: 0;
-  color: #bcaeff;
+  color: var(--theme-tone-violet);
   background: transparent;
 }
 
@@ -2317,9 +2294,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 8px;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .batch-runtime-card {
@@ -2370,7 +2347,7 @@ onBeforeUnmount(() => {
   width: 100%;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
 }
 
 .sources-progress__bar {
@@ -2382,7 +2359,7 @@ onBeforeUnmount(() => {
 .preview-playerbar__progress {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6c58f4, #9274ff);
+  background: linear-gradient(90deg, var(--theme-tone-blue), var(--theme-tone-violet));
 }
 
 .preview-card {
@@ -2402,8 +2379,8 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-pill.is-active {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--theme-text);
+  border-color: var(--theme-border);
 }
 
 .preview-stage {
@@ -2417,8 +2394,8 @@ onBeforeUnmount(() => {
   place-items: center;
   border-radius: 18px;
   background:
-    radial-gradient(circle at top, rgba(122, 99, 247, 0.12), transparent 34%),
-    linear-gradient(180deg, rgba(10, 12, 21, 0.98), rgba(6, 8, 16, 0.98));
+    radial-gradient(circle at top, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-input) 98%, transparent));
   overflow: hidden;
 }
 
@@ -2428,7 +2405,7 @@ onBeforeUnmount(() => {
   width: 232px;
   aspect-ratio: 9 / 16;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
@@ -2439,7 +2416,7 @@ onBeforeUnmount(() => {
   aspect-ratio: 9 / 16;
   object-fit: cover;
   border-radius: 18px;
-  background: #05070c;
+  background: var(--theme-input);
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.34);
 }
 
@@ -2490,10 +2467,10 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 30px;
   height: 64px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.028);
-  color: rgba(233, 238, 250, 0.72);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2506,9 +2483,9 @@ onBeforeUnmount(() => {
 }
 
 .preview-strip__nav:hover:not(:disabled) {
-  border-color: rgba(123, 97, 255, 0.22);
-  background: rgba(123, 97, 255, 0.08);
-  color: #f5f7fd;
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
+  color: var(--theme-text);
   transform: translateY(-1px);
 }
 
@@ -2531,8 +2508,8 @@ onBeforeUnmount(() => {
   display: grid;
   min-height: 64px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.022);
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
+  border: 1px solid var(--theme-border);
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -2550,7 +2527,7 @@ onBeforeUnmount(() => {
 .preview-thumbs__overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(6, 10, 18, 0.02), rgba(6, 10, 18, 0.58) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 2%, transparent), color-mix(in srgb, var(--theme-panel) 58%, transparent) 100%);
 }
 
 .preview-thumbs__label {
@@ -2559,7 +2536,7 @@ onBeforeUnmount(() => {
   right: 8px;
   bottom: 7px;
   overflow: hidden;
-  color: #f5f7fd;
+  color: var(--theme-text);
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -2569,14 +2546,14 @@ onBeforeUnmount(() => {
 }
 
 .preview-thumbs__item:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
   transform: translateY(-1px);
 }
 
 .preview-thumbs__item.is-active {
-  border-color: rgba(123, 97, 255, 0.88);
-  background: rgba(123, 97, 255, 0.08);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 88%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
   box-shadow:
     0 0 0 1px rgba(123, 97, 255, 0.34),
     0 10px 24px rgba(10, 10, 18, 0.22);
@@ -2592,9 +2569,9 @@ onBeforeUnmount(() => {
 .preview-meta {
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .preview-meta strong {
@@ -2610,7 +2587,7 @@ onBeforeUnmount(() => {
 }
 
 .preview-error {
-  color: #ffbdbd;
+  color: var(--theme-tone-red);
 }
 
 .preview-footer,
@@ -2673,8 +2650,8 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  border: 1px solid var(--theme-border);
   color: var(--text-main);
   text-align: left;
 }
@@ -2688,11 +2665,11 @@ onBeforeUnmount(() => {
   font-size: 14px;
   line-height: 1.2;
   font-weight: 700;
-  color: #f7f8fc;
+  color: var(--theme-text);
 }
 
 .template-preset span {
-  color: rgba(214, 220, 234, 0.68);
+  color: var(--theme-text);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -2702,12 +2679,12 @@ onBeforeUnmount(() => {
 .mode-pills button.is-active,
 .align-segment button.is-active {
   border-color: var(--panel-edge-strong);
-  background: rgba(122, 99, 247, 0.16);
+  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
 }
 
 .template-preset.is-active span,
 .template-preset:hover span {
-  color: rgba(237, 240, 248, 0.86);
+  color: var(--theme-text);
 }
 
 .strategy-card small {
@@ -2721,10 +2698,10 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 40px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
   outline: none;
-  background: rgba(6, 8, 14, 0.72);
+  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
   color: var(--text-main);
   font: inherit;
 }
@@ -2732,7 +2709,7 @@ onBeforeUnmount(() => {
 .dark-input:focus,
 .dark-textarea:focus,
 .dark-select:focus {
-  border-color: rgba(122, 99, 247, 0.62);
+  border-color: color-mix(in srgb, var(--theme-tone-blue) 62%, transparent);
   box-shadow: 0 0 0 1px rgba(122, 99, 247, 0.22);
 }
 
@@ -2763,8 +2740,8 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 12px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.028);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
+  border: 1px solid var(--theme-border);
 }
 
 .title-item-card__head {
@@ -2776,7 +2753,7 @@ onBeforeUnmount(() => {
 
 .title-item-card__head strong {
   font-size: 13px;
-  color: #f5f7fd;
+  color: var(--theme-text);
 }
 
 .title-item-card__head span {
@@ -2867,8 +2844,8 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 14px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.026);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .queue-card-item__top,
@@ -2925,8 +2902,8 @@ onBeforeUnmount(() => {
   gap: 2px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(244, 114, 114, 0.12);
-  background: rgba(127, 29, 29, 0.12);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
+  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
 }
 
 .failed-summary__item strong {
@@ -2947,30 +2924,30 @@ onBeforeUnmount(() => {
   min-height: 30px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
   font-style: normal;
   font-size: 12px;
 }
 
 .status-chip--queued,
 .status-chip--draft {
-  color: #d8e0f4;
+  color: var(--theme-text);
 }
 
 .status-chip--processing {
-  color: #c4b8ff;
-  background: rgba(122, 99, 247, 0.2);
+  color: var(--theme-tone-violet);
+  background: color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
 }
 
 .status-chip--completed {
-  color: #baf8cb;
-  background: rgba(56, 161, 105, 0.18);
+  color: var(--theme-tone-green);
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
 }
 
 .status-chip--partial_failed,
 .status-chip--failed {
-  color: #ffc5c5;
-  background: rgba(220, 38, 38, 0.16);
+  color: var(--theme-tone-red);
+  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
 }
 
 .progress-cell {
@@ -2992,9 +2969,9 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 8px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
 }
 
 .result-thumb__media {
@@ -3015,13 +2992,13 @@ onBeforeUnmount(() => {
   top: 10px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(56, 161, 105, 0.92);
-  color: #fff;
+  background: color-mix(in srgb, var(--theme-accent) 92%, transparent);
+  color: var(--theme-text);
   font-size: 11px;
 }
 
 .result-thumb__badge.is-failed {
-  background: rgba(220, 38, 38, 0.92);
+  background: color-mix(in srgb, var(--theme-tone-red) 92%, transparent);
 }
 
 .result-thumb__actions {
@@ -3036,9 +3013,9 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--theme-border);
   border-radius: 999px;
-  background: rgba(8, 11, 18, 0.86);
+  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
   color: var(--text-soft);
   backdrop-filter: blur(18px);
 }

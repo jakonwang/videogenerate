@@ -11,6 +11,18 @@ export type VideoTask = {
   outPath: string
   plan: VideoPlan
   hash: string
+  /** 混剪工作台生成的任务：记录公式、钩子与文案，供任务列表展示和后续效果回流分析 */
+  mix?: {
+    mode: 'auto' | 'ai'
+    formulaId: string
+    formulaName: string
+    hookClipId: string
+    clipIds: string[]
+    title: string
+    voiceover: string
+    hookStyle?: string
+    language: string
+  }
   status: TaskStatus
   progress: number
   /** 单条渲染耗时（ms） */

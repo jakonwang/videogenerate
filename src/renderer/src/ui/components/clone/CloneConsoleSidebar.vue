@@ -35,7 +35,7 @@ withDefaults(
 
 .console-sidebar {
   padding: 14px;
-  background: linear-gradient(180deg, rgba(13, 20, 36, 0.98), rgba(9, 15, 27, 0.98));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
 }
 
 .panel-head {

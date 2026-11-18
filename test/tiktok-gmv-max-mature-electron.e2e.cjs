@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { mkdir, writeFile } = require('node:fs/promises')
 const { _electron: electron } = require('playwright')
+const { prepareGmvProfile } = require('./gmv-profile-copy.cjs')
 
 async function capture(electronApp, filePath) {
   const base64 = await electronApp.evaluate(async ({ BrowserWindow }) => {
@@ -12,12 +13,27 @@ async function capture(electronApp, filePath) {
   await writeFile(filePath, Buffer.from(base64, 'base64'))
 }
 
+// GMV v2 shows a compact "today" view first; the SOP picker, phase rail and consoles
+// live behind the "full workspace" toggle.
+async function expandSopWorkspace(page) {
+  const toggle = page.locator('[data-testid="gmv-today-details-toggle"]')
+  await toggle.waitFor({ state: 'visible', timeout: 60_000 })
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click()
+}
+
 async function selectSopInstance(page, sopInstanceId) {
+  await expandSopWorkspace(page)
   await page.locator('[data-testid="gmv-sop-open-picker"]').click()
   const picker = page.locator('[data-testid="gmv-sop-picker"]')
   await picker.waitFor({ state: 'visible' })
   await picker.locator(`[data-sop-instance-id="${sopInstanceId}"] .gmv-sop-picker__item`).click()
   await picker.waitFor({ state: 'hidden' })
+  // Picking an instance also opens the command-center detail drawer; close it (Escape).
+  const detailDrawer = page.locator('[data-testid="gmv-command-center-drawer-backdrop"]')
+  if (await detailDrawer.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape')
+    await detailDrawer.waitFor({ state: 'hidden' })
+  }
 }
 
 async function dismissInterruptedSync(page) {
@@ -33,7 +49,9 @@ async function main() {
   const root = path.resolve(__dirname, '..')
   const artifacts = path.join(root, 'test-artifacts', 'tiktok-gmv-max-mature')
   await mkdir(artifacts, { recursive: true })
-  const electronApp = await electron.launch({ args: ['.'], cwd: root })
+  const profile = await prepareGmvProfile('gmv-mature-e2e')
+  console.log(`GMV profile: ${profile.describe}`)
+  const electronApp = await electron.launch({ args: ['.'], cwd: root, env: profile.env })
   const page = await electronApp.firstWindow()
   const pageErrors = []
   const consoleErrors = []
@@ -51,11 +69,13 @@ async function main() {
     await page.locator('[data-testid="gmv-tab-sop"]').click()
     const interruptedSyncRecovered = await dismissInterruptedSync(page)
     try {
+    await expandSopWorkspace(page)
     await page.locator('[data-testid="gmv-sop-phase-rail"]').waitFor({ state: 'visible', timeout: 30_000 })
     for (let index = 0; index < 3; index += 1) {
       await page.locator('[data-testid="gmv-tab-campaigns"]').click()
       await page.locator('[data-testid="gmv-tab-sop"]').click()
     }
+    await expandSopWorkspace(page)
     await page.locator('[data-testid="gmv-sop-phase-rail"]').waitFor({ state: 'visible', timeout: 30_000 })
     assert.equal(await page.locator('[data-testid="gmv-sop-loading"]').count(), 0)
     } catch (error) {
@@ -144,6 +164,7 @@ async function main() {
     await page.locator('[data-testid="gmv-max-workspace"]').waitFor({ state: 'visible', timeout: 60_000 })
     await page.locator('[data-testid="gmv-tab-sop"]').click()
     await dismissInterruptedSync(page)
+    await expandSopWorkspace(page)
     await page.locator('[data-testid="gmv-sop-phase-rail"]').waitFor({ state: 'visible', timeout: 60_000 })
     await page.waitForFunction((sopInstanceId) => window.localStorage.getItem('videogenerate:gmv-max:sop-selection:v1') === sopInstanceId, current.id)
     await page.locator('[data-testid="gmv-mature-console"]').waitFor({ state: 'visible', timeout: 60_000 })
@@ -231,8 +252,16 @@ async function main() {
     const taskPanel = page.locator('.gmv-sop-tasks')
     await taskPanel.scrollIntoViewIfNeeded()
     await page.waitForTimeout(300)
-    await taskPanel.locator('.gmv-sop-inline-toggle').click()
-    assert.ok(await taskPanel.locator('article.is-complete').count() >= 3)
+    // The task panel lists the newest task date only, so the completed count depends on the
+    // data snapshot; check that the expanded list matches the toggle's own counter.
+    const completedToggle = taskPanel.locator('.gmv-sop-inline-toggle')
+    if (await completedToggle.count()) {
+      const completedLabel = await completedToggle.innerText()
+      await completedToggle.click()
+      const completedCount = Number(/\((\d+)\)/.exec(completedLabel)?.[1] || 0)
+      assert.ok(completedCount >= 1)
+      assert.equal(await taskPanel.locator('article.is-complete').count(), completedCount)
+    }
     assert.equal(await taskPanel.locator('article.is-external').count(), 0)
     assert.equal(await taskPanel.locator('article.is-superseded').count(), 0)
     assert.equal(await taskPanel.getByText('Verify mature product recovery readiness', { exact: true }).count(), 0)
@@ -246,46 +275,51 @@ async function main() {
     assert.ok(await supplementalPanel.getByText('自动预算', { exact: true }).count() >= 1)
     const videoDisclosure = page.locator('[data-testid="gmv-sop-winner-dna"]')
     await videoDisclosure.locator('.gmv-sop-video-insights').waitFor({ state: 'visible' })
-    assert.equal(await videoDisclosure.locator('.gmv-sop-video-grades > button').count(), 4)
-    assert.equal(await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').count(), 1)
-    assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() >= 1)
-    assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() <= 6)
-    assert.equal(await videoDisclosure.locator('[data-testid="gmv-sop-video-actions"]').count(), 1)
-    const gradeA = videoDisclosure.locator('[data-testid="gmv-sop-video-grade-a"]')
-    await gradeA.click()
-    assert.equal(await gradeA.getAttribute('aria-selected'), 'true')
-    assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() <= 6)
-    await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').selectOption('roi')
-    const visibleRois = await videoDisclosure.locator('.gmv-sop-video-list__copy em > span').allTextContents()
-    const numericRois = visibleRois.map((value) => Number.parseFloat(value)).filter(Number.isFinite)
-    assert.deepEqual(numericRois, [...numericRois].sort((a, b) => b - a))
-    assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions button').count(), 2)
-    const nextVideoPage = videoDisclosure.locator('.gmv-sop-video-pagination button').last()
-    if (await nextVideoPage.isEnabled()) {
-      const firstCreativeId = await videoDisclosure.locator('.gmv-sop-video-list__items > button').first().getAttribute('data-creative-id')
-      await nextVideoPage.click()
-      assert.notEqual(await videoDisclosure.locator('.gmv-sop-video-list__items > button').first().getAttribute('data-creative-id'), firstCreativeId)
-    }
-    await videoDisclosure.locator('[data-testid="gmv-sop-video-grade-c"]').click()
-    assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions button').count(), 1)
-    await videoDisclosure.locator('[data-testid="gmv-sop-video-grade-s"]').click()
-    await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').selectOption('profit')
-    assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions__protected').count(), 1)
-    assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions__exclude').count(), 0)
-    assert.equal((await videoDisclosure.innerText()).includes('草稿已就绪'), false)
-    const videoFit = await videoDisclosure.evaluate((element) => ({
-      contained: element.getBoundingClientRect().right <= window.innerWidth + 2,
-      overflow: element.scrollWidth > element.clientWidth,
-    }))
-    assert.equal(videoFit.contained, true)
-    assert.equal(videoFit.overflow, false)
-    const previewButton = videoDisclosure.locator('[data-testid="gmv-sop-video-preview-button"]')
-    if (await previewButton.count()) {
-      await previewButton.click()
-      const preview = page.locator('[data-testid="gmv-creative-video-preview"]')
-      await preview.waitFor({ state: 'visible' })
-      await preview.locator('header .gmv-icon-button').click()
-      await preview.waitFor({ state: 'hidden' })
+    // The video toolbar only renders when the selected product has creative videos in the
+    // current data snapshot; without videos the disclosure shows its empty state.
+    const hasSopVideos = await videoDisclosure.locator('.gmv-sop-video-toolbar').count() > 0
+    if (hasSopVideos) {
+      assert.equal(await videoDisclosure.locator('.gmv-sop-video-grades > button').count(), 4)
+      assert.equal(await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').count(), 1)
+      assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() >= 1)
+      assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() <= 6)
+      assert.equal(await videoDisclosure.locator('[data-testid="gmv-sop-video-actions"]').count(), 1)
+      const gradeA = videoDisclosure.locator('[data-testid="gmv-sop-video-grade-a"]')
+      await gradeA.click()
+      assert.equal(await gradeA.getAttribute('aria-selected'), 'true')
+      assert.ok(await videoDisclosure.locator('.gmv-sop-video-list__items > button').count() <= 6)
+      await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').selectOption('roi')
+      const visibleRois = await videoDisclosure.locator('.gmv-sop-video-list__copy em > span').allTextContents()
+      const numericRois = visibleRois.map((value) => Number.parseFloat(value)).filter(Number.isFinite)
+      assert.deepEqual(numericRois, [...numericRois].sort((a, b) => b - a))
+      assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions button').count(), 2)
+      const nextVideoPage = videoDisclosure.locator('.gmv-sop-video-pagination button').last()
+      if (await nextVideoPage.isEnabled()) {
+        const firstCreativeId = await videoDisclosure.locator('.gmv-sop-video-list__items > button').first().getAttribute('data-creative-id')
+        await nextVideoPage.click()
+        assert.notEqual(await videoDisclosure.locator('.gmv-sop-video-list__items > button').first().getAttribute('data-creative-id'), firstCreativeId)
+      }
+      await videoDisclosure.locator('[data-testid="gmv-sop-video-grade-c"]').click()
+      assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions button').count(), 1)
+      await videoDisclosure.locator('[data-testid="gmv-sop-video-grade-s"]').click()
+      await videoDisclosure.locator('[data-testid="gmv-sop-video-sort"]').selectOption('profit')
+      assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions__protected').count(), 1)
+      assert.equal(await videoDisclosure.locator('.gmv-sop-video-actions__exclude').count(), 0)
+      assert.equal((await videoDisclosure.innerText()).includes('草稿已就绪'), false)
+      const videoFit = await videoDisclosure.evaluate((element) => ({
+        contained: element.getBoundingClientRect().right <= window.innerWidth + 2,
+        overflow: element.scrollWidth > element.clientWidth,
+      }))
+      assert.equal(videoFit.contained, true)
+      assert.equal(videoFit.overflow, false)
+      const previewButton = videoDisclosure.locator('[data-testid="gmv-sop-video-preview-button"]')
+      if (await previewButton.count()) {
+        await previewButton.click()
+        const preview = page.locator('[data-testid="gmv-creative-video-preview"]')
+        await preview.waitFor({ state: 'visible' })
+        await preview.locator('header .gmv-icon-button').click()
+        await preview.waitFor({ state: 'hidden' })
+      }
     }
     await capture(electronApp, path.join(artifacts, 'mature-automation-tasks-1440x900.png'))
 
@@ -299,7 +333,7 @@ async function main() {
     }))
     assert.equal(compactVideoFit.contained, true)
     assert.equal(compactVideoFit.overflow, false)
-    assert.equal(compactVideoFit.gradeCount, 4)
+    assert.equal(compactVideoFit.gradeCount, hasSopVideos ? 4 : 0)
     assert.ok(compactVideoFit.visibleItems <= 6)
     await capture(electronApp, path.join(artifacts, 'video-workbench-1280x760.png'))
     await page.evaluate(() => {
@@ -358,7 +392,8 @@ async function main() {
       await externalResolution.locator('[data-testid="gmv-sop-primary-action"]').click()
     } else {
       await externalResolution.locator(':scope > details').evaluate((element) => { element.open = true })
-      await externalResolution.locator(`[data-issue-code="${externalTarget.issue.code}"] > summary .gmv-button`).click()
+      // Each issue row has "view resolution" (help) followed by the action button.
+      await externalResolution.locator(`[data-issue-code="${externalTarget.issue.code}"] > summary .gmv-row__actions .gmv-button`).last().click()
     }
     const externalOperation = page.locator('[data-testid="gmv-external-operation-overlay"]')
     await externalOperation.waitFor({ state: 'visible' })
@@ -379,6 +414,7 @@ async function main() {
     console.log('[tiktok-gmv-max-mature-electron] passed', { current, autoOnboarding, desktopFit, compactFit })
   } finally {
     await electronApp.close()
+    await profile.cleanup()
   }
 }
 

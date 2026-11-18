@@ -1294,7 +1294,7 @@ export type GmvMaxPortfolioPlan = {
   rollbackApplied?: boolean
   remoteRequestIds?: string[]
 }
-export type GmvMaxNotificationConfig = { id: string; enabled: boolean; platform: 'feishu'; target?: string; dailySummaryEnabled: boolean; updatedAt: number }
+export type GmvMaxNotificationConfig = { id: string; enabled: boolean; platform: 'feishu' | 'desktop'; target?: string; dailySummaryEnabled: boolean; updatedAt: number }
 export type GmvMaxNotificationRecord = { id: string; eventType: string; status: 'succeeded' | 'failed'; target?: string; message: string; error?: string; createdAt: number }
 
 export type GmvMaxRecommendationEvidence = {
@@ -1440,3 +1440,7 @@ export type GmvMaxOptimizationRun = {
   completedAt?: number
   error?: string
 }
+
+/** Plain-language creative segments computed from ad data alone (see listCreativeMetricAggregatePage). */
+export const GMV_MAX_CREATIVE_SEGMENTS = ['earning', 'average', 'no_orders', 'new'] as const
+export type GmvMaxCreativeSegment = (typeof GMV_MAX_CREATIVE_SEGMENTS)[number]

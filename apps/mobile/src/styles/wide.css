@@ -1,0 +1,185 @@
+/*
+ * Web shell (computer-width screens): the App's phone components take the desktop ui-kit metrics
+ * (13px text, 34px controls, 10–12px radii, bordered panels) so every page reads like the desktop app.
+ * Everything is scoped to body.is-web-shell — phones never get it.
+ */
+
+/* A picker that will take the files being dragged over it (see lib/fileDrop.ts). */
+.m-drop-target { outline: 2px dashed var(--m-accent-2); outline-offset: 3px; border-radius: var(--m-radius-sm); }
+
+body.is-web-shell { overflow: hidden; font-size: 13px; }
+
+/* ------------------------------------------------------------ page frame */
+body.is-web-shell .web-head,
+body.is-web-shell .m-page { width: 100%; max-width: 1240px; margin: 0 auto; }
+body.is-web-shell .web-head { padding: 20px 24px 14px; }
+body.is-web-shell .web-head__back { margin-right: -4px; }
+body.is-web-shell .m-page { min-height: 0; padding: 0 24px 40px; }
+body.is-web-shell .m-page--no-tabs { padding-bottom: 40px; }
+body.is-web-shell .m-header { display: none; }
+
+body.is-web-shell .m-footer-bar {
+  position: sticky;
+  bottom: 0;
+  justify-content: flex-end;
+  margin: 16px -24px -40px;
+  padding: 12px 24px;
+  background: color-mix(in srgb, var(--theme-shell) 92%, transparent);
+  border-top: 1px solid var(--theme-border);
+}
+body.is-web-shell .m-footer-bar .m-btn { flex: 0 0 auto; min-width: 140px; }
+body.is-web-shell .m-fab { right: 32px; bottom: 32px; width: auto; height: 40px; padding: 0 16px; border-radius: 10px; gap: 6px; font-size: 13px; font-weight: 700; }
+body.is-web-shell .m-toast { bottom: 28px; left: calc(50% + 112px); }
+
+/* ------------------------------------------------------------ desktop metrics for phone components */
+body.is-web-shell .m-section { margin-top: 20px; }
+body.is-web-shell .m-section__head { margin: 0 0 10px; }
+body.is-web-shell .m-section__title { font-size: 14px; }
+body.is-web-shell .m-section__link { font-size: 12.5px; }
+
+body.is-web-shell .m-card {
+  border-radius: 12px;
+  background: var(--theme-panel);
+  border: 1px solid var(--theme-border);
+  box-shadow: none;
+}
+body.is-web-shell .m-card--pad { padding: 14px 16px; }
+
+body.is-web-shell .m-btn {
+  height: 34px;
+  padding: 0 14px;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+body.is-web-shell .m-btn--sm { height: 30px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; }
+body.is-web-shell .m-btn--block { width: auto; min-width: 180px; }
+body.is-web-shell .m-btn:hover:not(:disabled) { filter: brightness(1.08); }
+body.is-web-shell .m-icon-btn { width: 32px; height: 32px; border-radius: 8px; }
+
+body.is-web-shell .m-field { margin-bottom: 14px; }
+body.is-web-shell .m-field__label { margin: 0 0 6px; font-size: 12.5px; }
+body.is-web-shell .m-input,
+body.is-web-shell .m-select { height: 36px; padding: 0 11px; border-radius: 8px; font-size: 13px; }
+body.is-web-shell .m-textarea { min-height: 84px; padding: 9px 11px; border-radius: 8px; font-size: 13px; }
+body.is-web-shell .m-search { height: 34px; border-radius: 8px; }
+body.is-web-shell .m-search input { font-size: 13px; }
+
+body.is-web-shell .m-chips { margin-left: 0; margin-right: 0; padding: 0; flex-wrap: wrap; overflow: visible; }
+body.is-web-shell .m-chip { height: 28px; padding: 0 11px; border-radius: 8px; font-size: 12.5px; }
+
+body.is-web-shell .m-row { padding: 10px 14px; }
+body.is-web-shell .m-row__title { font-size: 13.5px; }
+body.is-web-shell .m-row:hover { background: var(--theme-control-hover); }
+
+body.is-web-shell .m-empty { padding: 40px 24px; }
+body.is-web-shell .m-empty__icon { width: 52px; height: 52px; border-radius: 14px; }
+body.is-web-shell .m-empty__title { font-size: 14px; }
+body.is-web-shell .m-empty__text { max-width: 420px; font-size: 12.5px; }
+
+/* Media grids sized for a phone (2–4 columns) flow into more columns. */
+body.is-web-shell .m-page .grid,
+body.is-web-shell .m-page .results,
+body.is-web-shell .m-page .scenes,
+body.is-web-shell .m-page .shots { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; gap: 10px !important; }
+body.is-web-shell .m-page .cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important; }
+
+/* Bottom sheets open as centered dialogs (they are teleported to <body>). */
+body.is-web-shell .sheet-backdrop { align-items: center !important; justify-content: center; padding: 32px; }
+body.is-web-shell .sheet-backdrop .sheet {
+  width: min(640px, 100%) !important;
+  max-height: 86vh !important;
+  padding: 16px 20px 20px !important;
+  border: 1px solid var(--theme-border-control);
+  border-radius: 14px !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .45);
+}
+
+/* Pickers: fixed thumbnail size instead of stretching across the page. */
+body.is-web-shell .m-page .picker .grid { grid-template-columns: repeat(auto-fill, 108px) !important; gap: 10px !important; }
+
+/* Segmented tabs: compact desktop tabs instead of full-width phone segments. */
+body.is-web-shell .m-page .seg { display: inline-flex !important; gap: 2px !important; width: auto; padding: 3px !important; border-radius: 9px !important; background: var(--theme-panel-soft) !important; }
+body.is-web-shell .m-page .seg button { height: 28px !important; padding: 0 14px !important; border-radius: 6px !important; font-size: 12.5px !important; font-weight: 600 !important; }
+body.is-web-shell .m-page .seg button.is-active { background: var(--theme-panel) !important; box-shadow: inset 0 0 0 1px var(--theme-border-control); }
+
+/* Button pairs keep their natural width. */
+body.is-web-shell .m-page :is(.source__actions, .pick, .sources, .actions) { display: flex !important; flex-wrap: wrap; gap: 8px !important; }
+body.is-web-shell .m-page :is(.source__actions, .pick, .actions) .m-btn { flex: 0 0 auto; height: 34px !important; font-size: 13px !important; }
+body.is-web-shell .m-page .sources > * { flex: 0 1 300px; }
+
+/* The phone "+" button becomes the page's primary action at the top right, like desktop page heads. */
+body.is-web-shell .m-fab {
+  top: 66px; bottom: auto !important;
+  right: max(24px, calc((100vw - 224px - 1240px) / 2 + 24px));
+  width: auto; height: 34px; padding: 0 14px; gap: 6px;
+  border-radius: 8px; box-shadow: none; font-size: 13px; font-weight: 700;
+}
+body.is-web-shell .m-fab svg { width: 16px; height: 16px; }
+body.is-web-shell .m-fab::after { content: attr(aria-label); }
+
+/* Workbench: settings as cards on the left, results in a sticky column on the right. */
+.wb-results--empty { display: none; }
+body.is-web-shell .m-page.wb { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); column-gap: 24px; align-items: start; }
+body.is-web-shell .m-page.wb > * { grid-column: 1; }
+body.is-web-shell .m-page.wb > .wb-results { grid-column: 2; grid-row: 1 / span 40; position: sticky; top: 16px; margin-top: 0; max-height: calc(100vh - 140px); overflow-y: auto; padding: 14px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+body.is-web-shell .m-page.wb > .wb-results--empty { display: block; padding: 0; border: 0; background: none; }
+body.is-web-shell .m-page.wb > .wb-results .grid,
+body.is-web-shell .m-page.wb > .wb-results .results { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; }
+body.is-web-shell .m-page.wb > section.m-section:not(.wb-results),
+body.is-web-shell .tool__form > section.m-section { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+body.is-web-shell .m-page.wb > .intro,
+body.is-web-shell .m-page > .intro { margin: 0 0 4px; }
+
+/* Desktop tool page layout (web templates): numbered step cards in columns, like the desktop plugin pages. */
+.wt-page { width: min(1440px, 100%); margin: 0 auto; padding-top: 4px; }
+.wt-grid { display: grid; grid-template-columns: repeat(var(--wt-cols, 3), minmax(0, 1fr)); gap: 14px; align-items: start; }
+.wt-grid--2 { --wt-cols: 2; }
+.wt-field { display: flex; flex-direction: column; gap: 6px; }
+.wt-note { font-size: 12px; }
+.wt-foot-hint { flex: 1; font-size: 12px; }
+@media (max-width: 1240px) { .wt-grid { --wt-cols: 2; } .wt-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
+
+/* 商品图素材: shot checklist rows (web template). */
+.pi-shots { display: flex; flex-direction: column; gap: 6px; }
+.pi-shot { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-panel-soft); color: var(--theme-text); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.pi-shot:hover { border-color: var(--theme-border-control); }
+.pi-shot.is-active { border-color: var(--vg-accent-line); background: var(--vg-accent-soft); }
+.pi-shot__check { width: 16px; height: 16px; flex-shrink: 0; border: 1.5px solid var(--theme-border-control); border-radius: 4px; }
+.pi-shot.is-active .pi-shot__check { border-color: var(--vg-accent); background: var(--vg-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") center/12px no-repeat; }
+.pi-shot__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pi-shot__text strong { font-size: 13px; }
+.pi-shot__text small { font-size: 11.5px; color: var(--theme-text-muted); }
+
+/* 商品替换 (web template). */
+.wis-drop-like { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; padding: 18px; border: 1px dashed var(--theme-border-control); border-radius: 12px; background: var(--theme-panel-soft); color: var(--theme-text); cursor: pointer; }
+.wis-drop-like:hover { border-color: var(--vg-accent-line); background: var(--vg-accent-soft); }
+.wis-drop-like__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: var(--vg-accent-soft); border: 1px solid var(--vg-accent-line); color: var(--vg-accent); }
+.wis-drop-like strong { font-size: 13px; }
+.wis-drop-like small { font-size: 11.5px; color: var(--theme-text-muted); }
+.pr-product { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-panel-soft); }
+.pr-product strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-refs, .pr-scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.pr-ref, .pr-scene { position: relative; aspect-ratio: 1; overflow: hidden; padding: 0; border: 2px solid transparent; border-radius: 10px; background: var(--theme-control); cursor: pointer; }
+.pr-ref :deep(img), .pr-scene :deep(img), .pr-ref img, .pr-scene img { width: 100%; height: 100%; object-fit: cover; }
+.pr-ref.is-active { border-color: var(--vg-accent); }
+.pr-ref__check { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--vg-accent); color: #fff; }
+.pr-scene { border: 1px solid var(--theme-border); cursor: default; }
+.pr-scene__remove { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .6); color: #fff; cursor: pointer; }
+.pr-scene--add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1px dashed var(--theme-border-control); background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 11.5px; cursor: pointer; }
+.pr-scene--add:hover { border-color: var(--vg-accent-line); color: var(--vg-accent); }
+
+/* 商品品牌水印 (web template). */
+.wt-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pw-template { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--theme-border-control); border-radius: 12px; background: var(--theme-panel-soft); color: var(--theme-text); text-align: left; cursor: pointer; }
+.pw-template:hover { border-color: var(--vg-accent-line); }
+.pw-template__img { width: 72px; height: 72px; flex-shrink: 0; overflow: hidden; border-radius: 8px; background-color: #fff; background-image: linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%), linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%); background-size: 12px 12px; background-position: 0 0, 6px 6px; }
+.pw-template__img img { width: 100%; height: 100%; object-fit: contain; }
+.pw-template__text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.pw-template__text strong { font-size: 13px; }
+.pw-template__text small { font-size: 11.5px; color: var(--theme-text-muted); }
+.pw-empty { padding: 24px 8px; }
+.wr-mini { display: flex; flex-direction: column; gap: 6px; }
+
+@media (max-width: 760px) { .wt-grid { --wt-cols: 1; } }

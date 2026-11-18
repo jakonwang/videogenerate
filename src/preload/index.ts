@@ -1,12 +1,22 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
 import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
+import type { CreatorHubContact, CreatorHubContactChannel, CreatorHubContactInput, CreatorHubFetchContactsResult, CreatorHubMessageTemplate, CreatorHubCreatorDetail,CreatorHubDiscoverQuery, CreatorHubDiscoverResult, CreatorHubPoolRow, CreatorHubCreatorProfile, CreatorHubCrmRow,CreatorHubFulfillmentReport, CreatorHubImportCookiesInput, CreatorHubOrder, CreatorHubOverview, CreatorHubProductCost, CreatorHubSample, CreatorHubSettings, CreatorHubShop, CreatorHubSyncJob, CreatorHubSyncProgress, CreatorHubSyncStage, CreatorHubVideo } from '../shared/creatorHub'
 import type {
   InventoryDashboard,
   InventoryDetail,
   InventorySyncResult,
   SaveInventorySkuInput,
 } from '../main/modules/dianxiaomi-inventory/types'
+import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
+import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
+import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
+import type { CloudDevice, CloudMeResponse, CloudOrder, CloudPage, CloudPayChannel, CloudPlansResponse } from '../shared/cloud/types'
+
+type CloudIpcResult<T> = ({ ok: true } & T) | { ok: false; error: string; code: string; details?: unknown }
+type CloudActivation = { ok: true } | { ok: false; reason: CloudLicenseStatus['reason']; message: string; devices?: CloudDevice[]; maxDevices?: number }
+type CloudAuthResult = { status: CloudLicenseStatus; activation: CloudActivation }
+
 
 function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.FileFilter[]; multiple?: boolean }) {
   return {
@@ -23,11 +33,29 @@ function normalizeFilePickerOptions(opts?: { title?: string; filters?: Electron.
 
 
 const api = {
+  productResearch: {
+    snapshot: (schemeId?: string) => ipcRenderer.invoke('productResearch:snapshot', schemeId) as Promise<ProductResearchSnapshot>,
+    createPairing: () => ipcRenderer.invoke('productResearch:createPairing') as Promise<ProductResearchPairing>,
+    createTask: (payload: { keyword: string; schemeId?: string; sort: 'comprehensive' | 'sales'; targetCount: number }) =>
+      ipcRenderer.invoke('productResearch:createTask', payload) as Promise<ProductResearchTask>,
+    cancelTask: (taskId: string) => ipcRenderer.invoke('productResearch:cancelTask', taskId) as Promise<ProductResearchTask | undefined>,
+    removeTask: (taskId: string) => ipcRenderer.invoke('productResearch:removeTask', taskId) as Promise<boolean>,
+    removeResult: (resultId: string, schemeId?: string) => ipcRenderer.invoke('productResearch:removeResult', { resultId, schemeId }) as Promise<boolean>,
+    removeResults: (resultIds: string[], schemeId?: string) => ipcRenderer.invoke('productResearch:removeResults', { resultIds, schemeId }) as Promise<number>,
+    clearResults: (schemeId?: string) => ipcRenderer.invoke('productResearch:clearResults', schemeId) as Promise<number>,
+    createScheme: (payload: { name: string; need: string; market: string; keywords: string[]; note?: string }) => ipcRenderer.invoke('productResearch:createScheme', payload) as Promise<ProductResearchScheme>,
+    listSchemes: () => ipcRenderer.invoke('productResearch:listSchemes') as Promise<ProductResearchScheme[]>,
+    updateScheme: (id: string, patch: any) => ipcRenderer.invoke('productResearch:updateScheme', id, patch) as Promise<ProductResearchScheme | null>,
+    deleteScheme: (id: string) => ipcRenderer.invoke('productResearch:deleteScheme', id) as Promise<boolean>,
+    getSchemeState: (id: string) => ipcRenderer.invoke('productResearch:getSchemeState', id) as Promise<ProductResearchSchemeState | null>,
+    saveSchemeState: (id: string, patch: Partial<ProductResearchSchemeState>) => ipcRenderer.invoke('productResearch:saveSchemeState', id, patch) as Promise<boolean>,
+  },
   assetLibrary: {
     list: (payload?: { query?: string; type?: 'all' | 'image' | 'video'; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:list', payload),
     upload: (folderId?: string | null) => ipcRenderer.invoke('assetLibrary:upload', folderId),
     importPaths: (payload: { paths: string[]; folderId?: string | null }) => ipcRenderer.invoke('assetLibrary:importPaths', payload),
     listFolders: (parentId?: string | null) => ipcRenderer.invoke('assetLibrary:listFolders', parentId),
+    listAllFolders: () => ipcRenderer.invoke('assetLibrary:listAllFolders'),
     getFolderPath: (folderId?: string | null) => ipcRenderer.invoke('assetLibrary:getFolderPath', folderId),
     createFolder: (payload: { name: string; parentId?: string | null }) => ipcRenderer.invoke('assetLibrary:createFolder', payload),
     renameFolder: (payload: { id: string; name: string }) => ipcRenderer.invoke('assetLibrary:renameFolder', payload),
@@ -130,6 +158,18 @@ const api = {
   clone: {
     debugLog: (payload: { message: string; level?: 'info' | 'error' }) =>
       ipcRenderer.invoke('clone:debugLog', payload),
+    describePromptTemplates: () => ipcRenderer.invoke('clone:describePromptTemplates'),
+    listPromptTemplates: (payload: { kind: string; productType?: string }) =>
+      ipcRenderer.invoke('clone:listPromptTemplates', payload),
+    listActivePromptTemplateScopes: (payload: { kind: string }) =>
+      ipcRenderer.invoke('clone:listActivePromptTemplateScopes', payload),
+    savePromptTemplate: (payload: { id?: string; kind: string; productType?: string; name?: string; prompt: string }) =>
+      ipcRenderer.invoke('clone:savePromptTemplate', payload),
+    activatePromptTemplate: (payload: { id: string; kind: string; productType?: string }) =>
+      ipcRenderer.invoke('clone:activatePromptTemplate', payload),
+    rollbackPromptTemplate: (payload: { id: string; kind: string; productType?: string }) =>
+      ipcRenderer.invoke('clone:rollbackPromptTemplate', payload),
+    removePromptTemplate: (payload: { id: string }) => ipcRenderer.invoke('clone:removePromptTemplate', payload),
     createDraftProject: (payload?: {
       locale?: 'vi-VN' | 'zh-CN'
       strength?: 'structure'
@@ -238,7 +278,7 @@ const api = {
       ipcRenderer.invoke('clone:expandCommercialPrompt', payload),
     prepareMaterials: (payload: {
       cloneProjectId: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       productReferenceImagePaths?: string[]
       generateModelPack?: boolean
@@ -286,6 +326,10 @@ const api = {
       shotId: string
       videoPath: string
     }) => ipcRenderer.invoke('clone:replaceShotVideo', payload),
+    listShotAlternatives: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('clone:listShotAlternatives', payload),
+    useShotAlternative: (payload: { cloneProjectId: string; shotId: string; ref: string }) => ipcRenderer.invoke('clone:useShotAlternative', payload),
+    sendProjectToCreative: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('clone:sendProjectToCreative', payload),
+    sendShotToCreative: (payload: { cloneProjectId: string; shotId: string }) => ipcRenderer.invoke('clone:sendShotToCreative', payload),
     composeCloneVideo: (payload: {
       cloneProjectId: string
       outputDir?: string
@@ -309,7 +353,7 @@ const api = {
       title?: string
       description?: string
       sourceProjectId?: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
     }) => ipcRenderer.invoke('clone:createModelTask', payload ?? {}),
     reanalyzeShotScript: (payload: { cloneProjectId: string; shotId: string }) =>
       ipcRenderer.invoke('clone:reanalyzeShotScript', payload),
@@ -333,7 +377,7 @@ const api = {
       ipcRenderer.invoke('clone:buildScriptCandidates', payload),
     generateConsistencyAssets: (payload: {
       cloneProjectId: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       productReferenceImagePaths?: string[]
       generateModelPack?: boolean
@@ -381,7 +425,7 @@ const api = {
       negativePrompt?: string
       locked?: boolean
       qualityMode?: 'fast' | 'standard' | 'high'
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       cloneEligible?: boolean
       filterReason?: string
       cloneClass?: 'real_product' | 'model_demo' | 'screen_recording' | 'tutorial_talking' | 'ui_demo' | 'result_showcase'
@@ -466,7 +510,7 @@ const api = {
     generateModelIdentityPack: (payload: {
       cloneProjectId?: string
       modelTaskId?: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
@@ -482,14 +526,14 @@ const api = {
     getModelIdentityPromptPreview: (payload: {
       cloneProjectId?: string
       modelTaskId?: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
     }) => ipcRenderer.invoke('clone:getModelIdentityPromptPreview', payload),
     getProjectIdentityGridPromptPreview: (payload: {
       cloneProjectId: string
-      productType?: 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+      productType?: 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
       productPoints?: string
       modelProfileOptions?: import('../shared/modelProfileOptions').ModelProfileOptions
       productReferenceImagePaths?: string[]
@@ -731,6 +775,37 @@ const api = {
     },
   },
 
+  liveSlicer: {
+    probe: (inputPath: string) =>
+      ipcRenderer.invoke('liveSlicer:probe', inputPath) as Promise<
+        | { ok: true; source: import('../main/modules/live-slicer/analyze').LiveSlicerSource }
+        | { ok: false; error: string }
+      >,
+    analyze: (payload: { jobId: string; inputPath: string }) =>
+      ipcRenderer.invoke('liveSlicer:analyze', payload) as Promise<
+        | { ok: true; analysis: import('../main/modules/live-slicer/analyze').LiveSlicerAnalysis }
+        | { ok: false; cancelled: boolean; error: string }
+      >,
+    thumbnail: (payload: { inputPath: string; atSec: number; width?: number; height?: number }) =>
+      ipcRenderer.invoke('liveSlicer:thumbnail', payload) as Promise<string | null>,
+    export: (payload: {
+      jobId: string
+      inputPath: string
+      segments: import('../main/modules/live-slicer/export').LiveSlicerExportSegment[]
+      options: import('../main/modules/live-slicer/export').LiveSlicerExportOptions
+    }) =>
+      ipcRenderer.invoke('liveSlicer:export', payload) as Promise<
+        | { ok: true; outputDir: string; results: import('../main/modules/live-slicer/export').LiveSlicerExportResult[] }
+        | { ok: false; cancelled: boolean; error: string }
+      >,
+    cancel: (jobId: string) => ipcRenderer.invoke('liveSlicer:cancel', jobId),
+    onProgress: (cb: (p: Record<string, any>) => void) => {
+      const fn = (_: unknown, p: Record<string, any>) => cb(p)
+      ipcRenderer.on('liveSlicer:progress', fn)
+      return () => ipcRenderer.removeListener('liveSlicer:progress', fn)
+    },
+  },
+
   shell: {
     showItemInFolder: (fullPath: string) => ipcRenderer.invoke('shell:showItemInFolder', fullPath),
     openPath: (fullPath: string) => ipcRenderer.invoke('shell:openPath', fullPath),
@@ -749,6 +824,10 @@ const api = {
     list: () => ipcRenderer.invoke('products:list'),
     upsert: (payload: any) => ipcRenderer.invoke('products:upsert', payload),
     remove: (id: string) => ipcRenderer.invoke('products:remove', id),
+    listPromptVersions: () => ipcRenderer.invoke('products:listPromptVersions'),
+    savePromptVersion: (payload: { id?: string; name?: string; prompt: string }) => ipcRenderer.invoke('products:savePromptVersion', payload),
+    activatePromptVersion: (id: string) => ipcRenderer.invoke('products:activatePromptVersion', id),
+    rollbackPromptVersion: (id: string) => ipcRenderer.invoke('products:rollbackPromptVersion', id),
     refreshCanonicalSource: (payload: { productId: string; force?: boolean }) => ipcRenderer.invoke('products:refreshCanonicalSource', payload),
     refreshProductAnalysis: (payload: { productId: string }) => ipcRenderer.invoke('products:refreshProductAnalysis', payload),
     ensureSegmentBucketsFromTemplates: () =>
@@ -829,67 +908,52 @@ const api = {
     openLogin: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:openLogin'),
     logout: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:logout'),
   },
-  tiktokCreatorOutreach: {
-    listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listAccounts'),
-    createAccount: (payload: { name: string; shopRegion: string; shopId: string; storeType?: 'cross_border' | 'local'; affiliateHost?: string; id?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:createAccount', payload),
-    removeAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:removeAccount', id),
-    listTemplates: (kind?: 'invite' | 'message') => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTemplates', kind),
-    saveTemplate: (payload: { id?: string; name: string; kind: 'invite' | 'message'; body: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:saveTemplate', payload),
-    open: (payload: { accountId: string; path?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:open', payload),
-    authStatus: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:authStatus', id),
-    configureApi: (payload: { appKey: string; appSecret: string; redirectUri: string; apiBaseUrl?: string; apiVersion?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:configureApi', payload),
-    getApiConfigStatus: () => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getApiConfigStatus'),
-    startOAuth: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:startOAuth', accountId),
-    handleOAuthCallback: (payload: { code: string; state: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:handleOAuthCallback', payload),
-    disconnectShop: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:disconnectShop', accountId),
-    authorizationStatus: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:authorizationStatus', accountId),
-    getCreatorFilters: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getCreatorFilters', accountId),
-    listShopProducts: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listShopProducts', payload),
-    searchTargetCollaborations: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:searchTargetCollaborations', payload),
-    getTargetCollaborationDetail: (payload: { accountId: string; collaborationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getTargetCollaborationDetail', payload),
-    getConversationList: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getConversationList', payload),
-    getMessages: (payload: { accountId: string; conversationId: string; pageToken?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getMessages', payload),
-    markConversationRead: (payload: { accountId: string; conversationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:markConversationRead', payload),
-    generateCollaborationLink: (payload: { accountId: string; collaborationId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:generateCollaborationLink', payload),
-    getCreatorPerformance: (payload: { accountId: string; creatorId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getCreatorPerformance', payload),
-    getWeeklyOutreachRecords: (payload: { accountId: string; filters?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getWeeklyOutreachRecords', payload),
-    getWeeklyOutreachQuota: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getWeeklyOutreachQuota', accountId),
-    getInboxCounts: (accountId: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getInboxCounts', accountId),
-    getPromotionDetails: (payload: { accountId: string; collaborationId: string; creatorId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getPromotionDetails', payload),
-    searchCreators: (payload: { accountId: string; filters?: Record<string, unknown>; cursor?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:searchCreators', payload),
-    readCreators: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:readCreators', id),
-    preview: (payload: { accountId: string; action: 'invite' | 'message'; creatorIds: string[]; creatorNames?: string[]; template?: string; variables?: Record<string, string>; batchSize?: number }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:preview', payload),
-    confirm: (payload: { accountId: string; action: 'invite' | 'message'; count: number; creatorIds?: string[]; creatorNames?: string[]; body?: string; invitation?: Record<string, unknown> }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:confirm', payload),
-    listAudits: (id?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listAudits', id),
-    listCampaigns: (id?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listCampaigns', id),
-    updateCampaignStatus: (payload: { id: string; status: 'draft' | 'ready' | 'running' | 'paused' | 'completed' | 'cancelled' | 'failed' }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:updateCampaignStatus', payload),
-    parseSpecifiedCreators: (input: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:parseSpecifiedCreators', input),
-    listCreatorLibrary: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listCreatorLibrary', accountId),
-    addCreatorsToLibrary: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:addCreatorsToLibrary', payload),
-    removeCreatorsFromLibrary: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:removeCreatorsFromLibrary', ids),
-    updateCreatorTags: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:updateCreatorTags', payload),
-    blockCreators: (payload: { ids: string[]; blocked?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:blockCreators', payload),
-    previewOutreachTask: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:previewOutreachTask', payload),
-    createOutreachTask: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:createOutreachTask', payload),
-    confirmOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:confirmOutreachTask', id),
-    startOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:startOutreachTask', id),
-    pauseOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:pauseOutreachTask', id),
-    resumeOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:resumeOutreachTask', id),
-    cancelOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:cancelOutreachTask', id),
-    retryFailedCreators: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:retryFailedCreators', id),
-    getOutreachTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getOutreachTask', id),
-    listOutreachTasks: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listOutreachTasks', accountId),
-    listTaskBatches: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTaskBatches', id),
-    listTaskAuditLogs: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listTaskAuditLogs', id),
-    getOutreachStatistics: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getOutreachStatistics', accountId),
-    getFeatureAvailability: (accountId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:getFeatureAvailability', accountId),
-    listMessageHistory: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokCreatorOutreach:listMessageHistory', payload),
+  tiktokCreatorHub: {
+    listShops: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:listShops') as Promise<CreatorHubShop[]>,
+    importCookies: (payload: CreatorHubImportCookiesInput) => ipcRenderer.invoke('plugin:tiktokCreatorHub:importCookies', payload) as Promise<{ shop: CreatorHubShop; merged: boolean; cookies: number; skipped: number }>,
+    verifyShop: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:verifyShop', id) as Promise<CreatorHubShop>,
+    renameShop: (payload: { id: string; name: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:renameShop', payload) as Promise<CreatorHubShop>,
+    removeShop: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removeShop', id) as Promise<{ ok: true }>,
+    openBackend: (payload: { id: string; path?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:openBackend', payload) as Promise<{ url: string; loggedIn: boolean }>,
+    syncSamples: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:syncSamples', id) as Promise<CreatorHubSyncJob>,
+    syncShop: (payload: { id: string; stages?: CreatorHubSyncStage[] }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:syncShop', payload) as Promise<CreatorHubSyncJob>,
+    listVideos: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listVideos', shopId) as Promise<Array<CreatorHubVideo & { sampleId?: string }>>,
+    listOrders: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listOrders', shopId) as Promise<CreatorHubOrder[]>,
+    listCrm: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listCrm', shopId) as Promise<CreatorHubCrmRow[]>,
+    saveProfile: (payload: { shopId: string; creatorId: string; tags?: string[]; note?: string; blocked?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveProfile', payload) as Promise<CreatorHubCreatorProfile>,
+    getOverview: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getOverview', shopId) as Promise<CreatorHubOverview>,
+    getSyncProgress: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getSyncProgress', id) as Promise<CreatorHubSyncProgress | null>,
+    listSyncJobs: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listSyncJobs', id) as Promise<CreatorHubSyncJob[]>,
+    listSamples: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listSamples', shopId) as Promise<CreatorHubSample[]>,
+    updateSample: (payload: { id: string; costOverride?: number | null; note?: string | null }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:updateSample', payload) as Promise<CreatorHubSample>,
+    listCosts: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listCosts', shopId) as Promise<CreatorHubProductCost[]>,
+    saveCost: (payload: { shopId: string; productId: string; skuId?: string; productTitle?: string; unitCost: number; shippingCost?: number }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveCost', payload) as Promise<CreatorHubProductCost>,
+    removeCost: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removeCost', id) as Promise<{ ok: true }>,
+    getSettings: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:getSettings') as Promise<CreatorHubSettings>,
+    saveSettings: (payload: Partial<CreatorHubSettings>) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveSettings', payload) as Promise<CreatorHubSettings>,
+    getFulfillment: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getFulfillment', shopId) as Promise<CreatorHubFulfillmentReport>,
+    discoverCreators: (payload: CreatorHubDiscoverQuery) => ipcRenderer.invoke('plugin:tiktokCreatorHub:discoverCreators', payload) as Promise<CreatorHubDiscoverResult>,
+    listPool: (shopId?: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:listPool', shopId) as Promise<CreatorHubPoolRow[]>,
+    setPoolStar: (payload: { ids: string[]; starred: boolean }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:setPoolStar', payload) as Promise<{ ok: true; count: number }>,
+    removePool: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removePool', ids) as Promise<{ ok: true; count: number }>,
+    fetchContacts: (payload: { shopId: string; creators: Array<{ creatorId: string; handle: string }> }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:fetchContacts', payload) as Promise<CreatorHubFetchContactsResult>,
+    saveContact: (payload: CreatorHubContactInput) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveContact', payload) as Promise<CreatorHubContact>,
+    logContact: (payload: { shopId: string; creatorId: string; handle: string; channel: CreatorHubContactChannel; note?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:logContact', payload) as Promise<CreatorHubContact>,
+    listTemplates: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:listTemplates') as Promise<CreatorHubMessageTemplate[]>,
+    saveTemplate: (payload: { id?: string; name: string; body: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:saveTemplate', payload) as Promise<CreatorHubMessageTemplate[]>,
+    removeTemplate: (id: string) => ipcRenderer.invoke('plugin:tiktokCreatorHub:removeTemplate', id) as Promise<CreatorHubMessageTemplate[]>,
+    openCreatorBackend: (payload: { shopId: string; creatorId: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:openCreatorBackend', payload) as Promise<{ url: string; loggedIn: boolean }>,
+    getCreatorDetail: (payload: { shopId: string; creatorId?: string; handle?: string }) => ipcRenderer.invoke('plugin:tiktokCreatorHub:getCreatorDetail', payload) as Promise<CreatorHubCreatorDetail>,
   },
   tiktokGmvMax: {
+    getV2Workspace: (payload?: { storeId?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getV2Workspace', payload),
+    saveV2Settings: (payload: { storeId?: string; marginPercent?: number | null; thresholds?: Record<string, number> }) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveV2Settings', payload),
+    recordV2Change: (payload: { campaignId: string; kind: 'roi' | 'budget' | 'products' | 'status' | 'other'; from?: number; to?: number; note?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:recordV2Change', payload),
+    undoV2Change: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:undoV2Change', payload),
     getDashboard: (payload?: { startDate?: string; endDate?: string; includeCreativeMetrics?: boolean }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getDashboard', payload),
     getCampaignWorkspace: (payload: { campaignId: string; startDate?: string; endDate?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCampaignWorkspace', payload),
     getCampaignPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignType?: string; status?: string; pacingState?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; minUtilization?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCampaignPage', payload),
-    getCreativePage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; source?: string; state?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; maxCpa?: number; minCtr?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCreativePage', payload),
+    getCreativePage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; source?: string; state?: string; segment?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; maxCpa?: number; minCtr?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getCreativePage', payload),
     getProductPage: (payload?: { page?: number; pageSize?: number; startDate?: string; endDate?: string; storeId?: string; campaignId?: string; state?: string; allocationState?: string; search?: string; minSpend?: number; minOrders?: number; minRoi?: number; minScore?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductPage', payload),
     getProductCostPage: (payload?: { page?: number; pageSize?: number; storeId?: string; campaignId?: string; scope?: string; completeness?: string; search?: string; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductCostPage', payload),
     getProductCost: (payload: { storeId: string; campaignId: string; productId: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:getProductCost', payload),
@@ -954,6 +1018,7 @@ const api = {
     }) => ipcRenderer.invoke('plugin:tiktokGmvMax:savePolicy', payload),
     approve: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approve', payload),
     approveBatch: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approveBatch', payload),
+    pushCreativeChanges: (payload: { operation: 'REMOVE' | 'ADD'; items: Array<{ campaignId: string; creativeId: string; label?: string }> }) => ipcRenderer.invoke('plugin:tiktokGmvMax:pushCreativeChanges', payload),
     setEmergencyStop: (payload: { stopped: boolean; reason?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:setEmergencyStop', payload),
     reject: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:reject', payload),
     approvePortfolio: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:approvePortfolio', payload),
@@ -969,6 +1034,9 @@ const api = {
     removeListEntry: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:removeListEntry', payload),
     backtest: (payload?: { campaignId?: string; days?: number }) => ipcRenderer.invoke('plugin:tiktokGmvMax:backtest', payload),
     rollback: (payload: { id: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:rollback', payload),
+    getAlerts: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getAlerts'),
+    applyManualChange: (payload: { campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }) => ipcRenderer.invoke('plugin:tiktokGmvMax:applyManualChange', payload),
+    applyManualChanges: (payload: { changes: Array<{ campaignId: string; budget?: string | number; roasBid?: string | number; operationStatus?: string }> }) => ipcRenderer.invoke('plugin:tiktokGmvMax:applyManualChanges', payload),
     saveNotificationConfig: (payload: Record<string, unknown>) => ipcRenderer.invoke('plugin:tiktokGmvMax:saveNotificationConfig', payload),
   },
   tiktokListing: {
@@ -982,6 +1050,13 @@ const api = {
   },
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
+    listSummary: (payload?: { ids?: string[] }) => ipcRenderer.invoke('plugin:tiktokCreative:listSummary', payload),
+    getTask: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:getTask', id),
+    onChanged: (callback: (payload: { taskIds: string[] }) => void) => {
+      const handler = (_event: unknown, payload: { taskIds: string[] }) => callback(payload)
+      ipcRenderer.on('plugin:tiktokCreative:changed', handler)
+      return () => ipcRenderer.off('plugin:tiktokCreative:changed', handler)
+    },
     getSettings: () => ipcRenderer.invoke('plugin:tiktokCreative:getSettings'),
     saveSettings: (payload: { imageRetryLimit?: number; qualityCheckerEnabled?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
     listAccounts: () => ipcRenderer.invoke('plugin:tiktokCreative:listAccounts'),
@@ -1168,6 +1243,8 @@ const api = {
     pauseRun: (runId: string) => ipcRenderer.invoke('agentOs:pauseRun', runId),
     resumeRun: (runId: string) => ipcRenderer.invoke('agentOs:resumeRun', runId),
     cancelRun: (runId: string) => ipcRenderer.invoke('agentOs:cancelRun', runId),
+    confirmStep: (payload: { runId: string; stepId: string }) => ipcRenderer.invoke('agentOs:confirmStep', payload),
+    estimateRun: (runId: string) => ipcRenderer.invoke('agentOs:estimateRun', runId),
     listArtifacts: (payload?: { runId?: string; conversationId?: string }) => ipcRenderer.invoke('agentOs:listArtifacts', payload),
     openArtifact: (id: string) => ipcRenderer.invoke('agentOs:openArtifact', id),
     subscribeEvents: (afterSequence: number, callback: (events: any[]) => void) => {
@@ -1187,12 +1264,98 @@ const api = {
     },
   },
 
+  videoWatermark: {
+    getState: () => ipcRenderer.invoke('videoWatermark:getState'),
+    start: (payload: { videoPaths: string[]; settings: Record<string, unknown>; outputDir?: string; archiveToLibrary?: boolean }) => ipcRenderer.invoke('videoWatermark:start', payload),
+    retryFailed: (batchId: string) => ipcRenderer.invoke('videoWatermark:retryFailed', batchId),
+    removeBatch: (batchId: string) => ipcRenderer.invoke('videoWatermark:removeBatch', batchId),
+    preview: (settings: Record<string, unknown>) => ipcRenderer.invoke('videoWatermark:preview', settings),
+    onChanged: (callback: (batch: any) => void) => {
+      const handler = (_event: unknown, batch: any) => callback(batch)
+      ipcRenderer.on('videoWatermark:changed', handler)
+      return () => ipcRenderer.off('videoWatermark:changed', handler)
+    },
+  },
+
+  contentHub: {
+    listContent: (payload?: { productId?: string; line?: string; status?: string; limit?: number }) => ipcRenderer.invoke('contentHub:listContent', payload),
+    recentProjects: (limit?: number) => ipcRenderer.invoke('contentHub:recentProjects', limit),
+    productOverview: (productId: string) => ipcRenderer.invoke('contentHub:productOverview', productId),
+    linkProductChannels: (payload: { productId: string; tiktokProductIds: string[] }) => ipcRenderer.invoke('contentHub:linkProductChannels', payload) as Promise<{ tiktokProductIds: string[] }>,
+    linkContentPerformance: (payload: { ref: string; creativeId: string; creativeName?: string }) => ipcRenderer.invoke('contentHub:linkContentPerformance', payload),
+    unlinkContentPerformance: (ref: string) => ipcRenderer.invoke('contentHub:unlinkContentPerformance', ref) as Promise<{ ok: boolean }>,
+    listReviews: (payload?: { decision?: string; line?: string; productId?: string }) => ipcRenderer.invoke('contentHub:listReviews', payload),
+    reviewCounts: () => ipcRenderer.invoke('contentHub:reviewCounts'),
+    decideReview: (payload: { ref: string; decision: 'approved' | 'redo' | 'discarded'; reason?: string; note?: string }) => ipcRenderer.invoke('contentHub:decideReview', payload),
+    reopenReview: (ref: string) => ipcRenderer.invoke('contentHub:reopenReview', ref),
+    lineageFor: (ref: string) => ipcRenderer.invoke('contentHub:lineageFor', ref),
+    getBrandMemory: () => ipcRenderer.invoke('contentHub:getBrandMemory'),
+    saveBrand: (payload: any) => ipcRenderer.invoke('contentHub:saveBrand', payload),
+    getProductMemory: (productId: string) => ipcRenderer.invoke('contentHub:getProductMemory', productId),
+    saveProductMemory: (payload: any) => ipcRenderer.invoke('contentHub:saveProductMemory', payload),
+    removeFeedback: (id: string) => ipcRenderer.invoke('contentHub:removeFeedback', id),
+    healthCheck: (force?: boolean) => ipcRenderer.invoke('contentHub:healthCheck', force),
+    insights: (rangeDays?: number) => ipcRenderer.invoke('contentHub:insights', rangeDays),
+    latestBriefs: () => ipcRenderer.invoke('contentHub:latestBriefs'),
+    generateBrief: (kind: 'daily' | 'weekly') => ipcRenderer.invoke('contentHub:generateBrief', kind),
+    listBriefs: (limit?: number) => ipcRenderer.invoke('contentHub:listBriefs', limit),
+    getAutomationSettings: () => ipcRenderer.invoke('contentHub:getAutomationSettings'),
+    saveAutomationSettings: (payload: any) => ipcRenderer.invoke('contentHub:saveAutomationSettings', payload),
+    testFeishuPush: (payload?: { webhookUrl?: string; secret?: string }) => ipcRenderer.invoke('contentHub:testFeishuPush', payload),
+    pushLatestBrief: (kind: 'daily' | 'weekly') => ipcRenderer.invoke('contentHub:pushLatestBrief', kind),
+    importProductFromLink: (payload: { url: string; name?: string; type?: string }) => ipcRenderer.invoke('contentHub:importProductFromLink', payload),
+    onChanged: (callback: (payload: { kind: string; counts?: { pending: number; approved: number; redo: number; discarded: number } }) => void) => {
+      const handler = (_event: unknown, payload: any) => callback(payload)
+      ipcRenderer.on('contentHub:changed', handler)
+      return () => ipcRenderer.off('contentHub:changed', handler)
+    },
+  },
+
   templates: {
     list: () => ipcRenderer.invoke('templates:list'),
     upsert: (payload: any) => ipcRenderer.invoke('templates:upsert', payload),
     remove: (id: string) => ipcRenderer.invoke('templates:remove', id),
   },
 
+  mixStudio: {
+    listFormulas: () => ipcRenderer.invoke('mixStudio:listFormulas') as Promise<import('../shared/mixFormula').MixFormula[]>,
+    saveFormula: (formula: Partial<import('../shared/mixFormula').MixFormula> & { name: string; beats: import('../shared/mixFormula').FormulaBeat[] }) =>
+      ipcRenderer.invoke('mixStudio:saveFormula', formula) as Promise<import('../shared/mixFormula').MixFormula>,
+    removeFormula: (formulaId: string) => ipcRenderer.invoke('mixStudio:removeFormula', formulaId) as Promise<{ ok: boolean }>,
+    formulaFromReference: (payload?: { name?: string }) =>
+      ipcRenderer.invoke('mixStudio:formulaFromReference', payload) as Promise<import('../shared/mixFormula').MixFormula | null>,
+    preview: (input: import('../shared/mixFormula').MixJobInput) =>
+      ipcRenderer.invoke('mixStudio:preview', input) as Promise<import('../shared/mixFormula').MixPreviewResult>,
+    enqueue: (payload: { input: import('../shared/mixFormula').MixJobInput; drafts: import('../shared/mixFormula').MixDraft[] }) =>
+      ipcRenderer.invoke('mixStudio:enqueue', payload) as Promise<{ enqueued: number; skipped: number }>,
+    ledger: (productId?: string) => ipcRenderer.invoke('mixStudio:ledger', productId) as Promise<import('../shared/mixInsights').MixLedgerEntry[]>,
+    insights: (productId?: string) => ipcRenderer.invoke('mixStudio:insights', productId) as Promise<import('../shared/mixInsights').MixInsights>,
+    refreshPerformance: () => ipcRenderer.invoke('mixStudio:refreshPerformance') as Promise<import('../shared/mixInsights').MixRefreshResult>,
+    listCreatives: () => ipcRenderer.invoke('mixStudio:listCreatives') as Promise<import('../shared/mixInsights').MixCreativeOption[]>,
+    linkCreative: (payload: { entryId: string; creativeId: string | null }) =>
+      ipcRenderer.invoke('mixStudio:linkCreative', payload) as Promise<import('../shared/mixInsights').MixLedgerEntry | null>,
+    sendToPublish: (entryIds: string[]) => ipcRenderer.invoke('mixStudio:sendToPublish', entryIds) as Promise<{ created: number }>,
+    removeLedgerEntry: (entryId: string) => ipcRenderer.invoke('mixStudio:removeLedgerEntry', entryId) as Promise<void>,
+  },
+  mixPool: {
+    overview: (productId: string) =>
+      ipcRenderer.invoke('mixPool:overview', productId) as Promise<import('../shared/mixPool').MixPoolOverview & { running: boolean }>,
+    syncLinked: (productId: string) => ipcRenderer.invoke('mixPool:syncLinked', productId) as Promise<{ added: number; found: number; scan: Record<'product_asset' | 'clone_output' | 'creative_studio' | 'live_photo', number> }>,
+    importFiles: (payload: { productId: string; origin: import('../shared/mixPool').ClipOrigin }) =>
+      ipcRenderer.invoke('mixPool:importFiles', payload) as Promise<{ added: number; skipped: number }>,
+    process: (productId: string) => ipcRenderer.invoke('mixPool:process', productId) as Promise<{ started: boolean }>,
+    retag: (payload: { productId: string; clipIds?: string[] }) => ipcRenderer.invoke('mixPool:retag', payload) as Promise<{ started: boolean }>,
+    resplitSource: (payload: { productId: string; sourceId: string }) => ipcRenderer.invoke('mixPool:resplitSource', payload),
+    updateClip: (payload: { id: string; roleOverride?: import('../shared/mixPool').ClipRole | null; disabled?: boolean }) =>
+      ipcRenderer.invoke('mixPool:updateClip', payload) as Promise<import('../shared/mixPool').PoolClip | null>,
+    setSourceOrigin: (payload: { sourceId: string; origin: import('../shared/mixPool').ClipOrigin }) => ipcRenderer.invoke('mixPool:setSourceOrigin', payload),
+    removeSource: (sourceId: string) => ipcRenderer.invoke('mixPool:removeSource', sourceId) as Promise<{ ok: boolean }>,
+    onProgress: (callback: (p: import('../shared/mixPool').MixPoolProgress) => void) => {
+      const handler = (_event: unknown, p: import('../shared/mixPool').MixPoolProgress) => callback(p)
+      ipcRenderer.on('mixPool:progress', handler)
+      return () => ipcRenderer.off('mixPool:progress', handler)
+    },
+  },
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     stats: () => ipcRenderer.invoke('tasks:stats'),
@@ -1228,22 +1391,38 @@ const api = {
     },
   },
 
-  license: {
-    getMachineId: () =>
-      ipcRenderer.invoke('license:getMachineId') as Promise<{
-        ok: boolean
-        machineId: string
-        error?: string
-      }>,
-    verify: (licenseKey: string) =>
-      ipcRenderer.invoke('license:verify', licenseKey) as Promise<{
-        code: number
-        msg: string
-        data?: { valid?: boolean; expire_time?: string }
-      }>,
+  /** 商品库、模特库与手机 App 经云端同步 */
+  cloudSync: {
+    status: () => ipcRenderer.invoke('cloudSync:status') as Promise<CloudSyncStatus>,
+    run: () => ipcRenderer.invoke('cloudSync:run') as Promise<CloudSyncStatus>,
+  },
+  cloud: {
+    getStatus: () => ipcRenderer.invoke('cloud:getStatus') as Promise<CloudLicenseStatus>,
+    refresh: () => ipcRenderer.invoke('cloud:refresh') as Promise<CloudLicenseStatus>,
+    login: (input: { account: string; password: string }) => ipcRenderer.invoke('cloud:login', input) as Promise<CloudIpcResult<CloudAuthResult>>,
+    register: (input: { account: string; password: string; displayName?: string }) =>
+      ipcRenderer.invoke('cloud:register', input) as Promise<CloudIpcResult<CloudAuthResult>>,
+    logout: () => ipcRenderer.invoke('cloud:logout') as Promise<CloudIpcResult<{ status: CloudLicenseStatus }>>,
+    me: () => ipcRenderer.invoke('cloud:me') as Promise<CloudIpcResult<CloudMeResponse>>,
+    unbindDevice: (deviceId: string) =>
+      ipcRenderer.invoke('cloud:unbindDevice', deviceId) as Promise<CloudIpcResult<{ devices: CloudDevice[]; activation: CloudActivation; status: CloudLicenseStatus }>>,
+    listPlans: () => ipcRenderer.invoke('cloud:listPlans') as Promise<CloudIpcResult<CloudPlansResponse>>,
+    createOrder: (input: { planCode: string; channel: CloudPayChannel }) =>
+      ipcRenderer.invoke('cloud:createOrder', input) as Promise<CloudIpcResult<{ order: CloudOrder }>>,
+    getOrder: (orderNo: string) => ipcRenderer.invoke('cloud:getOrder', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
+    mockPay: (orderNo: string) => ipcRenderer.invoke('cloud:mockPay', orderNo) as Promise<CloudIpcResult<{ order: CloudOrder; status: CloudLicenseStatus }>>,
+    listOrders: () => ipcRenderer.invoke('cloud:listOrders') as Promise<CloudIpcResult<CloudPage<CloudOrder>>>,
+    redeem: (code: string) => ipcRenderer.invoke('cloud:redeem', code) as Promise<CloudIpcResult<{ status: CloudLicenseStatus }>>,
+    getConfig: () => ipcRenderer.invoke('cloud:getConfig') as Promise<CloudIpcResult<{ values: Record<string, unknown>; version: string }>>,
+    onStatusChanged: (handler: (status: CloudLicenseStatus) => void) => {
+      const listener = (_event: unknown, status: CloudLicenseStatus) => handler(status)
+      ipcRenderer.on('cloud:statusChanged', listener)
+      return () => ipcRenderer.off('cloud:statusChanged', listener)
+    },
   },
 }
 
 contextBridge.exposeInMainWorld('api', api)
 
 export type PreloadApi = typeof api
+

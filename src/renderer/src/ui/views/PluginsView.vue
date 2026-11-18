@@ -1,1015 +1,156 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
+import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
   ArrowRight,
-  Check,
+  BarChart3,
+  Captions,
   Download,
-  Power,
+  Images,
+  Package,
+  Replace,
+  Scissors,
   Search,
-  Trash2,
+  ShoppingBag,
+  Stamp,
+  Store,
+  Tag,
+  Users,
   Wrench,
-} from "lucide-vue-next";
-import {
-  webApiClient,
-  type PluginDetail,
-  type PluginSummary,
-} from "@/lib/webApiClient";
+} from 'lucide-vue-next'
+import { featureForPath, useCloudAuthStore } from '@/stores/cloudAuth'
 
-type WorkspaceMode = "market" | "installed";
+type Tool = { id: string; route: string; icon: any; tone: string; group: 'source' | 'image' | 'video' | 'operations' }
 
-const route = useRoute();
-const router = useRouter();
-const { t } = useI18n();
+const RECENT_KEY = 'videogenerate:toolbox-recent:v1'
+const { t } = useI18n()
+const router = useRouter()
+const cloudAuth = useCloudAuthStore()
+const keyword = ref('')
+const recentIds = ref<string[]>([])
 
-const loading = ref(false);
-const actionBusy = ref(false);
-const notice = ref("");
-const errorText = ref("");
-const searchKeyword = ref("");
-const workspace = ref<WorkspaceMode>("market");
-const plugins = ref<PluginSummary[]>([]);
-const selectedPluginId = ref("");
+const TOOLS: Tool[] = [
+  { id: 'video-parser-download', route: '/plugins/video-parser-download', icon: Download, tone: 'blue', group: 'source' },
+  { id: 'live-slicer', route: '/live-slicer', icon: Scissors, tone: 'amber', group: 'source' },
+  { id: 'product-image-materials', route: '/plugins/product-image-materials', icon: Images, tone: 'blue', group: 'source' },
+  { id: 'product-replacement', route: '/plugins/product-replacement', icon: Replace, tone: 'green', group: 'image' },
+  { id: 'product-watermark', route: '/plugins/product-watermark', icon: Tag, tone: 'violet', group: 'image' },
+  { id: 'video-batch-subtitle', route: '/plugins/video-batch-subtitle', icon: Captions, tone: 'green', group: 'video' },
+  { id: 'video-batch-watermark', route: '/plugins/video-batch-watermark', icon: Stamp, tone: 'violet', group: 'video' },
+  { id: 'tiktok-listing-helper', route: '/plugins/tiktok-listing-helper', icon: ShoppingBag, tone: 'amber', group: 'operations' },
+  { id: 'tiktok-creator-hub', route: '/plugins/tiktok-creator-hub', icon: Users, tone: 'violet', group: 'operations' },
+  { id: 'tiktok-gmv-max-optimizer', route: '/plugins/tiktok-gmv-max-optimizer', icon: BarChart3, tone: 'accent', group: 'operations' },
+  { id: 'dianxiaomi-inventory', route: '/plugins/dianxiaomi-inventory', icon: Package, tone: 'amber', group: 'operations' },
+]
 
-const fallbackPlugins: PluginSummary[] = [
-  {
-    id: "product-replacement",
-    name: "Product Replacement",
-    category: "video_processing",
-    description: "Replace products in batches of scene images using saved product references and versioned prompts.",
-    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-replacement", status: "installed", enabled: true,
-  },
-  {
-    id: "product-watermark",
-    name: "Product Brand Watermark",
-    category: "video_processing",
-    description: "Crop product images to squares and apply reusable transparent brand watermarks.",
-    version: "0.1.0", entryType: "tool", workspacePath: "/plugins/product-watermark", status: "uninstalled", enabled: false,
-  },
-  {
-    id: "tiktok-gmv-max-optimizer",
-    name: "TikTok GMV MAX Optimizer",
-    category: "advertising_optimization",
-    description:
-      "Guarded GMV MAX campaign optimization through TikTok for Business MCP.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-gmv-max-optimizer",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "product-image-materials",
-    name: "Product Image Materials",
-    category: "video_processing",
-    description:
-      "Batch split videos into reusable product image materials with Qiniu upload and usage tracking.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/product-image-materials",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "dianxiaomi-inventory",
-    name: "Dianxiaomi Inventory Analytics",
-    category: "inventory_analysis",
-    description:
-      "Track SKU baselines, sync shipped quantities, forecast stockout dates, and surface reorder risks.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/dianxiaomi-inventory",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "live-photo-generator",
-    name: "Live Photo Generator",
-    category: "video_processing",
-    description:
-      "Create Apple-compatible Live Photo outputs from reference images or clone shots with preview and export tools.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/live-photo-generator",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "tiktok-creative-studio",
-    name: "TikTok Creative Studio",
-    category: "video_processing",
-    description:
-      "Read clone shot assets and prompts, then execute manual Creative Studio batches in an isolated workspace.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-creative-studio",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "tiktok-creator-outreach",
-    name: "TikTok Creator Outreach",
-    category: "ecommerce_listing",
-    description: "Prepare reviewed TikTok Affiliate creator invitation and message batches.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/tiktok-creator-outreach",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "video-parser-download",
-    name: "Video Parser Download",
-    category: "video_download",
-    description:
-      "Plugin entry for short-video link parsing and download workflows.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-parser-download",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "video-batch-watermark",
-    name: "Video Batch Watermark",
-    category: "video_processing",
-    description:
-      "Plugin entry for watermark parameters and batch processing presets.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-batch-watermark",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "video-batch-subtitle",
-    name: "Video Batch Subtitle",
-    category: "video_processing",
-    description:
-      "Subtitle recognition, styling, burn-in, and export workflow plugin.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/video-batch-subtitle",
-    status: "uninstalled",
-    enabled: false,
-  },
-  {
-    id: "geelark-publisher",
-    name: "Geelark Publisher",
-    category: "video_processing",
-    description:
-      "Publish clone outputs to Geelark cloud-phone workflows from a dedicated plugin workspace.",
-    version: "0.1.0",
-    entryType: "tool",
-    workspacePath: "/plugins/geelark-publisher",
-    status: "uninstalled",
-    enabled: false,
-  },
-];
+const groups = ['source', 'image', 'video', 'operations'] as const
 
-function mergePluginCatalogWithFallback(source: PluginSummary[]) {
-  const merged = new Map<string, PluginSummary>();
-  for (const item of fallbackPlugins) merged.set(item.id, item);
-  for (const item of source)
-    merged.set(item.id, { ...(merged.get(item.id) || item), ...item });
-  return [...merged.values()];
+const available = computed(() => TOOLS.filter((tool) => cloudAuth.hasFeature(featureForPath(tool.route))))
+const filtered = computed(() => {
+  const needle = keyword.value.trim().toLowerCase()
+  if (!needle) return available.value
+  return available.value.filter((tool) => `${name(tool)} ${desc(tool)}`.toLowerCase().includes(needle))
+})
+const recent = computed(() => recentIds.value.map((id) => available.value.find((tool) => tool.id === id)).filter((tool): tool is Tool => Boolean(tool)).slice(0, 4))
+
+function name(tool: Tool) {
+  return t(`ai.tools.items.${tool.id}.name`)
 }
 
-const filteredPlugins = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase();
-  const source =
-    workspace.value === "installed"
-      ? plugins.value.filter((item) => item.status === "installed")
-      : plugins.value;
-  if (!keyword) return source;
-  return source.filter((item) =>
-    `${item.name} ${item.description}`.toLowerCase().includes(keyword),
-  );
-});
-
-const selectedPlugin = computed(
-  () =>
-    plugins.value.find((item) => item.id === selectedPluginId.value) ??
-    filteredPlugins.value[0] ??
-    null,
-);
-
-function pluginName(plugin: PluginSummary | PluginDetail) {
-  const key = `plugins.catalog.${plugin.id}.name`;
-  return t(key, plugin.name);
+function desc(tool: Tool) {
+  return t(`ai.tools.items.${tool.id}.desc`)
 }
 
-function pluginDescription(plugin: PluginSummary | PluginDetail) {
-  const key = `plugins.catalog.${plugin.id}.description`;
-  return t(key, plugin.description);
-}
-
-function syncRoute() {
-  void router.replace({
-    path: "/plugins",
-    query: {
-      ...(workspace.value === "installed" ? { tab: "installed" } : {}),
-      ...(selectedPluginId.value ? { plugin: selectedPluginId.value } : {}),
-    },
-  });
-}
-
-function pluginStatusText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.status !== "installed") return t("plugins.status.notInstalled");
-  return plugin.enabled
-    ? t("plugins.status.enabled")
-    : t("plugins.status.disabled");
-}
-
-function pluginCategoryText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return t("plugins.categories.videoProcessing");
-  if (plugin.id === "product-replacement") return t("plugins.categories.videoProcessing");
-  if (plugin.id === "tiktok-gmv-max-optimizer")
-    return t("plugins.categories.advertisingOptimization");
-  if (plugin.id === "dianxiaomi-inventory")
-    return t("plugins.categories.inventoryAnalysis");
-  if (plugin.id === "live-photo-generator")
-    return t("plugins.categories.livePhoto");
-  if (plugin.id === "product-image-materials")
-    return t("plugins.categories.videoProcessing");
-  if (plugin.id === "tiktok-creative-studio")
-    return t("plugins.categories.creativeStudio");
-  if (plugin.id === "geelark-publisher")
-    return t("plugins.categories.publishing");
-  if (plugin.category === "video_download")
-    return t("plugins.categories.download");
-  return t("plugins.categories.videoProcessing");
-}
-
-function pluginIconText(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return "BW";
-  if (plugin.id === "product-replacement") return "PR";
-  if (plugin.id === "tiktok-gmv-max-optimizer") return "GM";
-  if (plugin.id === "dianxiaomi-inventory") return "IA";
-  if (plugin.id === "product-image-materials") return "IM";
-  if (plugin.id === "live-photo-generator") return "LP";
-  if (plugin.id === "tiktok-creative-studio") return "TT";
-  if (plugin.id === "geelark-publisher") return "GK";
-  if (plugin.id === "video-parser-download") return "DL";
-  if (plugin.id === "video-batch-watermark") return "WM";
-  if (plugin.id === "video-batch-subtitle") return "CC";
-  return "VG";
-}
-
-function pluginCardTone(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") return "tone-blue";
-  if (plugin.id === "product-replacement") return "tone-green";
-  if (plugin.id === "tiktok-gmv-max-optimizer") return "tone-cyan";
-  if (plugin.id === "dianxiaomi-inventory") return "tone-green";
-  if (plugin.id === "product-image-materials") return "tone-blue";
-  if (plugin.id === "live-photo-generator") return "tone-amber";
-  if (plugin.id === "tiktok-creative-studio") return "tone-green";
-  if (plugin.id === "geelark-publisher") return "tone-cyan";
-  if (plugin.id === "video-parser-download") return "tone-violet";
-  if (plugin.id === "video-batch-watermark") return "tone-blue";
-  return "tone-green";
-}
-
-function isDirectWorkspacePlugin(plugin: PluginSummary | PluginDetail) {
-  return [
-    "geelark-publisher",
-    "tiktok-creative-studio",
-    "tiktok-gmv-max-optimizer",
-    "live-photo-generator",
-    "product-image-materials",
-    "video-parser-download",
-    "dianxiaomi-inventory",
-    "product-watermark",
-    "product-replacement",
-  ].includes(plugin.id);
-}
-
-function primaryActionText(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") return t("plugins.actions.openWorkspace");
-  if (plugin.status !== "installed") return t("plugins.actions.install");
-  if (!plugin.enabled) return t("plugins.actions.enable");
-  return isDirectWorkspacePlugin(plugin)
-    ? t("plugins.actions.openWorkspace")
-    : t("plugins.actions.use");
-}
-
-async function loadPlugins() {
-  loading.value = true;
-  errorText.value = "";
+function open(tool: Tool) {
+  recentIds.value = [tool.id, ...recentIds.value.filter((id) => id !== tool.id)].slice(0, 8)
   try {
-    plugins.value = mergePluginCatalogWithFallback(
-      await webApiClient.listPlugins(),
-    );
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error);
-    plugins.value = fallbackPlugins;
-  } finally {
-    loading.value = false;
-    if (!selectedPlugin.value && filteredPlugins.value.length)
-      selectedPluginId.value = filteredPlugins.value[0].id;
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recentIds.value))
+  } catch {
+    // Recent list is a convenience only.
   }
+  void router.push(tool.route)
 }
 
-async function runPluginAction(
-  action: () => Promise<{ plugin: PluginDetail }>,
-  successMessage: string,
-) {
-  actionBusy.value = true;
-  errorText.value = "";
-  notice.value = "";
+onMounted(() => {
+  void cloudAuth.ensureLoaded()
   try {
-    const result = await action();
-    notice.value = successMessage;
-    selectedPluginId.value = result.plugin.id;
-    await loadPlugins();
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error);
-  } finally {
-    actionBusy.value = false;
+    const stored = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+    recentIds.value = Array.isArray(stored) ? stored.map(String) : []
+  } catch {
+    recentIds.value = []
   }
-}
-
-async function installPlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.installPlugin(pluginId),
-    t("plugins.messages.installed"),
-  );
-}
-
-async function enablePlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.enablePlugin(pluginId),
-    t("plugins.messages.enabled"),
-  );
-}
-
-async function disablePlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.disablePlugin(pluginId),
-    t("plugins.messages.disabled"),
-  );
-}
-
-async function uninstallPlugin(pluginId: string) {
-  await runPluginAction(
-    () => webApiClient.uninstallPlugin(pluginId),
-    t("plugins.messages.uninstalled"),
-  );
-}
-
-function openMarket() {
-  workspace.value = "market";
-}
-
-function openInstalled() {
-  workspace.value = "installed";
-}
-
-function selectPlugin(pluginId: string) {
-  selectedPluginId.value = pluginId;
-}
-
-function usePlugin(plugin: PluginSummary | PluginDetail) {
-  if (plugin.id === "product-watermark") {
-    void router.push("/plugins/product-watermark");
-    return;
-  }
-  if (plugin.id === "product-replacement") {
-    void router.push("/plugins/product-replacement");
-    return;
-  }
-  if (plugin.status !== "installed") {
-    errorText.value = t("plugins.errors.installFirst");
-    return;
-  }
-  if (!plugin.enabled) {
-    errorText.value = t("plugins.errors.enableFirst");
-    return;
-  }
-  if (plugin.id === "product-image-materials") {
-    void router.push("/plugins/product-image-materials");
-    return;
-  }
-  if (plugin.id === "live-photo-generator") {
-    void router.push("/plugins/live-photo-generator");
-    return;
-  }
-  if (plugin.id === "tiktok-creative-studio") {
-    void router.push("/plugins/tiktok-creative-studio");
-    return;
-  }
-  if (plugin.id === "tiktok-creator-outreach") {
-    void router.push("/plugins/tiktok-creator-outreach");
-    return;
-  }
-  if (plugin.id === "geelark-publisher") {
-    void router.push("/plugins/geelark-publisher/publish-center");
-    return;
-  }
-  if (plugin.id === "video-parser-download") {
-    void router.push("/plugins/video-parser-download");
-    return;
-  }
-  if (plugin.id === "dianxiaomi-inventory") {
-    void router.push("/plugins/dianxiaomi-inventory");
-    return;
-  }
-  void router.push(plugin.workspacePath);
-}
-
-function onPrimaryAction(plugin: PluginSummary) {
-  if (plugin.id === "product-watermark" || plugin.id === "product-replacement") {
-    void router.push(plugin.workspacePath);
-    return;
-  }
-  if (plugin.status !== "installed") {
-    void installPlugin(plugin.id);
-    return;
-  }
-  if (!plugin.enabled) {
-    void enablePlugin(plugin.id);
-    return;
-  }
-  usePlugin(plugin);
-}
-
-watch(
-  () => route.query,
-  () => {
-    workspace.value =
-      String(route.query.tab || "").trim() === "installed"
-        ? "installed"
-        : "market";
-    const pluginId = String(route.query.plugin || "").trim();
-    if (pluginId) selectedPluginId.value = pluginId;
-  },
-  { immediate: true },
-);
-
-watch([workspace, selectedPluginId], () => {
-  syncRoute();
-});
-
-watch(filteredPlugins, (list) => {
-  if (!list.length) return;
-  if (!list.some((item) => item.id === selectedPluginId.value))
-    selectedPluginId.value = list[0].id;
-});
-
-onMounted(async () => {
-  await loadPlugins();
-  const pluginId = String(route.query.plugin || "").trim();
-  if (pluginId) selectedPluginId.value = pluginId;
-  else if (filteredPlugins.value.length)
-    selectedPluginId.value = filteredPlugins.value[0].id;
-});
+})
 </script>
 
 <template>
-  <div class="plugins-page">
-    <section class="hero-card">
-      <div>
-        <div class="hero-card__eyebrow">{{ t("plugins.hero.eyebrow") }}</div>
-        <h1>
-          {{
-            workspace === "installed"
-              ? t("plugins.hero.installedTitle")
-              : t("plugins.hero.marketTitle")
-          }}
-        </h1>
-        <p>
-          {{
-            workspace === "installed"
-              ? t("plugins.hero.installedDesc")
-              : t("plugins.hero.marketDesc")
-          }}
-        </p>
+  <main class="vg-scope vg-page toolbox" data-testid="toolbox">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><Wrench :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('ai.tools.title') }}</h1>
+        <p>{{ t('ai.tools.desc') }}</p>
       </div>
-
-      <div class="hero-card__actions">
-        <label class="search-box">
-          <Search class="h-4 w-4" />
-          <input
-            v-model="searchKeyword"
-            type="text"
-            :placeholder="t('plugins.searchPlaceholder')"
-          />
+      <div class="vg-page-head__actions">
+        <label class="vg-search toolbox__search">
+          <Search :size="15" />
+          <input v-model="keyword" class="vg-input" :placeholder="t('ai.tools.search')" />
         </label>
-        <button
-          class="ghost-button"
-          :class="{ active: workspace === 'market' }"
-          type="button"
-          @click="openMarket"
-        >
-          {{ t("plugins.tabs.market") }}
-        </button>
-        <button
-          class="primary-button ghost-like"
-          :class="{ active: workspace === 'installed' }"
-          type="button"
-          @click="openInstalled"
-        >
-          <Download class="h-4 w-4" />
-          {{ t("plugins.tabs.installed") }}
+      </div>
+    </header>
+
+    <section v-if="recent.length && !keyword" class="vg-stack">
+      <h2 class="vg-section-title"><Store :size="16" /> {{ t('ai.tools.recent') }}</h2>
+      <div class="toolbox__grid">
+        <button v-for="tool in recent" :key="`recent-${tool.id}`" type="button" class="vg-card vg-card--interactive toolbox__tool" :class="`toolbox__tool--${tool.tone}`" @click="open(tool)">
+          <span class="toolbox__icon"><component :is="tool.icon" :size="18" /></span>
+          <span class="toolbox__copy"><strong>{{ name(tool) }}</strong><small>{{ desc(tool) }}</small></span>
+          <ArrowRight :size="15" class="toolbox__arrow" />
         </button>
       </div>
     </section>
 
-    <div v-if="notice" class="banner banner--success">
-      <Check class="h-4 w-4" />
-      <span>{{ notice }}</span>
-    </div>
-    <div v-if="errorText" class="banner banner--error">
-      <span>{{ errorText }}</span>
-    </div>
-
-    <section
-      v-if="workspace === 'installed' && !filteredPlugins.length && !loading"
-      class="empty-state"
-    >
-      <strong>{{ t("plugins.empty.title") }}</strong>
-      <p>{{ t("plugins.empty.desc") }}</p>
-      <button class="primary-button" type="button" @click="openMarket">
-        {{ t("plugins.empty.backToMarket") }}
-      </button>
-    </section>
-
-    <template v-else>
-      <section class="market-grid" :class="{ 'is-loading': loading }">
-        <article
-          v-for="plugin in filteredPlugins"
-          :key="plugin.id"
-          class="plugin-card"
-          :class="{ selected: selectedPluginId === plugin.id }"
-          @click="selectPlugin(plugin.id)"
-        >
-          <div class="plugin-card__top">
-            <div class="plugin-card__icon" :class="pluginCardTone(plugin)">
-              {{ pluginIconText(plugin) }}
-            </div>
-            <span
-              class="plugin-card__state"
-              :class="{ installed: plugin.status === 'installed' }"
-              >{{ pluginStatusText(plugin) }}</span
-            >
-          </div>
-          <div class="plugin-card__body">
-            <h3>{{ pluginName(plugin) }}</h3>
-            <p>{{ pluginDescription(plugin) }}</p>
-          </div>
-          <div class="plugin-card__meta">
-            <span>{{ pluginCategoryText(plugin) }}</span>
-            <span>{{ plugin.workspacePath }}</span>
-          </div>
+    <template v-for="group in groups" :key="group">
+      <section v-if="filtered.some((tool) => tool.group === group)" class="vg-stack">
+        <h2 class="vg-section-title">{{ t(`ai.tools.groups.${group}`) }}</h2>
+        <div class="toolbox__grid">
           <button
-            class="plugin-card__action"
+            v-for="tool in filtered.filter((item) => item.group === group)"
+            :key="tool.id"
             type="button"
-            :disabled="actionBusy"
-            @click.stop="onPrimaryAction(plugin)"
+            class="vg-card vg-card--interactive toolbox__tool"
+            :class="`toolbox__tool--${tool.tone}`"
+            :data-testid="`tool-${tool.id}`"
+            @click="open(tool)"
           >
-            <span>{{ primaryActionText(plugin) }}</span>
-            <ArrowRight
-              v-if="plugin.status === 'installed' && plugin.enabled"
-              class="h-4 w-4"
-            />
-          </button>
-        </article>
-      </section>
-
-      <section v-if="selectedPlugin" class="detail-card">
-        <div class="detail-card__hero">
-          <div
-            class="detail-card__icon"
-            :class="pluginCardTone(selectedPlugin)"
-          >
-            {{ pluginIconText(selectedPlugin) }}
-          </div>
-          <div class="detail-card__copy">
-            <div class="detail-card__eyebrow">
-              {{ t("plugins.detail.eyebrow") }}
-            </div>
-            <h2>{{ pluginName(selectedPlugin) }}</h2>
-            <p>{{ pluginDescription(selectedPlugin) }}</p>
-          </div>
-        </div>
-
-        <div class="detail-card__chips">
-          <span>{{ pluginStatusText(selectedPlugin) }}</span>
-          <span>{{ pluginCategoryText(selectedPlugin) }}</span>
-          <span>{{ selectedPlugin.workspacePath }}</span>
-        </div>
-
-        <div class="detail-card__actions">
-          <button
-            v-if="selectedPlugin.id === 'product-replacement'"
-            class="primary-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="router.push('/plugins/product-replacement')"
-          >
-            <Wrench class="h-4 w-4" />
-            {{ t("plugins.actions.openWorkspace") }}
-          </button>
-          <button
-            v-else-if="selectedPlugin.status !== 'installed'"
-            class="primary-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="installPlugin(selectedPlugin.id)"
-          >
-            {{ t("plugins.actions.installPlugin") }}
-          </button>
-          <button
-            v-else-if="!selectedPlugin.enabled"
-            class="primary-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="enablePlugin(selectedPlugin.id)"
-          >
-            <Power class="h-4 w-4" />
-            {{ t("plugins.actions.enablePlugin") }}
-          </button>
-          <button
-            v-else
-            class="primary-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="usePlugin(selectedPlugin)"
-          >
-            <Wrench class="h-4 w-4" />
-            {{ t("plugins.actions.openWorkspace") }}
-          </button>
-
-          <button
-            v-if="
-              selectedPlugin.status === 'installed' && selectedPlugin.enabled
-            "
-            class="ghost-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="disablePlugin(selectedPlugin.id)"
-          >
-            {{ t("plugins.actions.disable") }}
-          </button>
-
-          <button
-            v-if="
-              selectedPlugin.status === 'installed' && !selectedPlugin.enabled
-            "
-            class="ghost-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="enablePlugin(selectedPlugin.id)"
-          >
-            {{ t("plugins.actions.enable") }}
-          </button>
-
-          <button
-            v-if="selectedPlugin.status === 'installed'"
-            class="danger-button"
-            type="button"
-            :disabled="actionBusy"
-            @click="uninstallPlugin(selectedPlugin.id)"
-          >
-            <Trash2 class="h-4 w-4" />
-            {{ t("plugins.actions.uninstall") }}
+            <span class="toolbox__icon"><component :is="tool.icon" :size="18" /></span>
+            <span class="toolbox__copy"><strong>{{ name(tool) }}</strong><small>{{ desc(tool) }}</small></span>
+            <ArrowRight :size="15" class="toolbox__arrow" />
           </button>
         </div>
       </section>
     </template>
-  </div>
+
+    <div v-if="!filtered.length" class="vg-empty">
+      <span class="vg-empty__icon"><Search :size="22" /></span>
+      <p>{{ t('ai.tools.noMatch') }}</p>
+    </div>
+  </main>
 </template>
 
 <style scoped>
-.plugins-page {
-  display: grid;
-  gap: 18px;
-  padding: 10px 12px 18px;
-}
-
-.hero-card,
-.detail-card,
-.empty-state,
-.plugin-card {
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 20px;
-  background: rgba(8, 13, 21, 0.78);
-}
-
-.hero-card,
-.detail-card,
-.empty-state {
-  padding: 20px;
-}
-
-.hero-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.hero-card__eyebrow,
-.detail-card__eyebrow {
-  color: #86b7ff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hero-card h1,
-.detail-card h2 {
-  margin: 8px 0 0;
-  color: #f8fbff;
-  font-size: 30px;
-  font-weight: 800;
-}
-
-.hero-card p,
-.detail-card p,
-.empty-state p,
-.plugin-card__body p {
-  margin: 8px 0 0;
-  color: rgba(205, 218, 236, 0.76);
-  line-height: 1.65;
-}
-
-.hero-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 320px;
-  height: 50px;
-  padding: 0 16px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #dbe7f7;
-}
-
-.search-box input {
-  width: 100%;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  color: #f8fbff;
-}
-
-.banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.banner--success {
-  border: 1px solid rgba(74, 222, 128, 0.18);
-  background: rgba(34, 197, 94, 0.12);
-  color: #ddffe7;
-}
-
-.banner--error {
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd8d8;
-}
-
-.market-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.plugin-card {
-  display: grid;
-  gap: 12px;
-  min-height: 228px;
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.plugin-card:hover,
-.plugin-card.selected {
-  border-color: rgba(96, 165, 250, 0.28);
-  transform: translateY(-1px);
-  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.18);
-}
-
-.plugin-card__top,
-.plugin-card__meta,
-.detail-card__hero,
-.detail-card__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.plugin-card__icon,
-.detail-card__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.tone-cyan {
-  background: linear-gradient(135deg, #17b7d8, #0ea5e9);
-}
-
-.tone-violet {
-  background: linear-gradient(135deg, #7160ff, #8b5cf6);
-}
-
-.tone-blue {
-  background: linear-gradient(135deg, #3b82f6, #38bdf8);
-}
-
-.tone-green {
-  background: linear-gradient(135deg, #10b981, #22c55e);
-}
-
-.tone-amber {
-  background: linear-gradient(135deg, #f59e0b, #f97316);
-}
-
-.plugin-card__state,
-.detail-card__chips span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dbe7f7;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.plugin-card__state.installed {
-  border-color: rgba(34, 197, 94, 0.22);
-  background: rgba(34, 197, 94, 0.12);
-  color: #dcffe9;
-}
-
-.plugin-card__body h3 {
-  margin: 0;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.plugin-card__body p {
-  font-size: 12px;
-  min-height: 40px;
-}
-
-.plugin-card__meta {
-  flex-direction: column;
-  align-items: flex-start;
-  color: rgba(205, 218, 236, 0.7);
-  font-size: 11px;
-}
-
-.plugin-card__action,
-.primary-button,
-.ghost-button,
-.danger-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.plugin-card__action,
-.primary-button {
-  border: 1px solid rgba(96, 165, 250, 0.32);
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #fff;
-}
-
-.ghost-button {
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef5ff;
-}
-
-.ghost-like.active,
-.ghost-button.active {
-  border-color: rgba(96, 165, 250, 0.3);
-  background: rgba(59, 130, 246, 0.16);
-}
-
-.danger-button {
-  border: 1px solid rgba(248, 113, 113, 0.22);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ffd5d5;
-}
-
-.plugin-card__action:disabled,
-.primary-button:disabled,
-.ghost-button:disabled,
-.danger-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.detail-card {
-  display: grid;
-  gap: 18px;
-}
-
-.detail-card__hero {
-  justify-content: flex-start;
-  align-items: flex-start;
-}
-
-.detail-card__copy {
-  display: grid;
-  gap: 6px;
-}
-
-.detail-card__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.detail-card__actions {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-}
-
-.empty-state {
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  text-align: center;
-  padding-block: 48px;
-}
-
-.empty-state strong {
-  color: #fff;
-  font-size: 18px;
-}
-
-@media (max-width: 1400px) {
-  .market-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1080px) {
-  .hero-card {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .hero-card__actions {
-    justify-content: flex-start;
-  }
-
-  .search-box {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .market-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .market-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.toolbox { width: min(1400px, 100%); margin: 0 auto; gap: 18px; }
+.toolbox__search { width: 280px; }
+.toolbox__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.toolbox__tool { --tone: var(--vg-accent); display: flex; align-items: flex-start; gap: 12px; padding: 14px; color: var(--theme-text); text-align: left; min-width: 0; }
+.toolbox__tool--blue { --tone: var(--vg-blue); }
+.toolbox__tool--amber { --tone: var(--vg-amber); }
+.toolbox__tool--violet { --tone: var(--vg-violet); }
+.toolbox__tool--green { --tone: var(--vg-green); }
+.toolbox__icon { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
+.toolbox__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.toolbox__copy strong { font-size: 14px; }
+.toolbox__copy small { font-size: 12px; color: var(--theme-text-secondary); line-height: 1.5; }
+.toolbox__arrow { color: var(--theme-text-muted); flex-shrink: 0; margin-top: 10px; transition: transform .15s, color .15s; }
+.toolbox__tool:hover .toolbox__arrow { color: var(--tone); transform: translateX(2px); }
 </style>

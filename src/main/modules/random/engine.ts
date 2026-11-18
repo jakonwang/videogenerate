@@ -23,6 +23,8 @@ export type SegmentPlan = {
   /** 可解码原声在容器中的 stream index（新方案必有；旧任务缺省时渲染端回退 `a:0`） */
   audioStreamIndex?: number
   qualityScore?: number
+  /** 源文件总时长：允许配音过长时把该段向后延长（混剪工作台写入） */
+  sourceDurationSec?: number
   /** 是否对该段做水平镜像翻转（hflip） */
   hflip?: boolean
   fx?: {
@@ -39,6 +41,8 @@ export type SegmentPlan = {
 export type VideoPlan = {
   totalDurationSec: number
   segments: SegmentPlan[]
+  /** TTS 生成后若配音比画面长，按比例延长各段（不超过源文件），避免配音被截断 */
+  fitToVoice?: boolean
   /** 全局手动调色（基础值，叠加在色彩微扰之前） */
   colorGrade?: { brightness: number; contrast: number; saturation: number } | null
   /** 画幅统一模式：完整展示（pad）/充满屏幕（居中裁切） */
@@ -406,7 +410,51 @@ export async function buildRandomPlan(input: {
   }
 
   const totalDurationSec = Number(segments.reduce((a, s) => a + s.durationSec, 0).toFixed(3))
+  const finishing = buildTemplateFinishing(template, segments)
 
+  // 画面标题：独立文案池（无配音）；每项一组（可两行：标题+符号行），每条成片随机抽一组
+  const titleConf: any = (template as any).titleOverlay
+  const titleEnabled = Boolean(titleConf?.enabled)
+  const titleText = titleEnabled ? pickTitleOverlayPoolEntry(titleConf?.textPool) : null
+
+  // TTS：与画面标题相同规则——按「行」候选，避免一段多行在底部字幕一次性叠三行
+  const ttsConf: any = (template as any).tts
+  const ttsEnabled = Boolean(ttsConf?.enabled)
+  const ttsPool = flattenTextPoolToLines(ttsConf?.textPool)
+  const ttsText = ttsEnabled && ttsPool.length ? ttsPool[randInt(0, ttsPool.length - 1)] : null
+
+  const plan: VideoPlan = {
+    totalDurationSec,
+    segments,
+    ...finishing,
+    titleOverlay: titleText ? { text: titleText } : null,
+    tts: ttsText
+      ? {
+          text: ttsText,
+          voice: typeof ttsConf?.voice === 'string' ? ttsConf.voice : undefined,
+          rate: typeof ttsConf?.rate === 'string' ? ttsConf.rate : undefined,
+          pitch: typeof ttsConf?.pitch === 'string' ? ttsConf.pitch : undefined,
+          ttsVolume: typeof ttsConf?.ttsVolume === 'string' ? ttsConf.ttsVolume : undefined,
+          mixVolume: Number(ttsConf?.mixVolume ?? 0.9),
+          keepOriginal: Boolean(ttsConf?.keepOriginal ?? true),
+        }
+      : null,
+  }
+
+  return { plan, consumedFilePaths }
+}
+
+export type TemplateFinishing = Pick<
+  VideoPlan,
+  'colorGrade' | 'aspectUnifyMode' | 'lut3d' | 'sticker' | 'bgm' | 'assStyle' | 'voice' | 'ass' | 'transition' | 'audio'
+>
+
+/**
+ * Everything a template contributes besides shot selection and text: transitions between the given
+ * segments, colour, LUT, sticker, one BGM pick, subtitle style and audio mode. Shared by the random
+ * template mixer and the mix studio.
+ */
+export function buildTemplateFinishing(template: Template, segments: SegmentPlan[]): TemplateFinishing {
   // 转场：生成 n-1 个转场时长（并确保不超过相邻片段时长的一半，避免 offset 负数）
   const tConf: any =
     (template as any).transition ?? { enabled: false, pool: ['fade'], durationSec: { min: 0.12, max: 0.28 } }
@@ -431,11 +479,6 @@ export async function buildRandomPlan(input: {
     })
     transitions = segments.slice(1).map(() => safePool[randInt(0, safePool.length - 1)]!)
   }
-
-  // 画面标题：独立文案池（无配音）；每项一组（可两行：标题+符号行），每条成片随机抽一组
-  const titleConf: any = (template as any).titleOverlay
-  const titleEnabled = Boolean(titleConf?.enabled)
-  const titleText = titleEnabled ? pickTitleOverlayPoolEntry(titleConf?.textPool) : null
 
   // 手动调色（全局基础值）：与轻量色彩微扰平滑叠加（brightness 相加；contrast/saturation 相乘）
   const cg: any = (template as any).colorGrade
@@ -462,12 +505,6 @@ export async function buildRandomPlan(input: {
   })
   const stickerHeightPx = Math.max(40, Math.min(800, Math.round(Number((template as any).sticker?.heightPx ?? 180) || 180)))
 
-  // TTS：与画面标题相同规则——按「行」候选，避免一段多行在底部字幕一次性叠三行
-  const ttsConf: any = (template as any).tts
-  const ttsEnabled = Boolean(ttsConf?.enabled)
-  const ttsPool = flattenTextPoolToLines(ttsConf?.textPool)
-  const ttsText = ttsEnabled && ttsPool.length ? ttsPool[randInt(0, ttsPool.length - 1)] : null
-
   // ASS 字幕样式（可选）
   const assConf: any = (template as any).assSubtitle
   const assStyle =
@@ -493,33 +530,16 @@ export async function buildRandomPlan(input: {
   const bgmVolume = (template.bgm as any)?.volume
   const pickedBgmPath = pickSingleBgmPathFromTemplate(template)
 
-  const plan: VideoPlan = {
-    totalDurationSec,
-    segments,
+  return {
     colorGrade,
     aspectUnifyMode,
     lut3d: lutAbs ? { filePath: lutAbs } : null,
     sticker: stickerResolved ? { filePath: stickerResolved.filePath, heightPx: stickerHeightPx } : null,
     bgm: pickedBgmPath ? { filePath: pickedBgmPath, volume: Number(bgmVolume ?? 0.25) } : null,
-    titleOverlay: titleText ? { text: titleText } : null,
-    tts: ttsText
-      ? {
-          text: ttsText,
-          voice: typeof ttsConf?.voice === 'string' ? ttsConf.voice : undefined,
-          rate: typeof ttsConf?.rate === 'string' ? ttsConf.rate : undefined,
-          pitch: typeof ttsConf?.pitch === 'string' ? ttsConf.pitch : undefined,
-          ttsVolume: typeof ttsConf?.ttsVolume === 'string' ? ttsConf.ttsVolume : undefined,
-          mixVolume: Number(ttsConf?.mixVolume ?? 0.9),
-          keepOriginal: Boolean(ttsConf?.keepOriginal ?? true),
-        }
-      : null,
     assStyle,
     voice: null,
     ass: null,
     transition: { enabled: Boolean(tConf.enabled), durationsSec, transitions },
     audio: template.audio ?? { source: 'keep', ducking: { enabled: true, amountDb: 14 } },
   }
-
-  return { plan, consumedFilePaths }
 }
-

@@ -3,6 +3,17 @@ const path = require('node:path')
 const { mkdir } = require('node:fs/promises')
 const { _electron: electron } = require('playwright')
 
+/** Pages of a multi-page module show in the sub-tab row once that module is open. */
+async function openGmvTab(page, tab) {
+  const target = page.locator(`[data-testid="gmv-tab-${tab}"]`)
+  if (await target.isVisible().catch(() => false)) return target.click()
+  for (const module of await page.locator('[data-testid^="gmv-module-"]').all()) {
+    await module.click()
+    if (await target.isVisible().catch(() => false)) return target.click()
+  }
+  throw new Error(`GMV tab not found: ${tab}`)
+}
+
 async function main() {
   const root = path.resolve(__dirname, '..')
   const artifacts = path.join(root, 'test-artifacts', 'tiktok-gmv-max-decision-v2')
@@ -54,28 +65,31 @@ async function main() {
     assert.ok(Array.isArray(apiState.commandCenter.impactSummaryByCurrency))
     assert.equal(typeof apiState.commandCenter.resultSummary.observing, 'number')
 
-    await page.locator('[data-testid="gmv-tab-sop"]').click()
+    // Pro mode exposes every page (beginner mode is the default).
+    await page.locator('[data-testid="gmv-mode-pro"]').click()
+    await openGmvTab(page, 'sop')
     await page.locator('[data-testid="gmv-decision-center"]').waitFor({ state: 'visible' })
-    assert.equal(await page.locator('.gmv-task-header h1').innerText(), '增长')
-    assert.ok(await page.locator('[data-testid="gmv-cockpit-scopebar"]').isVisible())
+    assert.equal(await page.locator('.gmv-task-header h1').innerText(), '增长计划')
+    // v5.0.77 replaced the cockpit scope bar with the decision scope selector.
+    assert.ok(await page.locator('[data-testid="gmv-decision-scope"]').isVisible())
     assert.ok(await page.locator('[data-testid="gmv-today-plan"]').isVisible())
 
-    await page.locator('[data-testid="gmv-tab-actions"]').click()
+    await openGmvTab(page, 'actions')
     await page.locator('[data-testid="gmv-decision-categories"]').waitFor({ state: 'visible' })
     assert.equal(await page.locator('[data-testid="gmv-decision-categories"] article').count(), 4)
 
-    await page.locator('[data-testid="gmv-tab-rules"]').click()
+    await openGmvTab(page, 'rules')
     await page.locator('[data-testid="gmv-protection-goals"]').waitFor({ state: 'visible' })
-    assert.equal(await page.locator('[data-testid="gmv-protection-goals"] article').count(), 5)
+    assert.equal(await page.locator('[data-testid="gmv-protection-goals"] li').count(), 5)
     assert.equal(await page.locator('[data-testid="gmv-backtest-results"]').getAttribute('open'), null)
 
-    await page.locator('[data-testid="gmv-tab-audit"]').click()
+    await openGmvTab(page, 'audit')
     await page.getByRole('button', { name: '结果评估', exact: true }).click()
     await page.locator('[data-testid="gmv-audit-results"]').waitFor({ state: 'visible' })
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 760 }]) {
       await page.setViewportSize(viewport)
-      await page.locator('[data-testid="gmv-tab-overview"]').click()
+      await openGmvTab(page, 'overview')
       await page.locator('[data-testid="gmv-control-strip"]').waitFor({ state: 'visible' })
       const fit = await page.evaluate(() => ({
         horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,

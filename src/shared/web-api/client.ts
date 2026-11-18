@@ -19,14 +19,6 @@ import type {
   BatchSubtitleTitleStyleMode,
   BatchSubtitleViralTitleConfig,
   BillingOrder,
-  GeelarkCloudPhoneSummary,
-  GeelarkClonePublishCandidate,
-  GeelarkMusicPreset,
-  GeelarkPluginConfigPayload,
-  GeelarkPluginConfigSummary,
-  GeelarkPublishAccount,
-  GeelarkPublishTaskDetail,
-  GeelarkPublishTaskSummary,
   PluginConfigPayload,
   PluginDetail,
   PluginSummary,
@@ -377,158 +369,6 @@ export function createWebApiClient(options: WebApiClientOptions) {
       return result.item
     },
 
-    async getGeelarkPluginConfig() {
-      const result = await request<{ config: GeelarkPluginConfigSummary }>('/plugins/geelark-publisher/config', {
-        method: 'GET',
-      })
-      return result.config
-    },
-
-    async saveGeelarkPluginConfig(input: GeelarkPluginConfigPayload) {
-      const result = await request<{ config: GeelarkPluginConfigSummary }>('/plugins/geelark-publisher/config', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-      return result.config
-    },
-
-    async listGeelarkCloudPhones() {
-      const result = await request<{ items: GeelarkCloudPhoneSummary[] }>('/plugins/geelark-publisher/cloud-phones', {
-        method: 'GET',
-      })
-      return result.items || []
-    },
-
-    async listGeelarkPublisherAccounts() {
-      const result = await request<{ items: GeelarkPublishAccount[] }>('/plugins/geelark-publisher/accounts', {
-        method: 'GET',
-      })
-      return result.items || []
-    },
-
-    async listGeelarkPublishCandidates() {
-      const result = await request<{ items: GeelarkClonePublishCandidate[] }>(
-        '/plugins/geelark-publisher/publish-candidates',
-        {
-          method: 'GET',
-        },
-      )
-      return result.items || []
-    },
-
-    async listGeelarkMusicPresets() {
-      const result = await request<{ items: GeelarkMusicPreset[] }>('/plugins/geelark-publisher/music-presets', {
-        method: 'GET',
-      })
-      return result.items || []
-    },
-
-    async saveGeelarkMusicPreset(input: { id?: string; label: string; refVideoId: string; remark?: string }) {
-      const result = await request<{ item: GeelarkMusicPreset }>('/plugins/geelark-publisher/music-presets', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-      return result.item
-    },
-
-    async deleteGeelarkMusicPreset(id: string) {
-      return await request<{ ok: true }>(`/plugins/geelark-publisher/music-presets/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      })
-    },
-
-    async generateGeelarkPublishTitle(input: {
-      cloneProjectId: string
-      contentLanguage?: string
-      productTitle?: string
-      productId?: string
-      productReferenceImagePaths?: string[]
-    }) {
-      return await request<{
-        candidates: string[]
-        content: string
-        provider: string
-        model: string
-      }>('/plugins/geelark-publisher/publish-title', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-    },
-
-    async createGeelarkPublisherAccount(input: Omit<GeelarkPublishAccount, 'id' | 'createdAt' | 'updatedAt'>) {
-      const result = await request<{ item: GeelarkPublishAccount }>('/plugins/geelark-publisher/accounts', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-      return result.item
-    },
-
-    async updateGeelarkPublisherAccount(
-      id: string,
-      input: Partial<Omit<GeelarkPublishAccount, 'id' | 'createdAt' | 'updatedAt'>>,
-    ) {
-      const result = await request<{ item: GeelarkPublishAccount }>(
-        `/plugins/geelark-publisher/accounts/${encodeURIComponent(id)}`,
-        {
-          method: 'POST',
-          body: JSON.stringify(input),
-        },
-      )
-      return result.item
-    },
-
-    async deleteGeelarkPublisherAccount(id: string) {
-      return await request<{ ok: true }>(`/plugins/geelark-publisher/accounts/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      })
-    },
-
-    async publishGeelarkVideo(input: {
-      cloneProjectId?: string
-      videoPath: string
-      publishAccountId: string
-      videoDesc?: string
-      productId?: string
-      productTitle?: string
-      refVideoId?: string
-      sameVideoVolume?: number
-      sourceVideoVolume?: number
-      markAI?: boolean
-      musicMode?: 'library_ref' | 'manual_ref' | 'volume_only'
-      musicLabel?: string
-      scheduleAt?: number
-      needShareLink?: boolean
-    }) {
-      const result = await request<{ item: GeelarkPublishTaskDetail }>('/plugins/geelark-publisher/publish', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-      return result.item
-    },
-
-    async listGeelarkPublishTasks() {
-      const result = await request<{ items: GeelarkPublishTaskSummary[] }>('/plugins/geelark-publisher/tasks', {
-        method: 'GET',
-      })
-      return result.items || []
-    },
-
-    async getGeelarkPublishTask(id: string) {
-      const result = await request<{ item: GeelarkPublishTaskDetail }>(
-        `/plugins/geelark-publisher/tasks/${encodeURIComponent(id)}`,
-        { method: 'GET' },
-      )
-      return result.item
-    },
-
-    async syncGeelarkPublishTask(id: string) {
-      const result = await request<{ item: GeelarkPublishTaskDetail }>(
-        `/plugins/geelark-publisher/tasks/${encodeURIComponent(id)}/sync`,
-        { method: 'POST' },
-      )
-      return result.item
-    },
-
     async listBatchSubtitleJobs() {
       const result = await request<{ items: BatchSubtitleJob[] }>('/plugins/video-batch-subtitle/jobs', {
         method: 'GET',
@@ -678,16 +518,6 @@ export function createWebApiClient(options: WebApiClientOptions) {
         {
           method: 'POST',
           body: JSON.stringify(input || {}),
-        },
-      )
-      return result.item
-    },
-
-    async pushBatchSubtitleOutputsToGeelarkPool(jobId: string) {
-      const result = await request<{ item: BatchSubtitleJob }>(
-        `/plugins/video-batch-subtitle/jobs/${encodeURIComponent(jobId)}/push-to-geelark`,
-        {
-          method: 'POST',
         },
       )
       return result.item

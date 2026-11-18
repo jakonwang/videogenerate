@@ -1,0 +1,3 @@
+
+// === Additional state and computed (appended) ===
+// These are additional refs/computed not in the original script

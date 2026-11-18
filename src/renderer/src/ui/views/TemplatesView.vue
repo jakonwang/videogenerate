@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import UiCard from '../components/UiCard.vue'
-import UiButton from '../components/UiButton.vue'
 import UiChip from '../components/UiChip.vue'
 import UiWorkspaceSidebar from '../components/UiWorkspaceSidebar.vue'
 import RangeInput from '../components/RangeInput.vue'
@@ -19,6 +18,8 @@ import {
   Trash2,
   Wand2,
   X,
+  LayoutTemplate,
+  SlidersHorizontal,
 } from 'lucide-vue-next'
 import {
   ASS_DEFAULT_FONT_FAMILY,
@@ -1069,27 +1070,30 @@ watch(
 </script>
 
 <template>
-  <div class="app-page space-y-5">
+  <div class="vg-scope vg-page tpl">
     <ProductionTabs />
-    <header class="app-card flex flex-wrap items-start justify-between gap-4 p-5">
-      <div>
-        <div class="text-xs font-black uppercase tracking-[0.22em] text-violet-300">{{ tr('autoUi.k_42bae137bfd0') }}</div>
-        <h1 class="mt-2 text-2xl font-black text-white">{{ tr('autoUi.k_508b6f10d1f6') }}</h1>
-        <p class="mt-2 text-sm text-slate-400">{{ tr('autoUi.k_c5d58c4a6e65') }}</p>
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><LayoutTemplate :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ tr('ai.nav.templates') }}</h1>
+        <p>{{ tr('autoUi.k_c5d58c4a6e65') }}</p>
       </div>
-      <button class="app-ghost px-4 py-2 text-sm" @click="templateAdvancedOpen = !templateAdvancedOpen">
-        {{ templateAdvancedOpen ? tr('autoUi.k_3d70d528e945') : tr('autoUi.k_dd07e641ca66') }}
-      </button>
+      <div class="vg-page-head__actions">
+        <span class="vg-pill vg-pill--accent">{{ tr('autoUi.k_42bae137bfd0') }}</span>
+        <button class="vg-btn" type="button" @click="templateAdvancedOpen = !templateAdvancedOpen">
+          <SlidersHorizontal :size="15" /> {{ templateAdvancedOpen ? tr('autoUi.k_3d70d528e945') : tr('autoUi.k_dd07e641ca66') }}
+        </button>
+      </div>
     </header>
 
-    <section class="app-card px-4 py-3">
+    <section class="tpl-card px-4 py-3">
       <div class="flex flex-wrap items-center gap-2">
         <div class="mr-2 shrink-0 text-xs font-black uppercase tracking-[0.18em] text-slate-500">{{ tr('autoUi.k_a72ef18d9a0e') }}</div>
-        <input v-model="templateNewSegName" class="ui-input h-9 min-w-[180px] flex-[1_1_220px]" :placeholder="tr('autoUi.k_61609bd83fa0')" @keydown.enter.prevent="selectedTemplate && addSegment(selectedTemplate)" />
-        <button class="app-primary h-9 px-3 text-xs" :disabled="!selectedTemplate" @click="selectedTemplate && addSegment(selectedTemplate)">{{ tr('autoUi.k_b416e5df78b8') }}</button>
+        <input v-model="templateNewSegName" class="vg-input min-w-[180px] flex-[1_1_220px]" :placeholder="tr('autoUi.k_61609bd83fa0')" @keydown.enter.prevent="selectedTemplate && addSegment(selectedTemplate)" />
+        <button class="vg-btn vg-btn--primary vg-btn--sm" :disabled="!selectedTemplate" @click="selectedTemplate && addSegment(selectedTemplate)">{{ tr('autoUi.k_b416e5df78b8') }}</button>
         <div class="mx-1 hidden h-5 w-px bg-white/10 lg:block"></div>
-        <input v-model="styleAnalyzeDir" class="ui-input h-9 min-w-[180px] flex-[1_1_260px]" :placeholder="tr('autoUi.k_8bfe156bb4b6')" />
-        <button class="app-ghost h-9 px-3 text-xs" :disabled="styleAnalyzing" @click="analyzeVideosAndCreateTemplate">
+        <input v-model="styleAnalyzeDir" class="vg-input min-w-[180px] flex-[1_1_260px]" :placeholder="tr('autoUi.k_8bfe156bb4b6')" />
+        <button class="vg-btn vg-btn--sm" :disabled="styleAnalyzing" @click="analyzeVideosAndCreateTemplate">
           {{ styleAnalyzing ? tr('autoUi.k_4e9160839cf4') : tr('autoUi.k_cdcb894c06b1') }}
         </button>
         <div v-if="styleSummary" class="ml-auto min-w-0 truncate text-xs text-slate-500">
@@ -1099,7 +1103,7 @@ watch(
     </section>
 
     <div class="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-      <aside class="app-card space-y-3 p-4">
+      <aside class="tpl-card space-y-3 p-4">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-black text-white">{{ tr('autoUi.k_14c9bcea5e35') }}</h2>
@@ -1107,14 +1111,14 @@ watch(
           </div>
         </div>
         <div class="flex gap-2">
-          <input v-model="form.name" class="ui-input h-10 min-w-0 flex-1" :placeholder="tr('tpl.newNamePh')" />
-          <UiButton variant="accent" @click="createTemplate"><Plus class="h-4 w-4" /></UiButton>
+          <input v-model="form.name" class="vg-input min-w-0 flex-1" :placeholder="tr('tpl.newNamePh')" />
+          <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" @click="createTemplate"><Plus class="h-4 w-4" /></button>
         </div>
         <button
           v-for="tpl in list"
           :key="tpl.id"
-          class="app-soft-card group w-full p-3 text-left transition hover:bg-white/[0.06]"
-          :class="{ 'ring-1 ring-violet-400/50 bg-violet-500/15': selectedTemplate?.id === tpl.id }"
+          class="tpl-soft tpl-list__item"
+          :class="{ 'is-active': selectedTemplate?.id === tpl.id }"
           @click="selectTemplate(tpl.id)"
         >
           <div class="flex items-start justify-between gap-2">
@@ -1122,32 +1126,32 @@ watch(
               <strong class="block truncate text-sm text-white">{{ templateDisplayName(tpl) }}</strong>
               <small class="mt-1 block text-xs text-slate-500">{{ tr('tpl.totalDur', { min: tpl.totalDurationSec.min, max: tpl.totalDurationSec.max }) }}</small>
               <div v-if="tpl.meta?.source === 'clone_blueprint'" class="mt-2 flex flex-wrap gap-1">
-                <span class="rounded-full bg-violet-500/15 px-2 py-1 text-[10px] font-bold text-violet-200">{{ tr('autoUi.k_7cf5da95058a') }}</span>
-                <span class="rounded-full bg-white/8 px-2 py-1 text-[10px] text-slate-300">{{ templateHookTypeLabel(tpl.meta?.hookType) }}</span>
-                <span class="rounded-full bg-white/8 px-2 py-1 text-[10px] text-slate-300">{{ templateProductTypeLabel(tpl.meta?.productCategory) }}</span>
+                <span class="vg-pill vg-pill--violet">{{ tr('autoUi.k_7cf5da95058a') }}</span>
+                <span class="vg-chip">{{ templateHookTypeLabel(tpl.meta?.hookType) }}</span>
+                <span class="vg-chip">{{ templateProductTypeLabel(tpl.meta?.productCategory) }}</span>
               </div>
             </div>
             <button
-              class="shrink-0 rounded-md border border-red-400/25 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-200 opacity-80 transition hover:bg-red-500/20 group-hover:opacity-100"
+              class="vg-btn vg-btn--danger vg-btn--xs tpl-list__del"
               :title="tr('autoUi.k_b31745bdff4e')"
               @click.stop="removeTemplate(tpl.id)"
             > {{ tr('autoUi.k_3755f56f2f83') }} </button>
           </div>
         </button>
-        <div v-if="!list.length" class="app-soft-card p-5 text-sm text-slate-400">{{ tr('autoUi.k_71af99620e73') }}</div>
+        <div v-if="!list.length" class="tpl-soft p-5 text-sm text-slate-400">{{ tr('autoUi.k_71af99620e73') }}</div>
       </aside>
 
-      <main class="app-card min-w-0 p-5">
+      <main class="tpl-card min-w-0 p-5">
         <div class="mb-5 flex items-center justify-between">
           <div>
             <h2 class="text-lg font-black text-white">{{ tr('autoUi.k_ebe5d70f9a14') }}</h2>
             <p class="mt-1 text-xs text-slate-500">{{ templateDisplayName(selectedTemplate) || tr('autoUi.k_371fb3fb7ae6') }}</p>
           </div>
-          <button v-if="selectedTemplate" class="app-ghost px-3 py-2 text-xs" @click="openPresetPicker(selectedTemplate)">{{ tr('autoUi.k_9a0158b486f8') }}</button>
+          <button v-if="selectedTemplate" class="vg-btn vg-btn--sm" @click="openPresetPicker(selectedTemplate)">{{ tr('autoUi.k_9a0158b486f8') }}</button>
         </div>
         <div v-if="selectedTemplate" class="flex flex-wrap items-center gap-3">
           <template v-for="(seg, idx) in selectedTemplate.structure" :key="`${selectedTemplate.id}-${seg}-${idx}`">
-            <div class="app-flow-node">
+            <div class="tpl-node">
               <strong>{{ seg.toUpperCase() }}</strong>
               <span>{{ tr('tpl.segDur', { min: segDur(selectedTemplate, seg).min, max: segDur(selectedTemplate, seg).max }) }}</span>
               <small>{{ tr('autoUi.k_9d99dac5fbcf') }} {{ segFx(selectedTemplate, seg).zoom?.min ?? 1 }} - {{ segFx(selectedTemplate, seg).zoom?.max ?? 1.06 }}</small>
@@ -1155,10 +1159,10 @@ watch(
             <span v-if="idx < selectedTemplate.structure.length - 1" class="text-white/25">→</span>
           </template>
         </div>
-        <div v-else class="app-soft-card grid min-h-[420px] place-items-center p-8 text-center text-sm text-slate-400"> {{ tr('autoUi.k_71af99620e73') }} </div>
+        <div v-else class="tpl-soft grid min-h-[420px] place-items-center p-8 text-center text-sm text-slate-400"> {{ tr('autoUi.k_71af99620e73') }} </div>
 
-        <div v-if="selectedTemplate" class="mt-6 overflow-hidden rounded-xl border border-white/10">
-          <table class="w-full text-left text-sm">
+        <div v-if="selectedTemplate" class="mt-6 vg-table-wrap">
+          <table class="vg-table">
             <thead class="bg-white/[0.04] text-xs text-slate-500">
               <tr>
                 <th class="px-4 py-3">{{ tr('autoUi.k_1279939a7427') }}</th>
@@ -1174,9 +1178,9 @@ watch(
                 <td class="px-4 py-3">Zoom {{ segFx(selectedTemplate, seg).zoom?.min ?? 1 }} - {{ segFx(selectedTemplate, seg).zoom?.max ?? 1.06 }}</td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
-                    <button class="app-ghost px-2 py-1 text-[10px]" @click="moveSegment(selectedTemplate, seg, -1)">{{ tr('autoUi.k_8a0c839791d3') }}</button>
-                    <button class="app-ghost px-2 py-1 text-[10px]" @click="moveSegment(selectedTemplate, seg, 1)">{{ tr('autoUi.k_05c46fa3b77c') }}</button>
-                    <button class="rounded-md border border-red-400/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-200" @click="removeSegment(selectedTemplate, seg)">{{ tr('autoUi.k_3755f56f2f83') }}</button>
+                    <button class="vg-btn vg-btn--sm" @click="moveSegment(selectedTemplate, seg, -1)">{{ tr('autoUi.k_8a0c839791d3') }}</button>
+                    <button class="vg-btn vg-btn--sm" @click="moveSegment(selectedTemplate, seg, 1)">{{ tr('autoUi.k_05c46fa3b77c') }}</button>
+                    <button class="vg-btn vg-btn--danger vg-btn--xs" @click="removeSegment(selectedTemplate, seg)">{{ tr('autoUi.k_3755f56f2f83') }}</button>
                   </div>
                 </td>
               </tr>
@@ -1185,7 +1189,7 @@ watch(
         </div>
 
         <section v-if="selectedTemplate?.meta?.source === 'clone_blueprint'" class="mt-6 grid gap-3 md:grid-cols-2">
-          <div class="app-soft-card p-4">
+          <div class="tpl-soft p-4">
             <div class="text-sm font-black text-white">{{ tr('autoUi.k_8222dbd32528') }}</div>
             <div class="mt-3 space-y-2 text-sm text-slate-300">
               <div>{{ tr('autoUi.k_e6bb01c6f837') }}</div>
@@ -1196,7 +1200,7 @@ watch(
               <div>{{ tr('autoUi.k_0649f0de72f8') }}</div>
             </div>
           </div>
-          <div class="app-soft-card p-4">
+          <div class="tpl-soft p-4">
             <div class="text-sm font-black text-white">{{ tr('autoUi.k_97779e2726fc') }}</div>
             <div class="mt-3 space-y-2 text-sm text-slate-300">
               <div>{{ tr('autoUi.k_f14e1e658c86') }}{{ selectedTemplate.meta?.visualStyle?.scene || tr('autoUi.k_86f9195e25e4') }}</div>
@@ -1209,13 +1213,13 @@ watch(
           </div>
         </section>
         <section v-if="selectedTemplate?.meta?.source === 'clone_blueprint'" class="mt-3">
-          <div class="app-soft-card p-4">
+          <div class="tpl-soft p-4">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div class="text-sm font-black text-white">{{ tr('autoUi.k_1df6f3e6e92d') }}</div>
                 <div class="mt-1 text-xs text-slate-500">{{ tr('autoUi.k_74878d8853ce') }}</div>
               </div>
-              <button class="app-ghost px-3 py-2 text-xs" @click="openCloneWithTemplate(selectedTemplate)">{{ tr('autoUi.k_228cbba7e92f') }}</button>
+              <button class="vg-btn vg-btn--sm" @click="openCloneWithTemplate(selectedTemplate)">{{ tr('autoUi.k_228cbba7e92f') }}</button>
             </div>
             <div class="mt-3 space-y-2 text-sm text-slate-300">
               <div>{{ tr('autoUi.k_dff042c80c67') }}</div>
@@ -1231,15 +1235,15 @@ watch(
               <h3 class="text-base font-black text-white">{{ tr('autoUi.k_8e67f2128b9b') }}</h3>
               <p class="mt-1 text-xs text-slate-500">{{ tr('autoUi.k_ee9684155466') }}</p>
             </div>
-            <div class="app-tabs">
-              <button v-for="item in workspaceItems" :key="item.key" class="app-tab" :class="{ 'is-active': workspace === item.key }" @click="activateWorkspace(String(item.key))">
+            <div class="vg-seg vg-seg--sm">
+              <button v-for="item in workspaceItems" :key="item.key" class="vg-seg__btn" :class="{ 'is-active': workspace === item.key }" @click="activateWorkspace(String(item.key))">
                 {{ item.label }}
               </button>
             </div>
           </div>
 
           <div class="grid gap-4 xl:grid-cols-[1fr_1fr]">
-            <section v-if="workspace === 'structure'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'structure'" class="tpl-soft p-4 xl:col-span-2">
               <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div class="text-sm font-black text-white">{{ tr('autoUi.k_508b6f10d1f6') }}</div>
@@ -1247,15 +1251,15 @@ watch(
                 </div>
               </div>
               <div class="grid gap-3 md:grid-cols-2">
-                <label class="block text-xs font-bold text-slate-500"> {{ tr('autoUi.k_c0c31eb37b19') }} <input v-model="templateNewSegName" class="ui-input mt-2 h-10 w-full" placeholder="proof / cta" @keydown.enter.prevent="addSegment(selectedTemplate)" />
+                <label class="block text-xs font-bold text-slate-500"> {{ tr('autoUi.k_c0c31eb37b19') }} <input v-model="templateNewSegName" class="vg-input mt-2 w-full" placeholder="proof / cta" @keydown.enter.prevent="addSegment(selectedTemplate)" />
                 </label>
                 <div class="flex items-end gap-2">
-                  <button class="app-primary h-10 px-4 text-xs" @click="addSegment(selectedTemplate)">{{ tr('autoUi.k_80be7ec3cff8') }}</button>
+                  <button class="vg-btn vg-btn--primary vg-btn--sm" @click="addSegment(selectedTemplate)">{{ tr('autoUi.k_80be7ec3cff8') }}</button>
                 </div>
               </div>
             </section>
 
-            <section v-if="workspace === 'structure'" class="app-soft-card p-4">
+            <section v-if="workspace === 'structure'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_39e0624819a0') }}</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <label class="block text-xs font-bold text-slate-500"> {{ tr('autoUi.k_6f11716bec3f') }} <input
@@ -1263,7 +1267,7 @@ watch(
                     type="number"
                     min="3"
                     max="60"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { totalDurationSec: { ...selectedTemplate.totalDurationSec, min: Number(($event.target as HTMLInputElement).value) || 3 } })"
                   />
                 </label>
@@ -1272,7 +1276,7 @@ watch(
                     type="number"
                     min="3"
                     max="60"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { totalDurationSec: { ...selectedTemplate.totalDurationSec, max: Number(($event.target as HTMLInputElement).value) || selectedTemplate.totalDurationSec.min } })"
                   />
                 </label>
@@ -1282,7 +1286,7 @@ watch(
                     min="0"
                     max="30"
                     step="0.1"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { skipStartSec: Number(($event.target as HTMLInputElement).value) || 0 })"
                   />
                 </label>
@@ -1291,7 +1295,7 @@ watch(
                     type="number"
                     min="0"
                     :max="selectedTemplate.structure.length"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { randomizeOrder: { mode: selectedTemplate.randomizeOrder?.mode ?? 'partial', keepFirstCount: Number(($event.target as HTMLInputElement).value) || 0 } })"
                   />
                 </label>
@@ -1317,7 +1321,7 @@ watch(
                     min="0"
                     max="3"
                     step="0.05"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { transition: { enabled: selectedTemplate.transition?.enabled ?? true, type: 'fade', durationSec: { min: Number(($event.target as HTMLInputElement).value) || 0, max: selectedTemplate.transition?.durationSec?.max ?? 0.45 } } })"
                   />
                 </label>
@@ -1327,18 +1331,18 @@ watch(
                     min="0"
                     max="3"
                     step="0.05"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { transition: { enabled: selectedTemplate.transition?.enabled ?? true, type: 'fade', durationSec: { min: selectedTemplate.transition?.durationSec?.min ?? 0.2, max: Number(($event.target as HTMLInputElement).value) || 0.45 } } })"
                   />
                 </label>
               </div>
             </section>
 
-            <section v-if="workspace === 'audio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'audio'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_7f87addec71e') }}</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <label class="block text-xs font-bold text-slate-500"> {{ tr('autoUi.k_ed6eca3bfb96') }} <select
-                    class="ui-select mt-2 h-10 w-full"
+                    class="vg-select mt-2 w-full"
                     :value="(selectedTemplate.audio as any)?.source ?? 'keep'"
                     @change="updateTemplate(selectedTemplate, { audio: { ...((selectedTemplate.audio as any) ?? {}), source: ($event.target as HTMLSelectElement).value, ducking: selectedTemplate.audio?.ducking ?? { enabled: false, amountDb: 12 } } as any })"
                   >
@@ -1347,7 +1351,7 @@ watch(
                   </select>
                 </label>
                 <label class="block text-xs font-bold text-slate-500"> {{ tr('autoUi.k_d0b4e58a0845') }} <select
-                    class="ui-select mt-2 h-10 w-full"
+                    class="vg-select mt-2 w-full"
                     :value="selectedTemplate.aspectUnifyMode ?? 'cover_crop'"
                     @change="updateTemplate(selectedTemplate, { aspectUnifyMode: ($event.target as HTMLSelectElement).value as any })"
                   >
@@ -1368,22 +1372,22 @@ watch(
                     type="number"
                     min="0"
                     max="30"
-                    class="ui-input mt-2 h-10 w-full"
+                    class="vg-input mt-2 w-full"
                     @input="updateTemplate(selectedTemplate, { audio: { ...((selectedTemplate.audio as any) ?? {}), ducking: { enabled: selectedTemplate.audio?.ducking?.enabled ?? true, amountDb: Number(($event.target as HTMLInputElement).value) || 0 } } as any })"
                   />
                 </label>
               </div>
             </section>
 
-            <section v-if="workspace === 'structure'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'structure'" class="tpl-soft p-4 xl:col-span-2">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_a939e16b1711') }}</div>
               <div class="space-y-3">
                 <div v-for="seg in selectedTemplate.structure" :key="`edit-${seg}`" class="rounded-xl bg-black/20 p-3">
                   <div class="mb-3 flex items-center justify-between gap-3">
                     <div class="text-sm font-black text-white">{{ seg.toUpperCase() }}</div>
                     <div class="flex gap-1">
-                      <button class="app-ghost px-2 py-1 text-[10px]" @click="moveSegment(selectedTemplate, seg, -1)">{{ tr('autoUi.k_8a0c839791d3') }}</button>
-                      <button class="app-ghost px-2 py-1 text-[10px]" @click="moveSegment(selectedTemplate, seg, 1)">{{ tr('autoUi.k_05c46fa3b77c') }}</button>
+                      <button class="vg-btn vg-btn--sm" @click="moveSegment(selectedTemplate, seg, -1)">{{ tr('autoUi.k_8a0c839791d3') }}</button>
+                      <button class="vg-btn vg-btn--sm" @click="moveSegment(selectedTemplate, seg, 1)">{{ tr('autoUi.k_05c46fa3b77c') }}</button>
                     </div>
                   </div>
                   <div class="grid gap-2 md:grid-cols-4">
@@ -1391,7 +1395,7 @@ watch(
                         :value="segDur(selectedTemplate, seg).min"
                         type="number"
                         step="0.1"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentDurationSec: { ...(selectedTemplate.segmentDurationSec ?? {}), [seg]: { ...segDur(selectedTemplate, seg), min: Number(($event.target as HTMLInputElement).value) || 0.1 } } })"
                       />
                     </label>
@@ -1399,7 +1403,7 @@ watch(
                         :value="segDur(selectedTemplate, seg).max"
                         type="number"
                         step="0.1"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentDurationSec: { ...(selectedTemplate.segmentDurationSec ?? {}), [seg]: { ...segDur(selectedTemplate, seg), max: Number(($event.target as HTMLInputElement).value) || 0.1 } } })"
                       />
                     </label>
@@ -1407,7 +1411,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).zoom?.min ?? 1"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), zoom: { min: Number(($event.target as HTMLInputElement).value) || 1, max: segFx(selectedTemplate, seg).zoom?.max ?? 1.06 } } } })"
                       />
                     </label>
@@ -1415,7 +1419,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).zoom?.max ?? 1.06"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), zoom: { min: segFx(selectedTemplate, seg).zoom?.min ?? 1, max: Number(($event.target as HTMLInputElement).value) || 1.06 } } } })"
                       />
                     </label>
@@ -1425,7 +1429,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).move?.x?.min ?? -0.02"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), move: { x: { min: Number(($event.target as HTMLInputElement).value) || 0, max: segFx(selectedTemplate, seg).move?.x?.max ?? 0.02 }, y: segFx(selectedTemplate, seg).move?.y ?? { min: -0.015, max: 0.015 } } } } })"
                       />
                     </label>
@@ -1433,7 +1437,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).move?.x?.max ?? 0.02"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), move: { x: { min: segFx(selectedTemplate, seg).move?.x?.min ?? -0.02, max: Number(($event.target as HTMLInputElement).value) || 0 }, y: segFx(selectedTemplate, seg).move?.y ?? { min: -0.015, max: 0.015 } } } } })"
                       />
                     </label>
@@ -1441,7 +1445,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).move?.y?.min ?? -0.015"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), move: { x: segFx(selectedTemplate, seg).move?.x ?? { min: -0.02, max: 0.02 }, y: { min: Number(($event.target as HTMLInputElement).value) || 0, max: segFx(selectedTemplate, seg).move?.y?.max ?? 0.015 } } } } })"
                       />
                     </label>
@@ -1449,7 +1453,7 @@ watch(
                         :value="segFx(selectedTemplate, seg).move?.y?.max ?? 0.015"
                         type="number"
                         step="0.01"
-                        class="ui-input mt-1 h-9 w-full"
+                        class="vg-input mt-1 w-full"
                         @input="updateTemplate(selectedTemplate, { segmentFx: { ...(selectedTemplate.segmentFx ?? {}), [seg]: { ...segFx(selectedTemplate, seg), move: { x: segFx(selectedTemplate, seg).move?.x ?? { min: -0.02, max: 0.02 }, y: { min: segFx(selectedTemplate, seg).move?.y?.min ?? -0.015, max: Number(($event.target as HTMLInputElement).value) || 0 } } } } })"
                       />
                     </label>
@@ -1458,7 +1462,7 @@ watch(
               </div>
             </section>
 
-            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_f8f2e332da09') }}</div>
               <label class="flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1471,14 +1475,14 @@ watch(
                   :value="selectedTemplate.jitter?.speed?.range?.min ?? 0.99"
                   type="number"
                   step="0.01"
-                  class="ui-input h-10"
+                  class="vg-input"
                   @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), speed: { enabled: selectedTemplate.jitter?.speed?.enabled ?? true, range: { min: Number(($event.target as HTMLInputElement).value) || 0.99, max: selectedTemplate.jitter?.speed?.range?.max ?? 1.01 } } } })"
                 />
                 <input
                   :value="selectedTemplate.jitter?.speed?.range?.max ?? 1.01"
                   type="number"
                   step="0.01"
-                  class="ui-input h-10"
+                  class="vg-input"
                   @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), speed: { enabled: selectedTemplate.jitter?.speed?.enabled ?? true, range: { min: selectedTemplate.jitter?.speed?.range?.min ?? 0.99, max: Number(($event.target as HTMLInputElement).value) || 1.01 } } } })"
                 />
               </div>
@@ -1493,7 +1497,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.brightness?.min ?? -0.02"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: { min: Number(($event.target as HTMLInputElement).value) || 0, max: selectedTemplate.jitter?.color?.brightness?.max ?? 0.02 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1501,7 +1505,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.brightness?.max ?? 0.02"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: { min: selectedTemplate.jitter?.color?.brightness?.min ?? -0.02, max: Number(($event.target as HTMLInputElement).value) || 0 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1509,7 +1513,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.contrast?.min ?? 0.98"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: { min: Number(($event.target as HTMLInputElement).value) || 0.98, max: selectedTemplate.jitter?.color?.contrast?.max ?? 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1517,7 +1521,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.contrast?.max ?? 1.02"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: { min: selectedTemplate.jitter?.color?.contrast?.min ?? 0.98, max: Number(($event.target as HTMLInputElement).value) || 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1525,7 +1529,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.saturation?.min ?? 0.98"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: { min: Number(($event.target as HTMLInputElement).value) || 0.98, max: selectedTemplate.jitter?.color?.saturation?.max ?? 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1533,7 +1537,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.saturation?.max ?? 1.02"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: { min: selectedTemplate.jitter?.color?.saturation?.min ?? 0.98, max: Number(($event.target as HTMLInputElement).value) || 1.02 }, hueDeg: selectedTemplate.jitter?.color?.hueDeg ?? { min: -1, max: 1 } } } })"
                   />
                 </label>
@@ -1541,7 +1545,7 @@ watch(
                     :value="selectedTemplate.jitter?.color?.hueDeg?.min ?? -1"
                     type="number"
                     step="0.1"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: { min: Number(($event.target as HTMLInputElement).value) || 0, max: selectedTemplate.jitter?.color?.hueDeg?.max ?? 1 } } } })"
                   />
                 </label>
@@ -1549,14 +1553,14 @@ watch(
                     :value="selectedTemplate.jitter?.color?.hueDeg?.max ?? 1"
                     type="number"
                     step="0.1"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { jitter: { ...(selectedTemplate.jitter ?? {}), color: { enabled: selectedTemplate.jitter?.color?.enabled ?? true, brightness: selectedTemplate.jitter?.color?.brightness ?? { min: -0.02, max: 0.02 }, contrast: selectedTemplate.jitter?.color?.contrast ?? { min: 0.98, max: 1.02 }, saturation: selectedTemplate.jitter?.color?.saturation ?? { min: 0.98, max: 1.02 }, hueDeg: { min: selectedTemplate.jitter?.color?.hueDeg?.min ?? -1, max: Number(($event.target as HTMLInputElement).value) || 0 } } } })"
                   />
                 </label>
               </div>
             </section>
 
-            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_d9a200c7212f') }}</div>
               <label class="flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1569,7 +1573,7 @@ watch(
                     :value="selectedTemplate.colorGrade?.brightness ?? 0"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { colorGrade: { enabled: selectedTemplate.colorGrade?.enabled ?? true, brightness: Number(($event.target as HTMLInputElement).value) || 0, contrast: selectedTemplate.colorGrade?.contrast ?? 1, saturation: selectedTemplate.colorGrade?.saturation ?? 1 } })"
                   />
                 </label>
@@ -1577,7 +1581,7 @@ watch(
                     :value="selectedTemplate.colorGrade?.contrast ?? 1"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { colorGrade: { enabled: selectedTemplate.colorGrade?.enabled ?? true, brightness: selectedTemplate.colorGrade?.brightness ?? 0, contrast: Number(($event.target as HTMLInputElement).value) || 1, saturation: selectedTemplate.colorGrade?.saturation ?? 1 } })"
                   />
                 </label>
@@ -1585,14 +1589,14 @@ watch(
                     :value="selectedTemplate.colorGrade?.saturation ?? 1"
                     type="number"
                     step="0.01"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { colorGrade: { enabled: selectedTemplate.colorGrade?.enabled ?? true, brightness: selectedTemplate.colorGrade?.brightness ?? 0, contrast: selectedTemplate.colorGrade?.contrast ?? 1, saturation: Number(($event.target as HTMLInputElement).value) || 1 } })"
                   />
                 </label>
               </div>
             </section>
 
-            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4">
+            <section v-if="workspace === 'subtitle_voice'" class="tpl-soft p-4">
               <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div class="text-sm font-black text-white">{{ tr('autoUi.k_3655f2d5b4ae') }}</div>
                 <label class="flex items-center gap-2 text-xs text-slate-300">
@@ -1608,13 +1612,13 @@ watch(
                     <div class="text-xs font-bold text-slate-400">{{ tr('autoUi.k_580d9544c498') }} {{ idx + 1 }}</div>
                     <button class="text-xs font-bold text-red-300" @click="removeTitleGroup(selectedTemplate, idx)">{{ tr('autoUi.k_3755f56f2f83') }}</button>
                   </div>
-                  <input v-model="row.title" class="ui-input h-10 w-full" :placeholder="tr('autoUi.k_d9846fcfc125')" @input="flushTitleGroups(selectedTemplate)" />
-                  <textarea v-model="row.symbol" class="ui-input mt-2 min-h-[68px] w-full resize-y py-2" :placeholder="tr('autoUi.k_4acfa404e48e')" @input="flushTitleGroups(selectedTemplate)"></textarea>
+                  <input v-model="row.title" class="vg-input w-full" :placeholder="tr('autoUi.k_d9846fcfc125')" @input="flushTitleGroups(selectedTemplate)" />
+                  <textarea v-model="row.symbol" class="vg-input mt-2 min-h-[68px] w-full resize-y" :placeholder="tr('autoUi.k_4acfa404e48e')" @input="flushTitleGroups(selectedTemplate)"></textarea>
                   <div class="mt-2 flex flex-wrap gap-2">
                     <button
                       v-for="symbol in overlaySymbolTemplates.slice(0, 4)"
                       :key="symbol.id"
-                      class="app-ghost px-2 py-1 text-[10px]"
+                      class="vg-btn vg-btn--sm"
                       @click="insertOverlaySymbol(selectedTemplate, symbol.text)"
                     >
                       {{ symbol.label }}
@@ -1623,13 +1627,13 @@ watch(
                 </div>
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
-                <button class="app-ghost px-3 py-2 text-xs" @click="addTitleGroup(selectedTemplate)">{{ tr('autoUi.k_f3105664e9ff') }}</button>
-                <button class="app-ghost px-3 py-2 text-xs" @click="insertOverlayGroup(selectedTemplate, defaultOverlayGroupSymbol)">{{ tr('autoUi.k_6bbb51e9104e') }}</button>
-                <button class="app-ghost px-3 py-2 text-xs" @click="openSymbolLibModal">{{ tr('autoUi.k_9f28c9cba327') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="addTitleGroup(selectedTemplate)">{{ tr('autoUi.k_f3105664e9ff') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="insertOverlayGroup(selectedTemplate, defaultOverlayGroupSymbol)">{{ tr('autoUi.k_6bbb51e9104e') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="openSymbolLibModal">{{ tr('autoUi.k_9f28c9cba327') }}</button>
               </div>
             </section>
 
-            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4">
+            <section v-if="workspace === 'subtitle_voice'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_892c93095f5c') }}</div>
               <label class="mb-3 flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1638,11 +1642,11 @@ watch(
                   @change="updateTemplate(selectedTemplate, { assSubtitle: { enabled: ($event.target as HTMLInputElement).checked, fontName: selectedTemplate.assSubtitle?.fontName ?? ASS_DEFAULT_FONT_FAMILY, fontSize: selectedTemplate.assSubtitle?.fontSize ?? ASS_DEFAULT_FONT_SIZE, preset: selectedTemplate.assSubtitle?.preset ?? 'white_shadow', marginV: selectedTemplate.assSubtitle?.marginV ?? ASS_DEFAULT_TITLE_MARGIN_V, ttsMarginV: selectedTemplate.assSubtitle?.ttsMarginV ?? ASS_DEFAULT_TTS_MARGIN_V } })"
                 /> {{ tr('autoUi.k_51b82e4e0729') }} </label>
               <div class="grid gap-2 md:grid-cols-2">
-                <button class="app-ghost px-3 py-2 text-xs" @click="applySubtitlePresetToSelected('white_shadow')">{{ tr('autoUi.k_746988aa01cf') }}</button>
-                <button class="app-ghost px-3 py-2 text-xs" @click="applySubtitlePresetToSelected('yellow_box')">{{ tr('autoUi.k_e0f3337364c8') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="applySubtitlePresetToSelected('white_shadow')">{{ tr('autoUi.k_746988aa01cf') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="applySubtitlePresetToSelected('yellow_box')">{{ tr('autoUi.k_e0f3337364c8') }}</button>
               </div>
               <select
-                class="ui-select mt-3 h-10 w-full"
+                class="vg-select mt-3 w-full"
                 :value="selectedTemplate.assSubtitle?.fontName ?? ASS_DEFAULT_FONT_FAMILY"
                 @change="updateTemplate(selectedTemplate, { assSubtitle: { enabled: true, fontName: ($event.target as HTMLSelectElement).value, fontSize: selectedTemplate.assSubtitle?.fontSize ?? ASS_DEFAULT_FONT_SIZE, preset: selectedTemplate.assSubtitle?.preset ?? 'white_shadow', marginV: selectedTemplate.assSubtitle?.marginV ?? ASS_DEFAULT_TITLE_MARGIN_V, ttsMarginV: selectedTemplate.assSubtitle?.ttsMarginV ?? ASS_DEFAULT_TTS_MARGIN_V } })"
               >
@@ -1654,7 +1658,7 @@ watch(
                     type="number"
                     min="24"
                     max="160"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { assSubtitle: { enabled: selectedTemplate.assSubtitle?.enabled ?? true, fontName: selectedTemplate.assSubtitle?.fontName ?? ASS_DEFAULT_FONT_FAMILY, fontSize: Number(($event.target as HTMLInputElement).value) || ASS_DEFAULT_FONT_SIZE, preset: selectedTemplate.assSubtitle?.preset ?? 'white_shadow', marginV: selectedTemplate.assSubtitle?.marginV ?? ASS_DEFAULT_TITLE_MARGIN_V, ttsMarginV: selectedTemplate.assSubtitle?.ttsMarginV ?? ASS_DEFAULT_TTS_MARGIN_V } })"
                   />
                 </label>
@@ -1663,7 +1667,7 @@ watch(
                     type="number"
                     min="0"
                     max="900"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { assSubtitle: { enabled: selectedTemplate.assSubtitle?.enabled ?? true, fontName: selectedTemplate.assSubtitle?.fontName ?? ASS_DEFAULT_FONT_FAMILY, fontSize: selectedTemplate.assSubtitle?.fontSize ?? ASS_DEFAULT_FONT_SIZE, preset: selectedTemplate.assSubtitle?.preset ?? 'white_shadow', marginV: Number(($event.target as HTMLInputElement).value) || 0, ttsMarginV: selectedTemplate.assSubtitle?.ttsMarginV ?? ASS_DEFAULT_TTS_MARGIN_V } })"
                   />
                 </label>
@@ -1672,23 +1676,23 @@ watch(
                     type="number"
                     min="0"
                     max="900"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { assSubtitle: { enabled: selectedTemplate.assSubtitle?.enabled ?? true, fontName: selectedTemplate.assSubtitle?.fontName ?? ASS_DEFAULT_FONT_FAMILY, fontSize: selectedTemplate.assSubtitle?.fontSize ?? ASS_DEFAULT_FONT_SIZE, preset: selectedTemplate.assSubtitle?.preset ?? 'white_shadow', marginV: selectedTemplate.assSubtitle?.marginV ?? ASS_DEFAULT_TITLE_MARGIN_V, ttsMarginV: Number(($event.target as HTMLInputElement).value) || 0 } })"
                   />
                 </label>
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
-                <button class="app-ghost px-3 py-2 text-xs" @click="importFontsFromDialog">{{ tr('autoUi.k_4a9676baeb93') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="importFontsFromDialog">{{ tr('autoUi.k_4a9676baeb93') }}</button>
               </div>
             </section>
 
-            <section v-if="workspace === 'subtitle_voice'" class="app-soft-card p-4 xl:col-span-2">
+            <section v-if="workspace === 'subtitle_voice'" class="tpl-soft p-4 xl:col-span-2">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_cc09cb34dcb9') }}</div>
               <div class="grid gap-2 md:grid-cols-[1fr_auto]">
-                <select v-model="voiceDraft" class="ui-select h-10">
+                <select v-model="voiceDraft" class="vg-select">
                   <option v-for="voice in voiceQuickOptions" :key="voice" :value="voice">{{ voice }}</option>
                 </select>
-                <button class="app-primary px-4 text-xs" @click="applyVoiceToSelected">{{ tr('autoUi.k_db062db6b3e9') }}</button>
+                <button class="vg-btn vg-btn--primary vg-btn--sm" @click="applyVoiceToSelected">{{ tr('autoUi.k_db062db6b3e9') }}</button>
               </div>
               <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
                 <input
@@ -1698,7 +1702,7 @@ watch(
                 /> {{ tr('autoUi.k_fc54679205d9') }} </label>
               <textarea
                 :value="ensureCopyDraft(selectedTemplate)"
-                class="ui-input mt-3 min-h-[180px] w-full resize-y py-3 text-sm leading-6"
+                class="vg-input mt-3 min-h-[180px] w-full resize-y leading-6"
                 :placeholder="tr('autoUi.k_8285c0e23b75')"
                 @focus="copyEditing[selectedTemplate.id] = true"
                 @input="copyDraft[selectedTemplate.id] = ($event.target as HTMLTextAreaElement).value"
@@ -1707,19 +1711,19 @@ watch(
               <div class="mt-3 grid gap-2 md:grid-cols-5">
                 <label class="text-xs font-bold text-slate-500"> {{ tr('autoUi.k_747374775d00') }} <input
                     :value="selectedTemplate.tts?.rate ?? 'default'"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { tts: { enabled: selectedTemplate.tts?.enabled ?? true, textPool: selectedTemplate.tts?.textPool ?? [], voice: selectedTemplate.tts?.voice ?? voiceDraft, rate: ($event.target as HTMLInputElement).value, pitch: selectedTemplate.tts?.pitch ?? 'default', ttsVolume: selectedTemplate.tts?.ttsVolume ?? 'default', mixVolume: selectedTemplate.tts?.mixVolume ?? 0.9, keepOriginal: selectedTemplate.tts?.keepOriginal ?? true } })"
                   />
                 </label>
                 <label class="text-xs font-bold text-slate-500"> {{ tr('autoUi.k_bf36f9d87a1d') }} <input
                     :value="selectedTemplate.tts?.pitch ?? 'default'"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { tts: { enabled: selectedTemplate.tts?.enabled ?? true, textPool: selectedTemplate.tts?.textPool ?? [], voice: selectedTemplate.tts?.voice ?? voiceDraft, rate: selectedTemplate.tts?.rate ?? 'default', pitch: ($event.target as HTMLInputElement).value, ttsVolume: selectedTemplate.tts?.ttsVolume ?? 'default', mixVolume: selectedTemplate.tts?.mixVolume ?? 0.9, keepOriginal: selectedTemplate.tts?.keepOriginal ?? true } })"
                   />
                 </label>
                 <label class="text-xs font-bold text-slate-500"> {{ tr('autoUi.k_9a5425489f7f') }} <input
                     :value="selectedTemplate.tts?.ttsVolume ?? 'default'"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { tts: { enabled: selectedTemplate.tts?.enabled ?? true, textPool: selectedTemplate.tts?.textPool ?? [], voice: selectedTemplate.tts?.voice ?? voiceDraft, rate: selectedTemplate.tts?.rate ?? 'default', pitch: selectedTemplate.tts?.pitch ?? 'default', ttsVolume: ($event.target as HTMLInputElement).value, mixVolume: selectedTemplate.tts?.mixVolume ?? 0.9, keepOriginal: selectedTemplate.tts?.keepOriginal ?? true } })"
                   />
                 </label>
@@ -1729,7 +1733,7 @@ watch(
                     min="0"
                     max="1"
                     step="0.05"
-                    class="ui-input mt-1 h-10 w-full"
+                    class="vg-input mt-1 w-full"
                     @input="updateTemplate(selectedTemplate, { tts: { enabled: selectedTemplate.tts?.enabled ?? true, textPool: selectedTemplate.tts?.textPool ?? [], voice: selectedTemplate.tts?.voice ?? voiceDraft, rate: selectedTemplate.tts?.rate ?? 'default', pitch: selectedTemplate.tts?.pitch ?? 'default', ttsVolume: selectedTemplate.tts?.ttsVolume ?? 'default', mixVolume: Number(($event.target as HTMLInputElement).value) || 0, keepOriginal: selectedTemplate.tts?.keepOriginal ?? true } })"
                   />
                 </label>
@@ -1743,11 +1747,11 @@ watch(
               <div v-if="copyPoolBusy[selectedTemplate.id]" class="mt-2 text-xs text-violet-200">{{ tr('autoUi.k_180a7b92dac2') }}</div>
             </section>
 
-            <section v-if="workspace === 'audio'" class="app-soft-card p-4">
+            <section v-if="workspace === 'audio'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">BGM</div>
               <div class="flex gap-2">
-                <button class="app-ghost flex-1 px-3 py-2 text-xs" @click="pickBgm(selectedTemplate)">{{ tr('autoUi.k_77185fecef31') }}</button>
-                <button class="app-ghost px-3 py-2 text-xs" @click="clearBgm(selectedTemplate)">{{ tr('autoUi.k_84fcd70d4280') }}</button>
+                <button class="vg-btn vg-btn--sm flex-1" @click="pickBgm(selectedTemplate)">{{ tr('autoUi.k_77185fecef31') }}</button>
+                <button class="vg-btn vg-btn--sm" @click="clearBgm(selectedTemplate)">{{ tr('autoUi.k_84fcd70d4280') }}</button>
               </div>
               <div v-if="selectedTemplate.bgm?.filePaths?.length" class="mt-3 space-y-2">
                 <div v-for="path in selectedTemplate.bgm.filePaths" :key="path" class="flex items-center justify-between gap-2 rounded-lg bg-black/20 px-3 py-2 text-xs text-slate-400">
@@ -1762,17 +1766,17 @@ watch(
                   min="0"
                   max="1"
                   step="0.05"
-                  class="ui-input mt-1 h-10 w-full"
+                  class="vg-input mt-1 w-full"
                   @input="updateTemplate(selectedTemplate, { bgm: { filePaths: selectedTemplate.bgm?.filePaths ?? [], volume: Number(($event.target as HTMLInputElement).value) || 0 } })"
                 />
               </label>
             </section>
 
-            <section v-if="workspace === 'visual'" class="app-soft-card p-4">
+            <section v-if="workspace === 'visual'" class="tpl-soft p-4">
               <div class="mb-3 text-sm font-black text-white">{{ tr('autoUi.k_47838bf03ebc') }}</div>
               <div class="grid gap-3 md:grid-cols-2">
                 <select
-                  class="ui-select h-10 w-full"
+                  class="vg-select w-full"
                   :value="selectedTemplate.lut3d?.fileName ?? ''"
                   @change="updateTemplate(selectedTemplate, { lut3d: ($event.target as HTMLSelectElement).value ? { fileName: ($event.target as HTMLSelectElement).value } : null })"
                 >
@@ -1780,7 +1784,7 @@ watch(
                   <option v-for="lut in lutOptions" :key="lut.fileName" :value="lut.fileName">{{ lut.displayName }}</option>
                 </select>
                 <select
-                  class="ui-select h-10 w-full"
+                  class="vg-select w-full"
                   :value="getStickerRefFromTemplate(selectedTemplate)"
                   @change="(() => { const opt = findStickerOptionByRef(($event.target as HTMLSelectElement).value); updateTemplate(selectedTemplate, { sticker: opt ? { ref: opt.ref, fileName: opt.fileName, heightPx: selectedTemplate.sticker?.heightPx ?? 180 } : null }) })()"
                 >
@@ -1793,33 +1797,33 @@ watch(
                   type="number"
                   min="40"
                   max="720"
-                  class="ui-input mt-1 h-10 w-full"
+                  class="vg-input mt-1 w-full"
                   @input="selectedTemplate.sticker && updateTemplate(selectedTemplate, { sticker: { ...selectedTemplate.sticker, heightPx: Number(($event.target as HTMLInputElement).value) || 180 } })"
                 />
               </label>
-              <button class="app-ghost mt-3 px-3 py-2 text-xs" @click="importStickersFromDialog">{{ tr('autoUi.k_2e73d9d19058') }}</button>
+              <button class="vg-btn vg-btn--sm mt-3" @click="importStickersFromDialog">{{ tr('autoUi.k_2e73d9d19058') }}</button>
             </section>
           </div>
         </section>
       </main>
 
-      <aside class="app-card space-y-4 p-4">
+      <aside class="tpl-card space-y-4 p-4">
         <div>
           <h2 class="text-lg font-black text-white">{{ tr('autoUi.k_187677d07af7') }}</h2>
           <p class="mt-1 text-xs text-slate-500">{{ tr('autoUi.k_58f6dff9dd38') }}</p>
         </div>
         <template v-if="selectedTemplate">
-          <div class="app-soft-card p-3 text-xs text-slate-300">
+          <div class="tpl-soft p-3 text-xs text-slate-300">
             <div>{{ tr('autoUi.k_e2ceac018cc0') }}{{ selectedTemplate.totalDurationSec.min }} - {{ selectedTemplate.totalDurationSec.max }}s</div>
             <div class="mt-1">{{ tr('autoUi.k_15f6addc1021') }}{{ selectedTemplate.transition?.enabled ? tr('autoUi.k_25d284315063') : tr('autoUi.k_8bb38ef00ccc') }}</div>
           </div>
-          <button class="app-ghost w-full px-3 py-2 text-xs" @click="expanded[selectedTemplate.id] = !expanded[selectedTemplate.id]">
+          <button class="vg-btn vg-btn--sm w-full" @click="expanded[selectedTemplate.id] = !expanded[selectedTemplate.id]">
             {{ expanded[selectedTemplate.id] ? tr('autoUi.k_56af34e7c5b6') : tr('autoUi.k_af5a5bd865cd') }}
           </button>
-          <button class="app-ghost w-full px-3 py-2 text-xs" @click="templateAdvancedOpen = !templateAdvancedOpen">
+          <button class="vg-btn vg-btn--sm w-full" @click="templateAdvancedOpen = !templateAdvancedOpen">
             {{ templateAdvancedOpen ? tr('autoUi.k_c5f6a2584003') : tr('autoUi.k_706c47870ca5') }}
           </button>
-          <div v-if="templateAdvancedOpen" class="app-soft-card p-3">
+          <div v-if="templateAdvancedOpen" class="tpl-soft p-3">
             <UiWorkspaceSidebar
               :model-value="workspace"
               :title="tr('tpl.sidebarTitle')"
@@ -1836,10 +1840,10 @@ watch(
             <!-- Template preset selection -->
   <div
     v-if="presetPickerOpen"
-    class="fixed inset-0 z-[101] flex items-center justify-center bg-black/60 p-4"
+    class="vg-scope vg-backdrop"
     @click.self="closePresetPicker"
   >
-    <div class="w-full max-w-2xl rounded-xl border border-white/10 bg-[#18181B] p-4 shadow-2xl shadow-black/50" @click.stop>
+    <div class="vg-dialog vg-dialog--wide tpl-modal" @click.stop>
       <div class="text-sm font-semibold text-white/90">{{ tr('tpl.presetModalTitle') }}</div>
       <div class="mt-1 text-[11px] text-white/45">
         {{ tr('tpl.presetModalDesc', { name: presetTarget?.name ?? '-' }) }}
@@ -1849,7 +1853,7 @@ watch(
           v-for="item in presetChoices"
           :key="item.key"
           type="button"
-          class="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left transition hover:border-indigo-300/30 hover:bg-indigo-400/10"
+          class="vg-card vg-card--interactive tpl-preset"
           @click="applyTemplatePreset(item.key)"
         >
           <div class="text-sm font-semibold text-white/90">{{ item.title }}</div>
@@ -1857,7 +1861,7 @@ watch(
         </button>
       </div>
       <div class="mt-4 flex justify-end">
-        <UiButton class="h-9 px-3 text-[13px]" variant="ghost" @click="closePresetPicker">{{ tr('common.cancel') }}</UiButton>
+        <button type="button" class="vg-btn vg-btn--sm" @click="closePresetPicker">{{ tr('common.cancel') }}</button>
       </div>
     </div>
   </div>
@@ -1865,11 +1869,11 @@ watch(
             <!-- Editable symbol template library persisted in localStorage. -->
   <div
     v-if="symbolLibOpen"
-    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+    class="vg-scope vg-backdrop"
     @click.self="cancelSymbolLibModal"
   >
     <div
-      class="flex max-h-[min(560px,85vh)] w-full max-w-lg flex-col rounded-xl border border-white/10 bg-[#18181B] p-4 shadow-2xl shadow-black/50"
+      class="vg-dialog tpl-modal tpl-modal--scroll"
       @click.stop
     >
       <div class="text-sm font-semibold text-white/90">{{ tr('tpl.symbolLibModalTitle') }}</div>
@@ -1885,22 +1889,66 @@ watch(
           :key="row.id"
           class="grid grid-cols-[minmax(0,72px)_1fr_auto] items-start gap-2"
         >
-          <input v-model="row.label" class="ui-input h-9 px-2 text-[13px]" maxlength="64" />
-          <input v-model="row.text" class="ui-input h-9 px-2 text-[13px]" />
-          <UiButton class="h-9 px-2" variant="ghost" :title="tr('common.remove')" @click="removeSymbolLibRow(row.id)">
+          <input v-model="row.label" class="vg-input" maxlength="64" />
+          <input v-model="row.text" class="vg-input" />
+          <button type="button" class="vg-btn vg-btn--sm" :title="tr('common.remove')" @click="removeSymbolLibRow(row.id)">
             <Trash2 class="h-4 w-4" />
-          </UiButton>
+          </button>
         </div>
       </div>
       <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-        <UiButton class="h-9 px-3 text-[13px]" variant="ghost" @click="addSymbolLibRow">{{ tr('tpl.symbolLibAdd') }}</UiButton>
-        <UiButton class="h-9 px-3 text-[13px]" variant="ghost" @click="resetSymbolLibModalDraft">{{
+        <button type="button" class="vg-btn vg-btn--sm" @click="addSymbolLibRow">{{ tr('tpl.symbolLibAdd') }}</button>
+        <button type="button" class="vg-btn vg-btn--sm" @click="resetSymbolLibModalDraft">{{
           tr('tpl.symbolLibReset')
-        }}</UiButton>
+        }}</button>
         <div class="min-w-[8px] flex-1"></div>
-        <UiButton class="h-9 px-3 text-[13px]" variant="ghost" @click="cancelSymbolLibModal">{{ tr('common.cancel') }}</UiButton>
-        <UiButton class="h-9 px-3 text-[13px]" variant="accent" @click="saveSymbolLibModal">{{ tr('common.save') }}</UiButton>
+        <button type="button" class="vg-btn vg-btn--sm" @click="cancelSymbolLibModal">{{ tr('common.cancel') }}</button>
+        <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" @click="saveSymbolLibModal">{{ tr('common.save') }}</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Templates page on the vg- kit.
+ * The markup still uses Tailwind colour utilities written for the old dark-only
+ * look; inside this page they are re-pointed at theme tokens so every theme
+ * renders consistently. Scoped (unlayered) rules win over Tailwind's layer. */
+.tpl { width: min(1480px, 100%); margin: 0 auto; }
+
+/* Page surfaces */
+.tpl-card { background: var(--theme-panel); border: 1px solid var(--theme-border); border-radius: var(--vg-radius); min-width: 0; }
+.tpl-soft { background: var(--theme-panel-soft); border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); color: var(--theme-text); }
+.tpl-list__item { width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.tpl-list__item:hover { border-color: var(--vg-accent-line); }
+.tpl-list__item.is-active { border-color: var(--vg-accent); background: var(--vg-accent-soft); }
+.tpl-list__del { opacity: .75; }
+.tpl-list__item:hover .tpl-list__del { opacity: 1; }
+
+/* Segment flow nodes */
+.tpl-node { display: flex; flex-direction: column; gap: 3px; min-width: 116px; padding: 12px 14px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); }
+.tpl-node strong { font-size: 14px; font-weight: 800; color: var(--theme-text); letter-spacing: .02em; }
+.tpl-node span { font-size: 12px; font-weight: 600; color: var(--vg-accent); }
+.tpl-node small { font-size: 11px; color: var(--theme-text-muted); }
+
+/* Tables keep kit look even with Tailwind padding utilities */
+.tpl .vg-table thead { background: var(--theme-panel-soft); }
+
+/* Dialogs */
+.tpl-modal { padding: 18px 20px; gap: 0; }
+.tpl-modal--scroll { max-height: min(560px, 85vh); }
+.tpl-preset { text-align: left; }
+
+/* Colour utilities -> tokens */
+.text-white, .text-white\/90 { color: var(--theme-text); }
+.text-slate-300, .text-slate-400 { color: var(--theme-text-secondary); }
+.text-slate-500, .text-white\/45, .text-white\/50 { color: var(--theme-text-muted); }
+.text-white\/25 { color: var(--theme-border-control); }
+.text-violet-200, .text-violet-300 { color: var(--vg-accent); }
+.text-red-300 { color: var(--vg-red); }
+.bg-black\/20 { background-color: var(--theme-input); }
+.bg-white\/10 { background-color: var(--theme-divider); }
+.bg-white\/\[0\.04\], .bg-white\/\[0\.035\] { background-color: var(--theme-panel-soft); }
+.border-white\/10 { border-color: var(--theme-border); }
+.ring-white\/10 { --tw-ring-color: var(--theme-border); }
+</style>

@@ -18,9 +18,9 @@ withDefaults(
 <style scoped>
 .media-card {
   border-radius: 18px;
-  border: 1px solid rgba(134, 149, 205, 0.18);
+  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
   background:
-    linear-gradient(180deg, rgba(17, 24, 40, 0.96), rgba(12, 19, 34, 0.96)),
-    rgba(12, 19, 34, 0.94);
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 96%, transparent), color-mix(in srgb, var(--theme-panel) 96%, transparent)),
+    color-mix(in srgb, var(--theme-panel) 94%, transparent);
 }
 </style>

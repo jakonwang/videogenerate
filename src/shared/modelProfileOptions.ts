@@ -217,10 +217,10 @@ export function createEmptyModelProfileOptions(): ModelProfileOptions {
   return {}
 }
 
-type ProductType = 'earrings' | 'phone_case' | 'clothes' | 'toy' | 'general'
+type ProductType = 'earrings' | 'necklace' | 'ring' | 'bracelet' | 'phone_case' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
 
 export function getRecommendedModelProfileOptions(productType: ProductType): ModelProfileOptions {
-  if (productType === 'earrings') {
+  if (productType === 'earrings' || productType === 'necklace' || productType === 'ring' || productType === 'bracelet') {
     return {
       market: 'southeast_asia_female',
       gender: 'female',

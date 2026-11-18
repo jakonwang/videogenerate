@@ -163,14 +163,6 @@ async function main() {
     assert.equal(firstResolution.binding.id, secondResolution.binding.id)
 
     await agentOsService.initialize()
-
-    const linkedConversation = await agentOsService.createConversation({ employeeId: 'employee.supervisor' })
-    await agentOsService.linkHermesSession({ conversationId: linkedConversation.id, storedSessionId: 'hermes-session-primary' })
-    await agentOsService.linkHermesSession({ conversationId: linkedConversation.id, storedSessionId: 'hermes-session-branch' })
-    assert.equal((await agentOsService.findConversationByHermesSession('hermes-session-primary'))?.id, linkedConversation.id)
-    assert.equal((await agentOsService.findConversationByHermesSession('hermes-session-branch'))?.id, linkedConversation.id)
-    const linkedConversationDetail = await agentOsService.getConversation(linkedConversation.id)
-    assert.deepEqual(linkedConversationDetail.conversation.hermesStoredSessionIds, ['hermes-session-primary', 'hermes-session-branch'])
     brain.setAgentBrainTestDependencies({
       generateChatCompletion: (async () => ({
         content: JSON.stringify({

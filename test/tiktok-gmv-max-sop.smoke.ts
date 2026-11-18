@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { advanceGmvMaxSopInterventionObservation, buildGmvMaxAutomaticSopInstance, buildGmvMaxDailySopTasks, buildGmvMaxMatureAssessment, buildGmvMaxProductDailyMetrics, buildGmvMaxSopAutomationRunId, buildGmvMaxSopInterventionOutcome, buildGmvMaxSopMetricSummary, calculateGmvMaxLiveScore, classifyGmvMaxCreativeGrade, completeEvidenceBackedGmvMaxSopTasks, countGmvMaxObservedDeliveryDays, detectGmvMaxSopTrack, evaluateGmvMaxSopInstance, GMV_MAX_MATURE_CREATIVE_MIX, GMV_MAX_SOP_AUTOMATION_RETRY_MS, GMV_MAX_WINNER_DRAFT_RETRY_MS, planGmvMaxSopAutomation, selectGmvMaxAutomaticSopProductCandidate, shouldCreateGmvMaxSopRollback, shouldRetryGmvMaxWinnerDraft, shouldRunGmvMaxSopAutomation, supersedeExpiredGmvMaxSopTasks, supersedeGmvMaxSopAutomationTasks } from '../src/main/modules/tiktok-gmv-max/sop'
@@ -362,7 +362,12 @@ async function main() {
       assert.equal(typeof locale.gmvMaxSopVideo.analysis[code], 'string')
     }
   }
-  const rendererSource = await readFile(path.join(process.cwd(), 'src/renderer/src/ui/views/TiktokGmvMaxOptimizerView.vue'), 'utf8')
+  // The GMV MAX view renders its pages from components/gmv-max/pages, so check the view and its pages together.
+  const pagesDir = path.join(process.cwd(), 'src/renderer/src/ui/components/gmv-max/pages')
+  const rendererSource = [
+    await readFile(path.join(process.cwd(), 'src/renderer/src/ui/views/TiktokGmvMaxOptimizerView.vue'), 'utf8'),
+    ...await Promise.all((await readdir(pagesDir)).filter((file) => file.endsWith('.vue')).map((file) => readFile(path.join(pagesDir, file), 'utf8'))),
+  ].join('\n')
   assert.match(rendererSource, /const sopCanStart = computed/)
   assert.match(rendererSource, /loadSopProductOptions[\s\S]*getProductPage/)
   assert.match(rendererSource, /data-testid="gmv-sop-start-button"/)
