@@ -180,7 +180,7 @@ export function createCloudClient(options: CloudClientOptions) {
       publicUrls: (fileIds: string[], days?: number) => request<{ urls: Record<string, string>; days: number }>('POST', '/api/v1/ai/public-urls', { fileIds, days }, 120_000),
     },
     health: () => request<{ status: string }>('GET', '/api/v1/health'),
-    getConfig: () => request<{ values: Record<string, unknown>; version: string }>('GET', '/api/v1/client/config'),
+    getConfig: () => request<{ values: Record<string, unknown>; version: string; managedAi?: boolean }>('GET', '/api/v1/client/config'),
     listPlans: () => request<CloudPlansResponse>('GET', '/api/v1/plans'),
 
     login: (input: CloudLoginRequest) => request<CloudLoginResponse>('POST', '/api/v1/auth/login', input),

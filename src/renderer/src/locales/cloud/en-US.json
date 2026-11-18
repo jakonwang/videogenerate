@@ -112,7 +112,16 @@
     "refunded": "Refunded"
   },
   "settings": {
-    "managedNotice": "These settings are managed by your administrator and synced to this device automatically. Contact your administrator to change them."
+    "managedNotice": "These settings are managed by your administrator and synced to this device automatically. Contact your administrator to change them.",
+    "aiServiceLabel": "AI service",
+    "aiServiceDesc": "Provided for you, no keys needed",
+    "aiServiceTitle": "AI service",
+    "aiServiceSubtitle": "Provided by the platform",
+    "aiServiceNotice": "The AI platforms and models for video, image and chat are already set up for you. You don't need to get or enter any keys — just open a feature and generate. Video and image generation are billed as shown below.",
+    "aiServiceChat": "Chat (copywriting, script breakdown, etc.): free",
+    "aiServiceOpenBilling": "Points history & top-up",
+    "aiServiceLoginFirst": "Sign in with an active membership to see how generation is billed.",
+    "heroSubtitleManaged": "Appearance, AI service, AI producer and storage."
   },
   "banner": {
     "updateRequired": "This version is outdated. Please update to {version} or later."

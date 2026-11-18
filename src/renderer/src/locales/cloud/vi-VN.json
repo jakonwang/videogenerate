@@ -112,7 +112,16 @@
     "refunded": "Đã hoàn tiền"
   },
   "settings": {
-    "managedNotice": "Các cài đặt này do quản trị viên cấu hình và tự động đồng bộ về máy. Vui lòng liên hệ quản trị viên để thay đổi."
+    "managedNotice": "Các cài đặt này do quản trị viên cấu hình và tự động đồng bộ về máy. Vui lòng liên hệ quản trị viên để thay đổi.",
+    "aiServiceLabel": "Dịch vụ AI",
+    "aiServiceDesc": "Đã được cung cấp sẵn, không cần Key",
+    "aiServiceTitle": "Dịch vụ AI",
+    "aiServiceSubtitle": "Do nền tảng cung cấp",
+    "aiServiceNotice": "Nền tảng và mô hình AI cho video, hình ảnh và trò chuyện đã được cấu hình sẵn. Bạn không cần đăng ký hay nhập Key nào, chỉ cần mở chức năng là tạo được ngay. Tạo video / hình ảnh được tính phí như bên dưới.",
+    "aiServiceChat": "Trò chuyện (viết nội dung, phân tích kịch bản...): miễn phí",
+    "aiServiceOpenBilling": "Lịch sử điểm & nạp thêm",
+    "aiServiceLoginFirst": "Đăng nhập và kích hoạt hội viên để xem cách tính phí.",
+    "heroSubtitleManaged": "Giao diện, dịch vụ AI, AI sản xuất và lưu trữ."
   },
   "banner": {
     "updateRequired": "Phiên bản này đã cũ. Vui lòng cập nhật lên {version} hoặc mới hơn."

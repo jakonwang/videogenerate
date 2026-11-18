@@ -15,6 +15,7 @@ import {
   Video,
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
+import { useCloudAuthStore } from '@/stores/cloudAuth'
 
 type ParserVideoItem = {
   id: string
@@ -65,6 +66,8 @@ const copy = {
   settingsTitle: '缺少 TikHub 密钥',
   settingsHint: '请先在设置中填写 TikHub API Key，之后才能解析和下载 TikTok 视频。',
   openSettings: '打开设置',
+  managedTitle: '视频解析服务暂未开通',
+  managedHint: '平台还没有开通 TikTok 视频解析服务，开通后这里会自动可用。如需使用请联系客服。',
   deleteConfirm: '确定删除这条下载记录吗？',
   deleteDone: '已删除该视频记录',
   importedOk: '已导入视频',
@@ -236,6 +239,11 @@ async function deleteItem(id: string) {
   }
 }
 
+const cloudAuth = useCloudAuthStore()
+void cloudAuth.ensureLoaded()
+/** 商业版托管模式：TikHub 由平台统一提供，用户没有地方填 Key，不显示「打开设置」 */
+const managedAi = computed(() => Boolean(cloudAuth.status?.managedSettings))
+
 function openSettings() {
   void router.push('/settings')
 }
@@ -303,10 +311,10 @@ onUnmounted(() => {
         <KeyRound class="icon" />
       </div>
       <div class="vpd-empty__content">
-        <h2>{{ copy.settingsTitle }}</h2>
-        <p>{{ copy.settingsHint }}</p>
+        <h2>{{ managedAi ? copy.managedTitle : copy.settingsTitle }}</h2>
+        <p>{{ managedAi ? copy.managedHint : copy.settingsHint }}</p>
       </div>
-      <button class="vpd-primary-button" type="button" @click="openSettings">
+      <button v-if="!managedAi" class="vpd-primary-button" type="button" @click="openSettings">
         <Settings2 class="icon" />
         {{ copy.openSettings }}
       </button>

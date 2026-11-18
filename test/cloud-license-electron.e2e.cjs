@@ -195,23 +195,25 @@ async function main() {
       assert.equal(list, 'ok')
     })
 
-    await step('后台下发的软件设置自动应用，渲染进程只看到掩码，设置页只读', async () => {
+    await step('后台软件设置自动应用：本机只有云端代理地址和令牌，设置页换成「AI 服务」', async () => {
       const status = await page.evaluate(() => window.api.cloud.getStatus())
       assert.equal(status.managedSettings, true)
       const creds = await page.evaluate(() => window.api.clone.getModelCredentials())
       assert.equal(creds.videoApifoxHubProfile, 'ai666')
-      assert.equal(creds.ai666Hub.baseUrl, 'https://ai666.e2e.test')
+      assert.equal(creds.ai666Hub.baseUrl, `${base}/api/v1/ai-proxy/ai666`, '平台地址换成云端代理')
       assert.equal(creds.ai666Hub.startEndVideoModel, 'veo-e2e')
-      assert.equal(creds.ai666Hub.apiKey, '••••0000')
+      assert.match(creds.ai666Hub.apiKey, /^••••/)
       assert.equal(creds.qiniuBucket, 'e2e-bucket')
       assert.ok(!JSON.stringify(creds).includes('sk-e2e-ai666'), '渲染进程不应拿到明文 Key')
       // 用户尝试保存别的值：后台字段仍以后台为准
       await page.evaluate((c) => window.api.clone.setModelCredentials({ ...c, ai666Hub: { ...c.ai666Hub, baseUrl: 'https://evil.test' } }), creds)
       const after = await page.evaluate(() => window.api.clone.getModelCredentials())
-      assert.equal(after.ai666Hub.baseUrl, 'https://ai666.e2e.test')
+      assert.equal(after.ai666Hub.baseUrl, `${base}/api/v1/ai-proxy/ai666`)
       await page.evaluate(() => { window.location.hash = '#/settings' })
-      await page.locator('[data-settings-section="platforms"]').click()
-      await page.waitForSelector('[data-testid="settings-managed-notice"]', { timeout: 15_000 })
+      await page.locator('[data-settings-section="ai-service"]').click()
+      await page.waitForSelector('[data-testid="managed-ai-service"]', { timeout: 15_000 })
+      assert.equal(await page.locator('[data-settings-section="platforms"]').count(), 0, '普通用户看不到平台 Key 设置')
+      assert.equal(await page.locator('[data-settings-section="qiniu"]').count(), 0)
       await page.screenshot({ path: path.join(artifacts, 'cloud-license-e2e-settings-managed.png') })
     })
 

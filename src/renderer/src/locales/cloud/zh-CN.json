@@ -112,7 +112,16 @@
     "refunded": "已退款"
   },
   "settings": {
-    "managedNotice": "这些设置由管理员统一配置并自动同步到本机，无需自己填写 Key。如需修改请联系管理员。"
+    "managedNotice": "这些设置由管理员统一配置并自动同步到本机，无需自己填写 Key。如需修改请联系管理员。",
+    "aiServiceLabel": "AI 服务",
+    "aiServiceDesc": "平台统一提供，无需填写 Key",
+    "aiServiceTitle": "AI 服务",
+    "aiServiceSubtitle": "由平台统一提供",
+    "aiServiceNotice": "视频、图片、对话用的 AI 平台和模型都由平台统一配置好了，你不需要申请或填写任何 Key，打开功能就能直接生成。生成视频 / 图片按下面的方式计费。",
+    "aiServiceChat": "对话（写文案、拆解脚本等）：不扣点",
+    "aiServiceOpenBilling": "点数明细与充值",
+    "aiServiceLoginFirst": "登录并开通会员后可以查看计费方式。",
+    "heroSubtitleManaged": "外观、AI 服务、AI 制片人与存储。"
   },
   "banner": {
     "updateRequired": "当前版本过旧，请更新到 {version} 或更高版本后使用。"

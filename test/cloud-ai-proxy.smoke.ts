@@ -165,6 +165,7 @@ async function main() {
   assert.equal(creds.grsaiApiKey, token)
   assert.equal(creds.grsaiHost, `${base}/api/v1/ai-proxy/grsai`)
   assert.ok(!JSON.stringify(creds).includes('REAL'), '本机凭据里没有后台密钥')
+  assert.equal((await desk.client.getConfig()).managedAi, true, '公开配置告诉各端：AI 由平台统一配置')
   console.log('  ✓ 下发的设置不含平台 Key / 七牛 / TikHub 密钥，本机只有代理地址和令牌')
 
   const proxy = (platform: string, path: string, init: RequestInit = {}, auth = token) =>

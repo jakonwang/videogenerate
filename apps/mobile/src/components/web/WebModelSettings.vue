@@ -41,7 +41,7 @@ onMounted(() => void init())
   <div v-if="loading" class="wms-wait"><LoaderCircle :size="18" class="vg-spin" /> 正在读取电脑端的模型配置…</div>
   <div v-else-if="!desktopRelayOnline || !ms || !parts" class="vg-notice vg-notice--warning wms-offline">
     <Monitor :size="15" />
-    <span>模型与平台密钥保存在电脑上。打开电脑上的 TiktokCut（登录同一账号）后，这里可以直接查看和修改。网页上的生成功能用的是云端统一配置，不受影响。</span>
+    <span>这里查看和修改的是你在电脑上自己填写的平台 Key 和模型。打开电脑上的 TiktokCut（登录同一账号）后才能读取。网页上的生成功能用的是平台统一配置，不受影响。</span>
     <button type="button" class="vg-btn vg-btn--sm" @click="init"><RefreshCw :size="14" /> 重新检测</button>
   </div>
   <div v-else class="wms">

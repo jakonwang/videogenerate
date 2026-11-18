@@ -553,7 +553,8 @@ export function createCloudService(deps: {
 
   /* ------------------------------------------------------------------ 配置 */
 
-  function publicConfig(): { values: Record<string, unknown>; version: string } {
+  /** managedAi：后台是否统一配置了 AI 平台（Key 只在服务器）。是的话各端不给普通用户显示平台 / 模型 / 七牛设置 */
+  function publicConfig(): { values: Record<string, unknown>; version: string; managedAi: boolean } {
     const entries = repo.listConfig('public')
     const values: Record<string, unknown> = {}
     let latest = 0
@@ -561,7 +562,7 @@ export function createCloudService(deps: {
       values[entry.key] = entry.value
       latest = Math.max(latest, entry.updatedAt)
     }
-    return { values, version: `${entries.length}-${latest}` }
+    return { values, version: `${entries.length}-${latest}`, managedAi: readManagedSettings().settings.enabled }
   }
 
   /* ------------------------------------------------------------------ 软件设置下发 */

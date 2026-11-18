@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCloudAuthStore } from '@/stores/cloudAuth'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Check,
@@ -25,6 +25,7 @@ import {
   Settings as SettingsIcon,
   Brain,
   AlarmClock,
+  Sparkles,
 } from 'lucide-vue-next'
 import { useAppSettingsStore, type AppTheme } from '@/stores/appSettings'
 import StorageManagementPanel from '../components/StorageManagementPanel.vue'
@@ -33,6 +34,7 @@ import AiAutomationSettings from '../components/ai/AiAutomationSettings.vue'
 import { useModelSettings } from '../composables/useModelSettings'
 import ModelSettingsSection from '../components/settings/ModelSettingsSection.vue'
 import ModelSettingsSummary from '../components/settings/ModelSettingsSummary.vue'
+import ManagedAiServicePanel from '../components/settings/ManagedAiServicePanel.vue'
 
 const settingsBusy = ref(false)
 const settingsMessage = ref('')
@@ -44,16 +46,18 @@ type SettingsSection =
   | 'qiniu'
   | 'brand'
   | 'automation'
+  | 'ai-service'
 
 const settingsSection = ref<SettingsSection>('appearance')
 const settingsNavPanel = ref<HTMLElement | null>(null)
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const appSettings = useAppSettingsStore()
 
 watch(() => route.query.section, (value) => {
   const section = String(Array.isArray(value) ? value[0] : value || '') as SettingsSection
-  if (['appearance', 'platforms', 'capabilities', 'storage-management', 'qiniu', 'brand', 'automation'].includes(section)) settingsSection.value = section
+  if (['appearance', 'platforms', 'capabilities', 'storage-management', 'qiniu', 'brand', 'automation', 'ai-service'].includes(section)) settingsSection.value = section
 }, { immediate: true })
 
 function revealActiveSettingsSection() {
@@ -88,7 +92,7 @@ const {
   refreshModelSettings,
   saveModelSettings,
 } = modelSettings
-const sectionGroups = [
+const allSectionGroups = [
   {
     key: 'general',
     labelKey: 'settings.navigation.groups.general',
@@ -122,11 +126,32 @@ const sectionGroups = [
   },
 ] as const
 
-const isModelSettingsSection = computed(() => ['platforms', 'capabilities', 'qiniu'].includes(settingsSection.value))
 const cloudAuth = useCloudAuthStore()
 void cloudAuth.ensureLoaded()
-/** 平台 Key / 模型 / 七牛由后台统一下发时，这几个分区只读 */
-const managedLocked = computed(() => Boolean(cloudAuth.status?.managedSettings) && isModelSettingsSection.value)
+/**
+ * 商业版托管模式：平台 Key、模型、七牛都由后台统一配置（Key 只在服务器），
+ * 普通用户看不到「AI 平台 / 模型能力 / 七牛云」，换成一个「AI 服务」说明页（不用填 Key、怎么计费）。
+ */
+const managedAi = computed(() => Boolean(cloudAuth.status?.managedSettings))
+const MANAGED_HIDDEN: readonly string[] = ['platforms', 'capabilities', 'qiniu']
+const sectionGroups = computed(() =>
+  allSectionGroups.map((group) => {
+    if (!managedAi.value) return group
+    if (group.key === 'ai') {
+      return { ...group, items: [{ key: 'ai-service', labelKey: 'cloud.settings.aiServiceLabel', descKey: 'cloud.settings.aiServiceDesc', icon: Sparkles }] }
+    }
+    return { ...group, items: group.items.filter((item) => !MANAGED_HIDDEN.includes(item.key)) }
+  }),
+)
+watch(
+  [managedAi, settingsSection],
+  ([managed, section]) => {
+    if (managed && MANAGED_HIDDEN.includes(section)) settingsSection.value = 'ai-service'
+    else if (!managed && section === 'ai-service') settingsSection.value = 'platforms'
+  },
+  { immediate: true },
+)
+const isModelSettingsSection = computed(() => !managedAi.value && ['platforms', 'capabilities', 'qiniu'].includes(settingsSection.value))
 
 const settingsMessageTone = computed(() => {
   const text = String(settingsMessage.value || '').trim().toLowerCase()
@@ -194,7 +219,7 @@ onBeforeUnmount(() => {
       <span class="vg-page-head__icon"><SettingsIcon :size="20" /></span>
       <div class="vg-page-head__text">
         <h1>{{ t('settings.hero.title') }}</h1>
-        <p>{{ t('settings.hero.subtitle') }}</p>
+        <p>{{ managedAi ? t('cloud.settings.heroSubtitleManaged') : t('settings.hero.subtitle') }}</p>
       </div>
       <div class="vg-page-head__actions">
         <button class="vg-btn vg-btn--sm" type="button" :disabled="settingsBusy" @click="checkUpdatesNow">
@@ -203,16 +228,17 @@ onBeforeUnmount(() => {
         <button class="vg-btn vg-btn--sm" type="button" @click="openDataDir">
           <FolderOpen :size="14" /> {{ t('settings.actions.openDataDir') }}
         </button>
-        <button class="vg-btn vg-btn--sm" type="button" @click="refreshModelSettings">
+        <button v-if="!managedAi" class="vg-btn vg-btn--sm" type="button" @click="refreshModelSettings">
           <RefreshCw :size="14" /> {{ t('settings.actions.refresh') }}
         </button>
-        <button v-if="isModelSettingsSection" class="vg-btn vg-btn--primary vg-btn--sm" type="button" :disabled="modelSettingsBusy || managedLocked" @click="saveModelSettings">
+        <button v-if="isModelSettingsSection" class="vg-btn vg-btn--primary vg-btn--sm" type="button" :disabled="modelSettingsBusy" @click="saveModelSettings">
           <Save :size="14" /> {{ modelSettingsBusy ? t('settings.actions.saving') : t('settings.actions.saveSettings') }}
         </button>
       </div>
     </header>
 
-    <section class="vg-stats">
+    <!-- 托管模式下平台 / 模型由平台统一提供，普通用户不需要看这些 -->
+    <section v-if="!managedAi" class="vg-stats">
       <div v-for="item in summaryCards" :key="item.title" class="vg-stat">
         <span class="vg-stat__icon" :class="summaryToneClass(item.tone)"><component :is="item.icon" :size="17" /></span>
         <span class="vg-stat__body">
@@ -223,7 +249,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <div v-if="settingsMessage" class="vg-notice" :class="settingsMessageTone === 'success' ? 'vg-notice--accent' : settingsMessageTone === 'error' ? 'vg-notice--danger' : ''">
+    <div v-if="settingsMessage && (!managedAi || settingsMessageTone === 'error')" class="vg-notice" :class="settingsMessageTone === 'success' ? 'vg-notice--accent' : settingsMessageTone === 'error' ? 'vg-notice--danger' : ''">
       <Info :size="16" /><span>{{ settingsMessage }}</span>
     </div>
 
@@ -249,10 +275,7 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <main class="settings__main" :class="{ 'is-managed-locked': managedLocked }" :inert="managedLocked || undefined">
-        <div v-if="managedLocked" class="vg-notice vg-notice--accent settings__managed-notice" data-testid="settings-managed-notice">
-          <Info :size="16" /><span>{{ t('cloud.settings.managedNotice') }}</span>
-        </div>
+      <main class="settings__main">
         <!-- Appearance -->
         <template v-if="settingsSection === 'appearance'">
           <section class="vg-card">
@@ -283,6 +306,9 @@ onBeforeUnmount(() => {
 
           
         </template>
+
+        <!-- 托管模式：AI 服务说明 -->
+        <ManagedAiServicePanel v-else-if="settingsSection === 'ai-service'" @open-billing="router.push({ name: 'billing' })" />
 
         <!-- Platforms -->
         <ModelSettingsSection v-else-if="settingsSection === 'platforms' || settingsSection === 'capabilities'" :ms="modelSettings" :section="settingsSection" />
@@ -371,6 +397,4 @@ onBeforeUnmount(() => {
   .settings__layout, .settings__layout.has-side-panel { grid-template-columns: 1fr; }
   .settings-nav, .settings__side { position: static; grid-column: auto; }
 }
-.settings__main.is-managed-locked > :not(.settings__managed-notice) { opacity: .55; }
-.settings__managed-notice { margin-bottom: 12px; }
 </style>

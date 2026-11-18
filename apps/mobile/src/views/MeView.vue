@@ -15,22 +15,38 @@ import WebStep from '@/components/web/WebStep.vue'
 import WebResults from '@/components/web/WebResults.vue'
 import { Brain, Check, Cloud, Layers, Palette, Settings2 } from 'lucide-vue-next'
 import WebModelSettings from '@/components/web/WebModelSettings.vue'
+import WebAiService from '@/components/web/WebAiService.vue'
+import { Sparkles } from 'lucide-vue-next'
 import WebAutomationSettings from '@/components/web/WebAutomationSettings.vue'
 import BrandMemoryForm from '@/components/BrandMemoryForm.vue'
 import { APP_THEMES, applyTheme, currentTheme, type AppTheme } from '@/lib/theme'
-const settingsSection = ref<'appearance' | 'platforms' | 'capabilities' | 'brand' | 'automation' | 'account' | 'storage' | 'qiniu' | 'about'>('appearance')
+const settingsSection = ref<'appearance' | 'platforms' | 'capabilities' | 'ai' | 'brand' | 'automation' | 'account' | 'storage' | 'qiniu' | 'about'>('appearance')
 const theme = ref<AppTheme>(currentTheme())
 function setTheme(value: AppTheme) {
   theme.value = value
   applyTheme(value)
 }
-const SETTINGS_NAV = [
+const ALL_SETTINGS_NAV = [
   { title: '常规', items: [{ key: 'appearance' as const, label: '外观', desc: '皮肤与主题', icon: Palette }] },
   { title: 'AI 平台与模型', items: [{ key: 'platforms' as const, label: 'AI 平台', desc: '电脑端的平台密钥与地址', icon: Server }, { key: 'capabilities' as const, label: '模型能力', desc: '视频 / 图片 / 对话用哪个模型', icon: Layers }] },
   { title: 'AI 制片人', items: [{ key: 'brand' as const, label: '品牌记忆', desc: '语气、人群、禁用词', icon: Brain }, { key: 'automation' as const, label: '体检与自动化', desc: '系统体检、每日简报、每周复盘', icon: AlarmClock }] },
   { title: '账号', items: [{ key: 'account' as const, label: '账号与安全', desc: '会员、密码、退出登录', icon: KeyRound }] },
   { title: '数据', items: [{ key: 'storage' as const, label: '同步与存储', desc: '云端空间、同步、缓存', icon: HardDrive }, { key: 'qiniu' as const, label: '七牛云', desc: '电脑端的七牛存储配置', icon: Cloud }, { key: 'about' as const, label: '服务器与版本', desc: '连接的服务器和版本号', icon: Server }] },
 ]
+/**
+ * 后台统一配置 AI 平台时（Key 只在服务器），普通用户不需要「AI 平台 / 模型能力 / 七牛云」，
+ * 换成一个「AI 服务」说明页：不用填 Key、生成怎么计费。
+ */
+const managedAi = ref(true)
+const SETTINGS_NAV = computed(() =>
+  managedAi.value
+    ? ALL_SETTINGS_NAV.map((group) =>
+        group.title === 'AI 平台与模型'
+          ? { title: 'AI', items: [{ key: 'ai' as const, label: 'AI 服务', desc: '平台统一提供，无需填写 Key', icon: Sparkles }] }
+          : { ...group, items: group.items.filter((item) => item.key !== 'qiniu') },
+      )
+    : ALL_SETTINGS_NAV,
+)
 const inWebShell = useInWebShell()
 
 const router = useRouter()
@@ -54,6 +70,12 @@ const storagePct = computed(() => (usage.value ? Math.min(100, (usage.value.file
 
 onMounted(async () => {
   void refreshAccount()
+  void cloud
+    .getConfig()
+    .then((config) => {
+      managedAi.value = config.managedAi !== false
+    })
+    .catch(() => {})
   try {
     usage.value = await cloud.sync.usage()
   } catch {
@@ -123,6 +145,10 @@ async function logout() {
               <small>和电脑端设置同一份配置</small>
             </h2>
             <WebModelSettings :key="settingsSection" :section="settingsSection" />
+          </template>
+
+          <template v-else-if="settingsSection === 'ai'">
+            <WebAiService />
           </template>
 
           <template v-else-if="settingsSection === 'automation'">
