@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 import { ref } from 'vue'
 import { ImagePlus, LoaderCircle, Star, X } from 'lucide-vue-next'
 import type { SyncFileRef } from '@shared/cloud/sync'
@@ -52,7 +53,7 @@ const coverId = () => cover.value || images.value[0]?.fileId
     <div v-for="n in uploading" :key="`u${n}`" class="cell cell--loading" :style="{ aspectRatio: aspect || '1' }"><LoaderCircle :size="22" class="m-spin" /></div>
     <button type="button" class="cell cell--add" :style="{ aspectRatio: aspect || '1' }" @click="input?.click()">
       <ImagePlus :size="24" />
-      <span>拍照 / 相册</span>
+      <span>{{ isWeb ? '上传图片' : '拍照 / 相册' }}</span>
     </button>
     <input ref="input" type="file" accept="image/*" multiple hidden @change="onPick" />
   </div>

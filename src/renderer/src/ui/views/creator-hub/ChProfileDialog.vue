@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { UserCog, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubCrmRow } from '@/../../shared/creatorHub'
+import type { CreatorHubCrmRow } from '../../../../../shared/creatorHub'
 
 const props = defineProps<{ row: CreatorHubCrmRow | null; busy: boolean; knownTags: string[] }>()
 const emit = defineEmits<{ close: []; save: [payload: { tags: string[]; note: string; blocked: boolean }] }>()

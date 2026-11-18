@@ -2,7 +2,7 @@
 import { CalendarRange, Cookie, ExternalLink, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Save, ShieldCheck, Store, Trash2 } from 'lucide-vue-next'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubSettings, CreatorHubShop, CreatorHubSyncProgress } from '@/../../shared/creatorHub'
+import type { CreatorHubSettings, CreatorHubShop, CreatorHubSyncProgress } from '../../../../../shared/creatorHub'
 import { formatDateTime } from './creatorHubFormat'
 
 const props = defineProps<{ shops: CreatorHubShop[]; progress: Record<string, CreatorHubSyncProgress | null>; busy: Record<string, string>; settings: CreatorHubSettings; savingSettings: boolean }>()

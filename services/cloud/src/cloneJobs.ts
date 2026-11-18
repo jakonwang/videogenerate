@@ -19,6 +19,8 @@ const MAX_SHOTS = 30
 export type CloneProviders = {
   analyzeReferenceVideo: typeof analyzeReferenceVideo
   probeDuration: (path: string) => Promise<number>
+  /** 宽高、时长、有没有音轨（直播切片导出用） */
+  probe?: (path: string) => Promise<{ durationSec: number; width: number; height: number; hasAudio: boolean }>
   /** cwd：在工作目录里运行，让滤镜里的相对路径（字幕、字体）不需要转义盘符 */
   ffmpeg: (args: string[], cwd?: string) => Promise<void>
 }
@@ -26,6 +28,10 @@ export type CloneProviders = {
 export const DEFAULT_CLONE_PROVIDERS: CloneProviders = {
   analyzeReferenceVideo,
   probeDuration: async (path) => Number((await probeMedia(path)).durationSec ?? 0),
+  probe: async (path) => {
+    const info = await probeMedia(path)
+    return { durationSec: Number(info.durationSec ?? 0), width: Number(info.width ?? 0), height: Number(info.height ?? 0), hasAudio: Boolean(info.hasAudio) }
+  },
   ffmpeg: (args, cwd) =>
     new Promise((resolve, reject) => {
       const child = spawn(getFfmpegExecutable(), ['-hide_banner', '-loglevel', 'error', '-y', ...args], { windowsHide: true, cwd })

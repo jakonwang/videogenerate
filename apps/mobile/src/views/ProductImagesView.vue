@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Inbox, LoaderCircle, Sparkles } from 'lucide-vue-next'
@@ -11,6 +12,11 @@ import { categoryForProduct, generateProductImages, PRODUCT_IMAGE_SHOTS, startPo
 import { errorMessage } from '@/lib/session'
 import { getRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import WebImageSource from '@/components/web/WebImageSource.vue'
+const inWebShell = useInWebShell()
 
 const route = useRoute()
 const router = useRouter()
@@ -67,6 +73,42 @@ async function start() {
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader title="商品图素材" description="AI 按镜头生成商品主图、上身图和细节特写，一次出一整套。">
+      <template #actions>
+        <button type="button" class="vg-btn" @click="router.push('/review')"><Inbox :size="15" /> 审核收件箱 <span v-if="pendingReview" class="vg-count">{{ pendingReview }}</span></button>
+      </template>
+    </PageHeader>
+    <main class="vg-page wt-page" data-testid="web-product-images">
+      <div class="wt-grid">
+        <WebStep :index="1" title="商品图" subtitle="选择商品，或上传一张商品清晰的图">
+          <WebImageSource v-model="source" />
+          <div class="wt-field">
+            <span class="vg-field__label">商品品类 <small class="vg-muted">决定上身方式</small></span>
+            <div class="vg-seg vg-seg--sm">
+              <button v-for="[value, label] in categories" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': category === value }" @click="category = value">{{ label }}</button>
+            </div>
+          </div>
+        </WebStep>
+        <WebStep :index="2" title="选择镜头" subtitle="每种镜头生成 1 张" :meta="`已选 ${shots.length} / ${PRODUCT_IMAGE_SHOTS.length}`">
+          <div class="pi-shots">
+            <button v-for="shot in PRODUCT_IMAGE_SHOTS" :key="shot.index" type="button" class="pi-shot" :class="{ 'is-active': shots.includes(shot.index) }" @click="toggle(shot.index)">
+              <span class="pi-shot__check"></span>
+              <span class="pi-shot__text"><strong>{{ shot.label }}</strong><small>{{ shot.hint }}</small></span>
+            </button>
+          </div>
+          <template #foot>
+            <span class="vg-muted wt-foot-hint">约 1–2 分钟完成，结果也会进入审核收件箱</span>
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="submitting || !source || !shots.length" @click="start">
+              <LoaderCircle v-if="submitting" :size="15" class="vg-spin" /><Sparkles v-else :size="15" /> 生成 {{ shots.length }} 张商品图
+            </button>
+          </template>
+        </WebStep>
+        <WebResults :index="3" :items="results" title="最近生成" />
+      </div>
+    </main>
+  </template>
+  <template v-else>
   <PageHeader title="商品图素材" back="/create">
     <template #actions>
       <button type="button" class="m-icon-btn inbox" aria-label="审核收件箱" @click="router.push('/review')">
@@ -74,7 +116,7 @@ async function start() {
       </button>
     </template>
   </PageHeader>
-  <main class="m-page m-page--no-tabs">
+  <main class="m-page m-page--no-tabs wb">
     <section class="m-section">
       <div class="m-section__head"><h2 class="m-section__title">1. 选商品图</h2></div>
       <SourcePicker v-model="source" />
@@ -100,16 +142,18 @@ async function start() {
       <button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="submitting || !source || !shots.length" @click="start">
         <LoaderCircle v-if="submitting" :size="18" class="m-spin" /><Sparkles v-else :size="18" /> 生成 {{ shots.length }} 张商品图
       </button>
-      <p class="m-muted small note">生成在云端进行，关掉 App 也会继续；完成后在下方和「审核收件箱」里查看。</p>
+      <p class="m-muted small note">生成在云端进行，关掉{{ isWeb ? '网页' : ' App ' }}也会继续；完成后在下方和「审核收件箱」里查看。</p>
     </section>
 
-    <section v-if="results.length" class="m-section">
+    <section v-if="results.length" class="m-section wb-results">
       <div class="m-section__head"><h2 class="m-section__title">最近生成</h2><button type="button" class="m-section__link" @click="router.push('/review')">去审核</button></div>
       <div class="grid">
         <GenerationTile v-for="item in results.slice(0, 12)" :key="item.id" :item="item" @click="router.push(`/review?focus=${item.id}`)" />
       </div>
     </section>
+    <section v-else class="m-section wb-results wb-results--empty"><div class="m-card m-empty"><span class="m-empty__title">生成结果会出现在这里</span><span class="m-empty__text">在云端生成，完成后也会进入「审核收件箱」</span></div></section>
   </main>
+  </template>
 </template>
 
 <style scoped>

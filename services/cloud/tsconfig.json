@@ -6,5 +6,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../../src/shared/cloud/**/*.ts"]
+  "include": ["./**/*.ts", "../../src/shared/cloud/**/*.ts", "../../src/types/vendor.d.ts", "../../src/renderer/src/types/qrcode.d.ts"]
 }

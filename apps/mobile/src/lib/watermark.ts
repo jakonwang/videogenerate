@@ -1,4 +1,7 @@
+import { ref, watch } from 'vue'
+import { SYNC_COLLECTIONS, type SyncWatermarkTemplate } from '@shared/cloud/sync'
 import { fileBlob, uploadRaw } from './files'
+import { deleteRecord, listRecords, newId, saveRecord, syncState } from './sync'
 
 /**
  * 商品图水印（与电脑端一致）：原图居中裁成正方形、白底，盖上同尺寸的透明 PNG 模板，导出 JPEG。
@@ -75,3 +78,26 @@ export async function applyWatermark(sourceFileId: string, templateFileId: strin
     template.close()
   }
 }
+
+/* ------------------------------------------------------------------ 保存的模板（和电脑端「选择已保存模板」一样，多端同步） */
+
+export type WatermarkTemplateItem = SyncWatermarkTemplate & { id: string }
+
+export function useWatermarkTemplates() {
+  const items = ref<WatermarkTemplateItem[]>([])
+  watch(
+    () => syncState.version,
+    async () => {
+      const records = await listRecords<SyncWatermarkTemplate>(SYNC_COLLECTIONS.watermarkTemplates)
+      items.value = records.filter((r) => r.data).map((r) => ({ ...(r.data as SyncWatermarkTemplate), id: r.id })).sort((a, b) => b.createdAt - a.createdAt)
+    },
+    { immediate: true },
+  )
+  return items
+}
+
+export async function saveWatermarkTemplate(name: string, fileId: string) {
+  await saveRecord<SyncWatermarkTemplate>(SYNC_COLLECTIONS.watermarkTemplates, newId('wmt'), { name: name.trim().slice(0, 40) || '水印模板', fileId, createdAt: Date.now() })
+}
+
+export const removeWatermarkTemplate = (id: string) => deleteRecord(SYNC_COLLECTIONS.watermarkTemplates, id)

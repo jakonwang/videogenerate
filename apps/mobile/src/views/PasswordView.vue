@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { KeyRound } from 'lucide-vue-next'
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
@@ -28,7 +29,7 @@ async function save() {
 </script>
 
 <template>
-  <PageHeader title="修改密码" back />
+  <PageHeader title="修改密码" back :icon="KeyRound" description="修改后，其它已登录的电脑和手机需要用新密码重新登录。" />
   <main class="m-page m-page--no-tabs">
     <form class="m-card m-card--pad form" @submit.prevent="save">
       <label class="m-field"><span class="m-field__label">当前密码</span><input v-model="form.old" class="m-input" type="password" autocomplete="current-password" /></label>

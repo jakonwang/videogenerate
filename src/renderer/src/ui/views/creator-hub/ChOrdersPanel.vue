@@ -2,8 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { CheckCircle2, Coins, Receipt, RotateCcw, Search, ShoppingBag, TrendingUp } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubOrder, CreatorHubShop } from '@/../../shared/creatorHub'
-import { orderSummary } from '@/../../shared/creatorHubAnalytics'
+import type { CreatorHubOrder, CreatorHubShop } from '../../../../../shared/creatorHub'
+import { orderSummary } from '../../../../../shared/creatorHubAnalytics'
 import ChPager from './ChPager.vue'
 import { formatCount, formatDateTime, formatMoney, formatPercent } from './creatorHubFormat'
 

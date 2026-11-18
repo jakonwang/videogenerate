@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import QRCode from 'qrcode'
 import { CheckCircle2, Crown, ExternalLink, KeyRound, LoaderCircle, Receipt, X } from 'lucide-vue-next'
@@ -6,6 +7,11 @@ import { describeDeviceAllowance, type CloudOrder, type CloudPayChannel, type Cl
 import PageHeader from '@/components/PageHeader.vue'
 import { cloud, errorMessage, refreshAccount, session } from '@/lib/session'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import { CalendarClock, Check, RefreshCw, ShieldCheck, UserRound } from 'lucide-vue-next'
+const inWebShell = useInWebShell()
 
 /** 会员中心：看套餐、下单付款（扫码 / 打开支付宝）、兑换码、我的订单 */
 
@@ -149,6 +155,101 @@ onBeforeUnmount(stop)
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader title="账号与会员" description="会员状态、套餐购买与兑换，手机、电脑和网页版通用。" :icon="ShieldCheck">
+      <template #actions>
+        <button type="button" class="vg-btn" @click="load"><RefreshCw :size="14" /> 刷新</button>
+      </template>
+    </PageHeader>
+    <main class="vg-page mb" data-testid="web-membership">
+      <div class="st-stats mb-stats">
+        <div class="st-stat"><span class="st-stat__icon"><UserRound :size="16" /></span><span><small>当前账号</small><strong>{{ session.user?.account || '—' }}</strong></span></div>
+        <div class="st-stat"><span class="st-stat__icon is-violet"><Crown :size="16" /></span><span><small>会员套餐</small><strong>{{ status.title }}</strong></span></div>
+        <div class="st-stat"><span class="st-stat__icon is-amber"><CalendarClock :size="16" /></span><span><small>到期时间</small><strong>{{ status.sub }}</strong></span></div>
+      </div>
+
+      <section class="mb-section">
+        <div class="mb-section__head">
+          <h2 class="vg-section-title"><Crown :size="16" /> 选择套餐</h2>
+          <div v-if="channels.length > 1" class="vg-seg vg-seg--sm">
+            <button v-for="c in channels" :key="c" type="button" class="vg-seg__btn" :class="{ 'is-active': channel === c }" @click="channel = c">{{ CHANNEL_LABEL[c] }}</button>
+          </div>
+        </div>
+        <p v-if="loading" class="vg-muted"><LoaderCircle :size="14" class="vg-spin" /> 正在加载…</p>
+        <div v-else-if="loadError" class="vg-notice vg-notice--danger">{{ loadError }}</div>
+        <p v-else-if="!plans.length" class="vg-muted">暂无可购买的套餐</p>
+        <div v-else class="mb-plans">
+          <article v-for="(plan, index) in plans" :key="plan.code" class="mb-plan" :class="{ 'is-featured': index === 1 }">
+            <span v-if="index === 1" class="vg-pill vg-pill--accent mb-plan__tag">推荐</span>
+            <strong class="mb-plan__name">{{ plan.name }}</strong>
+            <span class="mb-plan__price">{{ yuan(plan.amountFen) }}<small> / {{ daysText(plan.days) }}</small></span>
+            <p v-if="plan.description" class="mb-plan__desc">{{ plan.description }}</p>
+            <p class="mb-plan__devices"><Check :size="13" /> {{ describeDeviceAllowance(plan.maxDevices, mobileSlots) }}</p>
+            <button type="button" class="vg-btn vg-btn--block" :class="index === 1 ? 'vg-btn--primary' : ''" :disabled="!!busyPlan" @click="buy(plan)">
+              <LoaderCircle v-if="busyPlan === plan.code" :size="14" class="vg-spin" /> {{ status.active ? '续费' : '开通' }}
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <div class="mb-lower">
+        <section class="mb-section">
+          <h2 class="vg-section-title"><KeyRound :size="16" /> 兑换码</h2>
+          <form class="mb-redeem" @submit.prevent="redeem">
+            <input v-model="code" class="vg-input" placeholder="输入兑换码" autocapitalize="characters" />
+            <button type="submit" class="vg-btn vg-btn--primary" :disabled="redeeming || !code.trim()">兑换</button>
+          </form>
+        </section>
+        <section class="mb-section">
+          <h2 class="vg-section-title"><Receipt :size="16" /> 我的订单 <small>{{ orders.length }} 笔</small></h2>
+          <div v-if="orders.length" class="vg-table-wrap">
+            <table class="vg-table">
+              <thead><tr><th>套餐</th><th>金额</th><th>支付方式</th><th>下单时间</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr v-for="item in orders" :key="item.orderNo">
+                  <td>{{ item.planName }}</td>
+                  <td>{{ yuan(item.amountFen) }}</td>
+                  <td>{{ CHANNEL_LABEL[item.channel] }}</td>
+                  <td>{{ new Date(item.createdAt).toLocaleString('zh-CN') }}</td>
+                  <td><span class="vg-pill vg-pill--dot" :class="item.status === 'paid' ? 'vg-pill--green' : item.status === 'pending' ? 'vg-pill--amber' : ''">{{ STATUS_LABEL[item.status] }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="vg-muted">还没有订单</p>
+        </section>
+      </div>
+
+      <div v-if="order" class="vg-backdrop" @click.self="closeOrder">
+        <section class="vg-dialog mb-pay">
+          <header class="vg-dialog__head">
+            <span class="vg-dialog__title">{{ order.status === 'paid' ? '付款成功' : `${order.planName} · ${yuan(order.amountFen)}` }}</span>
+            <button type="button" class="vg-icon-btn" aria-label="关闭" @click="closeOrder"><X :size="16" /></button>
+          </header>
+          <div class="vg-dialog__body mb-pay__body">
+            <template v-if="order.status === 'paid'">
+              <CheckCircle2 :size="44" class="mb-pay__ok" />
+              <p>{{ order.planName }} 已开通，手机、电脑和网页版立即可用</p>
+            </template>
+            <template v-else-if="order.status === 'pending'">
+              <img v-if="qr" :src="qr" alt="付款二维码" class="mb-pay__qr" />
+              <p class="vg-muted">{{ order.channel === 'wechat' ? '用手机微信「扫一扫」扫码付款' : order.channel === 'alipay' ? '点下面按钮打开支付宝付款，或扫码付款' : '测试环境：点下面按钮模拟付款' }}</p>
+              <p class="vg-muted"><LoaderCircle :size="13" class="vg-spin" /> 付款后自动开通</p>
+            </template>
+            <p v-else>订单{{ STATUS_LABEL[order.status] }}</p>
+          </div>
+          <footer class="vg-dialog__foot">
+            <div class="vg-dialog__foot-actions">
+              <button v-if="order.status === 'pending' && isLink" type="button" class="vg-btn vg-btn--primary" @click="openPay"><ExternalLink :size="14" /> 打开{{ CHANNEL_LABEL[order.channel] }}</button>
+              <button v-if="order.status === 'pending' && order.channel === 'mock'" type="button" class="vg-btn vg-btn--primary" @click="mockPay">模拟付款</button>
+              <button type="button" class="vg-btn" @click="closeOrder">{{ order.status === 'paid' ? '完成' : '关闭' }}</button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </main>
+  </template>
+  <template v-else>
   <PageHeader title="会员中心" back />
   <main class="m-page m-page--no-tabs">
     <section class="hero" :class="{ 'is-active': status.active }">
@@ -220,7 +321,7 @@ onBeforeUnmount(stop)
           <strong class="sheet__title">{{ order.planName }} · {{ yuan(order.amountFen) }}</strong>
           <img v-if="qr" :src="qr" alt="付款二维码" class="qr" />
           <p class="m-muted">
-            {{ order.channel === 'wechat' ? '截图保存后在微信「扫一扫」里从相册选取，或用另一台手机扫码付款' : order.channel === 'alipay' ? '点下面按钮打开支付宝付款，或扫码付款' : '测试环境：点下面按钮模拟付款' }}
+            {{ order.channel === 'wechat' ? (isWeb ? '用手机微信「扫一扫」扫码付款' : '截图保存后在微信「扫一扫」里从相册选取，或用另一台手机扫码付款') : order.channel === 'alipay' ? '点下面按钮打开支付宝付款，或扫码付款' : '测试环境：点下面按钮模拟付款' }}
           </p>
           <button v-if="isLink" type="button" class="m-btn m-btn--primary m-btn--block" @click="openPay"><ExternalLink :size="16" /> 打开{{ CHANNEL_LABEL[order.channel] }}</button>
           <button v-if="order.channel === 'mock'" type="button" class="m-btn m-btn--primary m-btn--block" @click="mockPay">模拟付款</button>
@@ -234,6 +335,7 @@ onBeforeUnmount(stop)
       </div>
     </div>
   </main>
+  </template>
 </template>
 
 <style scoped>

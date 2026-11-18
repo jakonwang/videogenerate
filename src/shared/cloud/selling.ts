@@ -129,3 +129,26 @@ export type SyncBusinessDigest = {
   creative?: BusinessCreative
 }
 
+
+/* ------------------------------------------------------------------ tk创意室（网页 / 手机下单，电脑代跑） */
+
+/** 网页或手机提交的 tk创意室任务；电脑端用自己的 TikTok 创意账号执行并把结果回传 */
+export type SyncCreativeRequest = {
+  /** 云端商品记录 id（products 集合） */
+  productId: string
+  productName?: string
+  /** 参考场景图（云端文件 id），每张出一条视频 */
+  referenceFileIds: string[]
+  mode?: 'reference_to_video' | 'image_to_video'
+  createdAt: number
+  /** pending = 等电脑接单；running = 电脑在出片；completed / failed / skipped 为最终状态 */
+  state: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+  /** 电脑端 tk创意室任务 id */
+  taskId?: string
+  shots?: Array<{ status: 'running' | 'completed' | 'failed'; outputFileId?: string; error?: string }>
+  error?: string
+  /** 电脑端最后一次回报的时间 */
+  reportedAt?: number
+}
+
+export const CREATIVE_REQUEST_MAX_IMAGES = 6

@@ -2,8 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { Save, Search, Trash2, Wallet } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubProductCost, CreatorHubSample } from '@/../../shared/creatorHub'
-import { costKey } from '@/../../shared/creatorHubFulfillment'
+import type { CreatorHubProductCost, CreatorHubSample } from '../../../../../shared/creatorHub'
+import { costKey } from '../../../../../shared/creatorHubFulfillment'
 import ChPager from './ChPager.vue'
 import { formatMoney } from './creatorHubFormat'
 

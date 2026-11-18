@@ -1,4 +1,7 @@
+import { createRelay, type RelayService } from './relay'
+import { routesToCloneEngine, type CloneEngine } from './cloneEngine'
 import http from 'node:http'
+import { createWebApp } from './webApp'
 import type { CloudConfig } from './config'
 import type { CloudService } from './service'
 import type { SyncService } from './sync'
@@ -55,7 +58,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -111,6 +114,18 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     return current
   }
   route('POST', '/api/v1/sync/push', (ctx) => sync.push(member(ctx).id, ctx.body))
+  // 电脑代办：网页调电脑端功能（GMV Max、达人中心），云端只在内存里转交
+  // 复刻：网页和电脑端同一个页面，但在服务器复刻引擎上执行（不需要电脑开着），见 cloneEngine.ts
+  route('POST', '/api/v1/relay/call', (ctx) => {
+    const id = member(ctx).id
+    const body = ctx.body as { ns?: string; method?: string; args?: unknown[] }
+    if (cloneEngine && routesToCloneEngine(cloneEngine, id, body)) return cloneEngine.call(id, String(body.ns), String(body.method), Array.isArray(body.args) ? body.args : [])
+    return relay.call(id, body as any)
+  })
+  route('GET', '/api/v1/relay/status', (ctx) => relay.online(user(ctx).id))
+  route('GET', '/api/v1/relay/next', (ctx) => relay.next(member(ctx).id, Number(ctx.url.searchParams.get('wait')) || undefined))
+  // Large results allowed: the body is read raw (custom size), so parse it here.
+  route('POST', '/api/v1/relay/result', (ctx) => relay.result(member(ctx).id, JSON.parse(ctx.bodyBuffer.toString('utf8') || '{}')), { maxBodyBytes: 16 * 1024 * 1024 })
   route('GET', '/api/v1/sync/usage', (ctx) => sync.usage(user(ctx).id))
   route('PUT', '/api/v1/files', (ctx) => sync.uploadFile(member(ctx).id, ctx.bodyBuffer, String(ctx.req.headers['content-type'] || '')), { maxBodyBytes: SYNC_MAX_FILE_BYTES })
   route('GET', '/api/v1/files/:id', (ctx) => {
@@ -125,6 +140,10 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('POST', '/api/v1/ai/jobs', (ctx) => ({ job: generation.create(member(ctx).id, ctx.body as any) }))
   route('GET', '/api/v1/ai/jobs', (ctx) => generation.list(user(ctx).id, String(ctx.url.searchParams.get('ids') || '').split(',')))
   route('GET', '/api/v1/ai/jobs/:id', (ctx) => ({ job: generation.get(user(ctx).id, ctx.params.id) }))
+  // 上架助手导出 Excel：图片的对外链接
+  // 网页显示自己的图片 / 视频用的签名链接
+  route('POST', '/api/v1/sync/file-links', (ctx) => generation.fileLinks(user(ctx).id, ctx.body as any))
+  route('POST', '/api/v1/ai/public-urls', (ctx) => generation.publicUrls(member(ctx).id, ctx.body as any))
   // 平台下载参考图用的签名链接（不需要登录，靠签名和有效期）
   route('GET', '/api/v1/public-files/:id', (ctx) => {
     const file = generation.readPublicFile(ctx.params.id, query(ctx))
@@ -190,8 +209,21 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     res.end(JSON.stringify(payload))
   }
 
+  const webApp = createWebApp(config.webAppDir)
+
   return async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     res.setHeader('X-Content-Type-Options', 'nosniff')
+    try {
+      const pathname = new URL(req.url || '/', 'http://cloud.local').pathname
+      if (await webApp(req, res, pathname)) return
+    } catch (error) {
+      console.error('[cloud] 网页版文件读取失败', error)
+      if (!res.headersSent) {
+        res.statusCode = 500
+        res.end()
+      }
+      return
+    }
     applyCors(req, res)
     if (req.method === 'OPTIONS') {
       res.statusCode = 204

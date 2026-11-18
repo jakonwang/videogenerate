@@ -61,19 +61,12 @@ function run() {
   pass(`app env: ${mode}`)
 
   const dataDir = ensureRequiredEnv('VIDEOGENERATE_DATA_DIR')
-  const webApiBase = ensureRequiredEnv('WEB_API_BASE_URL')
-  const publicWebApiBase = ensureRequiredEnv('NEXT_PUBLIC_WEB_API_BASE_URL')
+  const cloudApiBase = ensureRequiredEnv('NEXT_PUBLIC_CLOUD_API_BASE_URL')
 
-  if (webApiBase && !isHttpUrl(webApiBase)) {
-    fail(`WEB_API_BASE_URL must be http/https: ${webApiBase}`)
-  } else if (webApiBase) {
-    pass(`WEB_API_BASE_URL format valid`)
-  }
-
-  if (publicWebApiBase && !isHttpUrl(publicWebApiBase)) {
-    fail(`NEXT_PUBLIC_WEB_API_BASE_URL must be http/https: ${publicWebApiBase}`)
-  } else if (publicWebApiBase) {
-    pass(`NEXT_PUBLIC_WEB_API_BASE_URL format valid`)
+  if (cloudApiBase && !isHttpUrl(cloudApiBase)) {
+    fail(`NEXT_PUBLIC_CLOUD_API_BASE_URL must be http/https: ${cloudApiBase}`)
+  } else if (cloudApiBase) {
+    pass(`NEXT_PUBLIC_CLOUD_API_BASE_URL format valid`)
   }
 
   if (mode !== 'development') {
@@ -98,12 +91,9 @@ function run() {
 
   if (dataDir) {
     ensureDirExistsOrCreatable(dataDir)
-    ensureDirExistsOrCreatable(path.join(dataDir, 'db'))
-    ensureDirExistsOrCreatable(path.join(dataDir, 'viral-clone'))
-    ensureDirExistsOrCreatable(path.join(dataDir, 'web-uploads'))
   }
 
-  ensureFileExists(path.join(cwd, 'services', 'api', 'server.ts'), 'API entry')
+  ensureFileExists(path.join(cwd, 'services', 'cloud', 'server.ts'), 'Cloud service entry')
   ensureFileExists(path.join(cwd, 'apps', 'web-next', 'app'), 'Web-Next app dir')
   ensureFileExists(path.join(cwd, 'package.json'), 'package.json')
 

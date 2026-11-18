@@ -4,25 +4,18 @@
 
 - 本地开发：Windows
 - 预发布 / 生产部署：Linux
-- 商业主前端：`apps/web-next`
-- API 启动入口：`services/api/server.ts`
+- 官网 + 用户中心 + 后台：`apps/web-next`（Next.js）
+- 云服务（账号、会员、云同步、AI / 视频任务）：`services/cloud/server.ts`，同时在 `/app/` 提供网页版（`apps/mobile` 的 web 构建）
 - 桌面端自动更新配置入口：`src/main/lib/updater.ts`
+
+> 旧的网页工作台（`apps/web`、`services/api`、web-next 里的 workspace / clone / plugins 等页面）已于 2026-11 移除，
+> 功能由网页版 `/app/` 承接；旧路由在 `apps/web-next/next.config.ts` 里重定向到用户中心。
 
 ## 统一环境分层
 
-- `VG_APP_ENV=development`
-  - 仅用于 Windows 本地开发
-  - 可保留开发验证码
-  - 不允许桌面端自动更新检查
-- `VG_APP_ENV=staging`
-  - 用于 Linux 预发布或桌面端灰度验证
-  - 禁止 mock 回退
-  - 配置真实 `VG_UPDATE_BASE_URL` 后允许桌面端自动更新检查
-- `VG_APP_ENV=production`
-  - 用于正式运营
-  - 禁止固定验证码直登
-  - 禁止 mock 回退
-  - 配置真实 `VG_UPDATE_BASE_URL` 后允许桌面端自动更新检查
+- `VG_APP_ENV=development`：仅用于 Windows 本地开发；不允许桌面端自动更新检查
+- `VG_APP_ENV=staging`：Linux 预发布或桌面端灰度验证；禁止 mock 回退；配置真实 `VG_UPDATE_BASE_URL` 后允许自动更新检查
+- `VG_APP_ENV=production`：正式运营；禁止 mock 回退；配置真实 `VG_UPDATE_BASE_URL` 后允许自动更新检查
 
 ## 启动命令
 
@@ -30,65 +23,38 @@
 
 ```bash
 npm install
-npm run dev:api
+npm run dev:cloud
 npm run dev:web-next
 ```
+
+网页版开发：`cd apps/mobile && npm run dev:web`（代理 `/api` 到 `18300`）。
 
 ### Linux 预发布 / 生产
 
 ```bash
 npm install
+(cd apps/mobile && npm install && npm run build:web)
 npm run build:web-next
-node services/api/server.ts
-next start apps/web-next --hostname 0.0.0.0 --port 18280
+npm run start:cloud
+npm run start:web-next
 ```
+
+云服务的环境变量、PM2 与 Nginx 示例见 `services/cloud/README.md` 与 `services/cloud/deploy/`。
 
 ## 环境模板
 
-- 预发布模板：
-  - `env/staging.env.example`
-- 生产模板：
-  - `env/production.env.example`
+- 预发布：`env/staging.env.example`
+- 生产：`env/production.env.example`
+- 云服务：`services/cloud/deploy/cloud.env.example`
 
 ## 关键环境变量
-
-### Development
-
-```bash
-VG_APP_ENV=development
-VG_ALLOW_MOCK_GENERATION=true
-VIDEOGENERATE_DATA_DIR=D:/phpstudy_pro/WWW/videogenerate/.videogenerate
-NEXT_PUBLIC_WEB_API_BASE_URL=http://127.0.0.1:18080
-WEB_API_BASE_URL=http://127.0.0.1:18080
-VG_DEV_LOGIN_CODE=123456
-```
-
-### Staging
-
-```bash
-VG_APP_ENV=staging
-VG_ALLOW_MOCK_GENERATION=false
-VG_SMS_PROVIDER=console
-VG_UPDATE_BASE_URL=https://staging-update.example.com
-VIDEOGENERATE_DATA_DIR=/srv/videogen-staging/data
-VIDEOGENERATE_WEB_API_HOST=0.0.0.0
-VIDEOGENERATE_WEB_API_PORT=18080
-NEXT_PUBLIC_WEB_API_BASE_URL=https://staging-api.example.com
-WEB_API_BASE_URL=https://staging-api.example.com
-```
-
-### Production
 
 ```bash
 VG_APP_ENV=production
 VG_ALLOW_MOCK_GENERATION=false
-VG_SMS_PROVIDER=console
 VG_UPDATE_BASE_URL=https://update.example.com
 VIDEOGENERATE_DATA_DIR=/srv/videogen/data
-VIDEOGENERATE_WEB_API_HOST=0.0.0.0
-VIDEOGENERATE_WEB_API_PORT=18080
-NEXT_PUBLIC_WEB_API_BASE_URL=https://api.example.com
-WEB_API_BASE_URL=https://api.example.com
+NEXT_PUBLIC_CLOUD_API_BASE_URL=https://api.example.com
 ```
 
 ## 部署前预检
@@ -103,70 +69,13 @@ npm run preflight:production
 - `VG_APP_ENV` 是否合法
 - `VG_ALLOW_MOCK_GENERATION` 是否符合 staging / production 约束
 - `VG_UPDATE_BASE_URL` 是否仍为占位值
-- `VIDEOGENERATE_DATA_DIR`、`db`、`viral-clone`、`web-uploads` 是否可创建
-- API 与 Web-Next 入口是否存在
+- `NEXT_PUBLIC_CLOUD_API_BASE_URL` 是否为 http/https
+- `VIDEOGENERATE_DATA_DIR` 是否可创建
+- 云服务与 Web-Next 入口是否存在
 
 ## 运行时健康检查
 
-- API 健康检查：
-  - `GET /health`
-- Web-Next 健康检查：
-  - `GET /api/health`
-
-## API 启动 smoke
-
-```bash
-npm run smoke:api
-```
-
-该命令会：
-
-- 启动 `services/api/server.ts`
-- 轮询 `http://127.0.0.1:19080/health`
-- 成功后输出健康响应并退出
-
-## Web + API 联合 smoke
-
-```bash
-npm run smoke:web-stack
-```
-
-该命令会：
-
-- 启动 API（默认 `19080`）
-- 启动 Web-Next（默认 `19180`）
-- 检查：
-  - `GET /health`
-  - `GET /api/health`
-  - `GET /login`
-
-## 认证发码 smoke
-
-```bash
-npm run smoke:auth-send-code
-```
-
-该命令会验证：
-
-- development 可使用开发验证码与 `mock` provider
-- development 60 秒限频生效
-- staging 在 `VG_SMS_PROVIDER=console` 下会返回真实环境口径
-- staging 不再暴露 `devCode`
-
-## 数据目录与存储
-
-- 上传目录：
-  - `${VIDEOGENERATE_DATA_DIR}/web-uploads`
-- Clone 文件资产目录：
-  - `${VIDEOGENERATE_DATA_DIR}/viral-clone`
-- Web 商业数据默认正式存储：
-  - `${VIDEOGENERATE_DATA_DIR}/db/web-platform.sqlite`
-- Clone 项目元数据默认正式存储：
-  - `${VIDEOGENERATE_DATA_DIR}/db/clone-projects.sqlite`
-- 兼容与迁移说明：
-  - 若首次启动时 SQLite 为空且存在 `${VIDEOGENERATE_DATA_DIR}/db/web-platform.json`，会自动导入旧 Web 商业数据
-  - 若首次启动时 SQLite 为空且存在 `${VIDEOGENERATE_DATA_DIR}/db/clone-projects.json`，会自动导入旧 Clone 项目元数据
-  - 若当前 Node 运行环境不支持 `node:sqlite`，会自动回退到 JSON 存储
+- Web-Next：`GET /api/health`
 
 ## 更新配置
 
@@ -221,8 +130,8 @@ npm run dist
   - 构建命令：`npm run build:web-next`
   - 启动命令：`npm run start:web-next`
 - `api`
-  - 使用 Node 项目或 PM2 启动 `services/api/server.ts`
-  - 启动命令建议通过仓库根目录执行：`node services/api/server.ts`
+  - 使用 PM2 启动云服务：`services/cloud/deploy/ecosystem.config.cjs`
+  - 网页版随云服务在 `https://api.example.com/app/` 提供
 - `update`
   - 建立静态站点目录
   - 上传 `latest.yml`、`*.exe`、`*.blockmap`
@@ -275,21 +184,15 @@ Nginx / 面板层要求：
 2. 上传桌面更新资源到 `update` 子域
 3. Linux 服务器加载 `env/production.env.example` 对应变量
 4. 执行 `npm run preflight:production`
-5. 启动 API
+5. 启动云服务
 6. 启动 Web-Next
-7. 验证健康检查、登录发码、`/clone` 主链路与桌面更新检查
+7. 验证健康检查、登录发码、网页版 `/app/` 登录与桌面更新检查
 
 ## 验收清单
 
-- API 能启动，并打印正确的 `app env`
-- `GET /health` 返回 200
-- Web-Next 能启动
-- `GET /api/health` 返回 200
-- 登录可先发码再登录
-- `/clone` 可新建任务
-- `/clone/[projectId]` 至少可推进到脚本候选生成
+- 云服务能启动，网页版 `/app/` 可登录
+- Web-Next 能启动，`GET /api/health` 返回 200
+- 官网登录后可进入用户中心、购买 / 兑换会员
 - 生产环境缺少真实模型 Key 时，会明确失败而不是返回 mock
-- Linux 下数据目录与 SQLite 文件可正常创建
 - 桌面端打包后不会再使用占位更新地址检查更新
 - `npm run preflight:staging` / `npm run preflight:production` 可直接执行
-- `npm run smoke:api` 可直接执行

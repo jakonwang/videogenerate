@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import WebProducts from './web/WebProducts.vue'
+import WebModels from './web/WebModels.vue'
+import { useInWebShell } from '@/lib/layout'
+import { isWeb } from '@/lib/platform'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Boxes, Plus, Search, Users } from 'lucide-vue-next'
@@ -10,7 +14,12 @@ import { coverOf, relativeTime, useModels, useProducts } from '@/lib/library'
 
 const route = useRoute()
 const router = useRouter()
+const inWebShell = useInWebShell()
 const tab = ref<'products' | 'models'>(route.query.tab === 'models' ? 'models' : 'products')
+// Sidebar links switch tabs on the same page (/library?tab=…): follow the URL.
+watch(() => route.query.tab, (value) => {
+  tab.value = value === 'models' ? 'models' : 'products'
+})
 watch(tab, (value) => router.replace({ query: { tab: value } }))
 
 const { items: products, loading: productsLoading } = useProducts()
@@ -38,6 +47,9 @@ function create() {
 </script>
 
 <template>
+  <WebProducts v-if="inWebShell && tab === 'products'" />
+  <WebModels v-else-if="inWebShell" />
+  <template v-else>
   <PageHeader title="素材库" />
   <main class="m-page">
     <div class="seg" role="tablist">
@@ -83,11 +95,12 @@ function create() {
       <div v-else class="m-empty">
         <span class="m-empty__icon"><Boxes v-if="tab === 'products'" :size="28" /><Users v-else :size="28" /></span>
         <span class="m-empty__title">{{ keyword || typeFilter !== 'all' ? '没有符合条件的结果' : tab === 'products' ? '商品库是空的' : '模特库是空的' }}</span>
-        <span class="m-empty__text">{{ keyword ? '换个关键词试试' : '点右下角的 + 拍照或从相册添加' }}</span>
+        <span class="m-empty__text">{{ keyword ? '换个关键词试试' : (isWeb ? '点右下角的 + 上传图片添加' : '点右下角的 + 拍照或从相册添加') }}</span>
       </div>
     </template>
   </main>
   <button type="button" class="m-fab" :aria-label="tab === 'products' ? '新建商品' : '新建模特'" @click="create"><Plus :size="26" :stroke-width="2.4" /></button>
+  </template>
 </template>
 
 <style scoped>

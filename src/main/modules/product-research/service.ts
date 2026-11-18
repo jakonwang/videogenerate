@@ -597,6 +597,38 @@ class ProductResearchService {
     return true
   }
 
+  /* ---------------------------------------------------------------- 网页同步（cloud-sync/researchBridge） */
+
+  /** Everything the web version mirrors. Does not start the LAN server. */
+  async exportForSync() {
+    await this.ensureLoaded()
+    for (const device of this.state.devices) device.connected = this.sockets.has(device.id)
+    return {
+      schemes: await this.listSchemes(),
+      schemeStates: this.state.schemeStates,
+      tasks: [...this.state.tasks],
+      results: [...this.state.results],
+      devices: [...this.state.devices],
+      serverRunning: Boolean(this.server),
+      endpoint: this.server ? this.endpoint() : '',
+    }
+  }
+
+  /** A scheme edited on the web: replace ours (keeps the web's updatedAt so both sides agree on the version). */
+  async applySchemeFromSync(scheme: ProductResearchScheme, schemeState: ProductResearchSchemeState) {
+    await this.ensureLoaded()
+    const index = this.state.schemes.findIndex((item) => item.id === scheme.id)
+    if (index >= 0) this.state.schemes[index] = { ...scheme }
+    else this.state.schemes.push({ ...scheme })
+    this.state.schemeStates[scheme.id] = {
+      keywords: Array.isArray(schemeState?.keywords) ? schemeState.keywords : [],
+      candidateIds: Array.isArray(schemeState?.candidateIds) ? schemeState.candidateIds : [],
+      productEdits: Array.isArray(schemeState?.productEdits) ? schemeState.productEdits : [],
+      liveTestRecords: Array.isArray(schemeState?.liveTestRecords) ? schemeState.liveTestRecords : [],
+    }
+    await this.persist()
+  }
+
   async stop() {
     for (const socket of this.sockets.values()) socket.close(1001, 'Server stopping')
     this.sockets.clear()

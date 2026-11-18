@@ -48,7 +48,7 @@ async function main() {
             return { language: 'zh', cues: [{ id: '1', startMs: 0, endMs: 2500, text: '这款耳环真的太好看了' }, { id: '2', startMs: 2600, endMs: 6000, text: '现在下单还送礼盒' }], raw: {} }
           },
           fetch: (async (url: string) => {
-            if (String(url).includes('tikhub')) return new Response(JSON.stringify({ code: 200, data: { aweme_detail: { desc: '爆款耳环', video: { play_addr: { url_list: ['https://cdn.example.com/v.mp4'] } } } } }))
+            if (String(url).includes('tikhub')) return new Response(JSON.stringify({ code: 200, data: { aweme_detail: { desc: '爆款耳环', author: { nickname: '耳环小店' }, video: { play_addr: { url_list: ['https://cdn.example.com/v.mp4'] } } } } }))
             return new Response(readFileSync(video))
           }) as typeof fetch,
         },
@@ -96,12 +96,55 @@ async function main() {
     const logoId = await upload(logo, 'image/png')
     job = await runJob({ kind: 'watermark', videoFileId: videoId, options: { logoFileId: logoId, position: 'tl' } })
     assert.ok(probe(await download(job.outputFileId!, 'wm-logo.mp4')).format.duration > 8)
+    // size / margin like the desktop sliders
+    job = await runJob({ kind: 'watermark', videoFileId: videoId, options: { logoFileId: logoId, position: 'br', scale: 0.3, margin: 0.05, opacity: 0.6 } })
+    assert.equal(job.status, 'succeeded', job.error)
+    // 批量字幕: a full-frame transparent title image stretched over the video
+    const titleImage = join(dir, 'title.png')
+    run(['-f', 'lavfi', '-i', 'color=c=red@0.5:s=1080x1920', '-frames:v', '1', '-pix_fmt', 'rgba', titleImage])
+    job = await runJob({ kind: 'watermark', videoFileId: videoId, options: { logoFileId: await upload(titleImage, 'image/png'), fullFrame: true, opacity: 1 } })
+    assert.equal(job.status, 'succeeded', job.error)
+    const titled = probe(await download(job.outputFileId!, 'titled.mp4'))
+    assert.ok(titled.format.duration > 8)
+    assert.equal(titled.streams.find((s: any) => s.codec_type === 'video').width, 360, 'keeps the video size')
 
     // ---- slicing into 5-second parts (5 s minimum): 9 s → 5 s + 4 s
     job = await runJob({ kind: 'slice', videoFileId: videoId, options: { segmentSec: 5 } })
     let outputs = (job.result as any).outputs
     assert.equal(outputs.length, 2, `parts: ${JSON.stringify(outputs)}`)
     assert.ok(Math.abs(outputs[0].durationSec - 5) < 0.4 && Math.abs(outputs[1].durationSec - 4) < 0.4, JSON.stringify(outputs))
+
+    // ---- 视频拆图: 3 hard-cut scenes (red / blue / green, 3 s each) → one frame from the middle of each scene
+    const scenes = join(dir, 'scenes.mp4')
+    run(['-f', 'lavfi', '-i', 'color=c=red:s=360x640:d=3:r=30', '-f', 'lavfi', '-i', 'color=c=blue:s=360x640:d=3:r=30', '-f', 'lavfi', '-i', 'color=c=green:s=360x640:d=3:r=30', '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', scenes])
+    job = await runJob({ kind: 'frames', videoFileId: await upload(scenes, 'video/mp4') })
+    const frames = (job.result as any).outputs
+    assert.equal(frames.length, 3, `frames: ${JSON.stringify(frames)}`)
+    assert.ok(frames.every((f: any) => f.mime === 'image/jpeg'), 'frames are jpeg')
+    assert.deepEqual(frames.map((f: any) => Math.floor(f.atSec / 3)), [0, 1, 2], `one frame inside each scene: ${JSON.stringify(frames)}`)
+
+    // ---- 直播切片: analysis (energy every 0.5 s + scene cuts), then export clips like the desktop slicer
+    job = await runJob({ kind: 'live-analyze', videoFileId: videoId })
+    assert.equal(job.status, 'succeeded', job.error)
+    const analysis = (job.result as any).analysis
+    assert.ok(Math.abs(analysis.durationSec - 9) < 0.5, JSON.stringify(analysis.durationSec))
+    assert.equal(analysis.step, 0.5)
+    assert.ok(analysis.energy.length >= 16 && analysis.energy.length <= 19, `energy readings: ${analysis.energy.length}`)
+    assert.ok(analysis.energy.every((v: number) => v <= 0 && v >= -90), 'dBFS values')
+    assert.ok(Array.isArray(analysis.scenes))
+    job = await runJob({ kind: 'live-export', videoFileId: videoId, options: { segments: [{ id: 'a', start: 1, end: 3 }, { id: 'b', start: 5, end: 8 }], aspectMode: '1:1', resolution: '1080', fade: true, normalizeAudio: true } })
+    assert.equal(job.status, 'succeeded', job.error)
+    let clips = (job.result as any).outputs
+    assert.deepEqual(clips.map((c: any) => c.segmentId), ['a', 'b'])
+    const square = probe(await download(clips[1].fileId, 'live-b.mp4'))
+    const squareVideo = square.streams.find((s: any) => s.codec_type === 'video')
+    assert.equal(squareVideo.width, squareVideo.height, '1:1 crop')
+    assert.ok(Math.abs(square.format.duration - 3) < 0.4, `clip length ${square.format.duration}`)
+    assert.ok(square.streams.some((s: any) => s.codec_type === 'audio'), 'keeps audio')
+    job = await runJob({ kind: 'live-export', videoFileId: videoId, options: { segments: [{ id: 'c', start: 2, end: 6 }], cutMode: 'fast', padding: 1 } })
+    assert.equal(job.status, 'succeeded', job.error)
+    clips = (job.result as any).outputs
+    assert.ok(probe(await download(clips[0].fileId, 'live-fast.mp4')).format.duration > 4, 'fast cut with padding')
 
     // ---- mixing: 2 unique 6-second vertical videos with music
     const clipB = join(dir, 'b.mp4')
@@ -119,6 +162,27 @@ async function main() {
     assert.ok(info.streams.some((s: any) => s.codec_type === 'audio'), 'music added')
     assert.ok(Math.abs(Number(info.format.duration) - 6) < 0.6, `mix duration ${info.format.duration}`)
 
+    // ---- mixing with a template: duration range, title burned in, letterbox, color, mirroring, quiet music
+    const { templateMixOptions, normalizeSyncTemplate } = await import('../src/shared/cloud/templates')
+    const template = normalizeSyncTemplate({ name: '测试模板', durationSec: { min: 6, max: 8 }, pieceSec: { min: 1.5, max: 2.5 }, titles: ['今日上新\n✨✨'],bgmFileIds: [musicId], bgmVolume: 0.2, aspect: 'contain_pad', colorGrade: { enabled: true, brightness: 0.05, contrast: 1.1, saturation: 1.2 }, hflip: true })
+    job = await runJob({ kind: 'mix', clips: clipIds.map((fileId) => ({ fileId, durationSec: 0 })), options: templateMixOptions(template, 2) })
+    outputs = (job.result as any).outputs
+    assert.equal(outputs.length, 2, JSON.stringify(job))
+    for (const output of outputs) assert.ok(output.durationSec >= 5.6 && output.durationSec <= 8.4, `template duration ${output.durationSec}`)
+    info = probe(await download(outputs[0].fileId, 'mix-tpl.mp4'))
+    const tv = info.streams.find((s: any) => s.codec_type === 'video')
+    assert.equal(tv.width, 720)
+    assert.equal(tv.height, 1280)
+    assert.ok(info.streams.some((s: any) => s.codec_type === 'audio'), 'template music added')
+
+    // ---- 生产中心 cloud fallback: one video cut exactly as planned, with a title and music
+    job = await runJob({ kind: 'mix', clips: [{ fileId: clipIds[0], startSec: 1, durationSec: 1.5 }, { fileId: clipIds[1], startSec: 2, durationSec: 2 }, { fileId: clipIds[0], startSec: 4, durationSec: 1 }], options: { exactShots: true, title: '到货啦', bgmFileIds: [musicId], bgmVolume: 0.5, aspect: 'cover_crop' } })
+    outputs = (job.result as any).outputs
+    assert.equal(outputs.length, 1, JSON.stringify(job))
+    info = probe(await download(outputs[0].fileId, 'mix-shots.mp4'))
+    assert.ok(Math.abs(Number(info.format.duration) - 4.5) < 0.5, `exact shots duration ${info.format.duration}`)
+    assert.ok(info.streams.some((s: any) => s.codec_type === 'audio'), 'music added to planned mix')
+
     // ---- subtitles: speech → captions burned in, transcript returned
     job = await runJob({ kind: 'subtitle', videoFileId: videoId, options: { language: 'zh' } })
     assert.equal(transcribeCalls[0].config.baseUrl, 'https://ve.example.com/v1', 'uses the chat platform for speech recognition')
@@ -129,6 +193,10 @@ async function main() {
     // ---- link download
     job = await runJob({ kind: 'parse-link', url: '看看这个 https://v.douyin.com/abc123/ 复制打开' })
     assert.equal((job.result as any).title, '爆款耳环')
+    assert.equal((job.result as any).author, '耳环小店')
+    const poster = (job.result as any).outputs[0].posterFileId
+    assert.ok(poster, 'a cover frame is saved')
+    assert.ok(readFileSync(await download(poster, 'poster.jpg')).length > 100, 'cover is a real image')
     assert.ok(probe(await download(job.outputFileId!, 'dl.mp4')).format.duration > 8)
 
     // ffmpeg-only tools do not use the AI quota; subtitles and link parsing do.

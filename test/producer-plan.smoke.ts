@@ -4,7 +4,7 @@
  * 运行：npx tsx test/producer-plan.smoke.ts
  */
 import assert from 'node:assert/strict'
-import { buildProducerUserPrompt, parseProducerDecision, PRODUCER_TOOLS, type ProducerContext } from '../src/shared/cloud/producer'
+import { brandGuidance, buildProducerUserPrompt, parseProducerDecision, PRODUCER_TOOLS, type ProducerContext } from '../src/shared/cloud/producer'
 
 const context: ProducerContext = {
   products: [
@@ -98,5 +98,16 @@ if (d.action === 'plan') {
 d = parseProducerDecision(JSON.stringify({ action: 'plan', steps: [{ tool: 'mix', params: { videoIds: ['gen_v1'] } }] }), withVideos)
 assert.equal(d.action, 'clarify')
 assert.match(d.response, /至少需要 2 条视频/)
+
+
+// 品牌记忆 goes into the prompt only when filled in
+{
+  assert.equal(brandGuidance(null), '')
+  assert.equal(brandGuidance({ brandName: ' ', bannedWords: [] }), '')
+  const withBrand = JSON.parse(buildProducerUserPrompt({ message: '写文案', context: { ...context, brand: { brandName: '小饰', bannedWords: ['最便宜', ' '], tone: '轻松' } }, history: [] }))
+  assert.match(withBrand.context.brand, /Brand: 小饰/)
+  assert.match(withBrand.context.brand, /Never use these words: 最便宜$/m)
+  assert.equal(JSON.parse(buildProducerUserPrompt({ message: '写文案', context, history: [] })).context.brand, undefined)
+}
 
 console.log('producer plan smoke: ok')

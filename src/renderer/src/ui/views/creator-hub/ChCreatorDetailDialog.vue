@@ -2,10 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { Contact, ExternalLink, MessageCircle, Package, RefreshCw, Star, UserSearch, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubContactStatus, CreatorHubCreatorDetail } from '@/../../shared/creatorHub'
-import { CREATOR_HUB_CONTACT_STATUSES } from '@/../../shared/creatorHub'
-import { normalizeVnPhone } from '@/../../shared/creatorHubContacts'
-import { POOL_WEIGHTS } from '@/../../shared/creatorHubDiscovery'
+import type { CreatorHubContactStatus, CreatorHubCreatorDetail } from '../../../../../shared/creatorHub'
+import { CREATOR_HUB_CONTACT_STATUSES } from '../../../../../shared/creatorHub'
+import { normalizeVnPhone } from '../../../../../shared/creatorHubContacts'
+import { POOL_WEIGHTS } from '../../../../../shared/creatorHubDiscovery'
 import { formatCount, formatDate, formatDateTime, formatMoney, formatPercent, rateTone, stageTone, type CreatorDetailTarget, type DetailSavePayload } from './creatorHubFormat'
 
 const props = defineProps<{ target: CreatorDetailTarget | null; detail: CreatorHubCreatorDetail | null; loading: boolean; busy: boolean; knownTags: string[]; shopName?: string }>()

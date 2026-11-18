@@ -3,7 +3,7 @@ import type {
   ProductResearchResult,
   ProductResearchSchemeStatus,
   ProductResearchTaskStatus,
-} from '@/../../shared/productResearch'
+} from '../../../../../shared/productResearch'
 
 export type SchemeFormValue = { name: string; need: string; market: string; keywords: string[]; note: string }
 

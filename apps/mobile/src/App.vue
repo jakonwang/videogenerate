@@ -3,9 +3,13 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Boxes, Clapperboard, House, ScanSearch, UserRound } from 'lucide-vue-next'
 import { toastMessage } from './lib/toast'
+import WebShell from './components/web/WebShell.vue'
+import { isWideScreen } from './lib/layout'
 
 const route = useRoute()
-const showTabs = computed(() => route.meta.tabs !== false)
+// Computer-width screens get the desktop-style shell; phones keep the App layout with the tab bar.
+const webShell = computed(() => isWideScreen.value && !route.meta.public)
+const showTabs = computed(() => !webShell.value && route.meta.tabs !== false)
 const tabs = [
   { to: '/', label: '工作台', icon: House },
   { to: '/research', label: '选品', icon: ScanSearch },
@@ -17,8 +21,13 @@ const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.s
 </script>
 
 <template>
-  <router-view v-slot="{ Component }">
-    <component :is="Component" />
+  <WebShell v-if="webShell">
+    <router-view v-slot="{ Component }">
+      <component :is="Component" :key="route.path" />
+    </router-view>
+  </WebShell>
+  <router-view v-else v-slot="{ Component }">
+    <component :is="Component" :key="route.path" />
   </router-view>
   <nav v-if="showTabs" class="m-tabbar" aria-label="主导航">
     <router-link v-for="tab in tabs" :key="tab.to" :to="tab.to" class="m-tab" :class="{ 'is-active': isActive(tab.to) }" replace>

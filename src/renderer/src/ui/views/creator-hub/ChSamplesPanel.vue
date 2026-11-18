@@ -2,8 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ExternalLink, Package, Pencil, Search } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubProductCost, CreatorHubSample, CreatorHubSettings, CreatorHubShop } from '@/../../shared/creatorHub'
-import { classifySample, sampleCost, sampleDeadline } from '@/../../shared/creatorHubFulfillment'
+import type { CreatorHubProductCost, CreatorHubSample, CreatorHubSettings, CreatorHubShop } from '../../../../../shared/creatorHub'
+import { classifySample, sampleCost, sampleDeadline } from '../../../../../shared/creatorHubFulfillment'
 import ChPager from './ChPager.vue'
 import { SAMPLE_STAGES, formatCount, formatDate, formatMoney, formatPercent, fulfillmentTone, stageTone } from './creatorHubFormat'
 

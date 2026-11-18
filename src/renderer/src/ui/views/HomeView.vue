@@ -35,7 +35,7 @@ type BriefItem = { kind: string; level: 'ok' | 'warning' | 'error'; title: strin
 type Brief = { headline: string; summary?: string; items: BriefItem[]; createdAt: number }
 type Project = { ref: string; line: string; title: string; productName?: string; status: string; stage?: string; progress?: number; readyCount: number; failedCount: number; route: string; previewPath?: string; updatedAt: number }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const ai = useAiProducerStore()
 
@@ -120,7 +120,7 @@ function briefAction(item: BriefItem) {
 }
 
 function formatTime(value: number) {
-  return new Date(value).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleString(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 onMounted(() => {

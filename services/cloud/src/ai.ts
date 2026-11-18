@@ -15,6 +15,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 type ReadFile = (userId: string, fileId: string) => { mime: string; body: Buffer }
 
+/** 服务器复刻引擎的 AI 调用记在 ai_usage 里的用途名 */
+export const CLONE_ENGINE_PURPOSE = 'clone-engine'
+
 export function createAiService(deps: {
   db: CloudDb
   now: () => number
@@ -22,6 +25,8 @@ export function createAiService(deps: {
   readFile: ReadFile
   perMinute: number
   perDay: number
+  /** 服务器复刻引擎每个账号每天最多向 AI 平台发起几次生成请求，0 = 不限（单独计数，不占上面的 AI 次数） */
+  cloneEnginePerDay?: number
   fetchImpl?: typeof fetch
 }) {
   const { db, now } = deps
@@ -31,8 +36,22 @@ export function createAiService(deps: {
   const day = (at: number) => new Date(at).toISOString().slice(0, 10)
 
   function usedToday(userId: string): number {
-    const row = db.prepare('SELECT COALESCE(SUM(calls), 0) AS calls FROM ai_usage WHERE user_id = ? AND day = ?').get(userId, day(now())) as { calls: number }
+    const row = db.prepare('SELECT COALESCE(SUM(calls), 0) AS calls FROM ai_usage WHERE user_id = ? AND day = ? AND purpose != ?').get(userId, day(now()), CLONE_ENGINE_PURPOSE) as { calls: number }
     return Number(row.calls)
+  }
+
+  function cloneEngineUsedToday(userId: string): number {
+    const row = db.prepare('SELECT COALESCE(SUM(calls), 0) AS calls FROM ai_usage WHERE user_id = ? AND day = ? AND purpose = ?').get(userId, day(now()), CLONE_ENGINE_PURPOSE) as { calls: number }
+    return Number(row.calls)
+  }
+
+  /** 服务器复刻引擎每次向 AI 平台发起生成前调用：超过每日上限就拒绝，否则记一次 */
+  function meterCloneEngine(userId: string) {
+    const limit = deps.cloneEnginePerDay ?? 0
+    if (limit > 0 && cloneEngineUsedToday(userId) >= limit) {
+      throw new CloudError('RATE_LIMITED', `今天服务器复刻的 AI 生成次数已用完（每天 ${limit} 次），明天再来，或在电脑端继续`, 429)
+    }
+    record(userId, CLONE_ENGINE_PURPOSE, true)
   }
 
   function assertQuota(userId: string) {
@@ -125,10 +144,15 @@ export function createAiService(deps: {
   }
 
   function usage(userId: string): AiUsageResponse {
-    return { usedToday: usedToday(userId), dailyLimit: deps.perDay, resetsAt: Math.ceil(now() / DAY_MS) * DAY_MS }
+    return {
+      usedToday: usedToday(userId),
+      dailyLimit: deps.perDay,
+      resetsAt: Math.ceil(now() / DAY_MS) * DAY_MS,
+      cloneEngine: { usedToday: cloneEngineUsedToday(userId), dailyLimit: deps.cloneEnginePerDay ?? 0 },
+    }
   }
 
-  return { chat, usage, quota: { assert: assertQuota, record } }
+  return { chat, usage, quota: { assert: assertQuota, record }, cloneEngine: { meter: meterCloneEngine, usedToday: cloneEngineUsedToday } }
 }
 
 export type AiService = ReturnType<typeof createAiService>

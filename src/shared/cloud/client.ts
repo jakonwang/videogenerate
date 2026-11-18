@@ -115,6 +115,15 @@ export function createCloudClient(options: CloudClientOptions) {
 
   return {
     request,
+    /** 电脑代办：网页调电脑端功能；电脑端长轮询取请求、回传结果 */
+    relay: {
+      /** target 'server'：由服务器复刻引擎执行（复刻页面里的商品列表等）；复刻调用本身总是在服务器上 */
+      call: <T = unknown>(ns: string, method: string, args: unknown[], target?: 'server') =>
+        request<{ result: T }>('POST', '/api/v1/relay/call', { ns, method, args, target }, 11 * 60_000).then((r) => r.result),
+      status: () => request<{ online: boolean }>('GET', '/api/v1/relay/status'),
+      next: (waitMs = 25_000) => request<{ calls: import('./relay').RelayCall[] }>('GET', `/api/v1/relay/next${qs({ wait: waitMs })}`, undefined, waitMs + 15_000),
+      result: (result: import('./relay').RelayResult) => request<{ ok: boolean }>('POST', '/api/v1/relay/result', result, 120_000),
+    },
     sync: {
       pull: (since: number, collections?: string[], limit?: number) =>
         request<SyncPullResponse>('GET', `/api/v1/sync/changes${qs({ since, collections: collections?.join(','), limit })}`),
@@ -130,6 +139,10 @@ export function createCloudClient(options: CloudClientOptions) {
       createJob: (input: AiGenerationRequest) => request<{ job: AiGenerationJob }>('POST', '/api/v1/ai/jobs', input),
       getJob: (id: string) => request<{ job: AiGenerationJob }>('GET', `/api/v1/ai/jobs/${encodeURIComponent(id)}`),
       listJobs: (ids: string[]) => request<{ jobs: AiGenerationJob[] }>('GET', `/api/v1/ai/jobs${qs({ ids: ids.join(',') })}`),
+      /** 网页上显示自己的图片 / 视频：签名的相对链接（12 小时有效，末尾带 &t=扩展名） */
+      fileLinks: (fileIds: string[]) => request<{ links: Record<string, string>; expiresAt: number }>('POST', '/api/v1/sync/file-links', { fileIds }),
+      /** 图片的对外链接（上架导出用；七牛或签名链接，days 为签名链接有效天数，最长 30） */
+      publicUrls: (fileIds: string[], days?: number) => request<{ urls: Record<string, string>; days: number }>('POST', '/api/v1/ai/public-urls', { fileIds, days }, 120_000),
     },
     health: () => request<{ status: string }>('GET', '/api/v1/health'),
     getConfig: () => request<{ values: Record<string, unknown>; version: string }>('GET', '/api/v1/client/config'),

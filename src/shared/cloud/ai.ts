@@ -3,7 +3,7 @@
  */
 
 export const AI_MAX_PROMPT_CHARS = 12_000
-export const AI_MAX_IMAGES = 4
+export const AI_MAX_IMAGES = 5
 
 export type AiChatRequest = {
   system?: string
@@ -35,7 +35,7 @@ export type AiGenerationRequest = {
   /** analyze-video：脚本语言，如 zh-CN / vi-VN / en-US */
   locale?: string
   /** compose：按顺序拼接的片段（视频或图片）；mix：素材池（durationSec 不用） */
-  clips?: Array<{ fileId: string; durationSec: number }>
+  clips?: Array<{ fileId: string; durationSec: number; /** mix（按方案）：镜头在原视频里的起点 */ startSec?: number }>
   /** 视频工具的参数（水印文字、切片时长、混剪条数等） */
   options?: import('./videoTools').VideoJobOptions
   /** parse-link：分享链接 */
@@ -54,6 +54,14 @@ export type AiGenerationJob = {
   result?: unknown
   createdAt: number
   updatedAt: number
+  /** 排队中的任务在自己那条队列里的位置（1 = 下一个） */
+  queuePosition?: number
 }
 
-export type AiUsageResponse = { usedToday: number; dailyLimit: number; resetsAt: number }
+export type AiUsageResponse = {
+  usedToday: number
+  dailyLimit: number
+  resetsAt: number
+  /** 服务器复刻：今天向 AI 平台发起的生成次数与上限（0 = 不限） */
+  cloneEngine?: { usedToday: number; dailyLimit: number }
+}

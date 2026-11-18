@@ -767,6 +767,13 @@ export function createCloudService(deps: {
   }
 
   return {
+    /** 仅云端内部使用：服务器复刻引擎子进程的登录会话 */
+    issueEngineSession: (userId: string) => {
+      const user = repo.getUserById(userId)
+      if (!user) throw unauthorized()
+      return issueSession(user, 'web', null)
+    },
+    revokeSessionToken: (token: string) => repo.revokeSession(sha256(token), now()),
     /** 仅云端内部使用（AI 网关读取平台密钥），不对外返回 */
     readManagedSettings: () => readManagedSettings().settings,
     ensureSeed,

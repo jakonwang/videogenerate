@@ -17,6 +17,26 @@ server {
     proxy_set_header X-Forwarded-Proto https;
     proxy_read_timeout 30s;
   }
+  # 同步文件上传（素材、视频，单个最多 200 MB）
+  location /api/v1/files {
+    client_max_body_size 210m;
+    proxy_pass http://127.0.0.1:18300;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 300s;
+    proxy_request_buffering off;
+  }
+  # 电脑代办：网页调用电脑端功能最长等 2 分钟，电脑长轮询 25 秒，结果最大 16 MB
+  location /api/v1/relay/ {
+    client_max_body_size 16m;
+    proxy_pass http://127.0.0.1:18300;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 150s;
+    proxy_buffering off;
+  }
 }
 
 server {

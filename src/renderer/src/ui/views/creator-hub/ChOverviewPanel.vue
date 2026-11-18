@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clapperboard, ClipboardCheck, Clock3, Coins, LayoutDashboard, Package, ShoppingBag, TrendingUp, Users, Wallet } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubOverview, CreatorHubShop, CreatorHubShopOverview } from '@/../../shared/creatorHub'
+import type { CreatorHubOverview, CreatorHubShop, CreatorHubShopOverview } from '../../../../../shared/creatorHub'
 import { formatCount, formatDate, formatDateTime, formatMoney, formatPercent, rateTone } from './creatorHubFormat'
 
 const props = defineProps<{ overview: CreatorHubOverview | null; shops: CreatorHubShop[]; showShops: boolean }>()

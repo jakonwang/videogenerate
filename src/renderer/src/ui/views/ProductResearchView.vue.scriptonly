@@ -1,0 +1,182 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  ShoppingCart, Plus, Search, Star, MoreVertical, Copy, Archive,
+  Trash2, Play, Eye, ChevronLeft, ChevronRight, Upload, X, List, BarChart2
+} from 'lucide-vue-next'
+import type { ProductResearchScheme } from '@/../../shared/productResearch'
+
+const router = useRouter()
+
+const schemes = ref<ProductResearchScheme[]>([])
+const loading = ref(false)
+const searchQuery = ref('')
+const statusFilter = ref('all')
+const marketFilter = ref('all')
+const stageFilter = ref('all')
+const timeFilter = ref('all')
+const createDialogOpen = ref(false)
+const formName = ref('')
+const formMarket = ref('VN')
+const formNeed = ref('')
+const formKeywords = ref('')
+const formNote = ref('')
+const formCreating = ref(false)
+const formErrors = ref<Record<string, string>>({})
+const importFileName = ref('')
+const page = ref(1)
+const pageSize = ref(10)
+
+const marketOptions = [
+  { value: 'VN', label: '越南', flag: 'vn' },
+  { value: 'TH', label: '泰国', flag: 'th' },
+  { value: 'ID', label: '印尼', flag: 'id' },
+  { value: 'MY', label: '马来西亚', flag: 'my' },
+]
+
+const statusOptions = [
+  { value: 'all', label: '全部状态' },
+  { value: 'draft', label: '草稿' },
+  { value: 'active', label: '进行中' },
+  { value: 'pending', label: '待验证' },
+  { value: 'completed', label: '已完成' },
+]
+
+const stageOptions = [
+  { value: 'all', label: '全部SOP阶段' },
+  { value: '1', label: '1 商品采集' },
+  { value: '2', label: '2 分析商品' },
+  { value: '3', label: '3 确定商品' },
+  { value: '4', label: '4 直播测试' },
+  { value: '5', label: '5 获得爆款' },
+]
+
+const stageNames: Record<number, string> = {
+  1: '商品采集', 2: '分析商品', 3: '确定商品',
+  4: '直播测试', 5: '获得爆款商品',
+}
+
+const filteredSchemes = computed(() => {
+  return schemes.value.filter((scheme) => {
+    const q = searchQuery.value.toLowerCase()
+    const matchesSearch = !q || scheme.name.toLowerCase().includes(q) || scheme.need.toLowerCase().includes(q)
+    const matchesStatus = statusFilter.value === 'all' || scheme.status === statusFilter.value
+    const matchesMarket = marketFilter.value === 'all' || scheme.market === marketFilter.value
+    const matchesStage = stageFilter.value === 'all' || scheme.sopStage === Number(stageFilter.value)
+    return matchesSearch && matchesStatus && matchesMarket && matchesStage
+  })
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredSchemes.value.length / pageSize.value)))
+const pagedSchemes = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredSchemes.value.slice(start, start + pageSize.value)
+})
+
+function statusLabel(status: string) {
+  const map: Record<string, string> = { draft: '草稿', active: '进行中', pending: '待验证', completed: '已完成' }
+  return map[status] || status
+}
+function marketFlag(market: string) {
+  return market === 'VN' ? '🇻🇳' : market === 'TH' ? '🇹🇭' : market === 'ID' ? '🇮🇩' : market === 'MY' ? '🇲🇾' : ''
+}
+function marketName(market: string) {
+  return marketOptions.find((o) => o.value === market)?.label ?? market
+}
+function stageLabel(sopStage: number) {
+  return stageNames[sopStage] || `Step ${sopStage}`
+}
+function formatDate(ts: number) {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+async function loadSchemes() {
+  loading.value = true
+  try { schemes.value = await window.api.productResearch.listSchemes() }
+  catch (e) { console.error('Failed to load schemes:', e) }
+  finally { loading.value = false }
+}
+
+function openCreateDialog() {
+  formName.value = ''; formMarket.value = 'VN'; formNeed.value = ''
+  formKeywords.value = ''; formNote.value = ''
+  formErrors.value = {}; importFileName.value = ''
+  createDialogOpen.value = true
+}
+
+function validateForm() {
+  const errors: Record<string, string> = {}
+  if (!formName.value.trim()) errors.name = '方案名称为必填项'
+  if (!formNeed.value.trim()) errors.need = '客户需求摘要为必填项'
+  formErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+async function createScheme(asDraft = false) {
+  if (!validateForm() || formCreating.value) return
+  formCreating.value = true
+  const keywords = formKeywords.value.split(/[\n,，]/).map((k) => k.trim()).filter(Boolean)
+  try {
+    const scheme = await window.api.productResearch.createScheme({
+      name: formName.value.trim(), need: formNeed.value.trim(),
+      market: formMarket.value, keywords, note: formNote.value.trim() || undefined,
+    })
+    if (asDraft) {
+      await window.api.productResearch.updateScheme(scheme.id, { status: 'draft' })
+      createDialogOpen.value = false
+      await loadSchemes()
+    } else {
+      createDialogOpen.value = false
+      router.push({ name: 'product-research-detail', params: { schemeId: scheme.id } })
+    }
+  } catch (e) { console.error('Failed to create scheme:', e) }
+  finally { formCreating.value = false }
+}
+
+function openScheme(id: string) {
+  router.push({ name: 'product-research-detail', params: { schemeId: id } })
+}
+
+async function copyScheme(id: string) {
+  const source = schemes.value.find((s) => s.id === id)
+  if (!source) return
+  try {
+    await window.api.productResearch.createScheme({
+      name: `${source.name} (副本)`, need: source.need,
+      market: source.market, keywords: [], note: source.note,
+    })
+    await loadSchemes()
+  } catch (e) { console.error('Failed to copy scheme:', e) }
+}
+
+async function archiveScheme(id: string) {
+  try { await window.api.productResearch.updateScheme(id, { status: 'completed' }); await loadSchemes() }
+  catch (e) { console.error('Failed to archive scheme:', e) }
+}
+
+async function deleteScheme(id: string) {
+  const scheme = schemes.value.find((s) => s.id === id)
+  if (!scheme || !confirm(`确定删除方案"${scheme.name}"吗？此操作不可恢复。`)) return
+  try { await window.api.productResearch.deleteScheme(id); await loadSchemes() }
+  catch (e) { console.error('Failed to delete scheme:', e) }
+}
+
+function handleImportClick() {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = '.txt,.csv,.xlsx'
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    importFileName.value = file.name
+    const reader = new FileReader()
+    reader.onload = (evt) => { const text = evt.target?.result as string; if (text) formKeywords.value = text.replace(/\r/g, '') }
+    reader.readAsText(file)
+  }
+  input.click()
+}
+
+onMounted(() => loadSchemes())
+</script>

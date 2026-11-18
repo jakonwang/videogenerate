@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
+    "dev:web": "vite --mode web --host 127.0.0.1 --port 18291",
+    "build:web": "vue-tsc --noEmit && vite build --mode web",
     "typecheck": "vue-tsc --noEmit",
     "sync:android": "npm run build && cap sync android",
     "apk": "npm run sync:android && cd android && gradlew.bat assembleDebug"

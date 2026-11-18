@@ -179,6 +179,21 @@ async function main() {
     assert.equal((await fetch(link.replace(/s=[0-9a-f]{4}/, 's=0000'))).status, 403, 'tampered signature rejected')
     assert.equal((await fetch(link.replace(/e=\d+/, 'e=1'))).status, 403, 'expired link rejected')
 
+    // ---- 上架导出：图片的对外链接，签名链接按天数有效（最长 30 天）
+    const exported = await alice.ai.publicUrls([photo.fileId], 90)
+    assert.equal(exported.days, 30, 'capped at 30 days')
+    const exportLink = exported.urls[photo.fileId]!
+    assert.ok(exportLink.startsWith(`${base2}/api/v1/public-files/${photo.fileId}?`), exportLink)
+    const expires = Number(new URL(exportLink).searchParams.get('e'))
+    assert.ok(expires > Date.now() + 29 * 86_400_000, 'long-lived export link')
+    assert.equal((await fetch(exportLink)).status, 200)
+    await assert.rejects(alice.ai.publicUrls(['file_not_mine']), 'other files are refused')
+    // ---- signed relative links for showing one's own media on the web (no auth header needed)
+    const { links } = await alice.ai.fileLinks([photo.fileId, 'file_not_mine'])
+    assert.deepEqual(Object.keys(links), [photo.fileId], 'only own files get a link')
+    assert.ok(links[photo.fileId]!.startsWith(`/api/v1/public-files/${photo.fileId}?`) && links[photo.fileId]!.endsWith('&t=.png'), links[photo.fileId])
+    assert.deepEqual(Buffer.from(await (await fetch(`${base2}${links[photo.fileId]}`)).arrayBuffer()), PNG)
+
     // ---- provider failure → job failed with a readable reason, counted as a failure
     videoShouldFail = true
     job = await wait((await alice.ai.createJob({ kind: 'video', prompt: 'again', imageFileIds: [photo.fileId] })).job.id)

@@ -2,9 +2,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ArrowDownUp, Ban, Contact, Copy, Eye, Info, MessageCircle, RefreshCw, Search, Sparkles, Star, Trash2, UserSearch } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubDiscoverQuery, CreatorHubPoolRow, CreatorHubShop, CreatorHubTier } from '@/../../shared/creatorHub'
-import { CREATOR_HUB_GMV_GROUPS, CREATOR_HUB_MARKET_CATEGORIES, CREATOR_HUB_UNITS_GROUPS } from '@/../../shared/creatorHub'
-import { zaloNumber } from '@/../../shared/creatorHubContacts'
+import type { CreatorHubDiscoverQuery, CreatorHubPoolRow, CreatorHubShop, CreatorHubTier } from '../../../../../shared/creatorHub'
+import { CREATOR_HUB_GMV_GROUPS, CREATOR_HUB_MARKET_CATEGORIES, CREATOR_HUB_UNITS_GROUPS } from '../../../../../shared/creatorHub'
+import { zaloNumber } from '../../../../../shared/creatorHubContacts'
 import ChPager from './ChPager.vue'
 import { formatCount, formatDate, formatMoney, formatPercent, rateTone } from './creatorHubFormat'
 

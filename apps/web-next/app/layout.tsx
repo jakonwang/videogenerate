@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 
 import './globals.css'
 
-import { SessionBootstrap } from '@/components/app/session-bootstrap'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { QueryProvider } from '@/providers/query-provider'
 
@@ -17,7 +16,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <QueryProvider>
           <ThemeProvider>
-            <SessionBootstrap />
             {children}
           </ThemeProvider>
         </QueryProvider>

@@ -9,10 +9,16 @@ import PageHeader from '@/components/PageHeader.vue'
 import ProductPicker from '@/components/ProductPicker.vue'
 import { approve, reject, useGenerations, type GenerationItem } from '@/lib/generate'
 import { relativeTime, type ProductItem } from '@/lib/library'
-import { publishAvailable, saveToGallery, shareTo } from '@/lib/publish'
+import { publishAvailable, publishLabels, saveToGallery, shareTo } from '@/lib/publish'
+import { isWeb } from '@/lib/platform'
 import { errorMessage } from '@/lib/session'
 import { getRecord, saveRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import { Inbox } from 'lucide-vue-next'
+const inWebShell = useInWebShell()
 
 /** 作品库：所有生成成功的图片和视频，可以存相册、分享、去发布、加到商品 */
 
@@ -44,7 +50,7 @@ const PURPOSE: Record<string, string> = {
   mix: '混剪',
   'parse-link': '链接下载',
   'product-replace': '商品替换',
-  'product-watermark': '商品图水印',
+  'product-watermark': '商品图水印', creative: 'tk创意室',
   model: 'AI 模特',
 }
 
@@ -76,7 +82,7 @@ function toGallery() {
   if (!item?.outputFileId || needNative()) return
   void run('gallery', async () => {
     await saveToGallery({ fileId: item.outputFileId!, label: labelOf(item), generationId: item.id, mime: item.outputMime })
-    toast(item.kind === 'image' ? '已保存到相册「Pictures/TiktokCut」' : '已保存到相册「Movies/TiktokCut」')
+    toast(isWeb ? publishLabels.galleryDone : item.kind === 'image' ? '已保存到相册「Pictures/TiktokCut」' : '已保存到相册「Movies/TiktokCut」')
   })
 }
 
@@ -114,6 +120,73 @@ function review(ok: boolean) {
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader title="作品库" description="所有生成的图片和视频：预览、通过、下载、去发布或加到商品。">
+      <template #actions>
+        <button type="button" class="vg-btn" @click="router.push('/review')"><Inbox :size="14" /> 审核收件箱</button>
+        <button type="button" class="vg-btn vg-btn--primary" @click="router.push('/publish')"><Send :size="14" /> 发布中心</button>
+      </template>
+    </PageHeader>
+    <main class="vg-page wk" data-testid="web-works">
+      <div class="tk-bar">
+        <nav class="rv-tabs">
+          <button v-for="[key, label] in FILTERS" :key="key" type="button" class="rv-tab" :class="{ 'is-active': filter === key }" @click="filter = key">{{ label }} <span class="rv-tab__count">{{ counts[key] }}</span></button>
+        </nav>
+      </div>
+      <div v-if="shown.length" class="wk-grid">
+        <button v-for="item in shown" :key="item.id" type="button" class="wk-tile" @click="selected = item">
+          <span class="wk-tile__media">
+            <CloudImage v-if="item.kind === 'image'" :file-id="item.outputFileId" :alt="item.label" />
+            <CloudVideo v-else :file-id="item.outputFileId" />
+            <span class="wk-tile__kind">{{ item.kind === 'video' ? '视频' : '图片' }}</span>
+            <span v-if="item.review === 'approved'" class="wk-tile__ok"><Check :size="12" /></span>
+          </span>
+          <span class="wk-tile__meta"><strong>{{ labelOf(item) }}</strong><small>{{ PURPOSE[item.purpose] || '作品' }} · {{ relativeTime(item.createdAt) }}</small></span>
+        </button>
+      </div>
+      <div v-else class="vg-empty tk-empty">
+        <span class="vg-empty__icon"><ImagePlus :size="20" /></span>
+        <h3>还没有作品</h3>
+        <p>商品图、图生视频、复刻、视频工具生成的结果都会放在这里</p>
+        <button type="button" class="vg-btn vg-btn--primary" @click="router.push('/toolbox')">去工具箱</button>
+      </div>
+
+      <div v-if="selected" class="vg-backdrop" @click.self="selected = null">
+        <section class="vg-dialog vg-dialog--wide wk-dialog">
+          <header class="vg-dialog__head">
+            <span class="vg-dialog__title">{{ labelOf(selected) }}</span>
+            <button type="button" class="vg-icon-btn" aria-label="关闭" @click="selected = null"><X :size="16" /></button>
+          </header>
+          <div class="vg-dialog__body wk-dialog__body">
+            <div class="wk-dialog__media" :class="{ 'is-video': selected.kind === 'video' }">
+              <CloudImage v-if="selected.kind === 'image'" :file-id="selected.outputFileId" :alt="selected.label" />
+              <CloudVideo v-else :file-id="selected.outputFileId" controls autoplay />
+            </div>
+            <div class="wk-dialog__side">
+              <dl class="vg-kv">
+                <dt>来源</dt><dd>{{ PURPOSE[selected.purpose] || '作品' }}</dd>
+                <dt>商品</dt><dd>{{ selected.productName || '—' }}</dd>
+                <dt>时间</dt><dd>{{ new Date(selected.createdAt).toLocaleString() }}</dd>
+                <dt>审核</dt><dd>{{ selected.review === 'approved' ? '已通过' : selected.review === 'rejected' ? '未通过' : '待审核' }}</dd>
+              </dl>
+              <div v-if="selected.review !== 'approved'" class="wk-dialog__row">
+                <button type="button" class="vg-btn vg-btn--primary" :disabled="!!busy" @click="review(true)"><Check :size="14" /> 通过</button>
+                <button type="button" class="vg-btn" :disabled="!!busy" @click="review(false)"><X :size="14" /> 不要了</button>
+              </div>
+              <div class="wk-dialog__col">
+                <button v-if="selected.kind === 'video'" type="button" class="vg-btn vg-btn--block" @click="router.push('/publish')"><Send :size="14" /> 去发布</button>
+                <button v-else type="button" class="vg-btn vg-btn--block" :disabled="!!busy" @click="picking = true"><ImagePlus :size="14" /> 加到商品</button>
+                <button type="button" class="vg-btn vg-btn--block" :disabled="!!busy" @click="toGallery"><LoaderCircle v-if="busy === 'gallery'" :size="14" class="vg-spin" /><Download v-else :size="14" /> 下载</button>
+                <button type="button" class="vg-btn vg-btn--block" :disabled="!!busy" @click="share"><Share2 :size="14" /> 分享</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <ProductPicker v-if="picking" @close="picking = false" @pick="addTo" />
+    </main>
+  </template>
+  <template v-else>
   <PageHeader title="作品库" back />
   <main class="m-page m-page--no-tabs">
     <div class="m-chips filters">
@@ -162,7 +235,7 @@ function review(ok: boolean) {
             <LoaderCircle v-if="busy === 'product'" :size="16" class="m-spin" /><ImagePlus v-else :size="16" /> 加到商品
           </button>
           <button type="button" class="m-btn" :disabled="!!busy" @click="toGallery">
-            <LoaderCircle v-if="busy === 'gallery'" :size="16" class="m-spin" /><Download v-else :size="16" /> 存到相册
+            <LoaderCircle v-if="busy === 'gallery'" :size="16" class="m-spin" /><Download v-else :size="16" /> {{ publishLabels.gallery }}
           </button>
           <button type="button" class="m-btn" :disabled="!!busy" @click="share">
             <LoaderCircle v-if="busy === 'share'" :size="16" class="m-spin" /><Share2 v-else :size="16" /> 分享
@@ -172,6 +245,7 @@ function review(ok: boolean) {
     </div>
   </Teleport>
   <ProductPicker v-if="picking" @close="picking = false" @pick="addTo" />
+  </template>
 </template>
 
 <style scoped>

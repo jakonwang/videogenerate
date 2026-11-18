@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertTriangle, ArrowDownUp, CheckCircle2, Clock3, Info, Package, Percent, Save, Search, Users, Wallet } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubCreatorStat, CreatorHubFulfillmentReport, CreatorHubSettings, CreatorHubShop } from '@/../../shared/creatorHub'
+import type { CreatorHubCreatorStat, CreatorHubFulfillmentReport, CreatorHubSettings, CreatorHubShop } from '../../../../../shared/creatorHub'
 import ChPager from './ChPager.vue'
 import { formatCount, formatDate, formatMoney, formatPercent, rateTone } from './creatorHubFormat'
 

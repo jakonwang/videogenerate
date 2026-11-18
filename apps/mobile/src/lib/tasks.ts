@@ -37,6 +37,7 @@ const PURPOSE: Record<string, [string, string]> = {
   clone: ['复刻', '/clone'],
   'product-replace': ['商品替换', '/product-replace'],
   'product-watermark': ['商品图水印', '/product-watermark'],
+  creative: ['tk创意室', '/creative'],
   model: ['AI 模特', '/library?tab=models'],
 }
 

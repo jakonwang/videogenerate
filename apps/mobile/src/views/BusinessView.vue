@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useInWebShell } from '@/lib/layout'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlertTriangle, Clock, Lightbulb, LoaderCircle, Monitor, PackageX, TrendingDown, TrendingUp } from 'lucide-vue-next'
@@ -22,6 +23,17 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'creative', label: '创意室' },
 ]
 const tab = ref<Tab>(TABS.some((t) => t.key === route.query.tab) ? (route.query.tab as Tab) : 'insights')
+// Sidebar entries (数据复盘 / 达人 / 库存 / tk创意室) switch tabs on the same page: follow the URL.
+watch(() => route.query.tab, (value) => {
+  if (TABS.some((t) => t.key === value)) tab.value = value as Tab
+})
+const inWebShell = useInWebShell()
+const WEB_TITLE: Record<Tab, [string, string]> = {
+  insights: ['数据复盘', '看看每条生产线产出了多少、通过了多少、发出去多少，再决定下一步。'],
+  creators: ['达人管理', '多店铺寄样、达人履约与带货数据（电脑端同步）。'],
+  inventory: ['店小秘库存', '缺货与需补货的 SKU（电脑端同步）。'],
+  creative: ['tk创意室', '创意视频任务进度（电脑端生成，结果同步到这里）。'],
+}
 watch(tab, (value) => router.replace({ query: { tab: value } }))
 
 const digest = ref<SyncBusinessDigest | null>(null)
@@ -62,9 +74,9 @@ const hasSection = computed(() => Boolean(digest.value?.[tab.value]))
 </script>
 
 <template>
-  <PageHeader title="经营数据" back="/create" />
+  <PageHeader :title="inWebShell ? WEB_TITLE[tab][0] : '经营数据'" :description="inWebShell ? WEB_TITLE[tab][1] : undefined" back="/create" />
   <main class="m-page m-page--no-tabs">
-    <div class="seg">
+    <div v-if="!inWebShell" class="seg">
       <button v-for="t in TABS" :key="t.key" type="button" :class="{ 'is-active': tab === t.key }" @click="tab = t.key">{{ t.label }}</button>
     </div>
 

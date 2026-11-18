@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ArrowDownUp, Ban, Eye, Pencil, Search, Users } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubCrmRow, CreatorHubShop, CreatorHubTier } from '@/../../shared/creatorHub'
+import type { CreatorHubCrmRow, CreatorHubShop, CreatorHubTier } from '../../../../../shared/creatorHub'
 import ChPager from './ChPager.vue'
 import { formatCount, formatMoney, formatPercent, rateTone } from './creatorHubFormat'
 

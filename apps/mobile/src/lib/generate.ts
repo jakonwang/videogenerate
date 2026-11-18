@@ -31,7 +31,7 @@ export const VIDEO_MOTIONS = [
   { key: 'light', label: '光影流动', prompt: 'soft moving light sweeps across the product, highlights glide over the surface' },
 ] as const
 
-const VIDEO_BASE_PROMPT = 'Create a realistic six-second product close-up video while preserving the exact product identity and composition. Keep the product shape, color, material and every visible detail unchanged.'
+export const VIDEO_BASE_PROMPT = 'Create a realistic six-second product close-up video while preserving the exact product identity and composition. Keep the product shape, color, material and every visible detail unchanged.'
 
 const LISTING_CATEGORIES = new Set<TiktokListingCategory>(['earring', 'ring', 'necklace', 'phone_case', 'bracelet'])
 
@@ -53,6 +53,9 @@ async function submit(request: AiGenerationRequest, record: Omit<SyncGeneration,
   startPolling()
   return id
 }
+
+/** 给其它模块（商品替换批次等）提交一条生成任务，记录进 generations */
+export const submitGeneration = submit
 
 export async function generateProductImages(input: { productId?: string; productName?: string; category: TiktokListingCategory | null; sourceFileId: string; shots: number[] }) {
   const category = input.category
@@ -151,8 +154,21 @@ export function startPolling() {
   timer = setTimeout(tick, 1500)
 }
 
+/** 每次刷新任务后再跑的步骤（如图生视频：替换图完成后接着生成视频），返回新开的任务数 */
+const afterRefresh: Array<() => Promise<number>> = []
+export function onGenerationsRefreshed(hook: () => Promise<number>) {
+  afterRefresh.push(hook)
+}
+
 /** 查询所有未完成的任务并更新记录，返回仍在进行中的数量 */
 export async function refreshPending(): Promise<number> {
+  const still = await refreshJobs()
+  let started = 0
+  for (const hook of afterRefresh) started += await hook().catch(() => 0)
+  return still + started
+}
+
+async function refreshJobs(): Promise<number> {
   const records = await listRecords<SyncGeneration>(SYNC_COLLECTIONS.generations)
   const pending = records.filter((record) => record.data && (record.data.status === 'queued' || record.data.status === 'running'))
   if (!pending.length) return 0

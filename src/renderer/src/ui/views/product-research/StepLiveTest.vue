@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Banknote, Box, CalendarDays, ChevronDown, Download, Eye, Filter, LayoutGrid, List, MoreHorizontal,
   MousePointerClick, Pencil, Percent, Play, Plus, RotateCcw, ShoppingCart, Trash2, Tv, Undo2,
 } from 'lucide-vue-next'
-import type { ProductResearchLiveTestRecord } from '@/../../shared/productResearch'
+import type { ProductResearchLiveTestRecord } from '../../../../../shared/productResearch'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
 import PrThumb from './PrThumb.vue'

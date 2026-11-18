@@ -40,6 +40,12 @@ export type CloudErrorCode =
   | 'ACCOUNT_DISABLED'
   | 'CONFLICT'
   | 'QUOTA_EXCEEDED'
+  | 'DESKTOP_OFFLINE'
+  | 'RELAY_FAILED'
+  /** 服务器复刻引擎 */
+  | 'ENGINE_FAILED'
+  | 'ENGINE_STOPPED'
+  | 'ENGINE_TIMEOUT'
   | 'INTERNAL'
 
 export type CloudUser = {

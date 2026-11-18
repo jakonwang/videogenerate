@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Check, ChevronRight, CircleDashed, History, LoaderCircle, Paperclip, Plus, Wand2, X, XCircle } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncProducerChat, type SyncProducerMessage } from '@shared/cloud/sync'
 import PageHeader from '@/components/PageHeader.vue'
@@ -11,6 +11,7 @@ import { listRecords, syncState } from '@/lib/sync'
 import { toast } from '@/lib/toast'
 
 const router = useRouter()
+const route = useRoute()
 const chatId = ref('')
 const chat = ref<SyncProducerChat | null>(null)
 const input = ref('')
@@ -60,6 +61,14 @@ async function loadHistory() {
 watch(() => syncState.version, loadHistory, { immediate: true })
 
 onMounted(() => {
+  // 「交给 AI」/ 搜索框带来的目标：开一个新对话并把目标放进输入框，用户确认后再发送
+  const prompt = String(route.query.prompt || '').trim()
+  if (prompt) {
+    startNew()
+    input.value = prompt.slice(0, 500)
+    void router.replace({ path: route.path })
+    return
+  }
   const last = localStorage.getItem(LAST_KEY)
   if (last) void open(last)
   else startNew()

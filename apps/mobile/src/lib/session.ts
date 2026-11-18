@@ -2,13 +2,16 @@ import { Preferences } from '@capacitor/preferences'
 import { reactive } from 'vue'
 import { createCloudClient, CloudClientError } from '@shared/cloud/client'
 import type { CloudEntitlement, CloudUser } from '@shared/cloud/types'
+import { isWeb } from './platform'
 
 /**
  * 登录状态与云端客户端。会话令牌、云端地址、本机设备 id 存在 Preferences（Android SharedPreferences）。
  */
 
 const KEYS = { token: 'session.token', baseUrl: 'cloud.baseUrl', deviceId: 'device.id', user: 'session.user' }
-const BUILT_IN_BASE = (import.meta.env.VITE_CLOUD_API_BASE || '').replace(/\/+$/, '')
+// The web version is served from the same domain as the cloud API (/app/ next to /api/v1), so it
+// defaults to its own origin; the Android build gets the address at build time or from the login page.
+const BUILT_IN_BASE = (import.meta.env.VITE_CLOUD_API_BASE || (isWeb ? window.location.origin : '')).replace(/\/+$/, '')
 export const APP_VERSION = '0.1.0'
 
 export const session = reactive({
@@ -40,6 +43,7 @@ function randomId() {
 }
 
 function deviceName() {
+  if (isWeb) return '网页版'
   const ua = navigator.userAgent
   const match = /Android [\d.]+; ([^;)]+)/.exec(ua)
   return match ? match[1].replace(/ Build\/.*$/, '').trim() : 'Android'
@@ -72,13 +76,15 @@ export async function setBaseUrl(value: string) {
 
 export async function signIn(account: string, password: string) {
   if (!session.baseUrl) throw new Error('请先设置服务器地址')
+  // The web version signs in as a browser session: it takes no device slot, so it never
+  // replaces the user's phone. Membership is still checked on every member API.
   const result = await cloud.login({
     account,
     password,
-    client: 'mobile',
-    machineId: session.deviceId,
+    client: isWeb ? 'web' : 'mobile',
+    machineId: isWeb ? undefined : session.deviceId,
     deviceName: deviceName(),
-    platform: 'android',
+    platform: isWeb ? 'web' : 'android',
     appVersion: APP_VERSION,
   })
   session.token = result.sessionToken
@@ -87,7 +93,15 @@ export async function signIn(account: string, password: string) {
   await Preferences.set({ key: KEYS.token, value: result.sessionToken })
   await Preferences.set({ key: KEYS.user, value: JSON.stringify(result.user) })
   // Registers this phone as one of the account's devices (counts towards the plan's device limit).
+  if (isWeb) return
   await cloud.activateDevice({ machineId: session.deviceId, deviceName: deviceName(), platform: 'android', appVersion: APP_VERSION })
+}
+
+/** 网页版注册（和电脑端同一套账号），注册后直接登录 */
+export async function registerAccount(account: string, password: string, displayName?: string) {
+  if (!session.baseUrl) throw new Error('请先设置服务器地址')
+  await cloud.register({ account, password, displayName: displayName || undefined })
+  await signIn(account, password)
 }
 
 export async function refreshAccount() {

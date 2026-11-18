@@ -1,0 +1,110 @@
+# 由 makeserver 生成（ms ci init videogenerate），重新生成会覆盖。
+#   push 到 main：构建镜像 → 推到 ghcr.io → 部署到对应实例
+#   手机：GitHub App → 仓库 → Actions → makeserver → Run workflow，可以部署、回滚、重启
+# 自动部署需要先在本机执行一次：ms ci setup videogenerate
+name: makeserver
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 实例
+        type: choice
+        options: [videogenerate]
+      action:
+        description: 操作
+        type: choice
+        default: deploy
+        options: [deploy, rollback, restart]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: makeserver-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.r.outputs.target }}
+      key: ${{ steps.r.outputs.key }}
+    steps:
+      - id: r
+        name: 选择实例
+        run: |
+          if [ -n "${{ inputs.target }}" ]; then
+            TARGET="${{ inputs.target }}"
+          else
+            case "$GITHUB_REF_NAME" in
+              main) TARGET=videogenerate ;;
+            esac
+          fi
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "key=$(echo "$TARGET" | tr 'a-z-' 'A-Z_')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: route
+    if: github.event_name == 'push' || inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    env:
+      TARGET_KEY: ${{ needs.route.outputs.key }}
+    strategy:
+      # 一个镜像失败时，其他镜像继续构建，方便一次看到所有问题
+      fail-fast: false
+      matrix:
+        include:
+          - image: server
+            dockerfile: .makeserver/docker/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 镜像名
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/videogenerate-${{ matrix.image }}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            NEXT_PUBLIC_CLOUD_API_BASE_URL=${{ vars[format('NEXT_PUBLIC_CLOUD_API_BASE_URL_{0}', env.TARGET_KEY)] || vars.NEXT_PUBLIC_CLOUD_API_BASE_URL }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  deploy:
+    needs: [route, build]
+    if: always() && needs.route.outputs.target != '' && (needs.build.result == 'success' || needs.build.result == 'skipped') && vars.MS_AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 在服务器上执行
+        env:
+          SSH_KEY: ${{ secrets.MS_DEPLOY_KEY }}
+          HOST: ${{ secrets[format('MS_HOST_{0}', needs.route.outputs.key)] }}
+          PORT: ${{ secrets[format('MS_PORT_{0}', needs.route.outputs.key)] }}
+          TARGET: ${{ needs.route.outputs.target }}
+          ACTION: ${{ inputs.action || 'deploy' }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ -z "$HOST" ]; then echo "没有 $TARGET 的服务器地址：在本机执行 ms ci setup videogenerate"; exit 1; fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          case "$ACTION" in
+            deploy) CMD="redeploy $TARGET ${GITHUB_SHA::7} $ACTOR" ;;
+            rollback) CMD="rollback $TARGET $ACTOR" ;;
+            restart) CMD="restart $TARGET $ACTOR" ;;
+          esac
+          ssh -i ~/.ssh/deploy -p "${PORT:-22}" -o StrictHostKeyChecking=accept-new "root@$HOST" "$CMD"

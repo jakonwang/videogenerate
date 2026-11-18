@@ -33,7 +33,10 @@ html, body {
   overscroll-behavior-y: none;
 }
 
-button, input, select, textarea { font: inherit; color: inherit; }
+/* In the design-system layer so .vg-btn / .vg-input colours and fonts win (as on the desktop); unlayered it overrode them. */
+@layer components {
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
 button { cursor: pointer; }
 img { display: block; max-width: 100%; }
 

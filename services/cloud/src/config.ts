@@ -47,6 +47,21 @@ export function loadCloudConfig() {
     fontsDir: resolve(env('CLOUD_FONTS_DIR', join(process.cwd(), 'resources', 'fonts'))),
     /** 云端同时执行的图片 / 视频生成任务数 */
     aiJobConcurrency: envInt('CLOUD_AI_JOB_CONCURRENCY', 4),
+    /** 服务器 ffmpeg 处理（合成、水印、字幕、切片、混剪）同时跑几个；按 CPU 核数调 */
+    ffmpegConcurrency: envInt('CLOUD_FFMPEG_CONCURRENCY', 1),
+    /** 每个账号 24 小时内最多几个服务器视频处理任务，0 = 不限 */
+    ffmpegPerDay: envInt('CLOUD_FFMPEG_PER_DAY', 60),
+    /** 服务器复刻引擎：最多同时几个用户的引擎进程、空闲几分钟后退出 */
+    cloneEngineMaxWorkers: envInt('CLOUD_CLONE_ENGINE_MAX_WORKERS', 4),
+    cloneEngineIdleMinutes: envInt('CLOUD_CLONE_ENGINE_IDLE_MINUTES', 20),
+    /** 服务器复刻：每个账号每天最多向 AI 平台发起几次生成请求（一条成片大约 30～50 次），0 = 不限 */
+    cloneEnginePerDay: envInt('CLOUD_CLONE_ENGINE_PER_DAY', 300),
+    /** 仅开发 / 测试：没配置平台密钥时用模拟结果走通复刻流程（生产环境无效） */
+    cloneEngineAllowMock: env('CLOUD_CLONE_ENGINE_ALLOW_MOCK') === '1',
+    /** 没有任何记录引用的文件保留几天后清理，0 = 不清理 */
+    orphanFileDays: envInt('CLOUD_ORPHAN_FILE_DAYS', 7),
+    /** 网页版静态文件目录（apps/mobile 的 npm run build:web 产物），在 /app/ 提供 */
+    webAppDir: resolve(env('CLOUD_WEB_APP_DIR', join(process.cwd(), 'apps', 'mobile', 'dist-web'))),
     /** 每个账号的多端同步文件空间（图片、视频） */
     syncQuotaBytes: envInt('CLOUD_SYNC_QUOTA_MB', 2048) * 1024 * 1024,
     allowRegistration: env('CLOUD_ALLOW_REGISTRATION', '1') === '1',

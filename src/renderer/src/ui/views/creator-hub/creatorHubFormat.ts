@@ -1,4 +1,4 @@
-import type { CreatorHubContactStatus, CreatorHubSampleFulfillment, CreatorHubSampleStage } from '@/../../shared/creatorHub'
+import type { CreatorHubContactStatus, CreatorHubSampleFulfillment, CreatorHubSampleStage } from '../../../../../shared/creatorHub'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 

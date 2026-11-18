@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CloudDb } from './db'
 import { transaction } from './db'
@@ -18,7 +18,7 @@ import { SYNC_COLLECTION_PATTERN, SYNC_MAX_PULL, SYNC_MAX_PUSH, SYNC_MAX_RECORD_
 type RecordRow = { collection: string; id: string; data: string; updated_at: number; deleted: number; seq: number }
 
 const FILE_ID_PATTERN = /^[a-f0-9]{64}$/
-const ALLOWED_MIME = /^(image\/(png|jpeg|webp|gif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav|x-wav|aac|x-m4a|m4a|ogg))$/
+const ALLOWED_MIME = /^(image\/(png|jpeg|webp|gif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav|x-wav|aac|x-m4a|m4a|ogg)|application\/(json|gzip)|text\/plain)$/
 
 export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaBytes: number; now: () => number }) {
   const { db, now } = deps
@@ -148,7 +148,45 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     return { records: Number(records.count), fileBytes: usedBytes(userId), quotaBytes: deps.quotaBytes, cursor: currentSeq(userId) }
   }
 
-  return { pull, push, uploadFile, readFile, usage }
+  /**
+   * Deletes files nothing points to any more — e.g. a reference video uploaded for one tool run and
+   * never saved. A file is kept while any live sync record mentions its id (products, 素材库, works,
+   * projects …) or a job that is queued, running or was updated within the retention window uses it.
+   */
+  function cleanupOrphans(olderThanMs: number) {
+    const cutoff = now() - olderThanMs
+    const candidates = db.prepare('SELECT user_id, id, size FROM sync_files WHERE created_at < ?').all(cutoff) as Array<{ user_id: string; id: string; size: number }>
+    if (!candidates.length) return { removed: 0, bytes: 0 }
+    const byUser = new Map<string, typeof candidates>()
+    for (const row of candidates) byUser.set(row.user_id, [...(byUser.get(row.user_id) || []), row])
+    const HEX = /[a-f0-9]{64}/g
+    const hasJobs = Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_jobs'").get())
+    let removed = 0
+    let bytes = 0
+    for (const [userId, rows] of byUser) {
+      const referenced = new Set<string>()
+      for (const record of db.prepare('SELECT data FROM sync_records WHERE user_id = ? AND deleted = 0').iterate(userId) as Iterable<{ data: string }>) {
+        for (const match of String(record.data).match(HEX) || []) referenced.add(match)
+      }
+      if (hasJobs) {
+        const jobs = db.prepare("SELECT input, output_file_id FROM ai_jobs WHERE user_id = ? AND (status IN ('queued', 'running') OR updated_at >= ?)").all(userId, cutoff) as Array<{ input: string; output_file_id: string | null }>
+        for (const job of jobs) {
+          if (job.output_file_id) referenced.add(job.output_file_id)
+          for (const match of String(job.input).match(HEX) || []) referenced.add(match)
+        }
+      }
+      for (const row of rows) {
+        if (referenced.has(row.id)) continue
+        rmSync(join(userDir(userId), row.id), { force: true })
+        db.prepare('DELETE FROM sync_files WHERE user_id = ? AND id = ?').run(userId, row.id)
+        removed += 1
+        bytes += Number(row.size) || 0
+      }
+    }
+    return { removed, bytes }
+  }
+
+  return { pull, push, uploadFile, readFile, usage, cleanupOrphans }
 }
 
 export type SyncService = ReturnType<typeof createSyncService>

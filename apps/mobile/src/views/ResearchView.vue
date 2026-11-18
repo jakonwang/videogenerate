@@ -4,6 +4,10 @@ import { useRouter } from 'vue-router'
 import { Accessibility, ChevronRight, Keyboard, LoaderCircle, Monitor, QrCode, ScanSearch, Search, Smartphone, Unplug, X } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncResearchTask } from '@shared/cloud/sync'
 import PageHeader from '@/components/PageHeader.vue'
+import CloudImage from '@/components/CloudImage.vue'
+import { Check, Plus } from 'lucide-vue-next'
+import { useInWebShell } from '@/lib/layout'
+import { addResearchToLibrary, formatSales, useResearchResults, type ResearchItem } from '@/lib/researchResults'
 import { relativeTime } from '@/lib/library'
 import {
   cancelTask,
@@ -23,6 +27,7 @@ import { listRecords, syncState } from '@/lib/sync'
 import { toast } from '@/lib/toast'
 
 const router = useRouter()
+const inWebShell = useInWebShell()
 const tab = ref<'phone' | 'desktop'>(localStorage.getItem('research.tab') === 'desktop' ? 'desktop' : 'phone')
 watch(tab, (value) => localStorage.setItem('research.tab', value))
 
@@ -77,6 +82,28 @@ async function stop() {
 const taskStatus = (task: SyncResearchTask) =>
   ({ running: { label: '采集中', tone: 'blue' }, completed: { label: '已完成', tone: 'green' }, failed: { label: '失败', tone: 'red' }, cancelled: { label: '已取消', tone: 'muted' } })[task.status]
 
+/* ---------------------------------------------------------------- 网页：看采集结果、加入商品库 */
+const selectedId = ref<string | null>(null)
+const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedId.value) ?? tasks.value[0] ?? null)
+const { sorted: picked, sort: pickedSort } = useResearchResults(computed(() => selectedTask.value?.id ?? null))
+const adding = ref<string | null>(null)
+const PILL: Record<string, string> = { blue: 'vg-pill--blue', green: 'vg-pill--green', red: 'vg-pill--red', muted: '' }
+async function addPicked(item: ResearchItem) {
+  if (item.productId) {
+    router.push(`/library/products/${item.productId}`)
+    return
+  }
+  adding.value = item.id
+  try {
+    await addResearchToLibrary(item)
+    toast('已加入商品库')
+  } catch (error) {
+    toast(errorMessage(error))
+  } finally {
+    adding.value = null
+  }
+}
+
 /* ---------------------------------------------------------------- 连接电脑 */
 const manual = ref(false)
 const endpointDraft = ref('')
@@ -128,6 +155,61 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader title="选品" :icon="ScanSearch" description="手机 App 按销量采集的抖音商品会同步到这里；挑中的一键加入商品库，再去复刻或做素材。" />
+    <main class="vg-page rs" data-testid="web-research">
+      <div class="vg-notice vg-notice--accent"><Smartphone :size="14" /> 采集需要在手机上操作抖音：打开 TiktokCut 手机版 → 选品，输入关键词按销量采集，完成后结果自动出现在这里。</div>
+      <div v-if="tasks.length" class="rs-body">
+        <nav class="rs-tasks">
+          <span class="rs-tasks__head">采集记录 <small>{{ tasks.length }}</small></span>
+          <button v-for="task in tasks" :key="task.id" type="button" class="rs-task" :class="{ 'is-active': selectedTask?.id === task.id }" @click="selectedId = task.id">
+            <span class="rs-task__main"><strong>{{ task.keyword }}</strong><small>{{ task.collected }} 个商品 · {{ relativeTime(task.startedAt) }}</small></span>
+            <span class="vg-pill vg-pill--dot" :class="PILL[taskStatus(task).tone]">{{ taskStatus(task).label }}</span>
+          </button>
+        </nav>
+        <section class="rs-results">
+          <div class="vg-toolbar">
+            <strong class="rs-results__title">「{{ selectedTask?.keyword }}」 <small class="vg-muted">共 {{ picked.length }} 个商品</small></strong>
+            <span class="vg-toolbar__spacer"></span>
+            <div class="vg-seg vg-seg--sm">
+              <button type="button" class="vg-seg__btn" :class="{ 'is-active': pickedSort === 'rank' }" @click="pickedSort = 'rank'">默认</button>
+              <button type="button" class="vg-seg__btn" :class="{ 'is-active': pickedSort === 'sales' }" @click="pickedSort = 'sales'">销量</button>
+              <button type="button" class="vg-seg__btn" :class="{ 'is-active': pickedSort === 'price' }" @click="pickedSort = 'price'">价格</button>
+            </div>
+          </div>
+          <div v-if="picked.length" class="vg-table-wrap">
+            <table class="vg-table">
+              <thead><tr><th style="width: 52px">#</th><th style="width: 72px">主图</th><th>商品</th><th style="width: 110px">价格</th><th style="width: 110px">销量</th><th style="width: 130px"></th></tr></thead>
+              <tbody>
+                <tr v-for="item in picked" :key="item.id">
+                  <td class="vg-muted">{{ item.rank }}</td>
+                  <td><span class="rs-thumb"><CloudImage :file-id="item.image?.fileId" :alt="item.title" /></span></td>
+                  <td class="rs-title">{{ item.title }}</td>
+                  <td class="rs-price">{{ item.priceText || '-' }}</td>
+                  <td class="rs-sales">{{ formatSales(item.salesValue, item.salesText) }}</td>
+                  <td class="rs-actions">
+                    <button v-if="item.productId" type="button" class="vg-btn vg-btn--xs" @click="addPicked(item)"><Check :size="13" /> 已在商品库</button>
+                    <button v-else type="button" class="vg-btn vg-btn--xs vg-btn--primary" :disabled="adding === item.id" data-testid="research-add" @click="addPicked(item)"><Plus :size="13" /> 加入商品库</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="vg-empty rs-empty">
+            <span class="vg-empty__icon"><ScanSearch :size="20" /></span>
+            <h3>{{ selectedTask?.status === 'running' ? '正在采集…' : '没有采集到商品' }}</h3>
+            <p>{{ selectedTask?.status === 'running' ? '手机采集完成后结果会出现在这里' : '在手机上换个关键词再试一次' }}</p>
+          </div>
+        </section>
+      </div>
+      <div v-else class="vg-empty rs-empty">
+        <span class="vg-empty__icon"><ScanSearch :size="20" /></span>
+        <h3>还没有采集记录</h3>
+        <p>在 TiktokCut 手机版的「选品」里输入关键词开始第一次采集</p>
+      </div>
+    </main>
+  </template>
+  <template v-else>
   <PageHeader title="选品" />
   <main class="m-page">
     <div class="seg" role="tablist">
@@ -279,9 +361,29 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
       </section>
     </template>
   </main>
+  </template>
 </template>
 
 <style scoped>
+.rs { display: flex; flex-direction: column; gap: 14px; }
+.rs-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: start; }
+.rs-tasks { display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 220px); overflow: auto; padding: 10px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+.rs-tasks__head { padding: 4px 8px 8px; font-size: 12px; font-weight: 700; color: var(--theme-text-muted); }
+.rs-task { display: flex; align-items: center; gap: 8px; padding: 9px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--theme-text); text-align: left; cursor: pointer; }
+.rs-task:hover { background: var(--theme-panel-soft); }
+.rs-task.is-active { background: var(--vg-accent-soft); }
+.rs-task__main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.rs-task__main strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.rs-task__main small { font-size: 11px; color: var(--theme-text-muted); }
+.rs-results { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+.rs-results__title { font-size: 14px; }
+.rs-thumb { display: block; width: 48px; height: 48px; overflow: hidden; border-radius: 8px; background: var(--theme-panel-soft); }
+.rs-title { line-height: 1.45; }
+.rs-price { font-weight: 700; color: var(--vg-red); }
+.rs-sales { font-weight: 700; color: var(--vg-green); }
+.rs-actions { text-align: right; }
+.rs-empty { padding: 48px 16px; }
+
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; padding: 4px; border-radius: 14px; background: var(--theme-panel); border: 1px solid var(--theme-border); }
 .seg button { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border: 0; border-radius: 10px; background: none; color: var(--theme-text-muted); font-size: 14px; font-weight: 700; }
 .seg button.is-active { background: var(--theme-control-hover); color: var(--theme-text); }

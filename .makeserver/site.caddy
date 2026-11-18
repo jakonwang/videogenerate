@@ -1,0 +1,34 @@
+# videogenerate 站点：一个域名按路径分流（写到服务器 /srv/edge/sites/<实例>.caddy；${MS_PROJECT} 是实例名）
+#   /api/v1/*  云 API（桌面端、网页版、支付回调）
+#   /app/*     网页版（云服务提供）
+#   /updates/* 桌面端自动更新文件（服务器 /srv/apps/<实例>/shared/update/）
+#   其他       官网 + 用户中心 + 后台（Next.js）
+${DOMAIN} {
+	encode zstd gzip
+
+	@cloud path /api/v1/* /app /app/*
+	handle @cloud {
+		# 上传最大 210MB；电脑代办长轮询需要不缓冲
+		request_body {
+			max_size 210MB
+		}
+		reverse_proxy ${MS_PROJECT}-cloud:18300 {
+			flush_interval -1
+			lb_try_duration 10s
+			transport http {
+				read_timeout 310s
+			}
+		}
+	}
+
+	handle_path /updates/* {
+		root * /srv/apps/${MS_PROJECT}/shared/update
+		file_server
+	}
+
+	handle {
+		reverse_proxy ${MS_PROJECT}-web:18280 {
+			lb_try_duration 10s
+		}
+	}
+}

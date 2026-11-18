@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CheckCircle2, Copy, Loader2, RefreshCw, Smartphone, X } from 'lucide-vue-next'
-import type { ProductResearchPairing } from '@/../../shared/productResearch'
+import type { ProductResearchPairing } from '../../../../../shared/productResearch'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; paired: [deviceName: string] }>()

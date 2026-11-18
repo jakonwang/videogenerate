@@ -255,10 +255,10 @@
 
   /* ===== Progress ===== */
   .vg-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
-  .vg-progress__bar { flex: 1; height: 6px; border-radius: 999px; background: var(--theme-panel-soft); overflow: hidden; border: 1px solid var(--theme-border); }
-  .vg-progress__fill { height: 100%; background: var(--vg-accent); border-radius: inherit; transition: width .4s; }
+  .vg-progress__bar { display: block; flex: 1; height: 6px; border-radius: 999px; background: var(--theme-panel-soft); overflow: hidden; border: 1px solid var(--theme-border); }
+  .vg-progress__fill { display: block; height: 100%; background: var(--vg-accent); border-radius: inherit; transition: width .4s; }
   .vg-progress__fill--fail { background: var(--vg-red); }
-  .vg-progress > span { width: 38px; text-align: right; font-size: 12px; color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; }
+  .vg-progress > span:not(.vg-progress__bar) { width: 38px; text-align: right; font-size: 12px; color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; }
 
   /* ===== Pagination ===== */
   .vg-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px 0; font-size: 12px; color: var(--theme-text-muted); flex-wrap: wrap; }

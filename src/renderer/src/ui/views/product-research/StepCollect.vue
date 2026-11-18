@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowRight, Battery, CheckCircle2, ChevronDown, CircleDot, Clock3, Copy, Download, ExternalLink, Filter, Info,
   Layers, ListChecks, Loader2, Package, Pencil, Play, Plus, RefreshCw, Search, Settings2, Smartphone, Trash2, Upload, XCircle,
 } from 'lucide-vue-next'
-import type { ProductResearchTask } from '@/../../shared/productResearch'
+import type { ProductResearchTask } from '../../../../../shared/productResearch'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
 import PrThumb from './PrThumb.vue'

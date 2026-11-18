@@ -19,8 +19,8 @@ import type {
   CreatorHubShop,
   CreatorHubSyncProgress,
   CreatorHubVideo,
-} from '@/../../shared/creatorHub'
-import { CREATOR_HUB_DEFAULT_SETTINGS } from '@/../../shared/creatorHub'
+} from '../../../../shared/creatorHub'
+import { CREATOR_HUB_DEFAULT_SETTINGS } from '../../../../shared/creatorHub'
 import ChActionDialog from './creator-hub/ChActionDialog.vue'
 import ChCookieDialog from './creator-hub/ChCookieDialog.vue'
 import ChCostsPanel from './creator-hub/ChCostsPanel.vue'

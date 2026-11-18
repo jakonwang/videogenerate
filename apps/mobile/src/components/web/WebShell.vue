@@ -1,0 +1,150 @@
+<script setup lang="ts">
+/**
+ * Desktop-style shell for the web version: the desktop app's own sidebar layout (design-system
+ * MainLayout + Sidebar) under a matching title bar. Pages render inside its scrolling workspace.
+ */
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { House, Inbox, PanelLeftClose, PanelLeftOpen, Settings, Wrench } from 'lucide-vue-next'
+import DsMainLayout from '@design/layout/MainLayout.vue'
+import WebTitleBar from './WebTitleBar.vue'
+import { MODULES, type MobileModule } from '@/lib/modules'
+import { provideWebShell } from '@/lib/layout'
+import { session } from '@/lib/session'
+import { useGenerations } from '@/lib/generate'
+import { isWeb } from '@/lib/platform'
+
+const route = useRoute()
+const router = useRouter()
+provideWebShell(ref(true))
+
+const COLLAPSE_KEY = 'tiktokcut:web-sidebar-collapsed'
+const collapsed = ref(false)
+try {
+  collapsed.value = localStorage.getItem(COLLAPSE_KEY) === '1'
+} catch {
+  // storage unavailable (private mode): start expanded
+}
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+  try {
+    localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0')
+  } catch {
+    // ignore
+  }
+}
+
+const pending = useGenerations((item) => item.status === 'succeeded' && item.review === 'pending')
+
+function isActive(to: string) {
+  const [path, query] = to.split('?')
+  if (path === '/') return route.path === '/'
+  if (route.path !== path && !route.path.startsWith(`${path}/`)) return false
+  if (!query) return !(path === '/business' && route.query.tab)
+  const [key, value] = query.split('=')
+  return String(route.query[key] || '') === value
+}
+
+// Same structure as the desktop sidebar (src/renderer/src/ui/MainLayout.vue): 创作 / 资产 / 工具箱.
+const navItems = computed(() => [
+  { to: '/', label: '工作台', icon: House, active: isActive('/') },
+  { to: '/review', label: '审核收件箱', icon: Inbox, active: isActive('/review'), badge: pending.value.length },
+])
+
+const SECTIONS: Array<{ title: string; keys: string[] }> = [
+  { title: '创作', keys: ['research', 'clone', 'creative-studio', 'live-photo', 'production', 'publish', 'insights'] },
+  { title: '资产', keys: ['products', 'models', 'assets', 'templates', 'works'] },
+]
+const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/business?tab=creators', '/business?tab=inventory']
+const byKey = new Map(MODULES.map((item) => [item.key, item]))
+const sections = computed(() =>
+  SECTIONS.map((section) => ({
+    title: section.title,
+    items: section.keys
+      .map((key) => byKey.get(key))
+      .filter((item): item is MobileModule & { route: string } => Boolean(item?.route))
+      .map((item) => {
+        // Web 选品 = the desktop's 选品方案 (schemes + SOP); the phone capture page stays in the App.
+        const to = isWeb && item.key === 'research' ? '/product-research' : item.route
+        return { to, label: item.name, icon: item.icon, active: isActive(to) }
+      }),
+  }))
+    .filter((section) => section.items.length)
+    .concat([{ title: '工具箱', items: [{ to: '/toolbox', label: '工具箱', icon: Wrench, active: TOOL_ROUTES.some((to) => (to.includes('?') ? isActive(to) : route.path.startsWith(to))) }] }]),
+)
+
+const userName = computed(() => session.user?.displayName || session.user?.account || '我的账号')
+const planText = computed(() => {
+  const e = session.entitlement
+  if (!e?.active) return '未开通会员'
+  if (e.unlimited) return '不受限账号'
+  const name = e.planName || '会员'
+  if (!e.expiresAt) return name
+  const days = Math.max(0, Math.ceil((e.expiresAt - Date.now()) / 86_400_000))
+  return days > 3650 ? `${name} · 永久` : `${name} · 剩 ${days} 天`
+})
+
+// The workspace (not the window) scrolls inside the shell.
+onMounted(() => document.body.classList.add('is-web-shell'))
+onBeforeUnmount(() => document.body.classList.remove('is-web-shell'))
+</script>
+
+<template>
+  <div class="web-shell" data-testid="web-shell">
+    <WebTitleBar />
+    <div class="web-shell__body">
+      <DsMainLayout :nav-items="navItems" :sections="sections" :collapsed="collapsed">
+        <template #sidebar-footer>
+          <button type="button" class="shell-foot__btn" :class="{ 'is-active': route.path === '/me' || route.path === '/password' }" :title="collapsed ? '设置' : undefined" @click="router.push('/me')">
+            <span class="shell-foot__tile"><Settings class="shell-foot__icon" /></span>
+            <span class="shell-foot__label">设置</span>
+          </button>
+          <div class="shell-foot__user" :class="{ 'is-active': route.path.startsWith('/membership') }" role="button" tabindex="0" :title="collapsed ? `${userName} · ${planText}` : '账号与会员'" @click="router.push('/membership')" @keydown.enter="router.push('/membership')">
+            <span class="vg-avatar shell-foot__avatar">{{ userName.slice(0, 1).toUpperCase() }}</span>
+            <span class="shell-foot__user-copy">
+              <strong>{{ userName }}</strong>
+              <small>{{ planText }}</small>
+            </span>
+            <button type="button" class="vg-icon-btn vg-icon-btn--sm shell-foot__collapse" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click.stop="toggleCollapsed">
+              <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" class="shell-foot__icon" />
+            </button>
+          </div>
+        </template>
+        <div class="vg-scope web-workspace">
+          <slot />
+        </div>
+      </DsMainLayout>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.web-shell { display: flex; flex-direction: column; height: 100vh; background: var(--theme-shell); }
+.web-shell__body { flex: 1; min-height: 0; }
+.web-workspace { min-height: 100%; }
+
+/* Sidebar footer — same metrics as the desktop shell (src/renderer/src/ui/MainLayout.vue). */
+.shell-foot__btn { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 8px; border: 0; border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--theme-text) 86%, transparent); font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left; }
+.shell-foot__tile { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: color-mix(in srgb, var(--theme-text) 5%, transparent); border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent); color: var(--theme-text-secondary); }
+.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); color: var(--theme-text); }
+.shell-foot__btn.is-active { background: color-mix(in srgb, var(--theme-accent) 12%, transparent); color: var(--theme-text); }
+.shell-foot__btn.is-active .shell-foot__tile { background: var(--theme-accent); border-color: var(--theme-accent); color: #fff; }
+.shell-foot__icon { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.9; }
+.shell-foot__user { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-text) 3%, transparent); cursor: pointer; }
+.shell-foot__user:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
+.shell-foot__avatar { width: 32px; height: 32px; flex-shrink: 0; }
+.shell-foot__user-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.shell-foot__user-copy strong { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-foot__user-copy small { font-size: 11px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-foot__collapse { color: var(--theme-text-secondary); }
+/* The design-system sidebar also collapses itself below 1180px (desktop app behaviour). */
+@media (max-width: 1180px) {
+  .shell-foot__btn { justify-content: center; padding: 0; }
+  .shell-foot__label, .shell-foot__user-copy, .shell-foot__collapse { display: none; }
+  .shell-foot__user { justify-content: center; padding: 6px; }
+}
+.web-shell :deep(.vg-shell.is-collapsed) .shell-foot__btn { justify-content: center; padding: 0; }
+.web-shell :deep(.vg-shell.is-collapsed) .shell-foot__label,
+.web-shell :deep(.vg-shell.is-collapsed) .shell-foot__user-copy { display: none; }
+.web-shell :deep(.vg-shell.is-collapsed) .shell-foot__user { flex-direction: column; gap: 6px; padding: 6px 0; border-color: transparent; background: transparent; }
+</style>

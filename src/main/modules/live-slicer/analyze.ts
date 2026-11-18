@@ -3,11 +3,8 @@ import { constants as fsConstants } from 'node:fs'
 import { basename } from 'node:path'
 import { probeMedia } from '../ffmpeg/probe'
 import { runFfmpeg } from '../ffmpeg/runner'
-
-/** Seconds covered by one entry of `LiveSlicerAnalysis.energy`. */
-export const ENERGY_STEP_SEC = 0.5
-const ENERGY_SAMPLE_RATE = 8000
-const SILENT_DB = -90
+import { ENERGY_STEP_SEC, createEnergyParser, createSceneParser, energyFilter, sceneFilter, type LiveSlicerAnalysis } from '../../../shared/liveSlicer'
+export { ENERGY_STEP_SEC, type LiveSlicerAnalysis }
 
 export type LiveSlicerSource = {
   path: string
@@ -21,16 +18,6 @@ export type LiveSlicerSource = {
   videoCodec: string | null
   audioCodec: string | null
   bitRate: number
-}
-
-export type LiveSlicerAnalysis = {
-  durationSec: number
-  /** Seconds per energy entry. */
-  step: number
-  /** RMS loudness (dBFS, clamped to [-90, 0]) per `step` seconds; empty when the file has no audio. */
-  energy: number[]
-  /** Visual change points: [timeSec, score 0..1]. */
-  scenes: Array<[number, number]>
 }
 
 export async function probeLiveSource(inputPath: string): Promise<LiveSlicerSource> {
@@ -67,9 +54,7 @@ async function measureEnergy(opts: {
   signal?: AbortSignal
   onProgress: (fraction: number) => void
 }): Promise<number[]> {
-  const samplesPerStep = Math.round(ENERGY_SAMPLE_RATE * ENERGY_STEP_SEC)
-  const energy: number[] = []
-  let pendingIndex = -1
+  const parser = createEnergyParser()
   const map = opts.audioStreamIndex != null ? `0:${opts.audioStreamIndex}` : '0:a:0'
   await runFfmpeg({
     signal: opts.signal,
@@ -89,37 +74,18 @@ async function measureEnergy(opts: {
       '-map',
       map,
       '-af',
-      [
-        `aresample=${ENERGY_SAMPLE_RATE}`,
-        'aformat=channel_layouts=mono',
-        `asetnsamples=n=${samplesPerStep}:p=0`,
-        'astats=metadata=1:reset=1',
-        'ametadata=mode=print:key=lavfi.astats.Overall.RMS_level:file=-',
-      ].join(','),
+      energyFilter('-'),
       '-f',
       'null',
       '-',
     ],
-    onStdout: (line) => {
-      const frame = /pts_time:([\d.]+)/.exec(line)
-      if (frame) {
-        pendingIndex = Math.round(Number(frame[1]) / ENERGY_STEP_SEC)
-        return
-      }
-      const value = /RMS_level=(.+)$/.exec(line)
-      if (value && pendingIndex >= 0) {
-        const db = Number(value[1])
-        energy[pendingIndex] = Number.isFinite(db) ? Math.max(SILENT_DB, Math.min(0, db)) : SILENT_DB
-        pendingIndex = -1
-      }
-    },
+    onStdout: (line) => parser.push(line),
     onStderr: (line) => {
       const sec = parseProgressSeconds(line)
       if (sec != null && opts.durationSec > 0) opts.onProgress(Math.min(1, sec / opts.durationSec))
     },
   })
-  for (let i = 0; i < energy.length; i += 1) if (energy[i] == null) energy[i] = SILENT_DB
-  return energy
+  return parser.result()
 }
 
 async function detectScenes(opts: {
@@ -128,8 +94,7 @@ async function detectScenes(opts: {
   signal?: AbortSignal
   onProgress: (fraction: number) => void
 }): Promise<Array<[number, number]>> {
-  const scenes: Array<[number, number]> = []
-  let pendingTime = -1
+  const parser = createSceneParser()
   await runFfmpeg({
     signal: opts.signal,
     args: [
@@ -152,29 +117,18 @@ async function detectScenes(opts: {
       '-map',
       '0:v:0',
       '-vf',
-      'scale=96:-2,select=gt(scene\\,0.22),metadata=mode=print:key=lavfi.scene_score:file=-',
+      sceneFilter('-'),
       '-f',
       'null',
       '-',
     ],
-    onStdout: (line) => {
-      const frame = /pts_time:([\d.]+)/.exec(line)
-      if (frame) {
-        pendingTime = Number(frame[1])
-        return
-      }
-      const value = /scene_score=([\d.]+)/.exec(line)
-      if (value && pendingTime >= 0) {
-        scenes.push([Math.round(pendingTime * 100) / 100, Math.min(1, Number(value[1]))])
-        pendingTime = -1
-      }
-    },
+    onStdout: (line) => parser.push(line),
     onStderr: (line) => {
       const sec = parseProgressSeconds(line)
       if (sec != null && opts.durationSec > 0) opts.onProgress(Math.min(1, sec / opts.durationSec))
     },
   })
-  return scenes
+  return parser.result()
 }
 
 /**

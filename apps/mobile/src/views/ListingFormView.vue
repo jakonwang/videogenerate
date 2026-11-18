@@ -17,6 +17,11 @@ import { cloud, errorMessage } from '@/lib/session'
 import { writeListingCopy } from '@/lib/listing'
 import { deleteRecord, getRecord, newId, saveRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import { FileText, Image as ImageIcon } from 'lucide-vue-next'
+const inWebShell = useInWebShell()
 
 const route = useRoute()
 const router = useRouter()
@@ -108,6 +113,52 @@ async function remove() {
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader :title="isNew ? '添加商品' : form.title || '商品编辑'" back="/listings" description="TikTok 上架助手 · AI 看商品图写标题和描述">
+      <template #actions>
+        <button v-if="!isNew" type="button" class="vg-btn vg-btn--danger" @click="remove"><Trash2 :size="14" /> 删除</button>
+        <button type="button" class="vg-btn vg-btn--primary" :disabled="!form.images.length" @click="save()">保存</button>
+      </template>
+    </PageHeader>
+    <main v-if="loaded" class="vg-page pd" data-testid="web-listing-form">
+      <div class="pd-form">
+        <div class="mf-left">
+          <section class="pd-card">
+            <h2 class="vg-section-title"><ImageIcon :size="16" /> 商品图片 <small>第一张或带星号的图作为主图</small></h2>
+            <ImageGrid v-model:images="form.images" v-model:cover="cover" />
+            <div><button type="button" class="vg-btn vg-btn--sm" @click="picking = true"><Boxes :size="14" /> 从商品库选择</button></div>
+          </section>
+          <section class="pd-card">
+            <h2 class="vg-section-title"><FileText :size="16" /> 商品信息</h2>
+            <div class="vg-field"><span class="vg-field__label">品类</span><div class="vg-seg vg-seg--sm"><button v-for="[value, label] in categories" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': form.category === value }" @click="form.category = value">{{ label }}</button></div></div>
+            <div class="vg-field"><span class="vg-field__label">文案语言</span><div class="vg-seg vg-seg--sm"><button v-for="[value, label] in languages" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': form.language === value }" @click="form.language = value">{{ label }}</button></div></div>
+            <div class="lf-row">
+              <label class="vg-field"><span class="vg-field__label">SKU</span><input v-model="form.sku" class="vg-input" type="text" maxlength="60" placeholder="选填" /></label>
+              <label class="vg-field"><span class="vg-field__label">售价</span><input v-model="form.price" class="vg-input" type="text" inputmode="decimal" maxlength="30" placeholder="选填，如 $9.99" /></label>
+            </div>
+          </section>
+        </div>
+        <section class="pd-card">
+          <div class="lf-head">
+            <h2 class="vg-section-title"><Sparkles :size="16" /> 标题与描述 <small v-if="usage">今天已用 {{ usage.usedToday }} / {{ usage.dailyLimit }} 次</small></h2>
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="!canGenerate" @click="generate">
+              <LoaderCircle v-if="generating" :size="14" class="vg-spin" /><Sparkles v-else :size="14" /> {{ generating ? 'AI 正在写…' : form.title ? '重新生成' : 'AI 生成' }}
+            </button>
+          </div>
+          <label class="vg-field">
+            <span class="vg-field__label lf-label">商品标题 <span class="vg-muted">{{ form.title.length }} / 200</span><button type="button" class="vg-btn vg-btn--xs" @click.prevent="copy(form.title, '标题')"><Copy :size="12" /> 复制</button></span>
+            <textarea v-model="form.title" class="vg-textarea" rows="3" maxlength="255" placeholder="AI 生成后可以直接修改" />
+          </label>
+          <label class="vg-field">
+            <span class="vg-field__label lf-label">商品描述<button type="button" class="vg-btn vg-btn--xs" @click.prevent="copy(form.description, '描述')"><Copy :size="12" /> 复制</button></span>
+            <textarea v-model="form.description" class="vg-textarea" rows="14" placeholder="AI 会看商品图片写描述，约 10–30 秒" />
+          </label>
+        </section>
+      </div>
+      <ProductPicker v-if="picking" @close="picking = false" @pick="applyProduct" />
+    </main>
+  </template>
+  <template v-else>
   <PageHeader :title="isNew ? '新建上架文案' : '上架文案'" back="/listings">
     <template v-if="!isNew" #actions>
       <button type="button" class="m-icon-btn" aria-label="删除" @click="remove"><Trash2 :size="20" /></button>
@@ -174,6 +225,7 @@ async function remove() {
   </div>
 
   <ProductPicker v-if="picking" @close="picking = false" @pick="applyProduct" />
+  </template>
 </template>
 
 <style scoped>

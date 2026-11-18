@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Cookie, FileUp, Loader2, ShieldCheck, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubShop } from '@/../../shared/creatorHub'
+import type { CreatorHubShop } from '../../../../../shared/creatorHub'
 import { creatorHubError } from './creatorHubFormat'
 
 const props = defineProps<{ open: boolean; shop?: CreatorHubShop | null }>()

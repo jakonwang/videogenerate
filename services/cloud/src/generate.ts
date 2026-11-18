@@ -15,7 +15,7 @@ import { createGrsImageTask, createGrsVideoTask, waitGrsResult } from '../../../
 import { toPublicUrlViaQiniu } from '../../../src/main/modules/clone/qiniu'
 import type { ModelCredentials } from '../../../src/main/modules/clone/types'
 import { DEFAULT_CLONE_PROVIDERS, runAnalyze, runCompose, type CloneProviders } from './cloneJobs'
-import { runMix, runParseLink, runSlice, runSubtitle, runWatermark, type VideoToolProviders } from './videoJobs'
+import { runFrames, runLiveAnalyze, runLiveExport, runMix, runParseLink, runSlice, runSubtitle, runWatermark, type VideoToolProviders, runMixShots } from './videoJobs'
 import { transcribeWithWhisperCompatible } from '../../../src/main/modules/web-platform/whisperCompatible'
 import { VIDEO_TOOLS_USING_QUOTA, type VideoJobResult, type VideoToolKind } from '../../../src/shared/cloud/videoTools'
 
@@ -68,6 +68,7 @@ const DEFAULT_PROVIDERS: GenerationProviders = {
   video: {
     ffmpeg: DEFAULT_CLONE_PROVIDERS.ffmpeg,
     probeDuration: DEFAULT_CLONE_PROVIDERS.probeDuration,
+    probe: DEFAULT_CLONE_PROVIDERS.probe,
     transcribe: transcribeWithWhisperCompatible,
     fetch: (...args) => fetch(...args),
     random: Math.random,
@@ -77,6 +78,7 @@ const DEFAULT_PROVIDERS: GenerationProviders = {
 const MIME_BY_EXT: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' }
 const EXT_BY_MIME: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' }
 const PUBLIC_LINK_TTL_MS = 2 * 60 * 60 * 1000
+const FILE_LINK_TTL_MS = 12 * 60 * 60 * 1000
 
 export function createGenerationService(deps: {
   db: CloudDb
@@ -88,6 +90,10 @@ export function createGenerationService(deps: {
   publicBaseUrl: () => string
   linkSecret: string
   concurrency: number
+  /** 只用服务器 ffmpeg 的重活（合成、水印、字幕、切片、混剪）单独排队，默认同时 1 个 */
+  ffmpegConcurrency?: number
+  /** 每个账号 24 小时内最多提交多少个服务器视频处理任务，0 表示不限 */
+  ffmpegPerDay?: number
   providers?: Partial<Omit<GenerationProviders, 'clone' | 'video'>> & { clone?: Partial<CloneProviders>; video?: Partial<VideoToolProviders> }
   fontsDir: string
 }) {
@@ -98,8 +104,14 @@ export function createGenerationService(deps: {
     clone: { ...DEFAULT_CLONE_PROVIDERS, ...deps.providers?.clone },
     video: { ...DEFAULT_PROVIDERS.video, ...deps.providers?.video },
   }
-  const queue: string[] = []
-  let running = 0
+  // Two lanes: AI / provider jobs mostly wait on remote APIs; ffmpeg jobs burn this server's CPU,
+  // so they get their own (small) concurrency and never hold up AI generation.
+  const FFMPEG_KINDS = new Set<AiGenerationKind>(['compose', 'watermark', 'subtitle', 'slice', 'mix', 'frames', 'live-analyze', 'live-export'])
+  const lanes = {
+    ai: { queue: [] as string[], running: 0, limit: Math.max(1, deps.concurrency) },
+    ffmpeg: { queue: [] as string[], running: 0, limit: Math.max(1, deps.ffmpegConcurrency ?? 1) },
+  }
+  const laneOf = (kind: AiGenerationKind) => (FFMPEG_KINDS.has(kind) ? lanes.ffmpeg : lanes.ai)
 
   // Jobs interrupted by a restart cannot resume (their provider task handles are gone).
   db.prepare("UPDATE ai_jobs SET status = 'failed', error = '服务重启，任务中断，请重新生成', updated_at = ? WHERE status IN ('queued', 'running')").run(now())
@@ -117,6 +129,7 @@ export function createGenerationService(deps: {
       result: row.result ? JSON.parse(row.result) : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ...(row.status === 'queued' ? { queuePosition: laneOf(row.kind).queue.indexOf(row.id) + 1 || undefined } : {}),
     }
   }
 
@@ -133,7 +146,7 @@ export function createGenerationService(deps: {
     )
   }
 
-  const VIDEO_TOOLS: VideoToolKind[] = ['watermark', 'subtitle', 'slice', 'mix', 'parse-link']
+  const VIDEO_TOOLS: VideoToolKind[] = ['watermark', 'subtitle', 'slice', 'mix', 'parse-link', 'frames', 'live-analyze', 'live-export']
   const isVideoTool = (kind: AiGenerationKind): kind is VideoToolKind => VIDEO_TOOLS.includes(kind as VideoToolKind)
   /** 这类任务是否调用 AI / 付费接口（合成、水印、切片、混剪只用 ffmpeg，不占额度） */
   const usesAi = (kind: AiGenerationKind) => (isVideoTool(kind) ? VIDEO_TOOLS_USING_QUOTA.includes(kind) : kind !== 'compose')
@@ -156,13 +169,13 @@ export function createGenerationService(deps: {
     return deps.files.read(userId, fileId)
   }
 
-  async function publicUrl(credentials: ModelCredentials, userId: string, fileId: string, localPath: string) {
+  async function publicUrl(credentials: ModelCredentials, userId: string, fileId: string, localPath: string, ttlMs = PUBLIC_LINK_TTL_MS, keyPrefix = 'tiktokcut/mobile') {
     if (credentials.qiniuAccessKey && credentials.qiniuSecretKey && credentials.qiniuBucket && credentials.qiniuDomain) {
-      return providers.toPublicUrlViaQiniu(credentials, localPath, 'tiktokcut/mobile')
+      return providers.toPublicUrlViaQiniu(credentials, localPath, keyPrefix)
     }
     const base = deps.publicBaseUrl().replace(/\/+$/, '')
     if (base) {
-      const expiresAt = now() + PUBLIC_LINK_TTL_MS
+      const expiresAt = now() + ttlMs
       return `${base}/api/v1/public-files/${fileId}?u=${encodeURIComponent(userId)}&e=${expiresAt}&s=${sign(userId, fileId, expiresAt)}`
     }
     throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置七牛存储或云端对外地址，暂时无法生成，请联系客服', 503)
@@ -176,12 +189,13 @@ export function createGenerationService(deps: {
 
   function assertConfigured(kind: AiGenerationKind) {
     const settings = deps.readManagedSettings()
-    if (kind === 'compose' || kind === 'watermark' || kind === 'slice' || kind === 'mix') return settings
-    if (!settings.enabled) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置 AI 服务，请联系客服', 503)
+    if (kind === 'compose' || kind === 'watermark' || kind === 'slice' || kind === 'mix' || kind === 'frames' || kind === 'live-analyze' || kind === 'live-export') return settings
+    // 链接下载只用 TikHub，不需要打开 AI 服务
     if (kind === 'parse-link') {
       if (!settings.tikhubApiKey) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置 TikHub 密钥，暂时无法解析链接', 503)
       return settings
     }
+    if (!settings.enabled) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置 AI 服务，请联系客服', 503)
     // Speech recognition goes through the chat platform's OpenAI-compatible /v1/audio/transcriptions.
     const capability = kind === 'analyze-video' || kind === 'subtitle' ? 'chat' : kind
     const platform = settings.capabilities[capability].platform
@@ -212,7 +226,10 @@ export function createGenerationService(deps: {
         let result: VideoJobResult
         if (row.kind === 'watermark') result = { outputs: await runWatermark({ ...common, videoFileId: input.videoFileId!, options, fontsDir: deps.fontsDir }) }
         else if (row.kind === 'slice') result = { outputs: await runSlice({ ...common, videoFileId: input.videoFileId!, options }) }
-        else if (row.kind === 'mix') result = { outputs: await runMix({ ...common, clipFileIds: (input.clips ?? []).map((clip) => clip.fileId), options }) }
+        else if (row.kind === 'frames') result = { outputs: await runFrames({ ...common, videoFileId: input.videoFileId! }) }
+        else if (row.kind === 'live-analyze') result = { outputs: [], analysis: await runLiveAnalyze({ ...common, videoFileId: input.videoFileId! }) }
+        else if (row.kind === 'live-export') result = { outputs: await runLiveExport({ ...common, videoFileId: input.videoFileId!, options }) }
+        else if (row.kind === 'mix') result = { outputs: options.exactShots ? await runMixShots({ ...common, shots: input.clips ?? [], options, fontsDir: deps.fontsDir }) : await runMix({ ...common, clipFileIds: (input.clips ?? []).map((clip) => clip.fileId), options, fontsDir: deps.fontsDir }) }
         else if (row.kind === 'subtitle') {
           const chat = settings.capabilities.chat.platform
           const asr = { baseUrl: (settings.platforms[chat].baseUrl || (chat === 'grsai' ? 'https://grsaiapi.com' : '')).replace(/\/+$/, ''), apiKey: settings.platforms[chat].apiKey }
@@ -293,11 +310,15 @@ export function createGenerationService(deps: {
   }
 
   function pump() {
-    while (running < deps.concurrency && queue.length) {
-      const id = queue.shift()!
+    for (const lane of Object.values(lanes)) pumpLane(lane)
+  }
+
+  function pumpLane(lane: (typeof lanes)['ai']) {
+    while (lane.running < lane.limit && lane.queue.length) {
+      const id = lane.queue.shift()!
       const row = db.prepare('SELECT * FROM ai_jobs WHERE id = ?').get(id) as JobRow | undefined
       if (!row || row.status !== 'queued') continue
-      running += 1
+      lane.running += 1
       setStatus(id, { status: 'running' })
       void execute(row)
         .catch((error) => {
@@ -307,8 +328,8 @@ export function createGenerationService(deps: {
           if (usesAi(row.kind)) deps.quota.record(row.user_id, (JSON.parse(row.input) as AiGenerationRequest).purpose || row.kind, false)
         })
         .finally(() => {
-          running -= 1
-          pump()
+          lane.running -= 1
+          pumpLane(lane)
         })
     }
   }
@@ -324,12 +345,12 @@ export function createGenerationService(deps: {
     if (prompt.length > AI_MAX_PROMPT_CHARS) throw badRequest('提示词过长')
     const imageFileIds = Array.isArray(body.imageFileIds) ? body.imageFileIds.map(String).slice(0, AI_MAX_IMAGES) : []
     if (kind === 'video' && !imageFileIds.length) throw badRequest('图生视频需要一张商品图')
-    const needsVideo = kind === 'analyze-video' || kind === 'watermark' || kind === 'subtitle' || kind === 'slice'
+    const needsVideo = kind === 'analyze-video' || kind === 'watermark' || kind === 'subtitle' || kind === 'slice' || kind === 'frames' || kind === 'live-analyze' || kind === 'live-export'
     const videoFileId = needsVideo ? String(body.videoFileId || '') : undefined
     if (needsVideo && !videoFileId) throw badRequest('缺少视频')
     if (kind === 'parse-link' && !String(body.url || '').trim()) throw badRequest('缺少分享链接')
     const clips = (kind === 'compose' || kind === 'mix') && Array.isArray(body.clips)
-      ? body.clips.slice(0, 30).map((clip) => ({ fileId: String(clip?.fileId || ''), durationSec: Number(clip?.durationSec) || 3 }))
+      ? body.clips.slice(0, 30).map((clip) => ({ fileId: String(clip?.fileId || ''), durationSec: Number(clip?.durationSec) || 3, ...(Number.isFinite(Number(clip?.startSec)) ? { startSec: Math.max(0, Number(clip.startSec)) } : {}) }))
       : undefined
     if ((kind === 'compose' || kind === 'mix') && !clips?.length) throw badRequest('没有可合成的片段')
     const options = body.options && typeof body.options === 'object' ? body.options : undefined
@@ -338,6 +359,14 @@ export function createGenerationService(deps: {
     for (const fileId of [...imageFileIds, ...(videoFileId ? [videoFileId] : []), ...(clips ?? []).map((clip) => clip.fileId)]) deps.files.read(userId, fileId)
     assertConfigured(kind)
     if (usesAi(kind)) deps.quota.assert(userId)
+    if (FFMPEG_KINDS.has(kind) && deps.ffmpegPerDay) {
+      const since = now() - 24 * 60 * 60 * 1000
+      const kinds = [...FFMPEG_KINDS]
+      const used = db.prepare(`SELECT COUNT(*) AS count FROM ai_jobs WHERE user_id = ? AND created_at >= ? AND kind IN (${kinds.map(() => '?').join(',')})`).get(userId, since, ...kinds) as { count: number }
+      if (Number(used.count) >= deps.ffmpegPerDay) {
+        throw new CloudError('RATE_LIMITED', `视频处理 24 小时内最多 ${deps.ffmpegPerDay} 次，已用完，请稍后再试`, 429)
+      }
+    }
 
     const input: AiGenerationRequest = {
       kind,
@@ -356,7 +385,7 @@ export function createGenerationService(deps: {
     const id = `job_${randomUUID()}`
     const t = now()
     db.prepare('INSERT INTO ai_jobs (id, user_id, kind, status, input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, userId, kind, 'queued', JSON.stringify(input), t, t)
-    queue.push(id)
+    laneOf(kind).queue.push(id)
     pump()
     return get(userId, id)
   }
@@ -374,12 +403,60 @@ export function createGenerationService(deps: {
     return { jobs: rows.map(toJob) }
   }
 
-  /** 测试用：等所有任务跑完 */
-  async function idle() {
-    while (running || queue.length) await new Promise((resolve) => setTimeout(resolve, 20))
+  /**
+   * 上架助手导出 Excel：店小秘按图片链接下载商品图。配置了七牛就传到七牛（长期有效），
+   * 否则给签名链接，有效期默认 7 天、最长 30 天。
+   */
+  async function publicUrls(userId: string, body: { fileIds?: unknown; days?: unknown }) {
+    const ids = [...new Set((Array.isArray(body?.fileIds) ? body.fileIds : []).map(String).filter(Boolean))].slice(0, 100)
+    if (!ids.length) throw badRequest('没有要导出的图片')
+    const days = Math.max(1, Math.min(30, Math.round(Number(body?.days) || 7)))
+    const credentials = credentialsFrom(deps.readManagedSettings())
+    const hasQiniu = Boolean(credentials.qiniuAccessKey && credentials.qiniuSecretKey && credentials.qiniuBucket && credentials.qiniuDomain)
+    if (!hasQiniu && !deps.publicBaseUrl().trim()) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置七牛存储或云端对外地址，暂时无法给商品图生成导出链接，请联系客服', 503)
+    const workDir = join(tmpdir(), 'tiktokcut-public-urls', randomUUID())
+    await mkdir(workDir, { recursive: true })
+    try {
+      const urls: Record<string, string> = {}
+      for (const [index, fileId] of ids.entries()) {
+        const file = deps.files.read(userId, fileId)
+        const path = join(workDir, `img_${index}${EXT_BY_MIME[file.mime] || '.jpg'}`)
+        await writeFile(path, file.body)
+        urls[fileId] = await publicUrl(credentials, userId, fileId, path, days * 24 * 60 * 60 * 1000, 'tiktokcut/listing')
+      }
+      return { urls, days }
+    } finally {
+      await rm(workDir, { recursive: true, force: true }).catch(() => undefined)
+    }
   }
 
-  return { create, get, list, readPublicFile, idle }
+  /**
+   * 网页上直接显示自己的图片 / 视频（<img> / <video> 带不了登录头）：给每个文件一个签名的相对链接，12 小时有效。
+   * 链接末尾带上文件类型（如 &t=.mp4），电脑端复用过来的页面按扩展名判断是不是视频。
+   */
+  function fileLinks(userId: string, body: { fileIds?: unknown }) {
+    const ids = [...new Set((Array.isArray(body?.fileIds) ? body.fileIds : []).map(String).filter(Boolean))].slice(0, 200)
+    const expiresAt = now() + FILE_LINK_TTL_MS
+    const links: Record<string, string> = {}
+    for (const fileId of ids) {
+      let mime = ''
+      try {
+        mime = deps.files.read(userId, fileId).mime
+      } catch {
+        continue
+      }
+      const ext = EXT_BY_MIME[mime] || (mime.startsWith('video/') ? '.mp4' : '')
+      links[fileId] = `/api/v1/public-files/${fileId}?u=${encodeURIComponent(userId)}&e=${expiresAt}&s=${sign(userId, fileId, expiresAt)}${ext ? `&t=${ext}` : ''}`
+    }
+    return { links, expiresAt }
+  }
+
+  /** 测试用：等所有任务跑完 */
+  async function idle() {
+    while (Object.values(lanes).some((lane) => lane.running || lane.queue.length)) await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+
+  return { create, get, list, readPublicFile, publicUrls, fileLinks, idle }
 }
 
 export type GenerationService = ReturnType<typeof createGenerationService>

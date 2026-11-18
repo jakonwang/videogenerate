@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Copy, ExternalLink, Info, MessageCircle, Save, Trash2, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubContact, CreatorHubMessageTemplate } from '@/../../shared/creatorHub'
-import { normalizeVnPhone, renderTemplate, zaloLink, zaloNumber } from '@/../../shared/creatorHubContacts'
+import type { CreatorHubContact, CreatorHubMessageTemplate } from '../../../../../shared/creatorHub'
+import { normalizeVnPhone, renderTemplate, zaloLink, zaloNumber } from '../../../../../shared/creatorHubContacts'
 import { formatCount, formatDateTime, type CreatorDetailTarget } from './creatorHubFormat'
 
 const props = defineProps<{

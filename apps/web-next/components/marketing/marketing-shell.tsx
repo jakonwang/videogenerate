@@ -8,6 +8,9 @@ type MarketingShellProps = {
   children: React.ReactNode
 }
 
+/** 网页版跟着云服务走（/app/），自带登录。 */
+const WEB_APP_URL = `${(process.env.NEXT_PUBLIC_CLOUD_API_BASE_URL?.trim() || 'http://127.0.0.1:18300').replace(/\/+$/, '')}/app/`
+
 const navItems = [
   { href: '/', label: '产品首页', key: 'home' },
   { href: '/product', label: '产品介绍', key: 'product' },
@@ -48,13 +51,13 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
 
           <div className="flex flex-wrap items-center gap-3 max-[960px]:w-full">
             <ThemeToggle />
-            <Link
-              href="/login?next=/workspace"
+            <a
+              href={WEB_APP_URL}
               className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-[var(--border-base)] bg-[color:var(--bg-card)] px-4 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)]"
             >
               <LogIn className="h-4 w-4" />
-              进入工作台
-            </Link>
+              打开网页版
+            </a>
             <Link
               href="/download"
               className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-[rgba(109,93,255,0.4)] bg-[linear-gradient(135deg,#6d5dff,#8b5cf6)] px-4 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(109,93,255,0.28)] transition hover:-translate-y-[1px]"

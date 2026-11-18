@@ -4,10 +4,8 @@ import { invalidateHwEncoderProbes, libx264Pick, pickH264Encoder, type EncoderPi
 import { runFfmpeg } from '../ffmpeg/runner'
 import { probeMedia } from '../ffmpeg/probe'
 import { parseProgressSeconds } from './analyze'
-
-export type LiveSlicerCutMode = 'precise' | 'fast'
-export type LiveSlicerAspect = 'original' | '9:16-crop' | '9:16-blur' | '1:1' | '16:9'
-export type LiveSlicerResolution = 'source' | '1080' | '720'
+import { buildAudioChain, buildVideoChain, targetFrame, type LiveSlicerAspect, type LiveSlicerCutMode, type LiveSlicerResolution } from '../../../shared/liveSlicer'
+export { targetFrame, type LiveSlicerAspect, type LiveSlicerCutMode, type LiveSlicerResolution }
 
 export type LiveSlicerExportOptions = {
   outputDir: string
@@ -42,13 +40,6 @@ export type LiveSlicerExportProgress = {
   result?: LiveSlicerExportResult
 }
 
-const FADE_SEC = 0.35
-
-function even(n: number) {
-  const r = Math.max(2, Math.round(n))
-  return r % 2 === 0 ? r : r - 1
-}
-
 function sanitizeName(value: string) {
   return String(value ?? '')
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
@@ -71,75 +62,6 @@ function fmtTime(sec: number) {
 }
 
 /** Output frame size for an aspect + resolution choice; never upscales the source. */
-export function targetFrame(srcW: number, srcH: number, aspect: LiveSlicerAspect, resolution: LiveSlicerResolution) {
-  const w = srcW > 0 ? srcW : 1920
-  const h = srcH > 0 ? srcH : 1080
-  const ratio =
-    aspect === '9:16-crop' || aspect === '9:16-blur' ? 9 / 16 : aspect === '1:1' ? 1 : aspect === '16:9' ? 16 / 9 : w / h
-  // The short side of the output, capped by the requested resolution and by what the
-  // source can provide without upscaling.
-  let outW: number
-  let outH: number
-  if (ratio >= 1) {
-    outH = Math.min(h, Math.round(w / ratio))
-    outW = outH * ratio
-  } else {
-    outW = Math.min(w, Math.round(h * ratio))
-    outH = outW / ratio
-  }
-  if (aspect === '9:16-blur') {
-    // The whole source sits inside the frame over a blurred copy, so the frame width
-    // matches the source's short side (1920x1080 -> 1080x1920).
-    outW = Math.min(w, h)
-    outH = outW / ratio
-  }
-  const cap = resolution === '1080' ? 1080 : resolution === '720' ? 720 : 0
-  const shortSide = Math.min(outW, outH)
-  if (cap && shortSide > cap) {
-    const k = cap / shortSide
-    outW *= k
-    outH *= k
-  }
-  return { width: even(outW), height: even(outH) }
-}
-
-function buildVideoChain(
-  srcW: number,
-  srcH: number,
-  opts: LiveSlicerExportOptions,
-  duration: number,
-): { graph: string; width: number; height: number } {
-  const { width: W, height: H } = targetFrame(srcW, srcH, opts.aspect, opts.resolution)
-  const fades = opts.fade && duration > FADE_SEC * 3
-    ? `,fade=t=in:st=0:d=${FADE_SEC},fade=t=out:st=${(duration - FADE_SEC).toFixed(3)}:d=${FADE_SEC}`
-    : ''
-  let graph: string
-  if (opts.aspect === '9:16-blur') {
-    graph = [
-      `[0:v]setsar=1,split=2[lsbg][lsfg]`,
-      `[lsbg]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=luma_radius=24:luma_power=2,eq=brightness=-0.06[lsbgb]`,
-      `[lsfg]scale=${W}:${H}:force_original_aspect_ratio=decrease[lsfgs]`,
-      `[lsbgb][lsfgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p${fades}[vout]`,
-    ].join(';')
-  } else if (opts.aspect === 'original') {
-    graph = `[0:v]setsar=1,scale=${W}:${H},format=yuv420p${fades}[vout]`
-  } else {
-    // Centre crop to the requested ratio, then scale.
-    graph = `[0:v]setsar=1,scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},format=yuv420p${fades}[vout]`
-  }
-  return { graph, width: W, height: H }
-}
-
-function buildAudioChain(opts: LiveSlicerExportOptions, duration: number, audioMap: string) {
-  const parts: string[] = []
-  if (opts.normalizeAudio) parts.push('loudnorm=I=-14:TP=-1.5:LRA=11')
-  if (opts.fade && duration > FADE_SEC * 3) {
-    parts.push(`afade=t=in:st=0:d=${FADE_SEC}`, `afade=t=out:st=${(duration - FADE_SEC).toFixed(3)}:d=${FADE_SEC}`)
-  }
-  parts.push('aresample=48000')
-  return `[${audioMap}]${parts.join(',')}[aout]`
-}
-
 function encoderArgs(enc: EncoderPick) {
   if (enc.codec === 'libx264') return ['-c:v', 'libx264', ...enc.args, '-crf', '20', '-profile:v', 'high']
   return ['-c:v', enc.codec, ...enc.args]

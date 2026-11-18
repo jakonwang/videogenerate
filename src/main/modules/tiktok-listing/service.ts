@@ -12,6 +12,7 @@ import { generateChatCompletion } from '../clone/unifiedChat'
 import type { ModelCredentials } from '../clone/types'
 import { getAppPaths } from '../../lib/paths'
 import { buildTiktokListingImagePrompt, buildTiktokListingTitlePrompt } from './prompts'
+import { DEFAULT_LISTING_EXPORT_CONFIG, LISTING_EXPORT_HEADERS, buildListingExportRow, mergeListingExportConfigs, normalizeGeneratedTitle } from '../../../shared/tiktokListingExport'
 import { tiktokListingRepo } from './repo'
 import type {
   TiktokListingCategory,
@@ -44,64 +45,6 @@ type TiktokListingGenerationDeps = {
 }
 
 let generationDeps: TiktokListingGenerationDeps | null = null
-
-const TIKTOK_LISTING_RING_EXPORT_CONFIG: TiktokListingExportCategoryConfig = {
-  category: 'ring',
-  categoryId: '605273',
-  productAttributes:
-    '[{"attributeId":"100347","attributeName":"S? l??ng tr?n m?i g?i","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100392","attributeName":"D?p","values":[{"valueId":"1001082","valueName":"H?ng ng?y"}]},{"attributeId":"100445","attributeName":"Gi?i","values":[{"valueId":"1001452","valueName":"Phi gi?i t?nh"}]},{"attributeId":"100701","attributeName":"V?t li?u","values":[{"valueId":"1001475","valueName":"Ph? kim lo?i"}]},{"attributeId":"100757","attributeName":"Thi?t k?","values":[{"valueId":"1003618","valueName":"H?nh h?c"}]},{"attributeId":"101155","attributeName":"Ph? ki?n c?p ??i","values":[{"valueId":"1000059","valueName":"Kh?ng"}]},{"attributeId":"101157","attributeName":"B? nh?n","values":[{"valueId":"1000059","valueName":"Kh?ng"}]}]',
-}
-
-const TIKTOK_LISTING_DEFAULT_EXPORT_CATEGORY_CONFIG: Record<TiktokListingCategory, TiktokListingExportCategoryConfig> = {
-  earring: {
-    category: 'earring',
-    categoryId: '605268',
-    productAttributes:
-      '[{"attributeId":"100392","attributeName":"D?p","values":[{"valueId":"1001532","valueName":"?i?m l?nh"}]},{"attributeId":"100347","attributeName":"S? l??ng tr?n m?i g?i","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100462","attributeName":"Ki?u b?ng tai","values":[{"valueId":"1001168","valueName":"Thanh l?ch"}]},{"attributeId":"100461","attributeName":"Lo?i b?ng tai","values":[{"valueId":"1001538","valueName":"B?ng tai v?ng"}]},{"attributeId":"100445","attributeName":"Gi?i","values":[{"valueId":"1001450","valueName":"N?"}]},{"attributeId":"100701","attributeName":"V?t li?u","values":[{"valueId":"1001475","valueName":"Ph? kim lo?i"}]},{"attributeId":"100757","attributeName":"Thi?t k?","values":[{"valueId":"1001230","valueName":"Kim c??ng gi?"}]},{"attributeId":"101152","attributeName":"B? b?ng tai","values":[{"valueId":"1000059","valueName":"Kh?ng"}]}]',
-  },
-  ring: TIKTOK_LISTING_RING_EXPORT_CONFIG,
-  necklace: { ...TIKTOK_LISTING_RING_EXPORT_CONFIG, category: 'necklace' },
-  phone_case: { ...TIKTOK_LISTING_RING_EXPORT_CONFIG, category: 'phone_case' },
-  bracelet: { ...TIKTOK_LISTING_RING_EXPORT_CONFIG, category: 'bracelet' },
-}
-
-const TIKTOK_LISTING_EXPORT_HEADERS = [
-  '*分类id\n（必填）',
-  '*产品标题\n（必填）',
-  '*产品描述\n（必填）',
-  '品牌',
-  '产品属性',
-  'SKU',
-  '变种属性名称一',
-  '变种属性值一',
-  '变种属性名称二',
-  '变种属性值二',
-  '变种属性名称三',
-  '变种属性值三',
-  '识别码类型',
-  '识别码',
-  '*本地展示价(站点币种)\n（必填）',
-  '*库存\n（必填）',
-  '*产品主图(URL)地址\n（必填）',
-  '附图一',
-  '附图二',
-  '附图三',
-  '附图四',
-  '附图五',
-  '附图六',
-  '附图七',
-  '附图八',
-  '视频链接',
-  '尺码图',
-  '变种主图1图片',
-  '*重量(kg)\n（必填）',
-  '*长(cm)\n（必填）',
-  '*宽(cm)\n（必填）',
-  '*高(cm)\n（必填）',
-  '*仓库名称\n（必填）',
-  '货到付款',
-  '来源URL',
-]
 
 function now() {
   return Date.now()
@@ -329,27 +272,6 @@ async function ensurePublicUrl(credentials: ModelCredentials, filePath: string, 
   return await toPublicUrlViaQiniu(credentials, filePath, keyPrefix)
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function normalizeGeneratedTitle(title: string, sku: string) {
-  const cleanTitle = String(title || '').replace(/\s+/g, ' ').trim()
-  const cleanSku = String(sku || '').replace(/\s+/g, ' ').trim()
-  if (!cleanTitle || !cleanSku) return cleanTitle.slice(0, 200)
-
-  const skuPattern = new RegExp(`(?:^|[\\s,.:;\\-\\[\\]()])${escapeRegExp(cleanSku)}(?=$|[\\s,.:;\\-\\[\\]()])`, 'gi')
-  const stripped = cleanTitle
-    .replace(skuPattern, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[-,:;]+$/g, '')
-
-  const base = stripped || cleanTitle
-  const normalized = base.toLowerCase().endsWith(cleanSku.toLowerCase()) ? base : `${base} ${cleanSku}`.trim()
-  return normalized.slice(0, 200)
-}
-
 async function generateListingTitle(input: {
   credentials: ModelCredentials
   category: TiktokListingCategory
@@ -488,20 +410,7 @@ export function __setTiktokListingGenerationDepsForTest(deps: TiktokListingGener
 }
 
 async function listExportCategoryConfigs(): Promise<TiktokListingExportCategoryConfig[]> {
-  const savedConfigs = await tiktokListingRepo.getExportCategoryConfigs()
-  const map = new Map<TiktokListingCategory, TiktokListingExportCategoryConfig>()
-  for (const category of Object.keys(TIKTOK_LISTING_DEFAULT_EXPORT_CATEGORY_CONFIG) as TiktokListingCategory[]) {
-    map.set(category, { ...TIKTOK_LISTING_DEFAULT_EXPORT_CATEGORY_CONFIG[category] })
-  }
-  for (const config of savedConfigs) {
-    if (!config?.category) continue
-    map.set(config.category, {
-      category: config.category,
-      categoryId: String(config.categoryId || '').trim(),
-      productAttributes: String(config.productAttributes || '').trim(),
-    })
-  }
-  return Array.from(map.values())
+  return mergeListingExportConfigs(await tiktokListingRepo.getExportCategoryConfigs())
 }
 
 async function resolveExportCategoryConfigMap() {
@@ -513,46 +422,19 @@ function buildWorksheetRows(
   items: TiktokListingItem[],
   configMap: Map<TiktokListingCategory, TiktokListingExportCategoryConfig>,
 ) {
-  return items.map((item) => {
-    const exportConfig = configMap.get(item.category) || TIKTOK_LISTING_DEFAULT_EXPORT_CATEGORY_CONFIG[item.category]
-    return {
-      '*分类id\n（必填）': exportConfig.categoryId,
-      '*产品标题\n（必填）': item.generatedTitle || '',
-      '*产品描述\n（必填）': item.generatedDescription || '',
-      品牌: '无品牌',
-      产品属性: exportConfig.productAttributes,
-      SKU: item.sku,
-      变种属性名称一: '',
-      变种属性值一: '',
-      变种属性名称二: '',
-      变种属性值二: '',
-      变种属性名称三: '',
-      变种属性值三: '',
-      识别码类型: '',
-      识别码: '',
-      '*本地展示价(站点币种)\n（必填）': item.localDisplayPrice,
-      '*库存\n（必填）': '45',
-      '*产品主图(URL)地址\n（必填）': item.listingImages[0]?.publicUrl || '',
-      附图一: item.listingImages[1]?.publicUrl || '',
-      附图二: item.listingImages[2]?.publicUrl || '',
-      附图三: item.listingImages[3]?.publicUrl || '',
-      附图四: item.listingImages[4]?.publicUrl || '',
-      附图五: '',
-      附图六: '',
-      附图七: '',
-      附图八: '',
-      视频链接: '',
-      尺码图: '',
-      变种主图1图片: '',
-      '*重量(kg)\n（必填）': '0.001',
-      '*长(cm)\n（必填）': '1',
-      '*宽(cm)\n（必填）': '1',
-      '*高(cm)\n（必填）': '1',
-      '*仓库名称\n（必填）': 'Lys',
-      货到付款: '是',
-      来源URL: '',
-    }
-  })
+  return items.map((item) =>
+    buildListingExportRow(
+      {
+        category: item.category,
+        title: item.generatedTitle || '',
+        description: item.generatedDescription || '',
+        sku: item.sku,
+        price: item.localDisplayPrice,
+        imageUrls: (item.listingImages || []).map((image) => String(image.publicUrl || '')),
+      },
+      configMap.get(item.category) || DEFAULT_LISTING_EXPORT_CONFIG[item.category],
+    ),
+  )
 }
 
 export const tiktokListingService = {
@@ -729,7 +611,7 @@ export const tiktokListingService = {
     )
 
     const workbook = XLSX.utils.book_new()
-    const worksheet = XLSX.utils.json_to_sheet(rows, { header: TIKTOK_LISTING_EXPORT_HEADERS })
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: LISTING_EXPORT_HEADERS })
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
 
     const exportDir = join(getAppPaths().dataDir, 'exports', 'tiktok-listing')

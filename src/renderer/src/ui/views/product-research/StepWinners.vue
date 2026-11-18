@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ArrowLeft, Check, Download, Loader2, PackagePlus, Pencil, Save, Trophy } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import type { ProductResearchLiveTestRecord, ProductResearchProductEdit, ProductResearchResult } from '@/../../shared/productResearch'
+import type { ProductResearchLiveTestRecord, ProductResearchProductEdit, ProductResearchResult } from '../../../../../shared/productResearch'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrThumb from './PrThumb.vue'
 import { CONCLUSIONS, conclusionMeta, downloadCsv, formatNumber, formatPercent, marketOf, ratio, safeFileName, shortSku, type Conclusion } from './productResearchUtils'

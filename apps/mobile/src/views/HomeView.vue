@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
+import { useInWebShell } from '@/lib/layout'
+import WebHome from './web/WebHome.vue'
+// Public assets live under the build base (/ in the App, /app/ on the web).
+const brandLogo = `${import.meta.env.BASE_URL}brand-logo.png`
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronRight, Plus } from 'lucide-vue-next'
@@ -12,6 +17,7 @@ import { useGenerations } from '@/lib/generate'
 import { useTasks } from '@/lib/tasks'
 
 const router = useRouter()
+const inWebShell = useInWebShell()
 const { items: products } = useProducts()
 const { items: models } = useModels()
 
@@ -45,8 +51,10 @@ function open(module: MobileModule) {
 </script>
 
 <template>
+  <WebHome v-if="inWebShell" />
+  <template v-else>
   <header class="m-header home-header">
-    <img src="/brand-logo.png" alt="" class="home-header__logo" />
+    <img :src="brandLogo" alt="" class="home-header__logo" />
     <h1 class="m-header__title">TiktokCut</h1>
   </header>
 
@@ -111,10 +119,11 @@ function open(module: MobileModule) {
       </div>
       <div v-else class="m-card m-empty">
         <span class="m-empty__title">还没有商品</span>
-        <span class="m-empty__text">在电脑端添加的商品会自动出现在这里，也可以直接用手机拍照新建</span>
+        <span class="m-empty__text">在电脑端添加的商品会自动出现在这里，也可以{{ isWeb ? '上传图片' : '直接用手机拍照' }}新建</span>
       </div>
     </section>
   </main>
+  </template>
 </template>
 
 <style scoped>

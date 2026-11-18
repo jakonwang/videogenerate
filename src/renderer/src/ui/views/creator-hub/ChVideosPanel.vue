@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { Clapperboard, ExternalLink, Eye, Package, Search, ShoppingBag, TrendingUp, Timer } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import type { CreatorHubShop, CreatorHubVideo } from '@/../../shared/creatorHub'
+import type { CreatorHubShop, CreatorHubVideo } from '../../../../../shared/creatorHub'
 import ChPager from './ChPager.vue'
 import { formatCount, formatDate, formatMoney, formatPercent } from './creatorHubFormat'
 

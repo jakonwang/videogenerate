@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertCircle, Sparkles, Tv, X } from 'lucide-vue-next'
-import type { ProductResearchLiveTestRecord } from '@/../../shared/productResearch'
+import type { ProductResearchLiveTestRecord } from '../../../../../shared/productResearch'
 import type { ProductRow } from './useSchemeWorkspace'
 import PrThumb from './PrThumb.vue'
 import { CONCLUSIONS, formatPercent, ratio } from './productResearchUtils'

@@ -12,6 +12,10 @@ import { closestAspect, generateProductReplacement, startPolling, useGenerations
 import type { ProductItem } from '@/lib/library'
 import { errorMessage } from '@/lib/session'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+const inWebShell = useInWebShell()
 
 /** 商品替换：把场景图里原来的商品换成我的商品（构图、人物、背景不变） */
 
@@ -81,6 +85,63 @@ async function start() {
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader title="商品替换" description="上传别人的场景图（上身图、摆拍图），AI 把里面的商品换成你的，构图、人物、背景都不变。">
+      <template #actions>
+        <button type="button" class="vg-btn" @click="router.push('/review')"><Inbox :size="15" /> 审核收件箱 <span v-if="pendingReview" class="vg-count">{{ pendingReview }}</span></button>
+      </template>
+    </PageHeader>
+    <main class="vg-page wt-page" data-testid="web-product-replace">
+      <div class="wt-grid">
+        <WebStep :index="1" title="目标商品" subtitle="选商品后勾选 1–3 张参考图" :meta="product ? `${refs.length}/3` : undefined">
+          <button v-if="!product" type="button" class="wis-drop-like" @click="picking = true">
+            <span class="wis-drop-like__icon"><Boxes :size="20" /></span>
+            <strong>选择商品</strong>
+            <small>从商品库选择要换上的商品</small>
+          </button>
+          <template v-else>
+            <div class="pr-product">
+              <strong>{{ product.name }}</strong>
+              <button type="button" class="vg-btn vg-btn--sm" @click="picking = true">更换</button>
+            </div>
+            <div class="pr-refs">
+              <button v-for="image in product.images" :key="image.fileId" type="button" class="pr-ref" :class="{ 'is-active': refs.includes(image.fileId) }" @click="toggleRef(image.fileId)">
+                <CloudImage :file-id="image.fileId" />
+                <span v-if="refs.includes(image.fileId)" class="pr-ref__check"><Check :size="12" /></span>
+              </button>
+            </div>
+          </template>
+        </WebStep>
+        <WebStep :index="2" title="待替换图片" subtitle="每张场景图生成 1 张" :meta="`${scenes.length}/${MAX_SCENES} 张`">
+          <div class="pr-scenes">
+            <div v-for="(scene, index) in scenes" :key="scene.fileId" class="pr-scene">
+              <CloudImage :file-id="scene.fileId" />
+              <button type="button" class="pr-scene__remove" aria-label="移除" @click="scenes.splice(index, 1)"><X :size="13" /></button>
+            </div>
+            <button v-if="scenes.length < MAX_SCENES" type="button" class="pr-scene pr-scene--add" :disabled="uploading > 0" @click="input?.click()">
+              <LoaderCircle v-if="uploading" :size="20" class="vg-spin" /><ImagePlus v-else :size="20" />
+              <span>{{ uploading ? '上传中' : '上传图片' }}</span>
+            </button>
+          </div>
+          <p class="vg-muted wt-note">点击上传或把图片拖到这里，支持 JPG、PNG、WEBP</p>
+          <input ref="input" type="file" accept="image/*" multiple hidden @change="onFiles" />
+          <label class="vg-field">
+            <span class="vg-field__label">补充要求（选填）</span>
+            <textarea v-model="note" class="vg-textarea" rows="3" maxlength="300" placeholder="例如：保持模特手势不变，商品大小和原来一样" />
+          </label>
+          <template #foot>
+            <span class="vg-muted wt-foot-hint">{{ !refs.length ? '先选商品参考图' : !scenes.length ? '再上传场景图' : `将生成 ${scenes.length} 张` }}</span>
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="submitting || !refs.length || !scenes.length" @click="start">
+              <LoaderCircle v-if="submitting" :size="15" class="vg-spin" /><Replace v-else :size="15" /> 开始批量替换
+            </button>
+          </template>
+        </WebStep>
+        <WebResults :index="3" :items="results" title="批次记录" />
+      </div>
+      <ProductPicker v-if="picking" @close="picking = false" @pick="pickProduct" />
+    </main>
+  </template>
+  <template v-else>
   <PageHeader title="商品替换" back="/create">
     <template #actions>
       <button type="button" class="m-icon-btn inbox" aria-label="审核收件箱" @click="router.push('/review')">
@@ -88,7 +149,7 @@ async function start() {
       </button>
     </template>
   </PageHeader>
-  <main class="m-page m-page--no-tabs">
+  <main class="m-page m-page--no-tabs wb">
     <p class="intro">上传别人的场景图（上身图、摆拍图），AI 把里面的商品换成你的，构图、人物、背景都不变。</p>
 
     <section class="m-section">
@@ -136,14 +197,16 @@ async function start() {
       </button>
     </section>
 
-    <section v-if="results.length" class="m-section">
+    <section v-if="results.length" class="m-section wb-results">
       <div class="m-section__head"><h2 class="m-section__title">最近结果</h2><button type="button" class="m-section__link" @click="router.push('/review')">去审核</button></div>
       <div class="results">
         <GenerationTile v-for="item in results.slice(0, 12)" :key="item.id" :item="item" @click="router.push(`/review?focus=${item.id}`)" />
       </div>
     </section>
+    <section v-else class="m-section wb-results wb-results--empty"><div class="m-card m-empty"><span class="m-empty__title">生成结果会出现在这里</span><span class="m-empty__text">在云端生成，完成后也会进入「审核收件箱」</span></div></section>
   </main>
   <ProductPicker v-if="picking" @close="picking = false" @pick="pickProduct" />
+  </template>
 </template>
 
 <style scoped>

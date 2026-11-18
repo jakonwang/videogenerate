@@ -29,8 +29,8 @@ import {
   type MixPreviewResult,
 } from '../../../shared/mixFormula'
 import { formulaRepo } from './formulas'
-import { commitUsage, createBatchUsage, fitDraftToDuration, newDraft, planDraftShots, totalOf, type PlannerPool } from './planner'
-import { HOOK_STYLES, scriptFromPools, writeScriptsWithAi } from './scriptWriter'
+import { allocateFormulas, commitUsage, createBatchUsage, fitDraftToDuration, newDraft, planDraftShots, totalOf, type PlannerPool } from './planner'
+import { pickHookStyles, scriptFromPools, writeScriptsWithAi } from './scriptWriter'
 import { creativeOptions, mixLedger, type CreativeVideoLike, type MixLearnedWeights, type PublishTaskLike } from './insights'
 import type { MixCreativeOption, MixRefreshResult } from '../../../shared/mixInsights'
 
@@ -38,47 +38,6 @@ import type { MixCreativeOption, MixRefreshResult } from '../../../shared/mixIns
 taskQueue.onEvent((evt) => {
   if (evt.type === 'task:update' && evt.task.mix && evt.task.status === 'done') void mixLedger.recordRender(evt.task).catch(() => undefined)
 })
-
-/**
- * Splits `count` videos across formulas in proportion to learned weights (largest remainder).
- * Every chosen formula keeps at least one video while count allows, so new angles still get tested.
- */
-function allocateFormulas(formulas: MixFormula[], count: number, weights: Map<string, number> | null) {
-  const w = formulas.map((f) => weights?.get(f.id) ?? 1)
-  const sum = w.reduce((a, b) => a + b, 0) || 1
-  const raw = w.map((x) => (x / sum) * count)
-  const counts = raw.map((r) => Math.floor(r))
-  let rest = count - counts.reduce((a, b) => a + b, 0)
-  const order = raw.map((r, i) => ({ i, frac: r - Math.floor(r), w: w[i]! })).sort((a, b) => b.frac - a.frac || b.w - a.w)
-  for (let k = 0; rest > 0; k = (k + 1) % order.length, rest--) counts[order[k]!.i]! += 1
-  // Exploration floor: when the batch is big enough, every chosen formula keeps one video, taken from the largest share.
-  if (count >= formulas.length) {
-    for (let i = 0; i < counts.length; i++) {
-      if (counts[i]! > 0) continue
-      const donor = counts.indexOf(Math.max(...counts))
-      counts[donor]! -= 1
-      counts[i] = 1
-    }
-  }
-  // Interleave so a partial batch (or a failed tail) still covers every angle.
-  const seq: MixFormula[] = []
-  const remaining = [...counts]
-  while (seq.length < count) {
-    for (let i = 0; i < formulas.length && seq.length < count; i++) {
-      if (remaining[i]! > 0) {
-        seq.push(formulas[i]!)
-        remaining[i]!--
-      }
-    }
-  }
-  return { seq, counts }
-}
-
-/** Hook styles for a batch: best-scoring styles first, but every style gets tried before any repeats. */
-function pickHookStyles(n: number, weights: Map<string, number> | null) {
-  const ranked = HOOK_STYLES.map((s, i) => ({ s, w: (weights?.get(s) ?? 1) + Math.random() * 0.15 - i * 0.001 })).sort((a, b) => b.w - a.w)
-  return Array.from({ length: n }, (_, i) => ranked[i % ranked.length]!.s)
-}
 
 async function readCreatives(): Promise<{ creatives: CreativeVideoLike[]; available: boolean; message?: string }> {
   try {

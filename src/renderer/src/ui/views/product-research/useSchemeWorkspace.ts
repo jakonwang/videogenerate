@@ -7,7 +7,7 @@ import type {
   ProductResearchResult,
   ProductResearchScheme,
   ProductResearchTask,
-} from '@/../../shared/productResearch'
+} from '../../../../../shared/productResearch'
 import { matchScore } from './productResearchUtils'
 
 export type ToastTone = 'info' | 'success' | 'error'

@@ -12,6 +12,7 @@ import { buildProducerSystemPrompt, buildProducerUserPrompt, parseProducerDecisi
 import type { TiktokListingCategory, TiktokListingLanguage } from '@shared/tiktokListingPrompts'
 import { createProjectFromVideo, uploadVideo } from './clone'
 import { categoryForProduct, generateModelImage, generateProductImages, generateVideo, VIDEO_MOTIONS } from './generate'
+import { loadBrand } from './brand'
 import { coverOf } from './library'
 import { writeListingCopy } from './listing'
 import { startLocalTask } from './research'
@@ -41,10 +42,11 @@ export function newChat(): { id: string; chat: SyncProducerChat } {
 }
 
 async function buildContext(chat: SyncProducerChat): Promise<ProducerContext> {
-  const [products, models, generations] = await Promise.all([
+  const [products, models, generations, brand] = await Promise.all([
     listRecords<SyncProduct>(SYNC_COLLECTIONS.products),
     listRecords<SyncModel>(SYNC_COLLECTIONS.models),
     listRecords<SyncGeneration>(SYNC_COLLECTIONS.generations),
+    loadBrand().catch(() => undefined),
   ])
   return {
     products: products
@@ -59,6 +61,7 @@ async function buildContext(chat: SyncProducerChat): Promise<ProducerContext> {
       .map((record) => ({ id: record.id, label: record.data!.label, productName: record.data!.productName, approved: record.data!.review === 'approved' })),
     hasReferenceVideo: Boolean(chat.referenceVideoFileId),
     pendingReview: generations.filter((record) => record.data?.status === 'succeeded' && record.data.review === 'pending').length,
+    brand,
   }
 }
 

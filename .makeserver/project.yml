@@ -1,0 +1,64 @@
+# makeserver 部署规范：videogenerate（TiktokCut 服务端）
+# 云服务（API + 网页版 /app/）+ Next.js 官网/用户中心/后台 + 桌面端更新文件
+# Electron 桌面端不在服务器上运行；更新文件放到 shared/update，由入口 Caddy 提供下载。
+name: videogenerate
+
+# ci：push 到 GitHub 后由 Actions 构建镜像（服务器只有 2G 内存，构建 Next.js 必须放到 CI）
+build: ci
+
+images:
+  server: .makeserver/docker/Dockerfile
+
+# 构建时要写进前端的变量：ms ci setup 会把生产环境变量里的值同步成 GitHub 仓库变量
+build_args:
+  - NEXT_PUBLIC_CLOUD_API_BASE_URL
+
+# build: server 时才用到
+source:
+  extra:
+    - resources/fonts
+
+shared_dirs:
+  - data      # SQLite、密钥（data/keys）、用户文件
+  - update    # 桌面端自动更新文件 → https://<域名>/updates/
+
+checks:
+  - https://${DOMAIN}/
+  - https://${DOMAIN}/app/
+
+# 一个域名按路径分流：/api/v1 和 /app → 云服务，/updates → 更新文件，其他 → 官网
+dns:
+  - ${DOMAIN}
+
+backup:
+  # SQLite 在线备份，不用停服务
+  before:
+    - dc exec -T cloud node -e "new (require('node:sqlite').DatabaseSync)('/data/cloud.sqlite').exec(\"VACUUM INTO '/data/cloud.backup.sqlite'\")"
+  paths:
+    - data
+  exclude:
+    - data/cloud.sqlite
+    - data/cloud.sqlite-wal
+    - data/cloud.sqlite-shm
+  after:
+    - rm -f data/cloud.backup.sqlite
+
+restore:
+  before:
+    - dc stop cloud || true
+  after:
+    - mv -f data/cloud.backup.sqlite data/cloud.sqlite
+    - rm -f data/cloud.sqlite-wal data/cloud.sqlite-shm
+
+# 滚动更新：web 先起新容器再停旧的。cloud 用 SQLite 且有后台任务，不能两个同时跑，直接重建
+rolling:
+  - web
+
+limits:
+  cloud: 768m
+  web: 512m
+
+database:
+  type: sqlite
+  service: cloud
+  path: /data/cloud.sqlite

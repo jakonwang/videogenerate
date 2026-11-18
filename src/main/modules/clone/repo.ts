@@ -2947,6 +2947,18 @@ export const cloneRepo = {
     })
   },
 
+  /** 云端同步来的项目：整份替换（保留来源的 updatedAt）；本机已删除的项目不再导入 */
+  async importSyncedProject(input: CloneProject): Promise<CloneProject | null> {
+    return await queueCloneDbMutation(async () => {
+      const safeProjectId = String(input?.id || '').trim()
+      if (!safeProjectId) throw new Error('clone project id is required')
+      if (!readCloneProjectByIdFromSqlite(safeProjectId) && isRemovedProjectMarked(safeProjectId)) return null
+      const next = normalizeProject(await materializeCloneProjectAssets({ ...input, updatedAt: Number(input.updatedAt) || now() }))
+      upsertCloneProjectInSqlite(next)
+      return next
+    })
+  },
+
   async migrateExternalAssets(): Promise<{ migrated: number }> {
     return await queueCloneDbMutation(async () => {
       const projects = readCloneProjectsFromSqlite()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { ImageOff, X, ZoomIn, ZoomOut } from 'lucide-vue-next'
-import type { ProductResearchResult } from '@/../../shared/productResearch'
+import type { ProductResearchResult } from '../../../../../shared/productResearch'
 import { imageSrc } from './productResearchUtils'
 
 const props = withDefaults(defineProps<{

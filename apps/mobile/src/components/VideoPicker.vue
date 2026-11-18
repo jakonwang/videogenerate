@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 import { computed, ref } from 'vue'
 import { Check, Film, LoaderCircle, Plus, X } from 'lucide-vue-next'
 import CloudVideo from './CloudVideo.vue'
+import CloudImage from './CloudImage.vue'
+import { useAssets } from '@/lib/assets'
 import { uploadVideo } from '@/lib/clone'
 import { useGenerations } from '@/lib/generate'
 import { errorMessage } from '@/lib/session'
 import { toast } from '@/lib/toast'
 
 /**
- * 选视频：从相册上传，或从「我的视频」（AI 生成、复刻成片、下载的视频等）里选。
+ * 选视频：从相册上传，或从「我的视频」（素材库、AI 生成、复刻成片、下载的视频等）里选。
  * multiple=false 时只保留一个。
  */
 const model = defineModel<string[]>({ required: true })
@@ -17,6 +20,8 @@ const input = ref<HTMLInputElement>()
 const uploading = ref(0)
 const picking = ref(false)
 const mine = useGenerations((item) => item.kind === 'video' && item.status === 'succeeded' && Boolean(item.outputFileId))
+const { items: library } = useAssets((item) => item.kind === 'video')
+const hasMine = computed(() => mine.value.length > 0 || library.value.length > 0)
 const limit = computed(() => (props.multiple ? props.max ?? 20 : 1))
 
 function add(fileId: string) {
@@ -53,8 +58,8 @@ function toggleMine(fileId: string) {
         <button type="button" class="cell__remove" aria-label="移除" @click="model = model.filter((id) => id !== fileId)"><X :size="14" :stroke-width="2.6" /></button>
       </div>
       <div v-for="n in uploading" :key="`u${n}`" class="cell cell--loading"><LoaderCircle :size="20" class="m-spin" /><small>上传中</small></div>
-      <button v-if="model.length < limit" type="button" class="cell cell--add" @click="input?.click()"><Plus :size="22" /><small>相册</small></button>
-      <button v-if="model.length < limit && mine.length" type="button" class="cell cell--add" @click="picking = true"><Film :size="22" /><small>我的视频</small></button>
+      <button v-if="model.length < limit" type="button" class="cell cell--add" @click="input?.click()"><Plus :size="22" /><small>{{ isWeb ? '上传' : '相册' }}</small></button>
+      <button v-if="model.length < limit && hasMine" type="button" class="cell cell--add" @click="picking = true"><Film :size="22" /><small>我的视频</small></button>
     </div>
     <input ref="input" type="file" accept="video/*" :multiple="multiple" hidden @change="onFiles" />
 
@@ -62,7 +67,19 @@ function toggleMine(fileId: string) {
       <div v-if="picking" class="sheet-backdrop" @click.self="picking = false">
         <section class="sheet">
           <header class="sheet__head"><h2>我的视频</h2><button type="button" class="m-btn m-btn--sm m-btn--primary" @click="picking = false">完成</button></header>
-          <div class="mine">
+          <template v-if="library.length">
+            <h3 class="mine__group">素材库</h3>
+            <div class="mine">
+              <button v-for="item in library" :key="item.id" type="button" class="mine__item" :class="{ 'is-active': model.includes(item.fileId) }" @click="toggleMine(item.fileId)">
+                <CloudImage v-if="item.posterFileId" :file-id="item.posterFileId" :alt="item.name" />
+                <CloudVideo v-else :file-id="item.fileId" />
+                <span class="mine__label">{{ item.name }}</span>
+                <span v-if="model.includes(item.fileId)" class="mine__check"><Check :size="14" :stroke-width="3" /></span>
+              </button>
+            </div>
+          </template>
+          <h3 v-if="library.length && mine.length" class="mine__group">生成的视频</h3>
+          <div v-if="mine.length" class="mine">
             <button v-for="item in mine" :key="item.id" type="button" class="mine__item" :class="{ 'is-active': model.includes(item.outputFileId!) }" @click="toggleMine(item.outputFileId!)">
               <CloudVideo :file-id="item.outputFileId" />
               <span class="mine__label">{{ item.label }}</span>
@@ -88,6 +105,8 @@ function toggleMine(fileId: string) {
 .mine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .mine__item { position: relative; aspect-ratio: 9 / 16; overflow: hidden; padding: 0; border: 2px solid transparent; border-radius: 10px; background: var(--theme-panel-soft); }
 .mine__item.is-active { border-color: var(--m-accent); }
+.mine__item :deep(img) { width: 100%; height: 100%; object-fit: cover; }
+.mine__group { margin: 4px 2px 0; color: var(--theme-text-secondary); font-size: 13px; }
 .mine__label { position: absolute; left: 4px; right: 4px; bottom: 4px; overflow: hidden; padding: 1px 5px; border-radius: 6px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .mine__check { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--m-accent); color: #04201c; }
 </style>

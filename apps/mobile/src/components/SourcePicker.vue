@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 import { ref } from 'vue'
 import { Boxes, ImagePlus, LoaderCircle } from 'lucide-vue-next'
 import CloudImage from './CloudImage.vue'
@@ -49,7 +50,7 @@ async function onFile(event: Event) {
     <div v-if="model" class="source__chosen m-card">
       <span class="source__img"><CloudImage :file-id="model.fileId" /></span>
       <div class="source__info">
-        <strong>{{ model.product?.name || '手机里的照片' }}</strong>
+        <strong>{{ model.product?.name || (isWeb ? '上传的图片' : '手机里的照片') }}</strong>
         <div v-if="model.product && model.product.images.length > 1" class="source__thumbs">
           <button v-for="image in model.product.images" :key="image.fileId" type="button" :class="{ 'is-active': image.fileId === model.fileId }" @click="model = { ...model!, fileId: image.fileId }">
             <CloudImage :file-id="image.fileId" />
@@ -61,7 +62,7 @@ async function onFile(event: Event) {
     <div class="source__actions">
       <button type="button" class="m-btn" @click="picking = true"><Boxes :size="18" /> 从商品库选</button>
       <button type="button" class="m-btn" :disabled="uploading" @click="input?.click()">
-        <LoaderCircle v-if="uploading" :size="18" class="m-spin" /><ImagePlus v-else :size="18" /> 拍照 / 相册
+        <LoaderCircle v-if="uploading" :size="18" class="m-spin" /><ImagePlus v-else :size="18" /> {{ isWeb ? '上传图片' : '拍照 / 相册' }}
       </button>
     </div>
     <input ref="input" type="file" accept="image/*" hidden @change="onFile" />

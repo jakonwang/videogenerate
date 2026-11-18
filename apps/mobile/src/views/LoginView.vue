@@ -1,15 +1,22 @@
 <script setup lang="ts">
+// Public assets live under the build base (/ in the App, /app/ on the web).
+const brandLogo = `${import.meta.env.BASE_URL}brand-logo.png`
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Eye, EyeOff, LoaderCircle, Server } from 'lucide-vue-next'
-import { errorMessage, session, setBaseUrl, signIn } from '@/lib/session'
+import { Eye, EyeOff, LoaderCircle, Server, ShieldCheck } from 'lucide-vue-next'
+import { isWideScreen } from '@/lib/layout'
+import WebTitleBar from '@/components/web/WebTitleBar.vue'
+import { errorMessage, registerAccount, session, setBaseUrl, signIn } from '@/lib/session'
+import { isWeb } from '@/lib/platform'
 import { clearLocalData, getMeta, setMeta } from '@/lib/localDb'
 import { clearFileCache } from '@/lib/files'
 import { requestSync } from '@/lib/sync'
 
 const router = useRouter()
 const route = useRoute()
-const form = reactive({ account: '', password: '' })
+const form = reactive({ account: '', password: '', displayName: '' })
+/** 网页版（电脑浏览器）用电脑端的登录页样式，并支持注册 */
+const tab = ref<'login' | 'register'>('login')
 const busy = ref(false)
 const error = ref('')
 const showPassword = ref(false)
@@ -35,7 +42,8 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    await signIn(form.account.trim(), form.password)
+    if (tab.value === 'register') await registerAccount(form.account.trim(), form.password, form.displayName.trim())
+    else await signIn(form.account.trim(), form.password)
     // Different account than last time on this phone: drop the previous account's local copy.
     const owner = await getMeta<string>('owner')
     if (owner && owner !== session.user?.id) {
@@ -54,12 +62,58 @@ async function submit() {
 </script>
 
 <template>
-  <main class="login">
+  <div v-if="isWideScreen" class="cloud-login" data-testid="web-login">
+    <WebTitleBar minimal />
+    <div class="cloud-login__body vg-scope">
+      <div class="cloud-login__column">
+        <header class="cloud-login__brand">
+          <span class="vg-page-head__icon"><ShieldCheck :size="20" /></span>
+          <div>
+            <h1>{{ tab === 'login' ? '登录 TiktokCut' : '注册账号' }}</h1>
+            <p class="vg-muted">{{ tab === 'login' ? '登录账号后即可使用全部已开通的功能' : '注册后购买会员或使用兑换码即可开始使用' }}</p>
+          </div>
+        </header>
+
+        <form class="vg-card cloud-login__form" @submit.prevent="submit">
+          <div class="vg-field">
+            <label for="web-account">手机号或邮箱</label>
+            <input id="web-account" v-model="form.account" class="vg-input" autocomplete="username" required />
+          </div>
+          <div class="vg-field">
+            <label for="web-password">密码</label>
+            <input id="web-password" v-model="form.password" class="vg-input" type="password" :autocomplete="tab === 'login' ? 'current-password' : 'new-password'" required />
+            <span v-if="tab === 'register'" class="vg-field__hint">至少 8 位</span>
+          </div>
+          <div v-if="tab === 'register'" class="vg-field">
+            <label for="web-display-name">昵称（可选）</label>
+            <input id="web-display-name" v-model="form.displayName" class="vg-input" autocomplete="nickname" />
+          </div>
+          <div v-if="error" class="vg-field__error">{{ error }}</div>
+          <button type="submit" class="vg-btn vg-btn--primary vg-btn--block vg-btn--lg" :disabled="busy || !session.baseUrl">
+            <LoaderCircle v-if="busy" :size="16" class="vg-spin" />
+            {{ busy ? (tab === 'login' ? '登录中…' : '注册中…') : tab === 'login' ? '登录' : '注册并登录' }}
+          </button>
+          <button type="button" class="vg-link cloud-login__switch" @click="(tab = tab === 'login' ? 'register' : 'login'), (error = '')">
+            {{ tab === 'login' ? '没有账号？注册' : '已有账号？登录' }}
+          </button>
+        </form>
+
+        <p class="vg-muted cloud-login__server">
+          <template v-if="editingServer">
+            <input v-model="serverDraft" class="vg-input vg-input--sm" type="url" placeholder="https://api.example.com" />
+            <button class="vg-btn vg-btn--sm" type="button" @click="saveServer">保存</button>
+          </template>
+          <button v-else type="button" class="cloud-login__server-btn" @click="editingServer = true">云端服务：{{ session.baseUrl || '点此设置' }}</button>
+        </p>
+      </div>
+    </div>
+  </div>
+  <main v-else class="login">
     <div class="login__glow" aria-hidden="true" />
     <div class="login__brand">
-      <img src="/brand-logo.png" alt="" class="login__logo" />
+      <img :src="brandLogo" alt="" class="login__logo" />
       <h1>TiktokCut</h1>
-      <p>智能视频生产工作台 · 手机版</p>
+      <p>智能视频生产工作台 · {{ isWeb ? '网页版' : '手机版' }}</p>
     </div>
 
     <form class="login__card m-card" @submit.prevent="submit">
@@ -81,7 +135,7 @@ async function submit() {
         <LoaderCircle v-if="busy" :size="18" class="m-spin" />
         {{ busy ? '登录中…' : '登录' }}
       </button>
-      <p class="login__hint">使用电脑端同一个账号登录，商品库、模特库会自动同步</p>
+      <p class="login__hint">{{ isWeb ? '使用软件的同一个账号登录，商品库、模特库、作品会自动同步' : '使用电脑端同一个账号登录，商品库、模特库会自动同步' }}</p>
     </form>
 
     <div class="login__server">
@@ -97,6 +151,19 @@ async function submit() {
 </template>
 
 <style scoped>
+/* Web: same as the desktop CloudLoginView */
+.cloud-login { height: 100vh; display: flex; flex-direction: column; background: var(--theme-bg, var(--theme-app-bg)); color: var(--theme-text); }
+.cloud-login__body { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 48px 16px; }
+.cloud-login__column { width: min(400px, 100%); display: flex; flex-direction: column; gap: 16px; margin: auto 0; }
+.cloud-login__brand { display: flex; align-items: center; gap: 12px; }
+.cloud-login__brand h1 { font-size: 20px; font-weight: 700; }
+.cloud-login__brand p { font-size: 13px; margin-top: 2px; }
+.cloud-login__form { display: flex; flex-direction: column; gap: 14px; }
+.cloud-login__switch { align-self: center; font-size: 13px; background: none; border: 0; cursor: pointer; }
+.cloud-login__server { display: flex; justify-content: center; gap: 8px; font-size: 11px; text-align: center; }
+.cloud-login__server-btn { border: 0; background: none; color: inherit; font-size: 11px; cursor: pointer; }
+
+.login > :not(.login__glow) { width: 100%; max-width: 440px; margin-left: auto; margin-right: auto; }
 .login { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: calc(var(--m-safe-top) + 32px) 24px calc(var(--m-safe-bottom) + 32px); overflow: hidden; }
 .login__glow { position: absolute; top: -160px; left: 50%; width: 520px; height: 420px; transform: translateX(-50%); background: radial-gradient(closest-side, color-mix(in srgb, var(--m-accent) 26%, transparent), transparent); pointer-events: none; }
 .login__brand { position: relative; display: flex; flex-direction: column; align-items: center; margin-bottom: 28px; text-align: center; }

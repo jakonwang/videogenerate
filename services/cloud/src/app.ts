@@ -8,6 +8,10 @@ import { createSyncService } from './sync'
 import { createAiService } from './ai'
 import { createGenerationService, type GenerationProviders } from './generate'
 import { createHash } from 'node:crypto'
+import { createCloneEngine } from './cloneEngine'
+import { createRelay } from './relay'
+import { applyManagedSettings } from '../../../src/shared/cloud/managedSettings'
+import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
 export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders> } = {}) {
@@ -31,6 +35,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     readFile: (userId, fileId) => sync.readFile(userId, fileId),
     perMinute: config.aiPerMinute,
     perDay: config.aiPerDay,
+    cloneEnginePerDay: config.cloneEnginePerDay,
     fetchImpl: options.fetchImpl,
   })
   const generation = createGenerationService({
@@ -43,11 +48,39 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     // Signing key for reference-image links, derived from the private key so it needs no extra setup.
     linkSecret: createHash('sha256').update(`public-files:${privateKey}`).digest('hex'),
     concurrency: config.aiJobConcurrency,
+    ffmpegConcurrency: config.ffmpegConcurrency,
+    ffmpegPerDay: config.ffmpegPerDay,
     fontsDir: config.fontsDir,
     providers: options.generationProviders,
   })
-  const handler = createCloudHttpHandler(config, service, sync, ai, generation)
+  let listenPort = config.port
+  const cloneEngine = createCloneEngine({
+    dataDir: config.dataDir,
+    baseUrl: () => `http://127.0.0.1:${listenPort}`,
+    issueToken: (userId) => service.issueEngineSession(userId),
+    revokeToken: (token) => service.revokeSessionToken(token),
+    credentials: () => {
+      const settings = service.readManagedSettings()
+      return normalizeCredentials({ ...applyManagedSettings({}, settings), allowMockWhenNoKey: config.cloneEngineAllowMock && !config.isProduction, openaiImageQuality: settings.capabilities.image.quality })
+    },
+    meter: (userId) => ai.cloneEngine.meter(userId),
+    maxWorkers: Math.max(1, config.cloneEngineMaxWorkers),
+    idleMs: Math.max(1, config.cloneEngineIdleMinutes) * 60_000,
+  })
+  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine)
   const server = http.createServer((req, res) => void handler(req, res))
+
+  // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.
+  let cleanupTimer: NodeJS.Timeout | null = null
+  function runCleanup() {
+    if (!config.orphanFileDays) return
+    try {
+      const result = sync.cleanupOrphans(config.orphanFileDays * 24 * 60 * 60 * 1000)
+      if (result.removed) console.log(`[videogen-cloud] 清理未引用文件 ${result.removed} 个，释放 ${(result.bytes / 1024 / 1024).toFixed(1)} MB`)
+    } catch (error) {
+      console.warn('[videogen-cloud] 文件清理失败', error)
+    }
+  }
 
   return {
     config,
@@ -56,16 +89,27 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     service,
     server,
     generation,
+    sync,
+    cloneEngine,
     listen: () =>
       new Promise<number>((resolve, reject) => {
         server.once('error', reject)
         server.listen(config.port, config.host, () => {
+          if (config.orphanFileDays && !cleanupTimer) {
+            cleanupTimer = setInterval(runCleanup, 6 * 60 * 60 * 1000)
+            cleanupTimer.unref()
+            setTimeout(runCleanup, 60 * 60 * 1000).unref()
+          }
           const address = server.address()
-          resolve(typeof address === 'object' && address ? address.port : config.port)
+          listenPort = typeof address === 'object' && address ? address.port : config.port
+          resolve(listenPort)
         })
       }),
     close: () =>
       new Promise<void>((resolve) => {
+        if (cleanupTimer) clearInterval(cleanupTimer)
+        cleanupTimer = null
+        cloneEngine.close()
         server.close(() => {
           db.close()
           resolve()

@@ -1,3 +1,5 @@
+import type { SyncBrand } from './sync'
+
 /**
  * 手机端「AI 制片人」：一句话安排生产。模型只做决策（回复 / 追问 / 给出计划），
  * 计划里的每一步都对应手机 App 已有的功能，用户点「执行」后由 App 逐步调用。
@@ -106,6 +108,21 @@ export type ProducerContext = {
   /** 本次对话里用户附带了对标视频 */
   hasReferenceVideo: boolean
   pendingReview: number
+  /** 品牌记忆（设置里填的），写文案和回复时遵守 */
+  brand?: Partial<SyncBrand>
+}
+
+/** 品牌记忆转成给模型看的几行要求；没填就是空字符串 */
+export function brandGuidance(brand: Partial<SyncBrand> | null | undefined): string {
+  if (!brand) return ''
+  const lines: string[] = []
+  if (brand.brandName?.trim()) lines.push(`Brand: ${brand.brandName.trim()}`)
+  if (brand.tone?.trim()) lines.push(`Brand tone: ${brand.tone.trim()}`)
+  if (brand.audience?.trim()) lines.push(`Target audience: ${brand.audience.trim()}`)
+  const banned = (brand.bannedWords ?? []).map((word) => word.trim()).filter(Boolean)
+  if (banned.length) lines.push(`Never use these words: ${banned.join(', ')}`)
+  if (brand.notes?.trim()) lines.push(`Brand notes: ${brand.notes.trim().slice(0, 600)}`)
+  return lines.join('\n')
 }
 
 export type ProducerHistoryItem = { role: 'user' | 'assistant'; text: string }
@@ -120,6 +137,7 @@ export function buildProducerSystemPrompt() {
     'Use "plan" only when the user asks to produce something and you know which product(s) to use. Use the exact product ids from the context; never invent ids.',
     'Use "clarify" when a required product, reference video or keyword is missing or ambiguous, and ask one short question.',
     'Use "reply" for questions, greetings, or explaining what you can do.',
+    'If context.brand is present, follow it in every reply and step title, and never use its banned words.',
     `At most ${MAX_STEPS} steps. Only use the tools listed. Respond to the user in Simplified Chinese.`,
   ].join('\n')
 }
@@ -133,6 +151,7 @@ export function buildProducerUserPrompt(input: { message: string; context: Produ
       videos: (input.context.videos ?? []).slice(0, 30),
       hasReferenceVideo: input.context.hasReferenceVideo,
       pendingReviewItems: input.context.pendingReview,
+      ...(brandGuidance(input.context.brand) ? { brand: brandGuidance(input.context.brand) } : {}),
     },
     history: input.history.slice(-8),
     message: input.message,

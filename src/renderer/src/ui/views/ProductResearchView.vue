@@ -11,7 +11,7 @@ import type {
   ProductResearchSchemeState,
   ProductResearchSnapshot,
   ProductResearchTask,
-} from '@/../../shared/productResearch'
+} from '../../../../shared/productResearch'
 import PrPager from './product-research/PrPager.vue'
 import PrToast from './product-research/PrToast.vue'
 import PrConfirmDialog from './product-research/PrConfirmDialog.vue'

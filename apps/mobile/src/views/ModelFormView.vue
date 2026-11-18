@@ -10,6 +10,11 @@ import { approve, generateModelImage, useGenerations } from '@/lib/generate'
 import { errorMessage } from '@/lib/session'
 import { deleteRecord, getRecord, newId, saveRecord } from '@/lib/sync'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import { FileText, UserRound } from 'lucide-vue-next'
+const inWebShell = useInWebShell()
 
 const route = useRoute()
 const router = useRouter()
@@ -99,6 +104,45 @@ async function remove() {
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <PageHeader :title="isNew ? '创建模特' : form.name || '模特'" back="/library?tab=models" description="上传或 AI 生成统一的人物形象，复刻时保持人物一致。" :icon="UserRound">
+      <template #actions>
+        <button v-if="!isNew && !missing" type="button" class="vg-btn vg-btn--danger" @click="remove"><Trash2 :size="14" /> 删除模特</button>
+        <button v-if="!missing" type="button" class="vg-btn vg-btn--primary" :disabled="!canSave" @click="save">{{ isNew ? '创建模特' : '保存' }}</button>
+      </template>
+    </PageHeader>
+    <main v-if="loaded" class="vg-page pd" data-testid="web-model-form">
+      <div v-if="missing" class="vg-empty"><h3>模特不存在</h3><p>可能已在其他设备上删除</p></div>
+      <div v-else class="pd-form">
+        <div class="mf-left">
+          <section class="pd-card">
+            <h2 class="vg-section-title"><UserRound :size="16" /> 形象照片 <small>正脸、半身、全身各一张效果最好</small></h2>
+            <ImageGrid v-model:images="form.images" v-model:cover="form.coverFileId" aspect="3 / 4" />
+          </section>
+          <section class="pd-card">
+            <h2 class="vg-section-title"><Sparkles :size="16" /> AI 生成形象 <small>按右侧的性别、年龄、风格生成多角度形象图</small></h2>
+            <div v-if="aiResults.length" class="pd-content">
+              <div v-for="item in aiResults.slice(0, 8)" :key="item.id" class="mf-ai">
+                <GenerationTile :item="item" @click="useResult(item)" />
+                <small>{{ item.review === 'approved' ? '已加入' : item.status === 'succeeded' ? '点击加入形象照片' : '' }}</small>
+              </div>
+            </div>
+            <div><button type="button" class="vg-btn vg-btn--primary" :disabled="generating" @click="generateAi"><LoaderCircle v-if="generating" :size="14" class="vg-spin" /><Sparkles v-else :size="14" /> 生成形象图</button></div>
+          </section>
+        </div>
+        <section class="pd-card">
+          <h2 class="vg-section-title"><FileText :size="16" /> 模特资料</h2>
+          <label class="vg-field"><span class="vg-field__label">名称 <span class="vg-req">*</span></span><input v-model="form.name" class="vg-input" type="text" maxlength="40" placeholder="例如：欧美金发女模 A" /></label>
+          <div class="vg-field"><span class="vg-field__label">性别</span><div class="vg-seg vg-seg--sm"><button v-for="g in genders" :key="g" type="button" class="vg-seg__btn" :class="{ 'is-active': form.gender === g }" @click="form.gender = form.gender === g ? '' : g">{{ g }}</button></div></div>
+          <div class="vg-field"><span class="vg-field__label">年龄段</span><div class="vg-seg vg-seg--sm"><button v-for="a in ages" :key="a" type="button" class="vg-seg__btn" :class="{ 'is-active': form.ageRange === a }" @click="form.ageRange = form.ageRange === a ? '' : a">{{ a }}</button></div></div>
+          <label class="vg-field"><span class="vg-field__label">风格</span><input v-model="form.style" class="vg-input" type="text" maxlength="40" placeholder="例如：轻奢、甜美、街头" /></label>
+          <label class="vg-field"><span class="vg-field__label">外貌描述</span><textarea v-model="form.description" class="vg-textarea" rows="4" maxlength="500" placeholder="发型、肤色、气质等，生成时作为参考" /></label>
+          <label class="vg-field"><span class="vg-field__label">标签</span><input v-model="tagsText" class="vg-input" type="text" placeholder="用空格分隔，例如：欧美 长发" /></label>
+        </section>
+      </div>
+    </main>
+  </template>
+  <template v-else>
   <PageHeader :title="isNew ? '新建模特' : '编辑模特'" back="/library?tab=models">
     <template v-if="!isNew && !missing" #actions>
       <button type="button" class="m-icon-btn" aria-label="删除模特" @click="remove"><Trash2 :size="20" /></button>
@@ -171,6 +215,7 @@ async function remove() {
     <button type="button" class="m-btn" @click="router.back()">取消</button>
     <button type="button" class="m-btn m-btn--primary" :disabled="!canSave" @click="save">{{ isNew ? '创建模特' : '保存' }}</button>
   </div>
+  </template>
 </template>
 
 <style scoped>

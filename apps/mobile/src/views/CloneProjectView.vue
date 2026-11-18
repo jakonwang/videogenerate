@@ -1,22 +1,29 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, Boxes, Clapperboard, Film, Image as ImageIcon, LoaderCircle, RefreshCw, UserRound, X } from 'lucide-vue-next'
+import { AlertTriangle, ArrowLeft, Boxes, Clapperboard, Download, Film, Image as ImageIcon, LoaderCircle, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
+import { fileBlob } from '@/lib/files'
+import { downloadBlob } from '@/lib/platform'
 import { SYNC_COLLECTIONS, type SyncCloneProject, type SyncJobState } from '@shared/cloud/sync'
 import { CLONE_SHOT_ROLE_LABELS } from '@shared/cloud/clone'
 import CloudImage from '@/components/CloudImage.vue'
 import CloudVideo from '@/components/CloudVideo.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ProductPicker from '@/components/ProductPicker.vue'
-import { analyze, compose, generateFrames, generateShotVideos, refreshProject, setSource, toggleSkip, usableShots } from '@/lib/clone'
+import { CLONE_STEPS, analyze, cloneProgress, compose, generateFrames, generateShotVideos, refreshProject, setSource, toggleSkip, usableShots } from '@/lib/clone'
 import { coverOf, useModels, type ProductItem } from '@/lib/library'
 import { errorMessage } from '@/lib/session'
 import { getRecord, syncState } from '@/lib/sync'
 import { toast } from '@/lib/toast'
+import { useInWebShell } from '@/lib/layout'
+import WebStep from '@/components/web/WebStep.vue'
+import WebResults from '@/components/web/WebResults.vue'
+import { Check } from 'lucide-vue-next'
+const inWebShell = useInWebShell()
 
 const route = useRoute()
 const router = useRouter()
-const id = String(route.params.id)
+const id = String(route.params.id ?? route.params.projectId)
 const project = ref<SyncCloneProject | null>(null)
 const loaded = ref(false)
 const busy = ref('')
@@ -58,6 +65,32 @@ const step = computed(() => {
 })
 const running = (status?: SyncJobState) => status === 'queued' || status === 'running'
 
+/* 网页版：同电脑端的分步页面，一次看一个步骤；默认停在当前该做的那一步 */
+const STEP_META = [
+  { title: '参考视频分析', desc: '提取脚本结构、内容节奏与可复刻信息' },
+  { title: '选择商品与模特', desc: '分镜里的商品换成你的商品，可指定模特保持人物一致' },
+  { title: '分镜设计', desc: '按原片构图为每个镜头生成换上商品的分镜图' },
+  { title: '分镜视频', desc: '把每张分镜图生成动态视频片段' },
+  { title: '成片合成', desc: '按原片节奏把镜头拼接成完整成片' },
+]
+const viewStep = ref(1)
+const stepDone = computed(() => (project.value ? cloneProgress(project.value).done : [false, false, false, false, false]))
+let stepChosen = false
+watch(project, (value) => {
+  if (value && !stepChosen) {
+    viewStep.value = cloneProgress(value).current
+    stepChosen = true
+  }
+})
+async function downloadFinal() {
+  if (!project.value?.finalFileId) return
+  try {
+    downloadBlob(await fileBlob(project.value.finalFileId), `${project.value.name || '复刻成片'}.mp4`)
+  } catch (error) {
+    toast(errorMessage(error))
+  }
+}
+
 async function act(name: string, run: (p: SyncCloneProject) => Promise<void>, message?: string) {
   if (!project.value) return
   busy.value = name
@@ -95,6 +128,181 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
 </script>
 
 <template>
+  <template v-if="inWebShell">
+    <main v-if="loaded && project" class="vg-page cps" data-testid="web-clone-project">
+      <!-- 顶部步骤条（同电脑端：返回任务列表 + 各步骤） -->
+      <nav class="cps-bar">
+        <button type="button" class="cps-back" @click="router.push('/clone')"><ArrowLeft :size="15" /> 任务列表</button>
+        <template v-for="(label, index) in CLONE_STEPS" :key="label">
+          <button type="button" class="cps-step" :class="{ 'is-active': viewStep === index + 1, 'is-done': stepDone[index] }" @click="viewStep = index + 1">
+            <span class="cps-step__num"><Check v-if="stepDone[index] && viewStep !== index + 1" :size="12" /><template v-else>{{ index + 1 }}</template></span>{{ label }}
+          </button>
+          <span v-if="index < CLONE_STEPS.length - 1" class="cps-line" :class="{ 'is-done': stepDone[index] }"></span>
+        </template>
+      </nav>
+      <div class="cps-tip">
+        <span><SlidersHorizontal :size="15" /><strong>逐步调整</strong> 这里可以逐个步骤查看和修改；任务在云端执行，关掉网页也会继续。</span>
+        <span class="vg-muted">{{ project.name }}</span>
+      </div>
+
+      <header class="cps-head">
+        <span class="cps-head__num">{{ String(viewStep).padStart(2, '0') }}</span>
+        <div class="cps-head__text"><h1>{{ STEP_META[viewStep - 1].title }}</h1><p>{{ STEP_META[viewStep - 1].desc }}</p></div>
+        <div class="cps-head__actions">
+          <template v-if="viewStep === 1">
+            <button v-if="project.analyzeStatus === 'failed'" type="button" class="vg-btn vg-btn--primary" :disabled="busy === 'analyze'" @click="act('analyze', (p) => analyze(id, p), '已重新开始拆解')"><RefreshCw :size="14" /> 重新分析</button>
+            <button v-else type="button" class="vg-btn vg-btn--primary" :disabled="!project.analysis" @click="viewStep = 2">下一步：选择商品</button>
+          </template>
+          <template v-else-if="viewStep === 2">
+            <button type="button" class="vg-btn" @click="pickingModel = true"><UserRound :size="14" /> {{ project.modelId ? '更换模特' : '选择模特' }}</button>
+            <button type="button" class="vg-btn vg-btn--primary" @click="pickingProduct = true"><Boxes :size="14" /> {{ project.productImageFileId ? '更换商品' : '选择商品' }}</button>
+          </template>
+          <template v-else-if="viewStep === 3">
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="!project.productImageFileId || busy === 'frames'" @click="act('frames', (p) => generateFrames(id, p, allFrameIds()), '已开始生成分镜图')">
+              <LoaderCircle v-if="busy === 'frames'" :size="14" class="vg-spin" /><ImageIcon v-else :size="14" /> {{ framesDone ? '重新生成全部分镜图' : '生成分镜图' }}
+            </button>
+          </template>
+          <template v-else-if="viewStep === 4">
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="!framesDone || busy === 'videos'" @click="act('videos', (p) => generateShotVideos(id, p, framedIds()), '已提交分镜视频')">
+              <LoaderCircle v-if="busy === 'videos'" :size="14" class="vg-spin" /><Clapperboard v-else :size="14" /> 生成分镜视频
+            </button>
+          </template>
+          <template v-else>
+            <button v-if="project.finalFileId" type="button" class="vg-btn" @click="downloadFinal"><Download :size="14" /> 下载成片</button>
+            <button type="button" class="vg-btn vg-btn--primary" :disabled="!framesDone || busy === 'compose' || running(project.composeStatus)" @click="act('compose', (p) => compose(id, p), '已开始合成')">
+              <LoaderCircle v-if="busy === 'compose' || running(project.composeStatus)" :size="14" class="vg-spin" /><Film v-else :size="14" /> {{ project.finalFileId ? '重新合成' : '合成成片' }}
+            </button>
+          </template>
+        </div>
+      </header>
+
+      <!-- 01 参考分析 -->
+      <div v-if="viewStep === 1" class="cps-analyze">
+        <section class="vg-card cps-card cps-ref">
+          <h3 class="cps-card__title">参考视频 <small>{{ project.analysis ? '分析完成' : '上传后自动分析' }}</small></h3>
+          <div class="cps-ref__video"><CloudVideo :file-id="project.referenceVideoFileId" controls /></div>
+          <dl class="cps-kv">
+            <dt>文件名</dt><dd>{{ project.name }}</dd>
+            <dt>片段数</dt><dd>{{ project.analysis?.shots.length ?? 0 }}</dd>
+            <dt>时长</dt><dd>{{ project.analysis ? `${project.analysis.totalDurationSec.toFixed(1)} 秒` : '—' }}</dd>
+            <dt>状态</dt><dd><span class="vg-pill vg-pill--dot" :class="project.analyzeStatus === 'succeeded' ? 'vg-pill--green' : project.analyzeStatus === 'failed' ? 'vg-pill--red' : 'vg-pill--blue'">{{ project.analyzeStatus === 'succeeded' ? '已分析' : project.analyzeStatus === 'failed' ? '分析失败' : '分析中' }}</span></dd>
+          </dl>
+        </section>
+        <div class="cps-analyze__main">
+          <section class="vg-card cps-card">
+            <h3 class="cps-card__title">内容结构 <small>{{ project.analysis ? `${project.analysis.shots.length} 段` : '等待分析' }}</small></h3>
+            <div v-if="running(project.analyzeStatus)" class="cps-wait"><LoaderCircle :size="18" class="vg-spin" /> AI 正在拆分镜、写脚本，约 1–3 分钟…</div>
+            <div v-else-if="project.analyzeStatus === 'failed'" class="cps-wait is-error"><AlertTriangle :size="16" /> {{ project.analyzeError || '拆解失败' }}</div>
+            <template v-else-if="project.analysis">
+              <p v-if="project.analysis.summary" class="cps-summary">{{ project.analysis.summary }}</p>
+              <div class="cps-structure">
+                <div v-for="shot in project.analysis.shots" :key="shot.id" class="cps-seg" :class="{ 'is-skip': !shots.some((s) => s.id === shot.id) }" :style="{ flex: Math.max(0.6, shot.durationSec) }" :title="`${CLONE_SHOT_ROLE_LABELS[shot.role] || shot.role} · ${shot.durationSec.toFixed(1)}s`">
+                  <CloudImage :file-id="shot.frameFileId" /><span>{{ CLONE_SHOT_ROLE_LABELS[shot.role] || shot.role }}</span>
+                </div>
+              </div>
+              <p v-if="skipped" class="vg-muted cps-tiny">{{ skipped }} 个录屏 / 教学镜头已自动跳过。</p>
+            </template>
+            <div v-else class="cps-wait">完成分析后，这里会展示参考视频的内容分段。</div>
+          </section>
+          <section class="vg-card cps-card">
+            <h3 class="cps-card__title">脚本内容 <small>{{ project.analysis ? '逐镜脚本' : '等待识别' }}</small></h3>
+            <ol v-if="project.analysis" class="cps-script">
+              <li v-for="shot in project.analysis.shots" :key="shot.id"><b>{{ shot.index + 1 }}</b><span class="vg-chip">{{ CLONE_SHOT_ROLE_LABELS[shot.role] || shot.role }}</span><p>{{ shot.scriptText || '（无台词）' }}</p></li>
+            </ol>
+            <p v-else class="vg-muted">分析完成后，这里会显示节选脚本预览。</p>
+          </section>
+        </div>
+      </div>
+
+      <!-- 02 选择商品 -->
+      <div v-else-if="viewStep === 2" class="cps-sources">
+        <button type="button" class="vg-card cps-source" @click="pickingProduct = true">
+          <span class="cps-source__img"><CloudImage v-if="project.productImageFileId" :file-id="project.productImageFileId" /><Boxes v-else :size="26" /></span>
+          <span class="cps-source__text"><small>商品（必选）</small><strong>{{ project.productName || '选择商品' }}</strong><span class="vg-muted">分镜图和视频里的商品都会换成它</span></span>
+        </button>
+        <button type="button" class="vg-card cps-source" @click="pickingModel = true">
+          <span class="cps-source__img"><CloudImage v-if="project.modelImageFileId" :file-id="project.modelImageFileId" /><UserRound v-else :size="26" /></span>
+          <span class="cps-source__text"><small>模特（可选）</small><strong>{{ models.find((m) => m.id === project?.modelId)?.name || '不指定' }}</strong><span class="vg-muted">指定后各镜头保持同一个人物</span></span>
+        </button>
+      </div>
+
+      <!-- 03 分镜图 / 04 分镜视频 -->
+      <section v-else-if="viewStep === 3 || viewStep === 4" class="cps-shots">
+        <div class="cps-shots__bar">
+          <span class="vg-muted">{{ viewStep === 3 ? `分镜图 ${framesDone}/${shots.length}` : `分镜视频 ${videosDone}/${shots.length}` }}</span>
+          <span v-if="!project.productImageFileId" class="vg-pill vg-pill--amber">先在「选择商品」里选商品，才能生成分镜图</span>
+        </div>
+        <div v-if="shots.length" class="cp-grid">
+          <article v-for="shot in shots" :key="shot.id" class="cp-shot" :class="{ 'is-skip': project.shots[shot.id]?.skip }">
+            <div class="cp-shot__media">
+              <div class="cp-shot__ref"><CloudImage :file-id="shot.frameFileId" /><small>原片</small></div>
+              <div class="cp-shot__out">
+                <CloudVideo v-if="viewStep === 4 && project.shots[shot.id]?.videoFileId" :file-id="project.shots[shot.id]?.videoFileId" autoplay />
+                <CloudImage v-else-if="project.shots[shot.id]?.frameFileId" :file-id="project.shots[shot.id]?.frameFileId" />
+                <span v-else class="cp-shot__empty">
+                  <LoaderCircle v-if="running(project.shots[shot.id]?.frameStatus)" :size="16" class="vg-spin" />
+                  <AlertTriangle v-else-if="project.shots[shot.id]?.frameStatus === 'failed'" :size="16" />
+                  <ImageIcon v-else :size="16" />
+                </span>
+                <span v-if="running(project.shots[shot.id]?.videoStatus)" class="cp-shot__badge"><LoaderCircle :size="11" class="vg-spin" /> 视频生成中</span>
+                <span v-else-if="project.shots[shot.id]?.videoFileId" class="cp-shot__badge is-ok"><Film :size="11" /> 视频</span>
+              </div>
+            </div>
+            <div class="cp-shot__info">
+              <div class="cp-shot__head"><strong>镜头 {{ shot.index + 1 }}</strong><span class="vg-chip">{{ CLONE_SHOT_ROLE_LABELS[shot.role] || shot.role }}</span><span class="vg-muted">{{ shot.durationSec.toFixed(1) }}s</span></div>
+              <p v-if="shot.scriptText" class="cp-shot__script">{{ shot.scriptText }}</p>
+              <p v-if="project.shots[shot.id]?.frameError || project.shots[shot.id]?.videoError" class="cp-shot__error">{{ project.shots[shot.id]?.videoError || project.shots[shot.id]?.frameError }}</p>
+              <div class="cp-shot__actions">
+                <button v-if="viewStep === 3" type="button" class="vg-btn vg-btn--xs" :disabled="!project.productImageFileId" @click="act('one', (p) => generateFrames(id, p, [shot.id]), '已重新生成这一镜')"><ImageIcon :size="12" /> 重做分镜图</button>
+                <button v-else type="button" class="vg-btn vg-btn--xs" :disabled="!project.shots[shot.id]?.frameFileId" @click="act('one', (p) => generateShotVideos(id, p, [shot.id]), '已提交这一镜的视频')"><Clapperboard :size="12" /> {{ project.shots[shot.id]?.videoFileId ? '重做视频' : '生成视频' }}</button>
+                <button type="button" class="vg-btn vg-btn--xs vg-btn--ghost" @click="act('one', (p) => toggleSkip(id, p, shot.id))">{{ project.shots[shot.id]?.skip ? '放回成片' : '不要这镜' }}</button>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div v-else class="vg-empty"><span class="vg-empty__icon"><Film :size="20" /></span><h3>拆解完成后分镜会出现在这里</h3></div>
+      </section>
+
+      <!-- 05 成片合成 -->
+      <div v-else class="cps-final">
+        <section class="vg-card cps-card cps-final__video">
+          <h3 class="cps-card__title">成片 <small>{{ project.finalFileId ? '已生成' : '未生成' }}</small></h3>
+          <div class="cps-ref__video">
+            <CloudVideo v-if="project.finalFileId" :file-id="project.finalFileId" controls />
+            <div v-else-if="running(project.composeStatus)" class="cps-wait"><LoaderCircle :size="18" class="vg-spin" /> 正在按原片节奏拼接…</div>
+            <div v-else-if="project.composeStatus === 'failed'" class="cps-wait is-error"><AlertTriangle :size="16" /> {{ project.composeError || '合成失败' }}</div>
+            <div v-else class="cps-wait">点右上角「合成成片」按原片节奏拼接</div>
+          </div>
+        </section>
+        <section class="vg-card cps-card">
+          <h3 class="cps-card__title">合成清单</h3>
+          <dl class="cps-kv">
+            <dt>分镜</dt><dd>{{ shots.length }} 个（不要的 {{ shots.filter((s) => project?.shots[s.id]?.skip).length }} 个）</dd>
+            <dt>分镜图</dt><dd>{{ framesDone }}/{{ shots.length }}</dd>
+            <dt>分镜视频</dt><dd>{{ videosDone }}/{{ shots.length }}</dd>
+            <dt>商品</dt><dd>{{ project.productName || '未选' }}</dd>
+          </dl>
+          <p class="vg-muted cps-tiny">没生成视频的镜头用分镜图做静帧；成片不带声音，可在「批量字幕」里加字幕、在发布中心发布。</p>
+        </section>
+      </div>
+
+      <ProductPicker v-if="pickingProduct" @close="pickingProduct = false" @pick="pickProduct" />
+      <div v-if="pickingModel" class="vg-backdrop" @click.self="pickingModel = false">
+        <section class="vg-dialog vg-dialog--wide">
+          <header class="vg-dialog__head"><span class="vg-dialog__title"><UserRound :size="16" /> 选择模特</span><button type="button" class="vg-icon-btn" aria-label="关闭" @click="pickingModel = false"><X :size="16" /></button></header>
+          <div class="vg-dialog__body cp-models">
+            <button type="button" class="cp-model" :class="{ 'is-active': !project?.modelId }" @click="pickModel(null)"><span class="cp-model__img"><UserRound :size="22" /></span>不指定</button>
+            <button v-for="model in models" :key="model.id" type="button" class="cp-model" :class="{ 'is-active': project?.modelId === model.id }" @click="pickModel(model.id)">
+              <span class="cp-model__img"><CloudImage :file-id="coverOf(model)" /></span>{{ model.name }}
+            </button>
+          </div>
+          <footer v-if="!models.length" class="vg-dialog__foot"><button type="button" class="vg-btn vg-btn--primary" @click="router.push('/library/models/new')">先去模特库添加模特</button></footer>
+        </section>
+      </div>
+    </main>
+    <main v-else-if="loaded" class="vg-page"><div class="vg-empty"><h3>项目不存在</h3></div></main>
+  </template>
+  <template v-else>
   <PageHeader :title="project?.name || '复刻'" back="/clone" />
   <main v-if="loaded && project" class="m-page m-page--no-tabs">
     <!-- 进度条 -->
@@ -215,9 +423,65 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
       </section>
     </div>
   </Teleport>
+  </template>
 </template>
 
 <style scoped>
+/* 网页版分步页面（同电脑端 CloneView 布局） */
+.cps { display: flex; flex-direction: column; gap: 14px; width: min(1408px, 100%); margin: 0 auto; }
+.cps-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--theme-border); border-radius: 14px; background: var(--theme-panel); }
+.cps-back { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--theme-text); font-weight: 700; cursor: pointer; }
+.cps-step { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border: 0; border-radius: 999px; background: none; color: var(--theme-text-secondary); font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.cps-step.is-active { background: var(--vg-accent-soft); color: var(--theme-text); box-shadow: inset 0 0 0 1px var(--vg-accent-line); }
+.cps-step__num { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--theme-border); font-size: 11.5px; }
+.cps-step.is-active .cps-step__num, .cps-step.is-done .cps-step__num { background: var(--vg-accent); border-color: var(--vg-accent); color: #fff; }
+.cps-line { flex: 1; min-width: 16px; height: 1px; background: var(--theme-border); }
+.cps-line.is-done { background: var(--vg-accent); }
+.cps-tip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); font-size: 12.5px; }
+.cps-tip > span:first-child { display: flex; align-items: center; gap: 8px; color: var(--theme-text-secondary); }
+.cps-tip strong { color: var(--theme-text); }
+.cps-head { display: flex; align-items: center; gap: 14px; padding: 6px 4px; }
+.cps-head__num { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--vg-accent-line); background: var(--vg-accent-soft); color: var(--vg-accent); font-weight: 800; }
+.cps-head__text { flex: 1; min-width: 0; }
+.cps-head__text h1 { font-size: 20px; font-weight: 800; }
+.cps-head__text p { font-size: 13px; color: var(--theme-text-muted); }
+.cps-head__actions { display: flex; gap: 8px; }
+.cps-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.cps-card__title { font-size: 14px; font-weight: 800; }
+.cps-card__title small { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--theme-text-muted); }
+.cps-analyze { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+.cps-analyze__main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cps-ref__video { aspect-ratio: 9 / 16; max-height: 520px; overflow: hidden; border-radius: 10px; background: #000; }
+.cps-ref__video :deep(video) { object-fit: contain; }
+.cps-kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; margin: 0; font-size: 12.5px; }
+.cps-kv dt { color: var(--theme-text-muted); }
+.cps-kv dd { margin: 0; text-align: right; font-weight: 700; }
+.cps-wait { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 110px; padding: 16px; border: 1px dashed var(--theme-border); border-radius: 10px; color: var(--theme-text-muted); font-size: 13px; text-align: center; }
+.cps-wait.is-error { color: var(--vg-red); }
+.cps-summary { font-size: 13px; line-height: 1.7; }
+.cps-structure { display: flex; gap: 4px; height: 120px; }
+.cps-seg { position: relative; min-width: 0; overflow: hidden; border-radius: 8px; border: 1px solid var(--theme-border); background: var(--theme-panel-soft); }
+.cps-seg :deep(img) { width: 100%; height: 100%; object-fit: cover; }
+.cps-seg span { position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: 6px; background: rgb(0 0 0 / .6); color: #fff; font-size: 10.5px; white-space: nowrap; }
+.cps-seg.is-skip { opacity: .4; }
+.cps-script { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cps-script li { display: grid; grid-template-columns: 24px auto 1fr; align-items: start; gap: 8px; font-size: 13px; }
+.cps-script b { color: var(--theme-text-muted); }
+.cps-script p { margin: 0; line-height: 1.6; }
+.cps-tiny { font-size: 12px; }
+.cps-sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cps-source { display: flex; align-items: center; gap: 16px; padding: 18px; color: var(--theme-text); text-align: left; cursor: pointer; }
+.cps-source__img { display: grid; place-items: center; width: 96px; height: 96px; flex-shrink: 0; overflow: hidden; border-radius: 12px; background: var(--theme-panel-soft); color: var(--theme-text-muted); }
+.cps-source__img :deep(img) { width: 100%; height: 100%; object-fit: cover; }
+.cps-source__text { display: flex; flex-direction: column; gap: 4px; }
+.cps-source__text small { font-size: 12px; color: var(--theme-text-muted); }
+.cps-source__text strong { font-size: 16px; }
+.cps-source__text span { font-size: 12px; }
+.cps-shots { display: flex; flex-direction: column; gap: 10px; }
+.cps-shots__bar { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.cps-final { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .cps-analyze, .cps-final, .cps-sources { grid-template-columns: minmax(0, 1fr); } }
+
 .small { font-size: 12px; }
 .note { margin: 10px 2px 0; line-height: 1.6; }
 .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; }
@@ -264,4 +528,14 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
 .model { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--theme-border); border-radius: 12px; background: none; font-size: 12px; font-weight: 600; }
 .model.is-active { border-color: var(--m-accent); background: var(--m-accent-soft); }
 .model__img { display: grid; place-items: center; width: 64px; height: 84px; overflow: hidden; border-radius: 8px; background: var(--theme-control); color: var(--theme-text-muted); }
+@media (min-width: 1024px) {
+  /* Computer: shots side by side with larger previews; steps and actions keep a sensible width. */
+  .steps { max-width: 640px; margin: 4px auto 0; }
+  .sources, .actions { max-width: 640px; }
+  .shot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 12px; }
+  .shot__ref { width: 96px; height: 170px; }
+  .shot__out { width: 108px; height: 192px; }
+  .shot__script { -webkit-line-clamp: 6; }
+  .final { max-height: 560px; }
+}
 </style>

@@ -1,58 +1,26 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Plus } from 'lucide-vue-next'
-import { SYNC_COLLECTIONS, type SyncProduct, type SyncResearchResult, type SyncResearchTask } from '@shared/cloud/sync'
+import { SYNC_COLLECTIONS, type SyncResearchTask } from '@shared/cloud/sync'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { getRecord, listRecords, newId, saveRecord, syncState } from '@/lib/sync'
+import { addResearchToLibrary, formatSales, useResearchResults, type ResearchItem } from '@/lib/researchResults'
+import { getRecord, syncState } from '@/lib/sync'
 import { toast } from '@/lib/toast'
 
 const route = useRoute()
 const router = useRouter()
 const taskId = String(route.params.id)
 const task = ref<SyncResearchTask | null>(null)
-const results = ref<(SyncResearchResult & { id: string })[]>([])
-const sort = ref<'rank' | 'sales' | 'price'>('rank')
-
-async function load() {
-  task.value = (await getRecord<SyncResearchTask>(SYNC_COLLECTIONS.researchTasks, taskId))?.data ?? null
-  const records = await listRecords<SyncResearchResult>(SYNC_COLLECTIONS.researchResults)
-  results.value = records.filter((r) => r.data?.taskId === taskId).map((r) => ({ ...(r.data as SyncResearchResult), id: r.id }))
-}
-watch(() => syncState.version, load, { immediate: true })
-
-const sorted = computed(() => {
-  const list = [...results.value]
-  if (sort.value === 'sales') return list.sort((a, b) => (b.salesValue ?? -1) - (a.salesValue ?? -1))
-  if (sort.value === 'price') return list.sort((a, b) => (a.priceValue ?? Infinity) - (b.priceValue ?? Infinity))
-  return list.sort((a, b) => a.rank - b.rank)
-})
-
-function formatSales(value?: number, text?: string) {
-  if (value === undefined) return text || '-'
-  return value >= 10000 ? `${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}万` : String(value)
-}
+const { results, sorted, sort } = useResearchResults(ref(taskId))
+watch(() => syncState.version, async () => { task.value = (await getRecord<SyncResearchTask>(SYNC_COLLECTIONS.researchTasks, taskId))?.data ?? null }, { immediate: true })
 
 /** 一键把采集到的商品存进商品库（带上主图），之后可用于复刻、生成素材 */
-async function addToLibrary(item: SyncResearchResult & { id: string }) {
-  if (item.productId) {
-    router.push(`/library/products/${item.productId}`)
-    return
-  }
-  const productId = newId('prod')
-  const remark = [item.priceText && `价格 ${item.priceText}`, item.salesText && `销量 ${item.salesText}`, `来自选品「${item.keyword}」`].filter(Boolean).join(' · ')
-  await saveRecord<SyncProduct>(SYNC_COLLECTIONS.products, productId, {
-    name: item.title.slice(0, 80),
-    type: 'general',
-    remark,
-    images: item.image ? [item.image] : [],
-    coverFileId: item.image?.fileId,
-    createdAt: Date.now(),
-  })
-  const { id, ...data } = item
-  await saveRecord<SyncResearchResult>(SYNC_COLLECTIONS.researchResults, id, { ...data, productId })
-  toast('已加入商品库')
+async function addToLibrary(item: ResearchItem) {
+  const { productId, created } = await addResearchToLibrary(item)
+  if (created) toast('已加入商品库')
+  else router.push(`/library/products/${productId}`)
 }
 </script>
 

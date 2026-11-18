@@ -35,7 +35,7 @@ type ReviewItem = {
 
 const REDO_REASONS = ['product_mismatch', 'weird_motion', 'blurry', 'bad_composition', 'off_brand', 'subtitle_issue', 'other'] as const
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const ai = useAiProducerStore()
 
@@ -150,7 +150,7 @@ function createPublishDrafts(refs: string[]) {
 }
 
 function formatTime(value?: number) {
-  return value ? new Date(value).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
+  return value ? new Date(value).toLocaleString(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 }
 
 watch([decision, line], () => void load())

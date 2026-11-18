@@ -3,7 +3,7 @@ import { SYNC_COLLECTIONS, type SyncCloneProject, type SyncCloneShotState, type 
 import { buildCloneFramePrompt, buildCloneShotVideoPrompt, type CloneAnalysis, type CloneAnalysisShot } from '@shared/cloud/clone'
 import type { AiGenerationJob } from '@shared/cloud/ai'
 import { cloud } from './session'
-import { getRecord, listRecords, newId, saveRecord, syncState } from './sync'
+import { deleteRecord, getRecord, listRecords, newId, saveRecord, syncState } from './sync'
 
 /**
  * 手机端复刻：所有重活都在云端任务里跑（拆解、分镜图、分镜视频、合成），
@@ -209,4 +209,71 @@ export async function refreshProject(id: string): Promise<boolean> {
   }
   if (changed) await save(id, next)
   return hasPendingJobs(next)
+}
+
+/* ------------------------------------------------------------------ 列表管理（分组、改名、删除、步骤进度） */
+
+export const CLONE_STEPS = ['参考分析', '选择商品', '分镜图', '分镜视频', '成片合成'] as const
+
+/** 第几步（1 起）、完成了几步，用于列表进度条 */
+export function cloneProgress(project: SyncCloneProject) {
+  const shots = project.analysis ? usableShots(project) : []
+  const done = [
+    project.analyzeStatus === 'succeeded' && Boolean(project.analysis),
+    Boolean(project.productImageFileId),
+    shots.length > 0 && shots.every((shot) => project.shots[shot.id]?.frameFileId),
+    shots.length > 0 && shots.every((shot) => project.shots[shot.id]?.videoFileId),
+    Boolean(project.finalFileId),
+  ]
+  const finished = done.filter(Boolean).length
+  const current = Math.min(CLONE_STEPS.length, done.findIndex((ok) => !ok) + 1 || CLONE_STEPS.length)
+  return {
+    done,
+    current,
+    label: CLONE_STEPS[current - 1],
+    pct: Math.round((finished / CLONE_STEPS.length) * 100),
+    frames: shots.filter((shot) => project.shots[shot.id]?.frameFileId).length,
+    videos: shots.filter((shot) => project.shots[shot.id]?.videoFileId).length,
+  }
+}
+
+export type CloneStage = 'draft' | 'running' | 'done' | 'failed'
+export function cloneStage(project: SyncCloneProject): CloneStage {
+  if (project.finalFileId) return 'done'
+  if (project.analyzeStatus === 'failed' || project.composeStatus === 'failed') return 'failed'
+  if (hasPendingJobs(project)) return 'running'
+  if (!project.analysis || !project.productImageFileId) return 'draft'
+  return 'running'
+}
+export const CLONE_STAGE_LABEL: Record<CloneStage, { label: string; tone: string }> = {
+  draft: { label: '草稿', tone: '' },
+  running: { label: '进行中', tone: 'blue' },
+  done: { label: '已完成', tone: 'green' },
+  failed: { label: '失败', tone: 'red' },
+}
+
+export async function updateProjectMeta(id: string, patch: Partial<Pick<SyncCloneProject, 'name' | 'group'>>) {
+  const project = await loadProject(id)
+  if (project) await save(id, { ...project, ...patch })
+}
+
+export async function removeProject(id: string) {
+  await deleteRecord(SYNC_COLLECTIONS.cloneProjects, id)
+}
+
+/** 分组名单（全账号一条），删分组时项目回到「未分组」 */
+export function useCloneGroups() {
+  const names = ref<string[]>([])
+  watch(
+    () => syncState.version,
+    async () => {
+      names.value = (await getRecord<{ names: string[] }>(SYNC_COLLECTIONS.cloneGroups, 'groups'))?.data?.names ?? []
+    },
+    { immediate: true },
+  )
+  return names
+}
+
+export async function saveCloneGroups(names: string[]) {
+  await saveRecord<{ names: string[] }>(SYNC_COLLECTIONS.cloneGroups, 'groups', { names: [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(0, 50) })
 }
