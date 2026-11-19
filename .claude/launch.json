@@ -1,0 +1,55 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cloud",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:cloud"
+      ],
+      "port": 18300
+    },
+    {
+      "name": "electron",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "web-next",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:web-next"
+      ],
+      "port": 18280
+    },
+    {
+      "name": "mobile",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "apps/mobile",
+        "run",
+        "dev"
+      ],
+      "port": 18290
+    },
+    {
+      "name": "mobile-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "apps/mobile",
+        "run",
+        "dev:web"
+      ],
+      "port": 18291,
+      "url": "http://127.0.0.1:18291"
+    }
+  ]
+}
