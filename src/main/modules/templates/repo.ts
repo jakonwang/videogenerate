@@ -5,6 +5,7 @@ import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import { resolveStickerByRefOrFileName, toStickerRef } from '../../lib/stickers'
 import { materializeManagedAssets } from '../managed-assets/service'
 import type { BgmConfig, Template } from './types'
+import { removeRefDirsOfTemplate } from './refAssets'
 import {
   ASS_DEFAULT_FONT_FAMILY,
   ASS_DEFAULT_FONT_SIZE,
@@ -344,8 +345,10 @@ export const templatesRepo = {
 
   async remove(id: string): Promise<{ ok: true }> {
     const db = await readJsonFile<DbShape>(filePath(), { templates: [] })
+    const removed = db.templates.find((t) => t.id === id)
     db.templates = db.templates.filter((t) => t.id !== id)
     await writeJsonFile(filePath(), db)
+    await removeRefDirsOfTemplate(removed, db.templates)
     return { ok: true }
   },
 

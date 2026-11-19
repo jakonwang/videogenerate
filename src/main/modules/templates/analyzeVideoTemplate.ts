@@ -12,6 +12,8 @@ import { getAppPaths } from '../../lib/paths'
 import { analyzeReferenceVideo } from '../clone/analyzer'
 import { cloneRepo } from '../clone/repo'
 import type { CloneLocale, ShotSpec } from '../clone/types'
+import { sweepUnusedRefDirs, templateRefsRoot } from './refAssets'
+import { templatesRepo } from './repo'
 import type { SegmentFx, Template, TemplateReferenceShot, TransitionConfig } from './types'
 
 export type VideoTemplateDraft = {
@@ -30,6 +32,20 @@ const round = (n: number, d = 2) => {
   return Math.round(Number(n || 0) * m) / m
 }
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
+
+/** 混剪模板总时长上限（模板库里也按这个限制） */
+export const TEMPLATE_MAX_TOTAL_SEC = 60
+
+/**
+ * 参考视频时长 → 模板总时长范围（上下浮动约 15%）。
+ * 超过上限的长视频收到上限以内，并保证 min < max，不会出现 60–61 这种超限范围。
+ */
+export function totalDurationRange(totalSec: number): { min: number; max: number } {
+  const total = Number.isFinite(totalSec) && totalSec > 0 ? totalSec : 10
+  const min = clamp(Math.floor(total * 0.85), 3, TEMPLATE_MAX_TOTAL_SEC - 1)
+  const max = clamp(Math.ceil(total * 1.15), min + 1, TEMPLATE_MAX_TOTAL_SEC)
+  return { min, max }
+}
 
 /** 分镜在模板里的段位：按「这段在卖货视频里干什么」归类，同类镜头合成一段。 */
 function segmentKeyOf(shot: ShotSpec): string {
@@ -104,10 +120,13 @@ export async function analyzeVideoToTemplateDraft(input: {
       ? 'vi-VN'
       : undefined
 
+  // 顺手清掉以前识别完没保存的草稿缩略图
+  await sweepUnusedRefDirs(await templatesRepo.list()).catch(() => undefined)
+
   const jobId = randomUUID()
   const workDir = join(getAppPaths().tmpDir, 'template-analyze', jobId)
   // 关键帧留存在数据目录：模板保存后还要在「参考分镜」里显示
-  const thumbDir = join(getAppPaths().dataDir, 'template-refs', jobId)
+  const thumbDir = join(templateRefsRoot(), jobId)
   await mkdir(thumbDir, { recursive: true })
 
   try {
@@ -171,10 +190,7 @@ export async function analyzeVideoToTemplateDraft(input: {
       name: `AI 识别-${basename(referenceVideoName, extname(referenceVideoName)).slice(0, 24)}`,
       structure,
       segmentSyncMode: 'fixed',
-      totalDurationSec: {
-        min: clamp(Math.floor(total * 0.85), 3, 60),
-        max: clamp(Math.ceil(total * 1.15), Math.floor(total * 0.85) + 1, 60),
-      },
+      totalDurationSec: totalDurationRange(total),
       skipStartSec: 0.5,
       segmentDurationSec,
       segmentFx,
