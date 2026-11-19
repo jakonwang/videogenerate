@@ -219,6 +219,18 @@ export type BatchSubtitleStyleConfig = {
   maxWidthRatio?: number
   lineGap?: number
   bottomMargin?: number
+  /** 字重 400 / 600 / 700 / 900（不填 = 900） */
+  fontWeight?: number
+  /** 自定义垂直位置（文字中心在画面高度的比例 0~1），有值时代替 position */
+  offsetYRatio?: number | null
+  /** 批量时每条视频的位置随机微调幅度（画面高度的比例，0 = 不微调） */
+  positionJitter?: number
+  /** 渲染时整体上下挪的像素（由 positionJitter 按视频算出） */
+  shiftYPx?: number
+  /** 自定义水平位置（文字块中心在画面宽度的比例 0~1） */
+  offsetXRatio?: number | null
+  /** 第二行起的字号比例（1 = 和第一行一样大，默认 0.68） */
+  secondaryScale?: number
 }
 
 export type BatchSubtitleTitleConfig = {
@@ -274,6 +286,16 @@ export type BatchSubtitleOverlayImageConfig = {
   maxWidthRatio: number
   lineGap: number
   bottomMargin: number
+  /** 字重 400 / 600 / 700 / 900（不填 = 900） */
+  fontWeight?: number
+  /** 自定义垂直位置（文字中心在画面高度的比例 0~1），有值时代替 position */
+  offsetYRatio?: number | null
+  /** 批量时每条视频的位置随机微调幅度（画面高度的比例，0 = 不微调） */
+  positionJitter?: number
+  /** 自定义水平位置（文字块中心在画面宽度的比例 0~1） */
+  offsetXRatio?: number | null
+  /** 第二行起的字号比例（1 = 和第一行一样大，默认 0.68） */
+  secondaryScale?: number
 }
 
 export type BatchSubtitleOverlayAsset = {
@@ -324,6 +346,16 @@ export type BatchSubtitleCaptionStyle = {
   maxWidthRatio: number
   lineGap: number
   bottomMargin: number
+  /** 字重 400 / 600 / 700 / 900（不填 = 900） */
+  fontWeight?: number
+  /** 自定义垂直位置（文字中心在画面高度的比例 0~1），有值时代替 position */
+  offsetYRatio?: number | null
+  /** 批量时每条视频的位置随机微调幅度（画面高度的比例，0 = 不微调） */
+  positionJitter?: number
+  /** 自定义水平位置（文字块中心在画面宽度的比例 0~1） */
+  offsetXRatio?: number | null
+  /** 第二行起的字号比例（1 = 和第一行一样大，默认 0.68） */
+  secondaryScale?: number
 }
 
 export type BatchSubtitleFontOption = {

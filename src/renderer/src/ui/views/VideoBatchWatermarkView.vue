@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { CheckCircle2, ChevronLeft, FolderOpen, Images, Loader2, Play, RotateCcw, Stamp, Trash2, X, XCircle } from 'lucide-vue-next'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
-import { localMediaUrl } from '@/lib/localMedia'
+import { localMediaUrl, thumbnailUrl } from '@/lib/localMedia'
 
 type Position = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
 type Settings = { kind: 'text' | 'image'; text: string; imagePath: string; color: string; position: Position; opacity: number; scale: number; margin: number }
@@ -19,6 +19,26 @@ const outputDir = ref('')
 const archive = ref(true)
 const batches = ref<Batch[]>([])
 const previewPath = ref('')
+/** 预览底图：第一个选中视频的封面帧 */
+const previewBg = ref('')
+watch(
+  () => videos.value[0],
+  async (first) => {
+    previewBg.value = ''
+    if (!first) return
+    // 网页版没有 media.getInfo：网页的图片地址替身会直接从视频里截一帧
+    if (!window.api.media?.getInfo) {
+      previewBg.value = first
+      return
+    }
+    try {
+      const info = (await window.api.media.getInfo(first)) as { thumbnailPath?: string } | null
+      if (videos.value[0] === first) previewBg.value = info?.thumbnailPath || ''
+    } catch {
+      previewBg.value = ''
+    }
+  },
+)
 const busy = ref(false)
 const error = ref('')
 let previewTimer = 0
@@ -202,6 +222,8 @@ onBeforeUnmount(() => unsubscribe?.())
         <section class="vg-card">
           <div class="vg-card__head"><span class="vg-card__title">{{ t('ai.watermark.preview') }}</span></div>
           <div class="wm__frame">
+            <!-- 用第一个选中视频的画面做底，水印叠在真实画面上 -->
+            <img v-if="previewBg" class="wm__bg" :src="thumbnailUrl(previewBg, 640)" alt="" @error="previewBg = ''" />
             <img v-if="previewPath" class="wm__mark" :src="localMediaUrl(previewPath)" :style="previewStyle" alt="" />
             <span v-else class="wm__frame-empty">{{ t('ai.watermark.previewEmpty') }}</span>
           </div>
@@ -246,6 +268,7 @@ onBeforeUnmount(() => unsubscribe?.())
 .wm__switch { border: 0; background: transparent; padding: 0; margin: 12px 0; }
 .wm__frame { position: relative; aspect-ratio: 9 / 16; max-height: 460px; margin: 0 auto; border-radius: var(--vg-radius-sm); overflow: hidden; background: linear-gradient(160deg, #2b3a55, #10151f 70%); }
 .wm__mark { position: absolute; height: auto; }
+.wm__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #05070b; }
 .wm__frame-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; color: rgba(255, 255, 255, .6); font-size: 12.5px; }
 .wm__batch { padding: 8px 0; border-top: 1px solid var(--theme-divider); }
 .wm__batch:first-of-type { border-top: 0; }

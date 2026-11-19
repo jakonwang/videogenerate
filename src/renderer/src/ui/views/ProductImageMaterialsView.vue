@@ -36,6 +36,8 @@ import {
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 import MaterialPager from '../components/product-materials/MaterialPager.vue'
 import MaterialTile from '../components/product-materials/MaterialTile.vue'
+// The page brings its own stylesheet so the web version (which reuses this page) gets it too.
+import '@/design-system/product-materials.css'
 
 type Category = 'necklace' | 'ring' | 'earring' | 'bracelet'
 type UsageStatus = 'unused' | 'used'

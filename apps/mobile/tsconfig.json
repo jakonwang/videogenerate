@@ -16,6 +16,7 @@
       "vue": ["./node_modules/vue"],
       "vue-router": ["./node_modules/vue-router"],
       "lucide-vue-next": ["./node_modules/lucide-vue-next"],
+      "qrcode": ["./node_modules/@types/qrcode"],
       "@shared/*": ["../../src/shared/*"]
     }
   },

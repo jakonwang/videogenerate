@@ -38,7 +38,8 @@ function draggedFiles(event: DragEvent) {
 export function installFileDrop() {
   // Without this the browser would navigate to a dropped file and leave the app.
   window.addEventListener('dragover', (event) => {
-    if (!draggedFiles(event)) return
+    // A page with its own drop zone (e.g. desktop pages reused on the web) already accepted the drag.
+    if (!draggedFiles(event) || event.defaultPrevented) return
     event.preventDefault()
     // Types are known while dragging, the files themselves only on drop: match by the input that is there.
     let node = event.target instanceof Element ? event.target : null
@@ -56,6 +57,7 @@ export function installFileDrop() {
   })
   window.addEventListener('drop', (event) => {
     if (!draggedFiles(event)) return
+    if (event.defaultPrevented) return highlight(null)
     event.preventDefault()
     highlight(null)
     const files = Array.from(event.dataTransfer?.files || [])

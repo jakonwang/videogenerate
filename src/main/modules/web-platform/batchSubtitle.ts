@@ -19,10 +19,7 @@ import {
   isCapcutMateConfigured,
   saveCapcutDraft,
 } from './capcutMate'
-import {
-  generateBatchSubtitlePreviewFrameByRemotion,
-} from './batchSubtitleRemotion'
-import { renderBatchSubtitleVideoWithBitmapOverlay } from './batchSubtitleBitmap'
+import { generateBatchSubtitlePreviewFrame, renderBatchSubtitleVideoWithBitmapOverlay } from './batchSubtitleBitmap'
 import type {
   BatchSubtitleCaptionStyle,
   BatchSubtitleCue,
@@ -313,7 +310,33 @@ function normalizeOverlayImageConfig(
     maxWidthRatio: Math.max(0.4, Math.min(0.92, Number(merged.maxWidthRatio || style.maxWidthRatio || base.maxWidthRatio))),
     lineGap: Math.max(0, Math.min(40, Number(merged.lineGap || style.lineGap || base.lineGap))),
     bottomMargin: Math.max(48, Math.min(600, Number(merged.bottomMargin || style.bottomMargin || base.bottomMargin))),
+    fontWeight: normalizeFontWeight(merged.fontWeight ?? style.fontWeight),
+    offsetYRatio: normalizeOffsetY(merged.offsetYRatio !== undefined ? merged.offsetYRatio : style.offsetYRatio),
+    positionJitter: Math.max(0, Math.min(0.15, Number(merged.positionJitter ?? style.positionJitter ?? 0) || 0)),
+    offsetXRatio: normalizeOffsetY(merged.offsetXRatio !== undefined ? merged.offsetXRatio : style.offsetXRatio),
+    secondaryScale: Math.max(0.4, Math.min(1, Number(merged.secondaryScale ?? style.secondaryScale ?? 0.68) || 0.68)),
   }
+}
+
+function normalizeFontWeight(value: unknown) {
+  const weight = Number(value)
+  return weight === 400 || weight === 600 || weight === 700 || weight === 900 ? weight : 900
+}
+
+function normalizeOffsetY(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const ratio = Number(value)
+  return Number.isFinite(ratio) ? Math.max(0.05, Math.min(0.95, ratio)) : null
+}
+
+/** 每条视频的位置微调（批量发同款时画面不完全一样）：按视频 id 算，同一条视频每次都一样 */
+function positionShiftPx(job: BatchSubtitleJob, sourceItemId: string) {
+  const jitter = Number(job.overlayImageConfig?.positionJitter ?? job.captionStyle.positionJitter ?? 0) || 0
+  if (!jitter) return 0
+  let hash = 0
+  for (const char of String(sourceItemId)) hash = (hash * 31 + char.charCodeAt(0)) | 0
+  const unit = ((Math.abs(hash) % 2001) / 1000) - 1
+  return Math.round(unit * jitter * CANVAS_HEIGHT)
 }
 
 type BatchSubtitlePluginConfig = {
@@ -1398,6 +1421,11 @@ async function renderSingleOutputBitmap(input: {
       maxWidthRatio: job.overlayImageConfig?.maxWidthRatio || job.captionStyle.maxWidthRatio,
       lineGap: job.overlayImageConfig?.lineGap || job.captionStyle.lineGap,
       bottomMargin: job.overlayImageConfig?.bottomMargin || job.captionStyle.bottomMargin,
+      fontWeight: job.overlayImageConfig?.fontWeight ?? job.captionStyle.fontWeight,
+      offsetYRatio: job.overlayImageConfig?.offsetYRatio !== undefined ? job.overlayImageConfig.offsetYRatio : job.captionStyle.offsetYRatio,
+        offsetXRatio: job.overlayImageConfig?.offsetXRatio !== undefined ? job.overlayImageConfig.offsetXRatio : job.captionStyle.offsetXRatio,
+        secondaryScale: job.overlayImageConfig?.secondaryScale ?? job.captionStyle.secondaryScale,
+      shiftYPx: positionShiftPx(job, sourceItem.id),
       lineMode: 'multi',
     },
     outputDir,
@@ -1875,7 +1903,8 @@ export async function previewBatchSubtitleFrame(input: {
       typeof input.previewAtSec === 'number'
         ? input.previewAtSec
         : 1
-    const bitmap = await generateBatchSubtitlePreviewFrameByRemotion({
+    // 预览和成片用同一个标题渲染（SVG 叠图 + ffmpeg），所见即所得；也不用再起无界面 Chrome，轻很多
+    const bitmap = await generateBatchSubtitlePreviewFrame({
       sourceItem,
       titleConfig: {
         strategy: 'single_for_all',
@@ -1898,9 +1927,12 @@ export async function previewBatchSubtitleFrame(input: {
         maxWidthRatio: job.overlayImageConfig?.maxWidthRatio || job.captionStyle.maxWidthRatio,
         lineGap: job.overlayImageConfig?.lineGap || job.captionStyle.lineGap,
         bottomMargin: job.overlayImageConfig?.bottomMargin || job.captionStyle.bottomMargin,
+        fontWeight: job.overlayImageConfig?.fontWeight ?? job.captionStyle.fontWeight,
+        offsetYRatio: job.overlayImageConfig?.offsetYRatio !== undefined ? job.overlayImageConfig.offsetYRatio : job.captionStyle.offsetYRatio,
+        offsetXRatio: job.overlayImageConfig?.offsetXRatio !== undefined ? job.overlayImageConfig.offsetXRatio : job.captionStyle.offsetXRatio,
+        secondaryScale: job.overlayImageConfig?.secondaryScale ?? job.captionStyle.secondaryScale,
         lineMode: 'multi',
       },
-      overlayConfig: job.overlayImageConfig,
       previewAtSec,
       includeVideo: input.includeVideo === true,
     })
@@ -1974,21 +2006,34 @@ export async function generateBatchSubtitleTitles(input: {
   contentLanguage?: string
 }) {
   const credentials = await cloneRepo.getCredentials()
-  const language = String(input.contentLanguage || 'zh-CN').trim()
-  const ask =
-    language === 'en-US'
-      ? `Generate ${Math.max(3, Math.min(12, Number(input.count || 6)))} short TikTok title candidates in English, one title per line, no numbering. Topic: ${input.prompt}`
-      : `生成 ${Math.max(3, Math.min(12, Number(input.count || 6)))} 条适合短视频标题贴片的文案，每行一条，不要编号。主题：${input.prompt}`
+  const count = Math.max(3, Math.min(12, Number(input.count || 6)))
+  // 页面传 Vietnamese / English / Chinese，也兼容 vi / en-US / zh-CN（以前只认 en-US，选越南语也会出中文）
+  const raw = String(input.contentLanguage || 'zh').trim().toLowerCase()
+  const language = raw.startsWith('vi') ? 'Vietnamese' : raw.startsWith('en') ? 'English' : 'Chinese'
+  // 写法照着投放效果好的带货视频：短、口语、像跟朋友说话，结尾一个表情
+  const system = [
+    'You write the on-screen caption for TikTok product videos (jewellery, accessories, small goods).',
+    'Write like a real person talking to friends, not like an advert.',
+    'Rules for every caption:',
+    `- Language: ${language}.`,
+    '- 3 to 8 words (Chinese: 6 to 14 characters). One idea only.',
+    '- Casual spoken tone; natural slang is fine (Vietnamese e.g. "nha", "mấy bà", "xỉu", "lun").',
+    '- End with exactly one fitting emoji such as ✨ 🔥 🤩 😍 🥰 😚 💖.',
+    '- No hashtags, no quotes, no prices or discounts unless given, no numbering, no explanation.',
+    '- Vary the angle: how it looks when worn, a compliment, a small product detail, a surprise, everyday use.',
+    'Examples of the style (Vietnamese): "Đeo ngược vẫn đẹp lun nha mấy bà 🤩", "Tai có xíu khuyên trông xinh hẳn ✨", "Khuyên tai đẹp zậy bảo sao mà hot 😚", "Basic sang tai 🔥", "Không han gỉ nhá, sáng lấp lánh ✨".',
+    'Output only the captions, one per line.',
+  ].join('\n')
   const result = await generateChatCompletion({
     credentials,
-    system: '只输出标题候选，每行一条，不要解释。',
-    prompt: ask,
+    system,
+    prompt: `Write ${count} different captions. Product and selling points: ${input.prompt}`,
   })
   const titles = String(result.content || '')
     .split(/\r?\n/)
-    .map((item) => item.replace(/^[\d.\-\s]+/, '').trim())
+    .map((item) => item.replace(/^[\d.\-\s*•]+/, '').replace(/^["'“”「」]+|["'“”「」]+$/g, '').trim())
     .filter(Boolean)
-    .slice(0, Math.max(3, Math.min(12, Number(input.count || 6))))
+    .slice(0, count)
   return {
     titles,
     content: result.content,

@@ -1,7 +1,7 @@
 /**
  * 服务器上的复刻引擎（每个用户一个子进程，由 ../src/cloneEngine.ts 启动）。
  *
- * 跑的是电脑端同一套复刻代码（registerCloneIpc 注册的处理函数 + cloneService），数据放在这个用户自己的目录里，
+ * 跑的是电脑端同一套复刻、图生视频、批量字幕代码（registerCloneIpc / registerLivePhotoIpc 注册的处理函数、本地 Web API），数据放在这个用户自己的目录里，
  * 用后台配置的平台密钥生成。项目、商品、模特经云端同步和电脑端互通（cloud-sync 的 clone-engine 模式）。
  *
  * 父进程消息：init（会话、密钥）→ call（ns、method、args）；回复 ready / result。
@@ -27,6 +27,10 @@ const SERVER_BLOCKED = new Set([
   'clone:sendProjectToCreative',
   'clone:sendShotToCreative',
 ])
+/** 要用 Remotion 渲染字幕的操作：先向父进程申请渲染名额（全服务器限量） */
+const RENDER_CHANNELS = new Set(['plugin:livePhoto:generateSubtitleVideosForItems'])
+/** 网页调用的命名空间 → 电脑端 IPC 前缀 */
+const CHANNEL_PREFIX: Record<string, string> = { clone: 'clone:', livePhoto: 'plugin:livePhoto:' }
 const READ_ONLY = /^(get|list|describe)[A-Z]/
 
 const handlers = new Map<string, Handler>()
@@ -38,7 +42,45 @@ let lastSyncAt = 0
 async function runSync() {
   const sync = await import('../../../src/main/modules/cloud-sync/service')
   await sync.runCloudSync().catch(() => undefined)
+  await publishLivePhotoOutputs().catch((error) => console.warn('[clone-engine] publish live photo outputs failed', (error as Error)?.message || error))
   lastSyncAt = Date.now()
+}
+
+/* ------------------------------------------------------------------ 图生视频成片 → 作品库 / 审核收件箱 */
+
+/**
+ * 做好的图生视频上传到云端，记一条 generations（purpose = image-to-video），网页和手机的作品库、审核收件箱都能看到。
+ * 已发布的记在这个用户目录的 live-photo-published.json（换了成片文件会重新发布，同一条记录覆盖）。
+ */
+async function publishLivePhotoOutputs() {
+  const client = (globalThis as { __cloneEngineClient?: { sync: { push(changes: unknown[]): Promise<unknown>; uploadFile(body: Blob, mime: string): Promise<{ fileId: string }> } } }).__cloneEngineClient
+  if (!client) return
+  const { readFile: read } = await import('node:fs/promises')
+  const { livePhotoRepo } = await import('../../../src/main/modules/live-photo/repo')
+  const stateFile = join(process.env.VIDEOGENERATE_DATA_DIR!, 'live-photo-published.json')
+  const published: Record<string, string> = existsSync(stateFile) ? JSON.parse(await read(stateFile, 'utf8').catch(() => '{}')) : {}
+  let changed = false
+  for (const item of await livePhotoRepo.list()) {
+    if (item.packagingStatus !== 'completed') continue
+    const videoPath = [item.livePhotoVideoPath, item.previewVideoPath, item.motionVideoPath].map((path) => String(path || '').trim()).find((path) => path && existsSync(path))
+    if (!videoPath || published[item.id] === videoPath) continue
+    const video = await client.sync.uploadFile(new Blob([new Uint8Array(await read(videoPath))], { type: 'video/mp4' }), 'video/mp4')
+    const posterPath = [item.posterPath, item.generatedStillPath].map((path) => String(path || '').trim()).find((path) => path && existsSync(path))
+    const poster = posterPath ? await client.sync.uploadFile(new Blob([new Uint8Array(await read(posterPath))], { type: 'image/jpeg' }), 'image/jpeg').catch(() => null) : null
+    const productName = String((item.productSnapshot as { name?: string } | undefined)?.name || '').trim() || undefined
+    await client.sync.push([
+      {
+        collection: 'generations',
+        id: `lp_${item.id}`.slice(0, 64),
+        updatedAt: Date.now(),
+        deleted: false,
+        data: { kind: 'video', purpose: 'image-to-video', jobId: '', status: 'succeeded', productName, sourceFileId: poster?.fileId || video.fileId, label: productName ? `图生视频 · ${productName}` : '图生视频', outputFileId: video.fileId, outputMime: 'video/mp4', review: 'pending', createdAt: Number(item.createdAt) || Date.now() },
+      },
+    ])
+    published[item.id] = videoPath
+    changed = true
+  }
+  if (changed) await writeFile(stateFile, JSON.stringify(published), 'utf8')
 }
 
 /** 打开列表 / 项目前，取一下电脑端最近的改动（最多等几秒） */
@@ -85,12 +127,13 @@ async function init(message: InitMessage) {
   installFetchMeter(message.baseUrl)
   const dataDir = process.env.VIDEOGENERATE_DATA_DIR!
   await mkdir(join(dataDir, 'db'), { recursive: true })
-  const [{ createCloudClient }, sync, { cloneService }, { registerCloneIpc }, { registerClonePromptTemplatesIpc }] = await Promise.all([
+  const [{ createCloudClient }, sync, { cloneService }, { registerCloneIpc }, { registerClonePromptTemplatesIpc }, { registerLivePhotoIpc }] = await Promise.all([
     import('../../../src/shared/cloud/client'),
     import('../../../src/main/modules/cloud-sync/service'),
     import('../../../src/main/modules/clone/service'),
     import('../../../src/main/ipc/registerCloneIpc'),
     import('../../../src/main/ipc/registerClonePromptTemplatesIpc'),
+    import('../../../src/main/ipc/registerLivePhotoIpc'),
   ])
   const client = createCloudClient({ getBaseUrl: () => message.baseUrl, getToken: () => message.token })
   ;(globalThis as { __cloneEngineClient?: unknown }).__cloneEngineClient = client
@@ -104,12 +147,27 @@ async function init(message: InitMessage) {
   const host = { handle: (channel: string, handler: Handler) => void handlers.set(channel, handler) }
   registerCloneIpc(host as never)
   registerClonePromptTemplatesIpc(host as never)
+  registerLivePhotoIpc(host as never)
   for (const channel of SERVER_BLOCKED) handlers.delete(channel)
 
   // The first sync brings in projects / products made on the computer; don't keep the page waiting too long for it.
   await Promise.race([runSync(), new Promise((resolve) => setTimeout(resolve, 20_000))])
   setInterval(() => void runSync(), 30_000).unref()
   setInterval(() => void maybeExit(message.idleMs), 60_000).unref()
+  // 和电脑端启动时一样：上次退出时还没做完的图生视频任务接着做
+  void import('../../../src/main/modules/live-photo/service')
+    .then(({ livePhotoService }) => livePhotoService.resumePendingTasksOnStartup())
+    .catch((error) => console.warn('[clone-engine] live photo resume failed', (error as Error)?.message || error))
+}
+
+/** 有图生视频任务在跑（或 3 分钟内有改动）时不退出：任务在这个进程里后台执行 */
+async function livePhotoBusy() {
+  const { livePhotoService } = await import('../../../src/main/modules/live-photo/service')
+  const running = (await livePhotoService.listSummaries({ filter: 'running', page: 1, pageSize: 1 }).catch(() => null)) as { total?: number; items?: unknown[] } | null
+  if (running && (Number(running.total) > 0 || (running.items?.length ?? 0) > 0)) return true
+  const { livePhotoRepo } = await import('../../../src/main/modules/live-photo/repo')
+  const items = await livePhotoRepo.list().catch(() => [])
+  return items.some((item) => Date.now() - Number(item.updatedAt || 0) < 3 * 60_000)
 }
 
 /** 改动之后尽快推送，让电脑端也看到 */
@@ -127,7 +185,7 @@ async function maybeExit(idleMs: number) {
   const { cloneRepo } = await import('../../../src/main/modules/clone/repo')
   const projects = await cloneRepo.listRawProjects().catch(() => [])
   const busy = projects.some((project) => project.status === 'generating' || Date.now() - Number(project.updatedAt || 0) < 3 * 60_000)
-  if (busy) return
+  if (busy || (await livePhotoBusy())) return
   await runSync()
   process.exit(0)
 }
@@ -174,21 +232,107 @@ function assertOwnPaths(value: unknown) {
   check(value)
 }
 
+/* ------------------------------------------------------------------ 渲染名额（父进程统一分配） */
+
+const slotWaiters = new Map<string, () => void>()
+let slotSeq = 0
+async function withRenderSlot<T>(run: () => Promise<T> | T): Promise<T> {
+  const id = `r${++slotSeq}`
+  await new Promise<void>((resolveSlot) => {
+    slotWaiters.set(id, resolveSlot)
+    send({ type: 'slot', id })
+  })
+  try {
+    return await run()
+  } finally {
+    send({ type: 'slotDone', id })
+  }
+}
+
+/* ------------------------------------------------------------------ 电脑端本地 Web API（批量字幕页面用） */
+
+/**
+ * 电脑端「视频批量字幕」页面调用的是本机 Web API（src/main/modules/web-platform/webApiRouter.ts）。
+ * 这里在子进程里起同一个 API（只监听 127.0.0.1 的随机端口），网页的请求原样转过来；不带登录令牌，
+ * 由 web-platform 用本机默认用户处理——每个子进程只属于一个用户、数据在他自己的目录里。
+ * 只开放批量字幕插件和复刻项目列表；用 node:http 发请求，不经过 fetch 计数（真正的 AI 请求在 API 里面照常计数）。
+ */
+type WebApiRequest = { method?: string; path?: string; body?: unknown }
+const WEB_API_ALLOWED = [/^\/plugins\/video-batch-subtitle(\/[a-zA-Z0-9_%.-]+)*$/, /^\/clone\/projects$/]
+const WEB_API_RENDER = /^\/plugins\/video-batch-subtitle\/(preview-frame|jobs\/[^/]+\/(run|resume))$/
+let webApiPort: Promise<number> | null = null
+
+async function ensureWebApi() {
+  webApiPort ??= (async () => {
+    const http = await import('node:http')
+    const { handleWebApiRequest } = await import('../../../src/main/modules/web-platform/webApiRouter')
+    const server = http.createServer((req, res) => void handleWebApiRequest(req, res))
+    await new Promise<void>((resolveListen, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => resolveListen())
+    })
+    return (server.address() as { port: number }).port
+  })()
+  return webApiPort
+}
+
+async function webApiRequest(input: WebApiRequest) {
+  const method = String(input.method || 'GET').toUpperCase()
+  const path = String(input.path || '').split('?')[0]!
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new Error('请求方法不合法')
+  if (!WEB_API_ALLOWED.some((re) => re.test(path))) throw new Error('服务器上没有这个功能')
+  if (path === '/clone/projects' && method !== 'GET') throw new Error('服务器上没有这个功能')
+  const port = await ensureWebApi()
+  const send = async () => {
+    const http = await import('node:http')
+    const body = input.body === undefined || method === 'GET' ? undefined : JSON.stringify(input.body)
+    return await new Promise<{ status: number; text: string }>((resolveReq, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, path: String(input.path), method, headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {} }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk: Buffer) => chunks.push(chunk))
+        res.on('end', () => resolveReq({ status: res.statusCode || 0, text: Buffer.concat(chunks).toString('utf8') }))
+        res.on('error', reject)
+      })
+      req.on('error', reject)
+      if (body) req.write(body)
+      req.end()
+    })
+  }
+  const response = WEB_API_RENDER.test(path) ? await withRenderSlot(send) : await send()
+  let payload: { ok?: boolean; error?: string } & Record<string, unknown>
+  try {
+    payload = JSON.parse(response.text || '{}')
+  } catch {
+    throw new Error(`请求失败: ${response.status}`)
+  }
+  if (response.status >= 400 || payload.ok === false) throw new Error(String(payload.error || `请求失败: ${response.status}`))
+  return payload
+}
+
 async function handle(message: CallMessage): Promise<unknown> {
   const { materializeCloudFileArgs } = await import('../../../src/main/modules/cloud-sync/relayWorker')
   const args = await materializeCloudFileArgs(Array.isArray(message.args) ? message.args : [], downloadCloudFile)
-  assertOwnPaths(args)
+  // webApi: the API path itself ("/plugins/…") is not a file; only the request body can carry file paths.
+  assertOwnPaths(message.ns === 'webApi' ? (args[0] as WebApiRequest | undefined)?.body : args)
   if (message.ns === 'media' && message.method === 'publish') return publishMedia((args[0] ?? {}) as { path?: string; width?: number })
+  if (message.ns === 'webApi' && message.method === 'request') return webApiRequest((args[0] ?? {}) as WebApiRequest)
   if (message.ns === 'products' && message.method === 'list') {
     const { productsRepo } = await import('../../../src/main/modules/products/repo')
     return productsRepo.list()
   }
-  if (message.ns !== 'clone') throw new Error('服务器上没有这个功能')
-  const channel = `clone:${message.method}`
+  const prefix = CHANNEL_PREFIX[message.ns]
+  if (!prefix) throw new Error('服务器上没有这个功能')
+  const channel = `${prefix}${message.method}`
+  // 导出：只能导到这个用户自己的目录（网页再从这里下载）
+  if (channel === 'plugin:livePhoto:exportItems' && args[0] && typeof args[0] === 'object') {
+    const { getAppPaths } = await import('../../../src/main/lib/paths')
+    ;(args[0] as { outputDir?: string }).outputDir = join(getAppPaths().dataDir, 'exports', 'live-photo', String(Date.now()))
+  }
   const handler = handlers.get(channel)
   if (handler && REFRESH_BEFORE.has(channel)) await syncIfStale()
   if (!handler) throw new Error(SERVER_BLOCKED.has(channel) ? '这个操作需要在电脑端完成' : `服务器上没有这个操作：${message.method}`)
-  const result = await handler({ sender: { send: () => undefined } }, ...args)
+  const run = () => handler({ sender: { send: () => undefined } }, ...args)
+  const result = RENDER_CHANNELS.has(channel) ? await withRenderSlot(run) : await run()
   if (!READ_ONLY.test(message.method)) scheduleSync()
   return result
 }
@@ -198,6 +342,12 @@ process.on('message', (raw: unknown) => {
   if (message?.type === 'init') {
     ready = init(message)
     ready.then(() => send({ type: 'ready' })).catch((error) => send({ type: 'fatal', error: String((error as Error)?.message || error) }))
+    return
+  }
+  if ((message as { type?: string })?.type === 'slotGranted') {
+    const id = String((message as unknown as { id: string }).id)
+    slotWaiters.get(id)?.()
+    slotWaiters.delete(id)
     return
   }
   if ((message as { type?: string })?.type === 'meterResult') {

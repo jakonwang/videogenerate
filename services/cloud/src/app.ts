@@ -68,6 +68,8 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     meter: (userId) => ai.cloneEngine.meter(userId),
     maxWorkers: Math.max(1, config.cloneEngineMaxWorkers),
     idleMs: Math.max(1, config.cloneEngineIdleMinutes) * 60_000,
+    renderSlots: config.subtitleRenderSlots,
+    fontsDir: config.fontsDir,
   })
   const aiProxy = createAiProxy({
     db,

@@ -40,5 +40,7 @@ function copyFonts() {
 }
 
 copyFonts()
+// 常用表情图片（批量字幕渲染用），放在 fonts/emoji 下，和字体一起被找到
+copyDir('emoji', 'fonts/emoji')
 copyDir('luts', 'luts')
 copyDir('stickers', 'stickers')

@@ -33,6 +33,10 @@ export const useCloudAuthStore = defineStore('cloudAuth', () => {
         status.value = next
       })
       return value
+    }).catch((error) => {
+      // 失败不要缓存，否则之后每次切换页面都拿到同一个失败结果
+      loading = null
+      throw error
     })
     return loading
   }

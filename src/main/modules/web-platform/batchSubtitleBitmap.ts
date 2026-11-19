@@ -1,14 +1,15 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 import * as fontkitModule from 'fontkit'
 import { getAppPaths } from '../../lib/paths'
-import { resolveSubtitleRenderFont } from '../../lib/fontResolve'
+import { bundledEmojiDir, resolveSubtitleRenderFont } from '../../lib/fontResolve'
 import { probeMedia } from '../ffmpeg/probe'
 import { getMediaInfo } from '../media/info'
 import { runFfmpeg } from '../ffmpeg/runner'
 import type { BatchSubtitleSourceItem, BatchSubtitleStyleConfig, BatchSubtitleTitleConfig } from './types'
+import { layoutTitle, titleBoldPx } from '../../../shared/subtitleTitleLayout'
 
 const CANVAS_WIDTH = 1080
 const CANVAS_HEIGHT = 1920
@@ -20,6 +21,8 @@ type SubtitleSceneLine = {
   role: 'primary' | 'secondary'
   fontSize: number
   lineHeight: number
+  /** 这一行左边的 x（共用排版算好的） */
+  x: number
 }
 
 type SubtitleSceneRun = {
@@ -50,6 +53,10 @@ type SubtitleSceneSpec = {
   shadowBlur: number
   lineGapPx: number
   lines: SubtitleSceneLine[]
+  /** 第一行顶部的 y（来自共用排版，含自定义位置和每条视频的位置微调） */
+  startY: number
+  /** 字重：素材字体只有常规体，用同色描边加粗（0 = 不加粗） */
+  boldPx: number
 }
 
 const DEFAULT_TEXT_FONT_FALLBACK =
@@ -65,17 +72,16 @@ const fontkit = fontkitModule as unknown as { openSync: (path: string) => any }
 const runtimeRequire = createRequire(import.meta.url)
 const overlayGenerationLocks = new Map<string, Promise<string>>()
 
-function sanitizePathSegment(value: string, fallback: string) {
-  const cleaned = String(value || '')
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return cleaned || fallback
+/** 预览目录名：用来源 id 的短哈希（来源 id 可能带 64 位文件哈希，整段当目录名会超出 Windows 路径长度） */
+function shortPreviewKey(sourceItem: Pick<BatchSubtitleSourceItem, 'id' | 'sourceVideoPath'>) {
+  return createHash('sha1').update(String(sourceItem.id || sourceItem.sourceVideoPath || randomUUID())).digest('hex').slice(0, 16)
 }
 
 function createOverlayCacheKey(selectedTitle: string, styleConfig: BatchSubtitleStyleConfig) {
   const payload = JSON.stringify({
+    // Bump when the overlay layout changes so old cached overlays are not reused (2: titles wrap to the box width;
+    // 3: shared layout with the page preview, shrinks the text to fit maxLines).
+    layoutVersion: 4,
     selectedTitle: String(selectedTitle || '').trim(),
     styleConfig: {
       fontName: styleConfig.fontName,
@@ -93,6 +99,11 @@ function createOverlayCacheKey(selectedTitle: string, styleConfig: BatchSubtitle
       lineGap: styleConfig.lineGap,
       bottomMargin: styleConfig.bottomMargin,
       lineMode: styleConfig.lineMode,
+      fontWeight: styleConfig.fontWeight,
+      offsetYRatio: styleConfig.offsetYRatio,
+      shiftYPx: styleConfig.shiftYPx,
+      offsetXRatio: styleConfig.offsetXRatio,
+      secondaryScale: styleConfig.secondaryScale,
     },
   })
   return createHash('sha1').update(payload).digest('hex')
@@ -159,18 +170,6 @@ function normalizeSelectedTitle(titleConfig: BatchSubtitleTitleConfig) {
   return String(titleConfig.singleText || '').trim()
 }
 
-function splitPreviewLines(selectedTitle: string, lineMode: BatchSubtitleStyleConfig['lineMode']) {
-  const lines = String(selectedTitle || '')
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  if (lineMode === 'single') {
-    return lines.slice(0, 1).map((text) => ({ text, secondary: false }))
-  }
-  return lines.slice(0, 4).map((text, index) => ({ text, secondary: index > 0 }))
-}
-
 function isEmojiChar(char: string) {
   return /\p{Extended_Pictographic}/u.test(char) || /\p{Emoji_Presentation}/u.test(char)
 }
@@ -195,13 +194,23 @@ function splitRuns(text: string): SubtitleSceneRun[] {
 function toEmojiCodepointSequence(value: string) {
   return Array.from(String(value || ''))
     .map((char) => char.codePointAt(0)?.toString(16))
-    .filter(Boolean)
+    .filter((hex) => hex && hex !== 'fe0f')
     .join('-')
 }
 
 async function readCachedEmojiDataUri(emoji: string) {
   const sequence = toEmojiCodepointSequence(emoji)
   if (!sequence) return null
+  // 先用随软件带的（离线、国内网络也能用），没有再去 CDN 下载
+  const bundled = bundledEmojiDir()
+  if (bundled) {
+    try {
+      const svg = await readFile(join(bundled, `${sequence}.svg`), 'utf8')
+      return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`
+    } catch {
+      // 不在常用表情里
+    }
+  }
   const cacheDir = join(getAppPaths().dataDir, 'emoji-cache', 'twemoji-svg')
   const cachePath = join(cacheDir, `${sequence}.svg`)
   try {
@@ -240,6 +249,10 @@ function measureTextWidth(text: string, fontPath: string | null, fontSize: numbe
   }
 }
 
+/**
+ * 用字体文件里的字形轮廓画一段文字（不依赖系统字体，服务器上也一样）。分三层返回，整行画完再叠：
+ * 阴影 → 描边 → 文字本身，避免后一个字的描边盖住前一个字。boldPx > 0 时用同色描边模拟加粗。
+ */
 function buildFontPathNodes(input: {
   text: string
   fontPath: string | null
@@ -250,7 +263,9 @@ function buildFontPathNodes(input: {
   stroke: string
   strokeWidth: number
   shadowColor: string
-}) {
+  shadowOffset: number
+  boldPx: number
+}): { shadow: string; outline: string; fill: string } | null {
   if (!input.text || !input.fontPath) return null
   try {
     const font = fontkit.openSync(input.fontPath)
@@ -258,7 +273,9 @@ function buildFontPathNodes(input: {
     const unitsPerEm = Number(font.unitsPerEm || 1000)
     const scale = input.fontSize / Math.max(1, unitsPerEm)
     let cursorX = 0
-    const nodes: string[] = []
+    const shadow: string[] = []
+    const outline: string[] = []
+    const fill: string[] = []
     for (let index = 0; index < layout.glyphs.length; index += 1) {
       const glyph = layout.glyphs[index]
       const position = layout.positions[index] || {}
@@ -273,14 +290,18 @@ function buildFontPathNodes(input: {
       const glyphX = input.x + (cursorX + xOffset) * scale
       const glyphY = input.baselineY - yOffset * scale
       const transform = `translate(${glyphX} ${glyphY}) scale(${scale} -${scale})`
-      const shadowTransform = `translate(${glyphX} ${glyphY + Math.max(2, input.strokeWidth * 0.45)}) scale(${scale} -${scale})`
-      nodes.push(
-        `<path d="${pathData}" transform="${shadowTransform}" fill="${escapeXml(input.shadowColor)}" fill-opacity="0.34" stroke="none" />`,
-        `<path d="${pathData}" transform="${transform}" fill="${escapeXml(input.fill)}" stroke="${escapeXml(input.stroke)}" stroke-width="${input.strokeWidth}" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" paint-order="stroke fill" />`,
-      )
+      const shadowTransform = `translate(${glyphX} ${glyphY + input.shadowOffset}) scale(${scale} -${scale})`
+      const body = input.boldPx > 0 ? ` stroke="${escapeXml(input.fill)}" stroke-width="${input.boldPx}" stroke-linejoin="round" vector-effect="non-scaling-stroke"` : ' stroke="none"'
+      shadow.push(`<path d="${pathData}" transform="${shadowTransform}" fill="${escapeXml(input.shadowColor)}"${input.boldPx > 0 ? ` stroke="${escapeXml(input.shadowColor)}" stroke-width="${input.boldPx}" vector-effect="non-scaling-stroke"` : ''} />`)
+      if (input.strokeWidth > 0) {
+        outline.push(
+          `<path d="${pathData}" transform="${transform}" fill="${escapeXml(input.stroke)}" stroke="${escapeXml(input.stroke)}" stroke-width="${input.strokeWidth + input.boldPx}" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />`,
+        )
+      }
+      fill.push(`<path d="${pathData}" transform="${transform}" fill="${escapeXml(input.fill)}"${body} />`)
       cursorX += advanceWidth
     }
-    return nodes.join('')
+    return { shadow: shadow.join(''), outline: outline.join(''), fill: fill.join('') }
   } catch {
     return null
   }
@@ -361,22 +382,28 @@ function batchSubtitleBitmapEncodeArgs(mode: 'preview' | 'output') {
   return ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '23'] as string[]
 }
 
+/** Width of a piece of title text as drawn (emoji are drawn as square images). */
+function measureTitleText(text: string, fontPath: string | null, fontSize: number) {
+  return splitRuns(text).reduce((sum, run) => sum + (run.kind === 'emoji' ? Math.round(fontSize * EMOJI_IMAGE_BOX_RATIO) : measureTextWidth(run.text, fontPath, fontSize)), 0)
+}
+
 function buildSubtitleSceneSpec(selectedTitle: string, styleConfig: BatchSubtitleStyleConfig): SubtitleSceneSpec {
-  const mainSize = Math.max(18, Math.min(160, Math.round(styleConfig.fontSize)))
-  const secondarySize = Math.max(16, Math.round(mainSize * 0.68))
+  // Line breaks, sizes and the maxLines shrink come from the layout shared with the page's live preview
+  // (shared/subtitleTitleLayout.ts), so the rendered video matches what the user saw.
   const safeMarginPx = Math.max(48, Math.min(360, 180 + Math.round(styleConfig.safeMargin * 12)))
   const bottomMarginPx = Math.max(48, Math.min(900, Math.round(styleConfig.bottomMargin || 220)))
   const lineGapPx = Math.max(0, Math.min(40, Math.round(styleConfig.lineGap || 8)))
-  const lines = splitPreviewLines(selectedTitle, styleConfig.lineMode).map((line) => {
-    const fontSize = line.secondary ? secondarySize : mainSize
-    const lineHeight = Math.round(fontSize * (line.secondary ? 1.12 : 1.08))
-    return {
-      runs: splitRuns(line.text),
-      role: line.secondary ? ('secondary' as const) : ('primary' as const),
-      fontSize,
-      lineHeight,
-    }
-  })
+  const fontPath = resolveSubtitleRenderFont(styleConfig.fontName).path
+  const layout = layoutTitle(selectedTitle, styleConfig, (text, size) => measureTitleText(text, fontPath, size))
+  const firstLine = layout.lines[0]
+  const startY = firstLine ? firstLine.baselineY - firstLine.lineHeight : safeMarginPx
+  const lines = layout.lines.map((line) => ({
+    runs: splitRuns(line.text),
+    role: line.secondary ? ('secondary' as const) : ('primary' as const),
+    fontSize: line.fontSize,
+    lineHeight: line.lineHeight,
+    x: line.x,
+  }))
   return {
     canvasWidth: CANVAS_WIDTH,
     canvasHeight: CANVAS_HEIGHT,
@@ -393,6 +420,8 @@ function buildSubtitleSceneSpec(selectedTitle: string, styleConfig: BatchSubtitl
     shadowBlur: Math.max(0, Number(styleConfig.shadowBlur || 0)),
     lineGapPx,
     lines,
+    startY,
+    boldPx: titleBoldPx(styleConfig.fontWeight, layout.lines[0]?.fontSize ?? styleConfig.fontSize),
   }
 }
 
@@ -400,12 +429,6 @@ function resolveX(textAlign: BatchSubtitleStyleConfig['textAlign'], safeMarginPx
   if (textAlign === 'left') return safeMarginPx
   if (textAlign === 'right') return CANVAS_WIDTH - safeMarginPx
   return CANVAS_WIDTH / 2
-}
-
-function resolveY(position: BatchSubtitleStyleConfig['position'], safeMarginPx: number, bottomMarginPx: number, totalHeight: number) {
-  if (position === 'center') return Math.round((CANVAS_HEIGHT - totalHeight) / 2)
-  if (position === 'bottom') return CANVAS_HEIGHT - bottomMarginPx - totalHeight
-  return safeMarginPx
 }
 
 async function buildSubtitleOverlaySvg(
@@ -416,12 +439,18 @@ async function buildSubtitleOverlaySvg(
   const gap = scene.lineGapPx
   const totalHeight = scene.lines.reduce((sum, line) => sum + line.lineHeight, 0) + gap * Math.max(0, scene.lines.length - 1)
   const x = resolveX(scene.alignment, 72)
-  const startY = resolveY(scene.anchor, scene.safeMarginPx, scene.bottomMarginPx, totalHeight)
+  void totalHeight
+  const startY = scene.startY
   const shadowId = `shadow-${randomUUID()}`
   const embeddedFonts = options?.rasterizeFriendly ? null : await resolveEmbeddedFontFaces(styleConfig)
   const resolvedTextFont = resolveSubtitleRenderFont(styleConfig.fontName)
   let currentY = startY
   const textNodes: string[] = []
+  const shadowLayer: string[] = []
+  const outlineLayer: string[] = []
+  const fillLayer: string[] = []
+  // 阴影：往下偏一点，模糊程度跟「阴影模糊」走（以前固定不模糊，和页面预览不一致）
+  const shadowOffset = Math.max(2, Math.round(scene.strokeWidth * 0.45 + scene.shadowBlur * 0.15))
   for (const line of scene.lines) {
     const fontSize = line.fontSize
     const lineHeight = line.lineHeight
@@ -448,14 +477,20 @@ async function buildSubtitleOverlaySvg(
       })
     }
     const lineWidth = drawRuns.reduce((sum, run) => sum + run.width, 0)
-    let cursorX =
-      scene.alignment === 'left'
-        ? x
-        : scene.alignment === 'right'
-          ? x - lineWidth
-          : x - lineWidth / 2
+    void lineWidth
+    void x
+    let cursorX = line.x
     for (const run of drawRuns) {
       if (options?.rasterizeFriendly) {
+        // 表情：文字字体里没有表情，画成 Twemoji 图片（以前会画成空白 / 方块）
+        if (run.kind === 'emoji') {
+          if (run.dataUri) {
+            const size = run.width
+            fillLayer.push(`<image href="${run.dataUri}" x="${cursorX}" y="${baselineY - size * EMOJI_BASELINE_SHIFT_RATIO}" width="${size}" height="${size}" />`)
+          }
+          cursorX += run.width
+          continue
+        }
         const pathNodes = buildFontPathNodes({
           text: run.text,
           fontPath: resolvedTextFont.path,
@@ -466,9 +501,13 @@ async function buildSubtitleOverlaySvg(
           stroke: scene.strokeColor,
           strokeWidth: scene.strokeWidth,
           shadowColor: scene.shadowColor,
+          shadowOffset,
+          boldPx: scene.boldPx,
         })
         if (pathNodes) {
-          textNodes.push(pathNodes)
+          shadowLayer.push(pathNodes.shadow)
+          outlineLayer.push(pathNodes.outline)
+          fillLayer.push(pathNodes.fill)
           cursorX += run.width
           continue
         }
@@ -501,7 +540,10 @@ async function buildSubtitleOverlaySvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}">
-  <defs>${options?.rasterizeFriendly ? '' : `
+  <defs>${options?.rasterizeFriendly ? `
+    <filter id="${shadowId}" x="-10%" y="-30%" width="120%" height="160%">
+      <feGaussianBlur stdDeviation="${Math.max(0.6, scene.shadowBlur / 3)}" />
+    </filter>` : `
     <style><![CDATA[
 ${fontFaceCss}
     ]]></style>
@@ -510,6 +552,9 @@ ${fontFaceCss}
     </filter>`}
   </defs>
   <rect width="100%" height="100%" fill="transparent" />
+  ${shadowLayer.length && scene.shadowBlur > 0 ? `<g filter="url(#${shadowId})" opacity="0.55">${shadowLayer.join('')}</g>` : shadowLayer.length ? `<g opacity="0.34">${shadowLayer.join('')}</g>` : ''}
+  ${outlineLayer.join('')}
+  ${fillLayer.join('')}
   ${textNodes.join('')}
 </svg>`
 }
@@ -522,7 +567,7 @@ export async function generateBatchSubtitleOverlayAssets(input: {
 }) {
   const selectedTitle = normalizeSelectedTitle(input.titleConfig)
   const scene = buildSubtitleSceneSpec(selectedTitle, input.styleConfig)
-  const previewRoot = sanitizePathSegment(input.sourceItem.id || basename(input.sourceItem.sourceVideoPath), randomUUID())
+  const previewRoot = shortPreviewKey(input.sourceItem)
   const rootDir = input.workDir || join(getAppPaths().dataDir, 'batch-subtitle-preview', previewRoot)
   await mkdir(rootDir, { recursive: true })
   const svgPath = join(rootDir, 'overlay.svg')
@@ -543,10 +588,14 @@ export async function generateBatchSubtitlePreviewFrame(input: {
   titleConfig: BatchSubtitleTitleConfig
   styleConfig: BatchSubtitleStyleConfig
   previewAtSec?: number
+  /** 也做一段几秒的预览视频（默认只出一张画面，快很多） */
+  includeVideo?: boolean
 }) {
-  const stamp = `${Date.now()}-${randomUUID()}`
-  const previewRoot = sanitizePathSegment(input.sourceItem.id || basename(input.sourceItem.sourceVideoPath), 'preview')
-  const previewDir = join(getAppPaths().dataDir, 'batch-subtitle-preview', previewRoot, stamp)
+  const stamp = Date.now().toString(36)
+  const previewRoot = join(getAppPaths().dataDir, 'batch-subtitle-preview', shortPreviewKey(input.sourceItem))
+  // 每个视频只留最新一次预览，旧的删掉，不让预览文件越堆越多
+  await rm(previewRoot, { recursive: true, force: true }).catch(() => undefined)
+  const previewDir = join(previewRoot, stamp)
   await mkdir(previewDir, { recursive: true })
   const { overlayImagePath } = await generateBatchSubtitleOverlayAssets({
     sourceItem: input.sourceItem,
@@ -583,7 +632,7 @@ export async function generateBatchSubtitlePreviewFrame(input: {
       previewImagePath,
     ],
   })
-  await runFfmpeg({
+  if (input.includeVideo !== false) await runFfmpeg({
     args: [
       '-y',
       '-ss',
@@ -614,7 +663,7 @@ export async function generateBatchSubtitlePreviewFrame(input: {
     sourceItemId: input.sourceItem.id,
     previewImagePath,
     overlayImagePath,
-    previewVideoPath,
+    previewVideoPath: input.includeVideo !== false ? previewVideoPath : undefined,
     previewPosterPath: previewImagePath,
     generatedAt: Date.now(),
   }

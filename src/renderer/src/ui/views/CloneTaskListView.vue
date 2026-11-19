@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SubtitleStudioDialog, { type SubtitleDialogSubmit } from '@/ui/components/subtitle/SubtitleStudioDialog.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -650,6 +651,15 @@ function openSingleSubtitleDialog(item: CloneProjectSummary) {
 function closeSubtitleDialog() {
   if (subtitleDialogBusy.value) return
   resetSubtitleDialog()
+}
+
+/** 新弹窗交来的标题和样式，放进原来的变量后走原来的提交 */
+function onSubtitleDialogSubmit(payload: SubtitleDialogSubmit) {
+  subtitleTitleStrategy.value = payload.titleStrategy
+  subtitleTitleText.value = payload.titleText
+  subtitleTitlePoolText.value = payload.titlePoolText
+  Object.assign(subtitleCaptionStyle, payload.captionStyle)
+  void submitSubtitleDialog()
 }
 
 function buildSubtitleTitleConfig() {
@@ -1597,79 +1607,16 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div v-if="subtitleDialogOpen" class="vg-backdrop" @click.self="closeSubtitleDialog">
-      <section class="vg-dialog vg-dialog--wide ctl-subtitle" role="dialog" aria-modal="true" @click.stop>
-        <header class="vg-dialog__head">
-          <div class="vg-dialog__title"><span class="vg-dialog__title-icon"><Captions :size="20" /></span><div><h2>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</h2><p>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_23be11c82f2f') }}</p></div></div>
-          <button type="button" class="vg-icon-btn" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog"><X :size="18" /></button>
-        </header>
-        <div class="vg-dialog__body">
-          <div class="ctl-subtitle__summary">
-            <div><span>{{ t('autoUi.k_11a2736ed3c4') }}</span><strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong></div>
-            <div><span>{{ t('autoUi.k_5d9ef99b61c5') }}</span><strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong></div>
-          </div>
-          <div class="vg-tabs">
-            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
-            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
-            <button type="button" class="vg-tabs__btn" :class="{ 'is-active': subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
-          </div>
-
-          <section v-if="subtitleDialogTab === 'title'" class="ctl-subtitle__section">
-            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
-            <div class="vg-seg vg-seg--sm">
-              <button type="button" class="vg-seg__btn" :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" @click="subtitleTitleStrategy = 'single_for_all'">{{ t('autoUi.k_73e18b3f4a29') }}</button>
-              <button type="button" class="vg-seg__btn" :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" @click="subtitleTitleStrategy = 'random_pool'">{{ t('autoUi.k_84ba3e6f5cfb') }}</button>
-            </div>
-            <label v-if="subtitleTitleStrategy === 'single_for_all'" class="vg-field">
-              <span class="vg-field__label">{{ t('autoUi.k_7e33e07fd936') }}</span>
-              <input v-model.trim="subtitleTitleText" class="vg-input" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
-            </label>
-            <label v-else class="vg-field">
-              <span class="vg-field__label">{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
-              <textarea v-model.trim="subtitleTitlePoolText" class="vg-textarea ctl-subtitle__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')" />
-            </label>
-            <p class="vg-field__hint">{{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}</p>
-          </section>
-
-          <section v-else-if="subtitleDialogTab === 'template'" class="ctl-subtitle__section">
-            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_f84c2e382440') }}</strong>
-            <div class="ctl-subtitle__presets">
-              <button v-for="preset in subtitlePresets" :key="preset.id" type="button" class="ctl-preset" :class="{ 'is-active': subtitleSelectedPreset === preset.id }" @click="applySubtitlePreset(preset.id)">
-                <strong>{{ preset.name }}</strong><span>{{ preset.summary }}</span>
-              </button>
-            </div>
-            <p class="vg-field__hint">{{ t('autoUi.k_6bf2c4d17ccd') }}</p>
-          </section>
-
-          <section v-else class="ctl-subtitle__section">
-            <strong class="ctl-subtitle__heading">{{ t('autoUi.k_856e405fcf39') }}</strong>
-            <div class="vg-form-grid ctl-subtitle__grid4">
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_b50d4d8352f5') }}</span><input v-model.trim="subtitleCaptionStyle.fontName" class="vg-input" type="text" :placeholder="t('autoUi.k_9567b9609e02')" /></label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_576ccdb1f1c7') }}</span><input v-model.number="subtitleCaptionStyle.fontSize" class="vg-input" type="number" min="18" max="120" /></label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_a48b15a6de71') }}</span><input v-model.number="subtitleCaptionStyle.strokeWidth" class="vg-input" type="number" min="0" max="16" /></label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_3ca120ca0195') }}</span><input v-model.number="subtitleCaptionStyle.maxLines" class="vg-input" type="number" min="1" max="6" /></label>
-            </div>
-            <div class="vg-form-grid">
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_07f568dada4d') }}</span><span class="ctl-color"><input v-model.trim="subtitleCaptionStyle.fontColor" class="vg-input" type="text" /><input v-model="subtitleCaptionStyle.fontColor" type="color" /></span></label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_eaa98f95ba53') }}</span><span class="ctl-color"><input v-model.trim="subtitleCaptionStyle.strokeColor" class="vg-input" type="text" /><input v-model="subtitleCaptionStyle.strokeColor" type="color" /></span></label>
-            </div>
-            <div class="vg-form-grid vg-form-grid--3">
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_88c34452cc46') }}</span>
-                <select v-model="subtitleCaptionStyle.position" class="vg-input vg-select"><option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option><option value="center">{{ t('autoUi.k_910253ea0c16') }}</option><option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option></select>
-              </label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_6ff4e8934c7f') }}</span>
-                <select v-model="subtitleCaptionStyle.textAlign" class="vg-input vg-select"><option value="left">{{ t('autoUi.k_413f8db65f69') }}</option><option value="center">{{ t('autoUi.k_5009324782b9') }}</option><option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option></select>
-              </label>
-              <label class="vg-field"><span class="vg-field__label">{{ t('autoUi.k_fa0119023442') }}</span><input v-model.number="subtitleCaptionStyle.bottomMargin" class="vg-input" type="number" min="48" max="600" /></label>
-            </div>
-          </section>
-        </div>
-        <footer class="vg-dialog__foot"><div class="vg-dialog__foot-actions">
-          <button type="button" class="vg-btn" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
-          <button type="button" class="vg-btn vg-btn--primary" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">{{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_9ca6795dd07f') }}</button>
-        </div></footer>
-      </section>
-    </div>
+    <!-- 批量添加字幕：和「视频批量字幕」同一套标题 / 样式 / 实时预览 -->
+    <SubtitleStudioDialog
+      :open="subtitleDialogOpen"
+      :mode="subtitleDialogMode"
+      :count="subtitleTargetIds.length"
+      :busy="subtitleDialogBusy"
+      :preview-image="rows.find((item) => subtitleTargetIds.includes(item.id))?.coverAssetPath || ''"
+      @close="closeSubtitleDialog"
+      @submit="onSubtitleDialogSubmit"
+    />
 
     <div v-if="groupDialogOpen" class="vg-backdrop" @click.self="closeGroupDialog">
       <form class="vg-dialog ctl-dialog-sm" role="dialog" aria-modal="true" @click.stop @submit.prevent="submitGroupDialog">

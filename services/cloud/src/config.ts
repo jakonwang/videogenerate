@@ -61,6 +61,8 @@ export function loadCloudConfig() {
     cloneEnginePerDay: envInt('CLOUD_CLONE_ENGINE_PER_DAY', 300),
     /** 仅开发 / 测试：没配置平台密钥时用模拟结果走通复刻流程（生产环境无效） */
     cloneEngineAllowMock: env('CLOUD_CLONE_ENGINE_ALLOW_MOCK') === '1',
+    /** 字幕渲染（Remotion）全服务器同时最多几个 */
+    subtitleRenderSlots: envInt('CLOUD_SUBTITLE_RENDER_SLOTS', 1),
     /** 没有任何记录引用的文件保留几天后清理，0 = 不清理 */
     orphanFileDays: envInt('CLOUD_ORPHAN_FILE_DAYS', 7),
     /** 网页版静态文件目录（apps/mobile 的 npm run build:web 产物），在 /app/ 提供 */

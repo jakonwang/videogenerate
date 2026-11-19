@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import SubtitleStudioDialog, { type SubtitleDialogSubmit } from '@/ui/components/subtitle/SubtitleStudioDialog.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
 import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+// The page brings its own stylesheets so the web version (which reuses this page) gets them too.
+import '@/design-system/live-photo.css'
+import '@/design-system/live-photo-page.css'
 import { webApiClient } from '@/lib/webApiClient'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import {
@@ -955,6 +959,15 @@ function buildSubtitleTitleConfig() {
     singleText,
     titlePool: [],
   }
+}
+
+/** 新弹窗交来的标题和样式，放进原来的变量后走原来的提交 */
+function onSubtitleDialogSubmit(payload: SubtitleDialogSubmit) {
+  subtitleTitleStrategy.value = payload.titleStrategy
+  subtitleTitleText.value = payload.titleText
+  subtitleTitlePoolText.value = payload.titlePoolText
+  Object.assign(subtitleCaptionStyle, payload.captionStyle)
+  void submitSubtitleDialog()
 }
 
 async function submitSubtitleDialog() {
@@ -2980,156 +2993,26 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </div>
     </div>
 
-    <div v-if="subtitleDialogOpen" class="live-subtitle-dialog" @click.self="closeSubtitleDialog">
-      <div class="live-subtitle-dialog__panel">
-        <div class="live-subtitle-dialog__head">
-          <div class="live-subtitle-dialog__titleblock">
-            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_c6f0209a1cfa') : t('autoUi.k_6e4c3e5ffee8') }}</strong>
-            <p>{{ t('autoUi.k_b7a385ec00d6') }} {{ subtitleTargetIds.length }} {{ t('autoUi.k_f2b41b9c6a9c') }}</p>
-          </div>
-          <button class="live-subtitle-dialog__close" type="button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
-        </div>
-
-        <div class="live-subtitle-dialog__summary">
-          <div class="live-subtitle-dialog__summary-item">
-            <span>{{ t('autoUi.k_11a2736ed3c4') }}</span>
-            <strong>{{ subtitleDialogMode === 'batch' ? t('autoUi.k_50e078e7f961', { p0: subtitleTargetIds.length }) : t('autoUi.k_bda3ae2da55b') }}</strong>
-          </div>
-          <div class="live-subtitle-dialog__summary-item">
-            <span>{{ t('autoUi.k_5d9ef99b61c5') }}</span>
-            <strong>{{ subtitlePresets.find((preset) => preset.id === subtitleSelectedPreset)?.name || t('autoUi.k_469e324ba51b') }}</strong>
-          </div>
-        </div>
-
-        <div class="live-subtitle-dialog__tabs">
-          <button type="button" :class="{ active: subtitleDialogTab === 'title' }" @click="subtitleDialogTab = 'title'">{{ t('autoUi.k_748d7dc7e321') }}</button>
-          <button type="button" :class="{ active: subtitleDialogTab === 'template' }" @click="subtitleDialogTab = 'template'">{{ t('autoUi.k_06d0f38dd26c') }}</button>
-          <button type="button" :class="{ active: subtitleDialogTab === 'style' }" @click="subtitleDialogTab = 'style'">{{ t('autoUi.k_393a6c9117bc') }}</button>
-        </div>
-
-        <section v-if="subtitleDialogTab === 'title'" class="live-subtitle-dialog__section">
-          <div class="live-subtitle-dialog__section-head">
-            <span class="live-subtitle-dialog__kicker">Title Mode</span>
-            <strong>{{ t('autoUi.k_7f39a0d9ffad') }}</strong>
-          </div>
-          <div class="live-subtitle-dialog__mode-pills">
-            <button :class="{ 'is-active': subtitleTitleStrategy === 'single_for_all' }" type="button" @click="subtitleTitleStrategy = 'single_for_all'"> {{ t('autoUi.k_73e18b3f4a29') }} </button>
-            <button :class="{ 'is-active': subtitleTitleStrategy === 'random_pool' }" type="button" @click="subtitleTitleStrategy = 'random_pool'"> {{ t('autoUi.k_84ba3e6f5cfb') }} </button>
-          </div>
-          <label v-if="subtitleTitleStrategy === 'single_for_all'" class="live-subtitle-dialog__field">
-            <span>{{ t('autoUi.k_7e33e07fd936') }}</span>
-            <input v-model.trim="subtitleTitleText" type="text" maxlength="120" :placeholder="t('autoUi.k_169a71f2d82c')" @keydown.enter.prevent="submitSubtitleDialog" />
-          </label>
-          <label v-else class="live-subtitle-dialog__field">
-            <span>{{ t('autoUi.k_84ba3e6f5cfb') }}</span>
-            <textarea v-model.trim="subtitleTitlePoolText" class="live-subtitle-dialog__textarea" :placeholder="t('autoUi.k_60e49a8dd0a0')"></textarea>
-          </label>
-          <div class="live-subtitle-dialog__inline-tip">
-            {{ subtitleTitleStrategy === 'single_for_all' ? t('autoUi.k_fb5b47107a9b') : t('autoUi.k_70164720b604') }}
-          </div>
-        </section>
-
-        <section v-else-if="subtitleDialogTab === 'template'" class="live-subtitle-dialog__section">
-          <div class="live-subtitle-dialog__section-head">
-            <span class="live-subtitle-dialog__kicker">Template</span>
-            <strong>{{ t('autoUi.k_f84c2e382440') }}</strong>
-          </div>
-          <div class="live-subtitle-dialog__preset-grid">
-            <button
-              v-for="preset in subtitlePresets"
-              :key="preset.id"
-              class="live-subtitle-dialog__preset"
-              :class="{ active: subtitleSelectedPreset === preset.id }"
-              type="button"
-              @click="applySubtitlePreset(preset.id)"
-            >
-              <strong>{{ preset.name }}</strong>
-              <span>{{ preset.summary }}</span>
-            </button>
-          </div>
-          <div class="live-subtitle-dialog__preset-note">{{ t('autoUi.k_6bf2c4d17ccd') }}</div>
-        </section>
-
-        <section v-else class="live-subtitle-dialog__section">
-          <div class="live-subtitle-dialog__section-head">
-            <span class="live-subtitle-dialog__kicker">Style</span>
-            <strong>{{ t('autoUi.k_856e405fcf39') }}</strong>
-          </div>
-          <div class="live-subtitle-dialog__style-panel">
-            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_b50d4d8352f5') }}</span>
-                <input v-model.trim="subtitleCaptionStyle.fontName" type="text" :placeholder="t('autoUi.k_9567b9609e02')" />
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_576ccdb1f1c7') }}</span>
-                <input v-model.number="subtitleCaptionStyle.fontSize" type="number" min="18" max="120" />
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_a48b15a6de71') }}</span>
-                <input v-model.number="subtitleCaptionStyle.strokeWidth" type="number" min="0" max="16" />
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_3ca120ca0195') }}</span>
-                <input v-model.number="subtitleCaptionStyle.maxLines" type="number" min="1" max="6" />
-              </label>
-            </div>
-            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--dual">
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_07f568dada4d') }}</span>
-                <div class="live-subtitle-dialog__color-field">
-                  <input v-model.trim="subtitleCaptionStyle.fontColor" type="text" />
-                  <input v-model="subtitleCaptionStyle.fontColor" type="color" />
-                </div>
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_eaa98f95ba53') }}</span>
-                <div class="live-subtitle-dialog__color-field">
-                  <input v-model.trim="subtitleCaptionStyle.strokeColor" type="text" />
-                  <input v-model="subtitleCaptionStyle.strokeColor" type="color" />
-                </div>
-              </label>
-            </div>
-            <div class="live-subtitle-dialog__form-grid live-subtitle-dialog__form-grid--compact">
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_88c34452cc46') }}</span>
-                <select v-model="subtitleCaptionStyle.position">
-                  <option value="top">{{ t('autoUi.k_a9d35ab0a675') }}</option>
-                  <option value="center">{{ t('autoUi.k_910253ea0c16') }}</option>
-                  <option value="bottom">{{ t('autoUi.k_435b2d8982fd') }}</option>
-                </select>
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_6ff4e8934c7f') }}</span>
-                <select v-model="subtitleCaptionStyle.textAlign">
-                  <option value="left">{{ t('autoUi.k_413f8db65f69') }}</option>
-                  <option value="center">{{ t('autoUi.k_5009324782b9') }}</option>
-                  <option value="right">{{ t('autoUi.k_70fe40dec2fa') }}</option>
-                </select>
-              </label>
-              <label class="live-subtitle-dialog__field">
-                <span>{{ t('autoUi.k_fa0119023442') }}</span>
-                <input v-model.number="subtitleCaptionStyle.bottomMargin" type="number" min="48" max="600" />
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <div class="live-subtitle-dialog__actions">
-          <button
-            v-if="subtitleDialogMode === 'single' && subtitleDialogItem && itemHasAppliedSubtitle(subtitleDialogItem)"
-            type="button"
-            class="ghost-button"
-            :disabled="subtitleDialogBusy"
-            @click="revertSubtitleFromItem(subtitleDialogItem)"
-          > {{ t('autoUi.k_5d2a55f19c91') }} </button>
-          <button type="button" class="ghost-button" :disabled="subtitleDialogBusy" @click="closeSubtitleDialog">{{ t('autoUi.k_4d0b4688c787') }}</button>
-          <button type="button" class="primary-button" :disabled="subtitleDialogBusy" @click="submitSubtitleDialog">
-            {{ subtitleDialogBusy ? t('autoUi.k_dde1db57718c') : t('autoUi.k_c0b013507133') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 批量添加字幕：和「视频批量字幕」同一套标题 / 样式 / 实时预览 -->
+    <SubtitleStudioDialog
+      :open="subtitleDialogOpen"
+      :mode="subtitleDialogMode"
+      :count="subtitleTargetIds.length"
+      :busy="subtitleDialogBusy"
+      :preview-image="filteredLibraryItems.find((item) => subtitleTargetIds.includes(item.id))?.posterPath || ''"
+      @close="closeSubtitleDialog"
+      @submit="onSubtitleDialogSubmit"
+    >
+      <template #actions>
+        <button
+          v-if="subtitleDialogMode === 'single' && subtitleDialogItem && itemHasAppliedSubtitle(subtitleDialogItem)"
+          type="button"
+          class="vg-btn"
+          :disabled="subtitleDialogBusy"
+          @click="revertSubtitleFromItem(subtitleDialogItem)"
+        >{{ t('autoUi.k_5d2a55f19c91') }}</button>
+      </template>
+    </SubtitleStudioDialog>
 
     <div v-if="replacementRegionDialogOpen && replacementRegionDialogItem" class="replacement-region-dialog" @click.self="closeReplacementRegionEditor">
       <div class="replacement-region-dialog__panel">

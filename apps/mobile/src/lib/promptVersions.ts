@@ -56,7 +56,10 @@ export async function activatePromptVersion(collection: string, id: string, all:
 export async function rollbackPromptVersion(collection: string, id: string, all: PromptVersionItem[]) {
   const row = all.find((item) => item.id === id)
   if (!row) return ''
-  const newIdValue = await savePromptVersion(collection, { name: `${row.name} (rollback)`, prompt: row.prompt }, all)
-  await activatePromptVersion(collection, newIdValue, [...all, { ...row, id: newIdValue, active: false }])
+  const name = `${row.name} (rollback)`
+  const newIdValue = await savePromptVersion(collection, { name, prompt: row.prompt }, all)
+  // The new version as savePromptVersion wrote it (activating it re-saves this data with active: true).
+  const created: PromptVersionItem = { name, prompt: row.prompt, version: Math.max(0, ...all.map((item) => item.version)) + 1, active: false, createdAt: Date.now(), id: newIdValue, updatedAt: Date.now() }
+  await activatePromptVersion(collection, newIdValue, [...all, created])
   return newIdValue
 }

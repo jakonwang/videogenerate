@@ -26,6 +26,10 @@ export type CloneEngineDeps = {
   meter: (userId: string) => void
   maxWorkers: number
   idleMs: number
+  /** 字幕渲染（Remotion 无界面浏览器）全服务器同时最多几个，所有用户的子进程共用；默认 1 */
+  renderSlots?: number
+  /** 字幕用的字体目录（和服务器视频工具共用 CLOUD_FONTS_DIR） */
+  fontsDir?: string
 }
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
@@ -33,6 +37,24 @@ type Worker = { child: ChildProcess; token: string; ready: Promise<void>; pendin
 
 export function createCloneEngine(deps: CloneEngineDeps) {
   const workers = new Map<string, Worker>()
+
+  /* 渲染名额：子进程要渲染字幕前先申请（slot），做完归还（slotDone）；子进程退出时它占着的名额自动归还 */
+  const slotLimit = Math.max(1, deps.renderSlots ?? 1)
+  const slotHolders = new Map<string, ChildProcess>()
+  const slotQueue: Array<{ key: string; child: ChildProcess; id: string }> = []
+  function grantSlots() {
+    while (slotHolders.size < slotLimit && slotQueue.length) {
+      const next = slotQueue.shift()!
+      if (!next.child.connected) continue
+      slotHolders.set(next.key, next.child)
+      next.child.send({ type: 'slotGranted', id: next.id })
+    }
+  }
+  function releaseSlotsOf(child: ChildProcess) {
+    for (const [key, holder] of slotHolders) if (holder === child) slotHolders.delete(key)
+    for (let i = slotQueue.length - 1; i >= 0; i -= 1) if (slotQueue[i]!.child === child) slotQueue.splice(i, 1)
+    grantSlots()
+  }
   const userRoot = (userId: string) => join(deps.dataDir, 'clone-engine', userId.replace(/[^a-zA-Z0-9_-]/g, '_'))
 
   function stop(userId: string) {
@@ -58,7 +80,7 @@ export function createCloneEngine(deps: CloneEngineDeps) {
     mkdirSync(join(root, 'data'), { recursive: true })
     const child = fork(WORKER_PATH, [], {
       cwd: root,
-      env: { ...process.env, VIDEOGENERATE_USER_DATA_DIR: root, VIDEOGENERATE_DATA_DIR: join(root, 'data'), VIDEOGENERATE_CLONE_ENGINE: '1' },
+      env: { ...process.env, VIDEOGENERATE_USER_DATA_DIR: root, VIDEOGENERATE_DATA_DIR: join(root, 'data'), VIDEOGENERATE_CLONE_ENGINE: '1', ...(deps.fontsDir ? { VIDEOGENERATE_FONTS_DIR: deps.fontsDir } : {}) },
       // The desktop clone code logs a lot of debug lines to stdout; keep warnings / errors (stderr) only.
       stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
     })
@@ -68,6 +90,14 @@ export function createCloneEngine(deps: CloneEngineDeps) {
       child.on('message', (raw: any) => {
         if (raw?.type === 'ready') return resolveReady()
         if (raw?.type === 'fatal') return rejectReady(new Error(String(raw.error || '复刻引擎启动失败')))
+        if (raw?.type === 'slot') {
+          slotQueue.push({ key: `${child.pid}:${raw.id}`, child, id: String(raw.id) })
+          return grantSlots()
+        }
+        if (raw?.type === 'slotDone') {
+          slotHolders.delete(`${child.pid}:${raw.id}`)
+          return grantSlots()
+        }
         if (raw?.type === 'meter') {
           let error = ''
           try {
@@ -87,6 +117,7 @@ export function createCloneEngine(deps: CloneEngineDeps) {
         else pending.reject(new CloudError('ENGINE_FAILED', String(raw.error || '复刻执行失败').slice(0, 500), 502))
       })
       child.once('exit', () => {
+        releaseSlotsOf(child)
         rejectReady(new Error('复刻引擎已退出'))
         if (workers.get(userId) === worker) stop(userId)
       })
@@ -147,6 +178,8 @@ export function routesToCloneEngine(engine: CloneEngine, userId: string, body: {
   const ns = String(body?.ns || '')
   const method = String(body?.method || '')
   if (ns === 'clone') return !DESKTOP_CLONE_METHODS.has(method)
+  // 图生视频、批量字幕（电脑端本地 Web API）：网页和电脑端同一个页面，在服务器引擎上执行
+  if (ns === 'livePhoto' || ns === 'webApi') return true
   if (ns === 'products' && method === 'list') return body?.target === 'server'
   if (ns === 'media' && method === 'publish') {
     const input = Array.isArray(body?.args) ? (body.args[0] as { path?: unknown } | undefined) : undefined

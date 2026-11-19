@@ -1,16 +1,36 @@
 <script setup lang="ts">
 import { thumbnailUrl } from '@/lib/localMedia'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { applySubtitlePreset, defaultSubtitleCaptionStyle, loadSubtitleSettings, saveSubtitleSettings, subtitlePresets, type SubtitlePresetId } from '@/lib/subtitleStyle'
+import SubtitleLivePreview from '@/ui/components/subtitle/SubtitleLivePreview.vue'
+import SubtitleStyleFields from '@/ui/components/subtitle/SubtitleStyleFields.vue'
+import SubtitleTitleFields from '@/ui/components/subtitle/SubtitleTitleFields.vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import {
+  AlertTriangle,
   ArrowLeft,
+  Captions,
   CheckCircle2,
+  Copy,
+  Image as ImageIcon,
+  Images,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clapperboard,
+  Film,
   FolderOpen,
+  ListChecks,
   LockKeyhole,
+  Pause,
   Play,
   LoaderCircle,
+  RefreshCcw,
+  RotateCcw,
+  Save,
+  Sparkles,
   Upload,
   X,
 } from 'lucide-vue-next'
@@ -36,14 +56,13 @@ type SourceTab = 'upload' | 'clone'
 type RightTab = 'content' | 'style'
 type QueueTab = 'all' | 'processing' | 'completed'
 type StepState = 'idle' | 'active' | 'done'
-type CaptionTemplatePresetId =
-  | 'viral-hook'
-  | 'deal-punch'
-  | 'premium-drop'
-  | 'vn-viral-bold'
-  | 'vn-viral-outline'
+type CaptionTemplatePresetId = SubtitlePresetId
 type PreviewMode = 'fast' | 'video'
 
+/** 页面三个标签：制作（三栏工作台）/ 任务 / 成片 */
+const studioTab = ref<'make' | 'jobs' | 'outputs'>('make')
+const dragOver = ref(false)
+const outputsShown = ref(60)
 const sourceTab = ref<SourceTab>('upload')
 const rightTab = ref<RightTab>('content')
 const queueTab = ref<QueueTab>('all')
@@ -69,7 +88,7 @@ const previewThumbStart = ref(0)
 const previewThumbPageSize = 5
 const sourcePage = ref(1)
 const sourcePageSize = 12
-const selectedTemplatePreset = ref<CaptionTemplatePresetId>('viral-hook')
+const selectedTemplatePreset = ref<CaptionTemplatePresetId>('tiktok-native')
 const previewMode = ref<PreviewMode>('fast')
 const titleStrategy = ref<BatchSubtitleTitleStrategy>('single_for_all')
 const titlePoolText = ref('')
@@ -81,22 +100,7 @@ let lastAppliedPreviewSignature = ''
 let previewDirtySinceLastRender = false
 
 function defaultCaptionStyle(): BatchSubtitleCaptionStyle {
-  return {
-    fontName: 'Noto Sans SC',
-    fontSize: 64,
-    fontColor: '#FFFFFF',
-    strokeColor: '#000000',
-    strokeWidth: 6,
-    shadowColor: '#000000',
-    shadowBlur: 12,
-    position: 'bottom',
-    safeMargin: 12,
-    textAlign: 'center',
-    maxLines: 2,
-    maxWidthRatio: 0.7,
-    lineGap: 8,
-    bottomMargin: 220,
-  }
+  return defaultSubtitleCaptionStyle()
 }
 
 function defaultLayoutPolicy(): BatchSubtitleLayoutPolicy {
@@ -108,118 +112,8 @@ function defaultLayoutPolicy(): BatchSubtitleLayoutPolicy {
   }
 }
 
-const captionTemplatePresets = computed<Array<{
-  id: CaptionTemplatePresetId
-  name: string
-  summary: string
-  style: Partial<BatchSubtitleCaptionStyle>
-}>>(() => [
-  {
-    id: 'viral-hook',
-    name: tr('autoUi.k_469e324ba51b'),
-    summary: tr('autoUi.k_cee620d9318e'),
-    style: {
-      fontName: 'SimHei',
-      fontSize: 68,
-      fontColor: '#FFFFFF',
-      strokeColor: '#101116',
-      strokeWidth: 8,
-      shadowColor: 'rgba(0, 0, 0, 0.34)',
-      shadowBlur: 10,
-      position: 'bottom',
-      textAlign: 'center',
-      safeMargin: 10,
-      maxLines: 2,
-      maxWidthRatio: 0.8,
-      lineGap: 6,
-      bottomMargin: 188,
-    },
-  },
-  {
-    id: 'deal-punch',
-    name: tr('autoUi.k_16d824cf7aac'),
-    summary: tr('autoUi.k_5112ff1701be'),
-    style: {
-      fontName: 'Microsoft YaHei',
-      fontSize: 64,
-      fontColor: '#FFF7D6',
-      strokeColor: '#17181F',
-      strokeWidth: 6,
-      shadowColor: 'rgba(4, 6, 12, 0.42)',
-      shadowBlur: 12,
-      position: 'bottom',
-      textAlign: 'center',
-      safeMargin: 11,
-      maxLines: 2,
-      maxWidthRatio: 0.76,
-      lineGap: 6,
-      bottomMargin: 194,
-    },
-  },
-  {
-    id: 'premium-drop',
-    name: tr('autoUi.k_995c4ae82e7f'),
-    summary: tr('autoUi.k_140953ff6916'),
-    style: {
-      fontName: 'Noto Sans SC',
-      fontSize: 58,
-      fontColor: '#F8FAFF',
-      strokeColor: '#12131A',
-      strokeWidth: 2,
-      shadowColor: 'rgba(5, 8, 16, 0.56)',
-      shadowBlur: 16,
-      position: 'bottom',
-      textAlign: 'center',
-      safeMargin: 14,
-      maxLines: 2,
-      maxWidthRatio: 0.68,
-      lineGap: 8,
-      bottomMargin: 212,
-    },
-  },
-  {
-    id: 'vn-viral-bold',
-    name: 'VN Viral Bold',
-    summary: tr('autoUi.k_2ea22f84f8ed'),
-    style: {
-      fontName: 'Arial Black',
-      fontSize: 78,
-      fontColor: '#FFF44F',
-      strokeColor: '#050505',
-      strokeWidth: 10,
-      shadowColor: 'rgba(0, 0, 0, 0.45)',
-      shadowBlur: 14,
-      position: 'top',
-      textAlign: 'center',
-      safeMargin: 8,
-      maxLines: 2,
-      maxWidthRatio: 0.84,
-      lineGap: 4,
-      bottomMargin: 180,
-    },
-  },
-  {
-    id: 'vn-viral-outline',
-    name: 'VN Viral Outline',
-    summary: tr('autoUi.k_146e6100be2f'),
-    style: {
-      fontName: 'Arial Black',
-      fontSize: 74,
-      fontColor: '#FFFFFF',
-      strokeColor: '#D61F3A',
-      strokeWidth: 8,
-      shadowColor: 'rgba(8, 8, 8, 0.48)',
-      shadowBlur: 16,
-      position: 'top',
-      textAlign: 'center',
-      safeMargin: 8,
-      maxLines: 2,
-      maxWidthRatio: 0.82,
-      lineGap: 4,
-      bottomMargin: 176,
-    },
-  },
-])
+/** 模板（和各模块的「批量添加字幕」弹窗共用，见 lib/subtitleStyle） */
+const captionTemplatePresets = computed(() => subtitlePresets(tr))
 
 function defaultOverlayImageConfig(): BatchSubtitleOverlayImageConfig {
   const style = defaultCaptionStyle()
@@ -453,23 +347,9 @@ watch(
   { immediate: true },
 )
 
+// 样式改了就同步到渲染用的配置（整份复制，新增的字重 / 自定义位置等也带上）
 watch(
-  () => ({
-    fontName: draft.captionStyle.fontName,
-    fontSize: draft.captionStyle.fontSize,
-    fontColor: draft.captionStyle.fontColor,
-    strokeColor: draft.captionStyle.strokeColor,
-    strokeWidth: draft.captionStyle.strokeWidth,
-    shadowColor: draft.captionStyle.shadowColor,
-    shadowBlur: draft.captionStyle.shadowBlur,
-    position: draft.captionStyle.position,
-    safeMargin: draft.captionStyle.safeMargin,
-    textAlign: draft.captionStyle.textAlign,
-    maxLines: draft.captionStyle.maxLines,
-    maxWidthRatio: draft.captionStyle.maxWidthRatio,
-    lineGap: draft.captionStyle.lineGap,
-    bottomMargin: draft.captionStyle.bottomMargin,
-  }),
+  () => ({ ...draft.captionStyle }),
   (style) => {
     draft.overlayImageConfig = {
       ...draft.overlayImageConfig,
@@ -498,10 +378,9 @@ watch(
     draft.captionStyle.bottomMargin,
   ],
   () => {
-    lastAppliedPreviewSignature = ''
+    // 不再每改一次就渲染（每次都要起一个 Chrome，连着改会把软件拖垮）：页面上的实时预览即时更新，
+    // 「生成真实画面」由用户手动点。
     previewDirtySinceLastRender = true
-    if (previewMode.value !== 'fast') return
-    scheduleAccuratePreview()
   },
 )
 
@@ -553,11 +432,7 @@ function applyCaptionTemplatePreset(presetId: CaptionTemplatePresetId) {
   const preset = captionTemplatePresets.value.find((item) => item.id === presetId)
   if (!preset) return
   selectedTemplatePreset.value = preset.id
-  draft.captionStyle = {
-    ...draft.captionStyle,
-    ...preset.style,
-  }
-  scheduleAccuratePreview()
+  draft.captionStyle = applySubtitlePreset(draft.captionStyle, preset)
 }
 
 function goPreviewThumbPrev() {
@@ -587,6 +462,7 @@ function resolveJobStatusLabel(status: BatchSubtitleJob['status']) {
   if (status === 'completed') return tr('autoUi.k_e99b48a29bdf')
   if (status === 'partial_failed') return tr('autoUi.k_7912043e5530')
   if (status === 'failed') return tr('autoUi.k_3e3c8068bb0e')
+  if (status === 'paused') return tr('autoUi.k_130448bce675')
   return tr('autoUi.k_0f436818c0b4')
 }
 
@@ -643,13 +519,17 @@ function updateTitleItem(sourceItemId: string, text: string) {
   if (titleStrategy.value !== 'single_for_all') return
   const normalized = String(text || '').trim()
   const next = draft.titleItems.filter((item) => item.sourceItemId !== sourceItemId)
-  next.push({
-    sourceItemId,
-    text: normalized,
-    updatedAt: Date.now(),
-  })
+  // 和统一标题一样或留空 = 不单独设置（以后改统一标题时这条也跟着变）
+  if (normalized && normalized !== String(draft.titleText || '').trim()) {
+    next.push({ sourceItemId, text: normalized, updatedAt: Date.now() })
+  }
   draft.titleItems = next
-  syncDraftTitleSummary()
+}
+
+/** 这条视频单独设置的标题（没有单独设置时为空） */
+function titleOverrideFor(sourceItemId: string) {
+  const text = draft.titleItems.find((item) => item.sourceItemId === sourceItemId)?.text?.trim() || ''
+  return text && text !== String(draft.titleText || '').trim() ? text : ''
 }
 
 function buildPreviewSignature() {
@@ -673,6 +553,10 @@ function buildPreviewSignature() {
       maxWidthRatio: draft.captionStyle.maxWidthRatio,
       lineGap: draft.captionStyle.lineGap,
       bottomMargin: draft.captionStyle.bottomMargin,
+      fontWeight: draft.captionStyle.fontWeight,
+      offsetYRatio: draft.captionStyle.offsetYRatio,
+      offsetXRatio: draft.captionStyle.offsetXRatio,
+      secondaryScale: draft.captionStyle.secondaryScale,
     },
   })
 }
@@ -750,9 +634,6 @@ function setPreviewMode(mode: PreviewMode) {
   }
   lastAppliedPreviewSignature = ''
   previewDirtySinceLastRender = true
-  if (mode === 'fast') {
-    scheduleAccuratePreview()
-  }
 }
 
 async function refreshFontOptions() {
@@ -791,7 +672,6 @@ async function loadAll() {
     if (selectedJobId.value && !jobItems.some((item) => item.id === selectedJobId.value)) {
       selectedJobId.value = ''
     }
-    if (!selectedJobId.value && !draftDirty.value && !draft.sourceItems.length && jobItems[0]) loadJobIntoDraft(jobItems[0])
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
   } finally {
@@ -938,12 +818,14 @@ async function renderBatch() {
     return
   }
   if (!hasDraftTitles.value) {
-    errorText.value = titleStrategy.value === 'random_pool' ? 'Please add at least one random title.' : 'Please enter a title.'
+    errorText.value = titleStrategy.value === 'random_pool' ? tr('bsx.needPool') : tr('bsx.needTitle')
     return
   }
   runningJob.value = true
   errorText.value = ''
   notice.value = tr('autoUi.k_df4d23490b1b')
+  // 每次开始都新建一条处理记录，不覆盖上一次的成片
+  selectedJobId.value = ''
   try {
     const ensuredJob = selectedJobId.value ? { id: selectedJobId.value } : await saveCurrentDraft()
     const jobId = String(ensuredJob?.id || selectedJobId.value || '').trim()
@@ -966,7 +848,8 @@ async function renderBatch() {
     const result = await webApiClient.runBatchSubtitleJob(jobId)
     loadJobIntoDraft(result)
     draftDirty.value = false
-    notice.value = tr('autoUi.k_adb3a2a7ae93', { p0: result.outputCount })
+    // 网页版渲染在服务器后台进行，先返回「处理中」，底部渲染栏显示进度
+    notice.value = result.status === 'processing' || result.status === 'queued' ? tr('bsx.renderStarted') : tr('autoUi.k_adb3a2a7ae93', { p0: result.outputCount })
     await loadAll()
   } catch (error: any) {
     errorText.value = error?.message ?? String(error)
@@ -1041,12 +924,17 @@ function loadJobIntoDraft(job: BatchSubtitleJob) {
   titleStrategy.value = job.titleConfig?.strategy || 'single_for_all'
   draft.titleText = job.titleConfig?.singleText || ''
   titlePoolText.value = Array.isArray(job.titleConfig?.titlePool) ? job.titleConfig.titlePool.join('\n') : ''
-  draft.titleItems = [...(job.titleItems || [])]
+  const sharedTitle = String(job.titleConfig?.singleText || '').trim()
+  draft.titleItems = (job.titleItems || []).filter((item) => String(item.text || '').trim() && String(item.text || '').trim() !== sharedTitle)
   draft.overlayImageConfig = { ...defaultOverlayImageConfig(), ...(job.overlayImageConfig || {}) }
   draft.captionStyle = { ...defaultCaptionStyle(), ...(job.captionStyle || {}) }
   draft.layoutPolicy = { ...defaultLayoutPolicy(), ...(job.layoutPolicy || {}) }
   selectedJobId.value = job.id
   draftDirty.value = false
+  // 上面改草稿会在下一拍触发「有修改」的监听，载入本身不算修改
+  void nextTick(() => {
+    draftDirty.value = false
+  })
   if (job.sourceItems[0]) selectedPreviewId.value = job.sourceItems[0].id
 }
 
@@ -1062,6 +950,110 @@ async function showOutputInFolder(item: BatchSubtitleOutputItem) {
   await window.api.shell.showItemInFolder(outputPath)
 }
 
+/* ---------------- 预览：实时画面在 SubtitleLivePreview 里画（和成片同一套排版），这里管「真实画面」 ---------------- */
+
+const liveTitle = computed(() => (previewSource.value ? resolveTitleTextForSource(previewSource.value.id) : String(draft.titleText || titlePoolItems.value[0] || '').trim()))
+const previewImageSrc = computed(() => {
+  const source = previewSource.value
+  const path = source ? source.coverImagePath || source.sourceVideoPath : ''
+  return path && mediaUrl(path) ? thumbnailUrl(path, 640) : ''
+})
+/** 生成过的真实画面只在设置没再改动时显示，改了就回到实时预览 */
+const realPreviewFresh = computed(() => Boolean(previewFrame.value && !previewFrameLoading.value && lastAppliedSignature.value === buildPreviewSignature()))
+const lastAppliedSignature = ref('')
+watch(previewFrame, () => {
+  lastAppliedSignature.value = lastAppliedPreviewSignature
+})
+
+function renderRealPreview(mode: PreviewMode) {
+  previewMode.value = mode
+  lastAppliedPreviewSignature = ''
+  void refreshAccuratePreview()
+}
+
+const missingTitleCount = computed(() => (titleStrategy.value === 'random_pool' ? 0 : draft.sourceItems.filter((item) => !resolveTitleTextForSource(item.id)).length))
+
+/* ---------------- 记住上次的标题和样式（本机，和各模块的「批量添加字幕」弹窗共用） ---------------- */
+
+function restoreSettings() {
+  const saved = loadSubtitleSettings()
+  draft.captionStyle = saved.captionStyle
+  titleStrategy.value = saved.titleStrategy
+  draft.titleText = saved.titleText
+  titlePoolText.value = saved.titlePoolText
+  selectedTemplatePreset.value = saved.preset
+}
+watch(
+  () => [draft.captionStyle, titleStrategy.value, draft.titleText, titlePoolText.value, selectedTemplatePreset.value],
+  () => saveSubtitleSettings({ captionStyle: draft.captionStyle, titleStrategy: titleStrategy.value, titleText: draft.titleText, titlePoolText: titlePoolText.value, preset: selectedTemplatePreset.value }),
+  { deep: true },
+)
+
+/* ---------------- 处理记录 ---------------- */
+
+const historyShown = ref(10)
+const shownJobs = computed(() => jobs.value.filter((job) => job.status !== 'draft').slice(0, historyShown.value))
+function jobDone(job: BatchSubtitleJob) {
+  return job.outputs.filter((item) => item.renderStatus === 'success').length
+}
+function openJobFolder(job: BatchSubtitleJob) {
+  const first = job.outputs.find((item) => item.renderStatus === 'success' && item.outputVideoPath)
+  if (first) void showOutputInFolder(first)
+}
+/** 用这条记录的标题和样式（视频不变） */
+function reuseJobSettings(job: BatchSubtitleJob) {
+  const sources = draft.sourceItems
+  loadJobIntoDraft(job)
+  draft.sourceItems = sources.length ? sources : draft.sourceItems
+  selectedJobId.value = ''
+  notice.value = tr('bsx.reused')
+}
+
+function clearSources() {
+  draft.sourceItems = []
+  draft.titleItems = []
+  selectedPreviewId.value = ''
+}
+
+const VIDEO_EXT = /\.(mp4|mov|m4v|webm)$/i
+async function onDropVideos(event: DragEvent) {
+  dragOver.value = false
+  const files = Array.from(event.dataTransfer?.files || [])
+  const videos = files.filter((file) => file.type.startsWith('video/') || VIDEO_EXT.test(file.name))
+  if (files.length && !videos.length) {
+    errorText.value = tr('bsx.dropOnlyVideo')
+    return
+  }
+  const paths = videos.map((file) => window.api.getPathForFile(file)).filter(Boolean)
+  if (paths.length) await pickUploadVideos(paths)
+}
+
+function stepPreview(delta: number) {
+  const count = draft.sourceItems.length
+  if (!count) return
+  const index = Math.max(0, selectedPreviewIndex.value)
+  const next = draft.sourceItems[(index + delta + count) % count]
+  if (next) selectedPreviewId.value = next.id
+}
+
+const activePresetName = computed(() => captionTemplatePresets.value.find((item) => item.id === selectedTemplatePreset.value)?.name || '')
+const jobProgress = computed(() => Math.max(0, Math.min(100, Number(selectedJob.value?.progress || 0))))
+const showJobBar = computed(() => Boolean(selectedJob.value && (runningJob.value || ['queued', 'processing', 'paused', 'failed', 'partial_failed'].includes(selectedJob.value.status))))
+const shownOutputs = computed(() => outputs.value.slice(0, outputsShown.value))
+
+function jobTone(status: BatchSubtitleJob['status']) {
+  if (status === 'completed') return 'vg-pill--green'
+  if (status === 'failed') return 'vg-pill--red'
+  if (status === 'partial_failed' || status === 'paused') return 'vg-pill--amber'
+  if (status === 'processing' || status === 'queued') return 'vg-pill--blue'
+  return ''
+}
+
+function editJob(job: BatchSubtitleJob) {
+  loadJobIntoDraft(job)
+  studioTab.value = 'make'
+}
+
 function openGuide() {
   notice.value =
     tr('autoUi.k_6901d9336c6f')
@@ -1070,9 +1062,9 @@ function openGuide() {
 onMounted(async () => {
   if (!(await ensurePluginReady())) return
   await refreshFontOptions()
+  restoreSettings()
   await loadAll()
   startQueuePolling()
-  scheduleAccuratePreview()
 })
 
 onBeforeUnmount(() => {
@@ -1082,2041 +1074,297 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="subtitle-workbench-page plugin-workspace-standard">
-    <section class="hero-panel glass-panel hero-panel--compact">
-      <div class="hero-copy hero-copy--compact">
+  <main class="vg-scope vg-page bsx">
+    <header class="vg-page-head">
+      <button class="vg-icon-btn" type="button" :title="tr('ai.tools.back')" @click="router.push('/plugins')"><ChevronLeft :size="18" /></button>
+      <span class="vg-page-head__icon"><Captions :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>{{ tr('autoUi.k_3c2dba21dfac') }}</h1>
-        <p>{{ tr('autoUi.k_2ef208e0ed51') }}</p>
+        <p>{{ tr('bsx.subtitle') }}</p>
       </div>
+    </header>
 
-      <div class="hero-actions hero-actions--compact">
-        <div class="hero-kpis hero-kpis--compact">
-          <div v-for="item in queueSummary" :key="item.label" class="hero-kpi hero-kpi--compact">
-            <strong>{{ item.value }}</strong>
-            <span>{{ item.label }}</span>
-          </div>
-        </div>
-        <button class="ghost-button ghost-button--compact" type="button" @click="openGuide">
-          <FolderOpen class="h-4 w-4" />
-          <span>{{ tr('autoUi.k_02b72c79047a') }}</span>
-        </button>
-      </div>
+    <div v-if="notice" class="vg-notice vg-notice--accent bsx-notice">
+      <span>{{ notice }}</span>
+      <button class="vg-icon-btn vg-icon-btn--sm" type="button" aria-label="close" @click="notice = ''"><X :size="13" /></button>
+    </div>
+    <div v-if="errorText" class="vg-notice vg-notice--danger bsx-notice">
+      <span>{{ errorText }}</span>
+      <button class="vg-icon-btn vg-icon-btn--sm" type="button" aria-label="close" @click="errorText = ''"><X :size="13" /></button>
+    </div>
+
+    <section v-if="pluginChecking" class="vg-card vg-empty">
+      <LoaderCircle :size="22" class="vg-spin" />
+      <p>{{ tr('autoUi.k_ab033e36c756') }}</p>
     </section>
 
-    <section v-if="pluginChecking" class="plugin-lock-panel glass-panel">
-      <LoaderCircle class="h-6 w-6 animate-spin" />
-      <strong>{{ tr('autoUi.k_ab033e36c756') }}</strong>
-    </section>
-
-    <section v-else-if="!pluginReady" class="plugin-lock-panel glass-panel">
-      <LockKeyhole class="h-8 w-8" />
-      <strong>{{ tr('autoUi.k_7659e21372a5') }}</strong>
+    <section v-else-if="!pluginReady" class="vg-card vg-empty">
+      <span class="vg-empty__icon"><LockKeyhole :size="22" /></span>
+      <p><strong>{{ tr('autoUi.k_7659e21372a5') }}</strong></p>
       <p>{{ tr('autoUi.k_a27ab48c49f9') }}</p>
-      <button class="ghost-button" type="button" @click="router.push('/plugins')">
-        <ArrowLeft class="h-4 w-4" />
-        <span>{{ tr('ai.tools.back') }}</span>
-      </button>
     </section>
 
-    <template v-else>
-    <section class="stepbar-panel glass-panel stepbar-panel--compact">
-      <button class="step-chip step-chip--compact" :class="[`is-${stepStates.source}`]" type="button">
-        <span class="step-chip__index">1</span>
-        <span class="step-chip__copy">
-          <strong>{{ tr('autoUi.k_2d9e0489e21f') }}</strong>
-        </span>
-        <CheckCircle2 v-if="stepStates.source === 'done'" class="step-chip__done h-4 w-4" />
-      </button>
-      <button class="step-chip step-chip--compact" :class="[`is-${stepStates.config}`]" type="button">
-        <span class="step-chip__index">2</span>
-        <span class="step-chip__copy">
-          <strong>{{ tr('autoUi.k_251c613f509d') }}</strong>
-        </span>
-        <CheckCircle2 v-if="stepStates.config === 'done'" class="step-chip__done h-4 w-4" />
-      </button>
-      <button class="step-chip step-chip--compact" :class="[`is-${stepStates.preview}`]" type="button">
-        <span class="step-chip__index">3</span>
-        <span class="step-chip__copy">
-          <strong>{{ tr('autoUi.k_f95aacf3bd60') }}</strong>
-        </span>
-        <CheckCircle2 v-if="stepStates.preview === 'done'" class="step-chip__done h-4 w-4" />
-      </button>
-      <button class="step-chip step-chip--compact" :class="[`is-${stepStates.render}`]" type="button">
-        <span class="step-chip__index">4</span>
-        <span class="step-chip__copy">
-          <strong>{{ tr('autoUi.k_64ffbf43808b') }}</strong>
-        </span>
-        <CheckCircle2 v-if="stepStates.render === 'done'" class="step-chip__done h-4 w-4" />
-      </button>
-    </section>
-
-    <div v-if="notice" class="page-message page-message--success">{{ notice }}</div>
-    <div v-if="errorText" class="page-message page-message--error">{{ errorText }}</div>
-
-    <section class="workspace-grid">
-      <article class="glass-panel work-card sources-card">
-        <div class="section-heading">
-          <div>
-            <span class="section-kicker">Source Intake</span>
-            <strong>{{ tr('autoUi.k_aa0dfea4335b') }}</strong>
-          </div>
-          <span class="section-note">{{ tr('autoUi.k_1bd9bfc383cf') }}</span>
-        </div>
-
-        <div class="segmented-tabs">
-          <button :class="{ 'is-active': sourceTab === 'upload' }" type="button" @click="sourceTab = 'upload'"> {{ tr('autoUi.k_16367f3d8ae3') }} </button>
-          <button :class="{ 'is-active': sourceTab === 'clone' }" type="button" @click="sourceTab = 'clone'"> {{ tr('autoUi.k_8810731ffc4d') }} </button>
-        </div>
-
-        <div v-if="sourceTab === 'upload'" class="upload-zone" @click="pickUploadVideos">
-          <div class="upload-zone__icon">
-            <Upload class="h-7 w-7" />
-          </div>
-          <strong>{{ tr('autoUi.k_ce5318355f95') }}</strong>
-          <span>{{ tr('autoUi.k_0e8f11cc03f6') }}</span>
-          <button class="minor-button" type="button" @click.stop="pickUploadVideosFromLibrary">从素材库选择视频</button>
-        </div>
-
-        <div v-else class="clone-picker">
-          <div class="picker-tip">
-            <p>{{ tr('autoUi.k_ac29877edcfd') }}</p>
-            <button class="minor-button minor-button--full" type="button" @click="applyCloneSources"> {{ tr('autoUi.k_49e222b27db2') }} </button>
-          </div>
-          <div class="clone-picker__list">
-            <button
-              v-for="project in cloneProjects"
-              :key="project.id"
-              class="clone-picker__item"
-              :class="{ 'is-selected': selectedSourceIds.includes(project.id) }"
-              type="button"
-              @click="toggleCloneSource(project)"
-            >
-              <img v-if="mediaUrl(project.coverAssetPath)" :src="mediaUrl(project.coverAssetPath)" :alt="project.title" />
-              <div class="clone-picker__copy">
-                <strong>{{ project.title }}</strong>
-                <small>{{ project.referenceVideoName || tr('autoUi.k_d264f0c81078') }}</small>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        <div class="card-head">
-          <strong>{{ tr('autoUi.k_917845a7389e') }} {{ draft.sourceItems.length }}</strong>
-          <button class="text-button" type="button" @click="draft.sourceItems = []; selectedPreviewId = ''"> {{ tr('autoUi.k_84fcd70d4280') }} </button>
-        </div>
-
-        <div class="sources-list">
-          <button
-            v-for="item in sourcePageItems"
-            :key="item.id"
-            class="source-list-item"
-            :class="{ 'is-active': selectedPreviewId === item.id }"
-            type="button"
-            @click="selectedPreviewId = item.id"
-          >
-            <img
-              v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-              :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
-              :alt="item.fileName"
-              loading="lazy"
-              decoding="async"
-            />
-            <div class="source-list-item__copy">
-              <strong>{{ item.fileName }}</strong>
-              <small>{{ formatDuration(item.durationSec) }} · {{ item.width || 1080 }}×{{ item.height || 1920 }}</small>
+    <div v-else class="vg-split bsx__layout">
+      <div class="vg-stack">
+        <!-- 1. 视频 -->
+        <section
+          class="vg-card bsx-videos"
+          :class="{ 'is-dragover': dragOver }"
+          @dragover.prevent="dragOver = true"
+          @dragleave.self="dragOver = false"
+          @drop.prevent="onDropVideos"
+        >
+          <div class="vg-card__head">
+            <span class="vg-card__title">1. {{ tr('bsx.stepVideos') }} <small>{{ tr('bsx.selectedCount', { n: draft.sourceItems.length }) }}</small></span>
+            <div class="vg-card__actions">
+              <button v-if="draft.sourceItems.length" type="button" class="vg-btn vg-btn--sm vg-btn--ghost" @click="clearSources">{{ tr('autoUi.k_84fcd70d4280') }}</button>
+              <button type="button" class="vg-btn vg-btn--sm" @click="pickUploadVideosFromLibrary"><Images :size="14" />{{ tr('bsx.fromLibrary') }}</button>
+              <button v-if="cloneProjects.length" type="button" class="vg-btn vg-btn--sm" :class="{ 'is-active': sourceTab === 'clone' }" @click="sourceTab = sourceTab === 'clone' ? 'upload' : 'clone'"><Film :size="14" />{{ tr('autoUi.k_8810731ffc4d') }}</button>
+              <button type="button" class="vg-btn vg-btn--sm" @click="pickUploadVideos()"><FolderOpen :size="14" />{{ tr('bsx.fromDisk') }}</button>
             </div>
-            <span class="source-list-item__remove" @click.stop="removeSourceItem(item.id)">
-              <X class="h-4 w-4" />
-            </span>
+          </div>
+
+          <div v-if="sourceTab === 'clone'" class="bsx-clone">
+            <div class="bsx-clone__list">
+              <label v-for="project in cloneProjects" :key="project.id" class="bsx-clone__item" :class="{ 'is-selected': selectedSourceIds.includes(project.id) }">
+                <input type="checkbox" :checked="selectedSourceIds.includes(project.id)" @change="toggleCloneSource(project)" />
+                <img v-if="mediaUrl(project.coverAssetPath)" :src="mediaUrl(project.coverAssetPath)" alt="" />
+                <span class="vg-ellipsis">{{ project.title || tr('autoUi.k_d264f0c81078') }}</span>
+              </label>
+            </div>
+            <button class="vg-btn vg-btn--sm vg-btn--soft" type="button" :disabled="!selectedSourceIds.length" @click="applyCloneSources(); sourceTab = 'upload'">{{ tr('autoUi.k_49e222b27db2') }}</button>
+          </div>
+
+          <button v-if="!draft.sourceItems.length" type="button" class="bsx-drop" @click="pickUploadVideos()">
+            <Upload :size="22" />
+            <strong>{{ tr('bsx.dropHint') }}</strong>
+            <span>{{ tr('bsx.noVideosHint') }}</span>
           </button>
-        </div>
 
-        <div v-if="draft.sourceItems.length > sourcePageSize" class="source-pager">
-          <div class="source-pager__meta">
-            <span>{{ tr('autoUi.k_8b8b664f5094') }} {{ sourcePageRange }}</span>
-            <strong>{{ tr('autoUi.k_dae828fe4fb7') }} {{ sourcePage }} / {{ sourcePageCount }} {{ tr('autoUi.k_73422182ab45') }}</strong>
-          </div>
-          <div class="source-pager__actions">
-            <button class="toolbar-pill" type="button" :disabled="!canSourcePagePrev" @click="goSourcePagePrev"> {{ tr('autoUi.k_b41561d80765') }} </button>
-            <button class="toolbar-pill" type="button" :disabled="!canSourcePageNext" @click="goSourcePageNext"> {{ tr('autoUi.k_67a246a344ae') }} </button>
-          </div>
-        </div>
-
-        <div class="capacity-card">
-          <div class="capacity-head">
-            <span>{{ tr('autoUi.k_11895d0b9912') }}</span>
-            <strong>{{ draft.sourceItems.length }} {{ tr('autoUi.k_bce2ef61514a') }}</strong>
-          </div>
-          <div class="sources-progress__bar">
-            <div class="sources-progress__fill" :style="{ width: `${sourceUsagePercent}%` }"></div>
-          </div>
-          <p>{{ tr('autoUi.k_1e7860c88dd9') }}</p>
-          <div v-if="selectedJobBatchSummary" class="batch-runtime-card">
-            <div class="batch-runtime-card__head">
-              <span>{{ tr('autoUi.k_dacdf7b9d85d') }}</span>
-              <strong>{{ selectedJobBatchSummary.totalBatches ? `${selectedJobBatchSummary.currentBatch} / ${selectedJobBatchSummary.totalBatches}` : '--' }}</strong>
+          <div v-else class="bsx-rows">
+            <div
+              v-for="item in sourcePageItems"
+              :key="item.id"
+              class="bsx-row"
+              :class="{ 'is-active': previewSource?.id === item.id }"
+              @click="selectedPreviewId = item.id"
+            >
+              <span class="bsx-row__thumb">
+                <img
+                  v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
+                  :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
+              </span>
+              <span class="bsx-row__info">
+                <strong class="vg-ellipsis" :title="item.fileName">{{ item.fileName }}</strong>
+                <small>{{ formatDuration(item.durationSec) }}<template v-if="item.width && item.height"> · {{ item.width }}×{{ item.height }}</template></small>
+              </span>
+              <input
+                v-if="titleStrategy === 'single_for_all'"
+                class="vg-input vg-input--sm bsx-row__title"
+                :value="titleOverrideFor(item.id)"
+                :placeholder="draft.titleText ? tr('bsx.useShared') : tr('bsx.noTitle')"
+                :class="{ 'is-missing': !resolveTitleTextForSource(item.id) }"
+                @click.stop
+                @focus="selectedPreviewId = item.id"
+                @change="updateTitleItem(item.id, ($event.target as HTMLInputElement).value)"
+              />
+              <span v-else class="bsx-row__random vg-muted">{{ tr('bsx.randomTitle') }}</span>
+              <button type="button" class="vg-icon-btn vg-icon-btn--sm" :aria-label="tr('autoUi.k_84fcd70d4280')" @click.stop="removeSourceItem(item.id)"><X :size="14" /></button>
             </div>
-            <div class="batch-runtime-card__meta">
-              <span>{{ tr('autoUi.k_96b029d1e14b') }} {{ selectedJobBatchSummary.rangeStart }}-{{ selectedJobBatchSummary.rangeEnd }}</span>
-              <span>{{ tr('autoUi.k_f37c034a97bb') }} {{ selectedJobBatchSummary.remaining }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
-              <span>{{ tr('autoUi.k_fd04697da61c') }} {{ selectedJobBatchSummary.batchSize }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
+            <div v-if="draft.sourceItems.length > sourcePageSize" class="bsx-pager">
+              <button class="vg-pg" type="button" :disabled="!canSourcePagePrev" @click="goSourcePagePrev"><ChevronLeft :size="14" /></button>
+              <span class="vg-num">{{ sourcePage }} / {{ sourcePageCount }}</span>
+              <button class="vg-pg" type="button" :disabled="!canSourcePageNext" @click="goSourcePageNext"><ChevronRight :size="14" /></button>
             </div>
           </div>
-        </div>
-      </article>
+        </section>
 
-      <article class="glass-panel work-card preview-card">
-        <div class="card-head">
-          <div>
-            <span class="section-kicker">Live Preview</span>
-            <strong>{{ tr('autoUi.k_3db769d9546e') }}</strong>
-          </div>
-          <div class="preview-toolbar">
-            <span class="toolbar-pill is-active">9:16</span>
-            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'fast' }" type="button" @click="setPreviewMode('fast')"> {{ tr('autoUi.k_94636f2c55e9') }} </button>
-            <button class="toolbar-pill" :class="{ 'is-active': previewMode === 'video' }" type="button" @click="setPreviewMode('video')"> {{ tr('autoUi.k_c29bc057fcfc') }} </button>
-            <button class="toolbar-pill" type="button" @click="scheduleAccuratePreview()">
-              {{ previewDirtySinceLastRender ? tr('autoUi.k_13191048151a') : tr('autoUi.k_2e19057052a3') }}
-            </button>
-          </div>
-        </div>
+        <!-- 2. 标题（和各模块的「批量添加字幕」弹窗同一个组件） -->
+        <section class="vg-card">
+          <div class="vg-card__head"><span class="vg-card__title">2. {{ tr('bsx.stepTitle') }}</span></div>
+          <SubtitleTitleFields
+            v-model:strategy="titleStrategy"
+            v-model:title-text="draft.titleText"
+            v-model:pool-text="titlePoolText"
+            :hint="tr('bsx.sharedHint')"
+            @error="errorText = $event"
+            @notice="notice = $event"
+          />
+        </section>
 
-        <div class="preview-stage">
-          <div class="preview-stage__frame">
+        <!-- 3. 样式 -->
+        <section class="vg-card">
+          <div class="vg-card__head"><span class="vg-card__title">3. {{ tr('bsx.stepStyle') }}</span></div>
+          <SubtitleStyleFields v-model="draft.captionStyle" v-model:preset="selectedTemplatePreset" :title="liveTitle" />
+        </section>
+
+        <!-- 4. 开始 -->
+        <section class="vg-card bsx-start">
+          <div class="bsx-start__summary">
+            <span>{{ tr('bsx.summaryVideos', { n: draft.sourceItems.length }) }}</span>
+            <span>{{ titleStrategy === 'random_pool' ? tr('bsx.summaryPool', { n: titlePoolItems.length }) : tr('autoUi.k_73e18b3f4a29') }}</span>
+            <span v-if="missingTitleCount" class="bsx-help--warn">{{ tr('bsx.summaryMissing', { n: missingTitleCount }) }}</span>
+          </div>
+          <button type="button" class="vg-btn vg-btn--primary vg-btn--lg vg-btn--block" :disabled="runningJob || !draft.sourceItems.length || !hasDraftTitles" @click="renderBatch">
+            <LoaderCircle v-if="runningJob" :size="16" class="vg-spin" /><Play v-else :size="16" />
+            {{ runningJob ? tr('autoUi.k_12fefde201ec') : tr('bsx.start', { n: draft.sourceItems.length }) }}
+          </button>
+        </section>
+      </div>
+
+      <aside class="vg-stack bsx-side">
+        <!-- 效果预览 -->
+        <section class="vg-card">
+          <div class="vg-card__head">
+            <span class="vg-card__title">{{ tr('bsx.preview') }}</span>
+            <span class="vg-pill" :class="realPreviewFresh ? 'vg-pill--green' : ''">{{ realPreviewFresh ? tr('bsx.previewReal') : tr('bsx.previewLive') }}</span>
+          </div>
+          <SubtitleLivePreview v-model:caption-style="draft.captionStyle" :title="realPreviewFresh ? '' : liveTitle" :image-src="realPreviewFresh ? '' : previewImageSrc" :draggable="!realPreviewFresh" :empty-text="realPreviewFresh ? '' : tr('bsx.previewEmpty')" class="bsx-frame">
             <video
-              v-if="previewMode === 'video' && previewDynamicVideoUrl"
-              :key="previewFrame?.generatedAt"
+              v-if="realPreviewFresh && previewMode === 'video' && previewDynamicVideoUrl"
               :src="previewDynamicVideoUrl"
               :poster="previewPosterUrl || undefined"
               controls
+              autoplay
+              muted
               preload="metadata"
-              class="preview-stage__video"
             ></video>
-            <img
-              v-else-if="previewFrame?.previewImagePath"
-              :src="mediaUrl(previewFrame.previewImagePath)"
-                    :alt="tr('autoUi.k_3b93fd2d045d')"
-              class="preview-stage__video"
-            />
-            <div v-else class="preview-stage__empty">
-              <strong>{{ tr('autoUi.k_0d43ec255cb5') }}</strong>
-              <span>{{ tr('autoUi.k_72f847dd1821') }}</span>
-            </div>
-            <div v-if="previewFrameLoading" class="preview-stage__loading">
-              <LoaderCircle class="h-4 w-4 animate-spin" />
-              <span>{{ previewMode === 'video' ? tr('autoUi.k_b9c55e9ffcb6') : tr('autoUi.k_ab62e9e1f4e5') }}</span>
-            </div>
+            <img v-else-if="realPreviewFresh && previewFrame?.previewImagePath" :src="mediaUrl(previewFrame.previewImagePath)" alt="" />
+            <div v-if="previewFrameLoading" class="bsx-frame__loading"><LoaderCircle :size="14" class="vg-spin" />{{ tr('bsx.rendering') }}</div>
+          </SubtitleLivePreview>
+          <div class="bsx-nav">
+            <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="draft.sourceItems.length < 2" :title="tr('bsx.prevVideo')" @click="stepPreview(-1)"><ChevronLeft :size="16" /></button>
+            <span class="vg-ellipsis">{{ previewSource ? `${Math.max(0, selectedPreviewIndex) + 1}/${draft.sourceItems.length} · ${previewSource.fileName}` : tr('autoUi.k_4e810e74e284') }}</span>
+            <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="draft.sourceItems.length < 2" :title="tr('bsx.nextVideo')" @click="stepPreview(1)"><ChevronRight :size="16" /></button>
           </div>
-        </div>
-
-        <div class="preview-playerbar">
-          <Play class="h-4 w-4" />
-          <span>{{ previewSource ? '00:03' : '--:--' }} / {{ formatDuration(previewSource?.durationSec) }}</span>
-          <div class="preview-playerbar__track">
-            <div class="preview-playerbar__progress"></div>
+          <div class="bsx-real">
+            <button type="button" class="vg-btn vg-btn--sm" :disabled="!previewSource || !liveTitle || previewFrameLoading" @click="renderRealPreview('fast')"><ImageIcon :size="14" />{{ tr('bsx.renderFrame') }}</button>
+            <button type="button" class="vg-btn vg-btn--sm" :disabled="!previewSource || !liveTitle || previewFrameLoading" @click="renderRealPreview('video')"><Clapperboard :size="14" />{{ tr('bsx.renderClip') }}</button>
           </div>
-        </div>
-
-        <div class="preview-strip">
-          <button class="preview-strip__nav" type="button" :disabled="!canPreviewThumbPrev" @click="goPreviewThumbPrev">
-            ‹
-          </button>
-          <div class="preview-thumbs">
-            <button
-              v-for="item in visiblePreviewThumbs"
-              :key="item.id"
-              class="preview-thumbs__item"
-              :class="{ 'is-active': selectedPreviewId === item.id }"
-              type="button"
-              @click="selectedPreviewId = item.id"
-            >
-              <img
-                v-if="mediaUrl(item.coverImagePath || item.sourceVideoPath)"
-                :src="thumbnailUrl(item.coverImagePath || item.sourceVideoPath, 160)"
-                :alt="item.fileName"
-                loading="lazy"
-                decoding="async"
-              />
-              <span class="preview-thumbs__overlay"></span>
-              <span class="preview-thumbs__label">{{ shortFileName(item.fileName) }}</span>
-            </button>
-            <button v-if="previewThumbRemaining > 0" class="preview-thumbs__more" type="button" @click="goPreviewThumbNext">
-              +{{ previewThumbRemaining }}
-            </button>
-          </div>
-          <button class="preview-strip__nav" type="button" :disabled="!canPreviewThumbNext" @click="goPreviewThumbNext">
-            ›
-          </button>
-        </div>
-
-        <div class="preview-meta">
-          <div>
-            <span class="section-kicker">Preview Status</span>
-            <strong>{{ previewSource?.fileName || tr('autoUi.k_4e810e74e284') }}</strong>
-          </div>
-          <p>{{ previewMode === 'video' ? tr('autoUi.k_878c3070dab2') : tr('autoUi.k_9dfec6f6a2e9') }}</p>
-        </div>
-
-        <div v-if="previewVideoError" class="preview-error">{{ previewVideoError }}</div>
-
-        <div class="preview-footer">
-          <div class="preview-footer__actions">
-            <button class="minor-button" type="button" @click="saveCurrentDraft">{{ tr('autoUi.k_817af1870ca0') }}</button>
-            <button class="minor-button" type="button" :disabled="!canPauseSelectedJob || controllingJob" @click="pauseCurrentJob"> {{ tr('autoUi.k_130448bce675') }} </button>
-            <button class="minor-button" type="button" :disabled="!canResumeSelectedJob || controllingJob" @click="resumeCurrentJob(false)"> {{ tr('autoUi.k_1fc1afc5c55e') }} </button>
-            <button class="minor-button" type="button" :disabled="!canRetryFailedOnly || controllingJob" @click="resumeCurrentJob(true)"> {{ tr('autoUi.k_8af761b2b4bf') }} </button>
-          </div>
-          <button class="primary-button" type="button" :disabled="runningJob" @click="renderBatch">
-            <LoaderCircle v-if="runningJob" class="h-4 w-4 animate-spin" />
-            <Play v-else class="h-4 w-4" />
-            <span>{{ runningJob ? tr('autoUi.k_12fefde201ec') : tr('autoUi.k_32dc2a3442fc', { p0: draft.sourceItems.length || 0 }) }}</span>
-          </button>
-        </div>
-      </article>
-
-      <article class="glass-panel work-card config-card">
-        <div class="card-head">
-          <div>
-            <span class="section-kicker">Caption Control</span>
-            <strong>{{ tr('autoUi.k_437fa96dabb8') }}</strong>
-          </div>
-        </div>
-
-        <div class="segmented-tabs">
-          <button :class="{ 'is-active': rightTab === 'content' }" type="button" @click="rightTab = 'content'"> {{ tr('autoUi.k_696307182bc5') }} </button>
-          <button :class="{ 'is-active': rightTab === 'style' }" type="button" @click="rightTab = 'style'"> {{ tr('autoUi.k_8b52bd0a4bd6') }} </button>
-        </div>
-
-        <template v-if="rightTab === 'content'">
-          <section class="form-section">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Title Mode</span>
-                <strong>{{ tr('autoUi.k_7f39a0d9ffad') }}</strong>
-              </div>
-            </div>
-            <div class="strategy-grid">
-              <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'single_for_all' }" type="button" @click="titleStrategy = 'single_for_all'">
-                <strong>{{ tr('autoUi.k_73e18b3f4a29') }}</strong>
-                <small>{{ tr('autoUi.k_35ea8ee71029') }}</small>
-              </button>
-              <button class="strategy-card" :class="{ 'is-active': titleStrategy === 'random_pool' }" type="button" @click="titleStrategy = 'random_pool'">
-                <strong>{{ tr('autoUi.k_84ba3e6f5cfb') }}</strong>
-                <small>{{ tr('autoUi.k_5c5896230c71') }}</small>
-              </button>
-            </div>
-            <div v-if="titleStrategy === 'single_for_all'">
-              <input
-                v-model="draft.titleText"
-                class="dark-input"
-                type="text"
-                :placeholder="tr('autoUi.k_84fa79965540')"
-              />
-            </div>
-            <div v-else>
-              <textarea
-                v-model="titlePoolText"
-                class="dark-textarea dark-textarea--compact"
-                :placeholder="tr('autoUi.k_8b5a652b83d0')"
-              ></textarea>
-              <p class="helper-copy helper-copy--tight">{{ tr('autoUi.k_829814eab6c6') }}{{ titlePoolItems.length }}</p>
-            </div>
-          </section>
-
-
-          <section class="form-section" v-if="titleStrategy === 'single_for_all'">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Per Video Titles</span>
-                <strong>{{ tr('autoUi.k_e2fd7c5ff973') }}</strong>
-              </div>
-            </div>
-            <div class="title-item-list">
-              <div v-for="item in draft.sourceItems" :key="item.id" class="title-item-card">
-                <div class="title-item-card__head">
-                  <strong>{{ shortFileName(item.fileName) }}</strong>
-                  <span>{{ formatDuration(item.durationSec) }}</span>
-                </div>
-                <textarea
-                  class="dark-textarea dark-textarea--compact"
-                  :value="resolveTitleTextForSource(item.id)"
-                  :placeholder="tr('autoUi.k_70c4476bc64d')"
-                  @input="updateTitleItem(item.id, ($event.target as HTMLTextAreaElement).value)"
-                ></textarea>
-                <p class="helper-copy helper-copy--tight">{{ tr('autoUi.k_3ff93f5971c0') }}</p>
-              </div>
-            </div>
-          </section>
-        </template>
-        <template v-else>
-          <section class="form-section">
-            <div class="section-heading">
-              <div>
-                <span class="section-kicker">Typeface</span>
-                <strong>{{ tr('autoUi.k_1bc4ce5a7f47') }}</strong>
-              </div>
-            </div>
-
-            <div class="template-preset-grid">
-              <button
-                v-for="preset in captionTemplatePresets"
-                :key="preset.id"
-                class="template-preset"
-                :class="{ 'is-active': selectedTemplatePreset === preset.id }"
-                type="button"
-                @click="applyCaptionTemplatePreset(preset.id)"
-              >
-                <strong>{{ preset.name }}</strong>
-                <span>{{ preset.summary }}</span>
-              </button>
-            </div>
-            <p class="helper-copy">{{ tr('autoUi.k_12a878360eaf') }}</p>
-          </section>
-
-          <section class="form-section">
-            <div class="form-grid form-grid--triple">
-              <label class="field-block field-block--wide">
-                <span>{{ tr('autoUi.k_b50d4d8352f5') }}</span>
-                <input v-model="draft.captionStyle.fontName" class="dark-input" type="text" :placeholder="tr('autoUi.k_92e18f5ddb71')" />
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_576ccdb1f1c7') }}</span>
-                <input v-model.number="draft.captionStyle.fontSize" class="dark-input" type="number" min="18" max="120" />
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_a48b15a6de71') }}</span>
-                <input v-model.number="draft.captionStyle.strokeWidth" class="dark-input" type="number" min="0" max="12" />
-              </label>
-            </div>
-
-            <div class="form-grid form-grid--dual">
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_07f568dada4d') }}</span>
-                <div class="color-field">
-                  <input v-model="draft.captionStyle.fontColor" class="dark-input dark-input--text" type="text" />
-                  <input v-model="draft.captionStyle.fontColor" class="dark-input dark-input--color" type="color" />
-                </div>
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_eaa98f95ba53') }}</span>
-                <div class="color-field">
-                  <input v-model="draft.captionStyle.strokeColor" class="dark-input dark-input--text" type="text" />
-                  <input v-model="draft.captionStyle.strokeColor" class="dark-input dark-input--color" type="color" />
-                </div>
-              </label>
-            </div>
-          </section>
-
-          <section class="form-section">
-            <div class="form-grid form-grid--dual">
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_2dafdabeabf6') }}</span>
-                <div class="color-field">
-                  <input v-model="draft.captionStyle.shadowColor" class="dark-input dark-input--text" type="text" />
-                  <input v-model="draft.captionStyle.shadowColor" class="dark-input dark-input--color" type="color" />
-                </div>
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_7f36b37b3b4f') }}</span>
-                <input v-model.number="draft.captionStyle.shadowBlur" class="dark-input" type="number" min="0" max="40" />
-              </label>
-            </div>
-
-            <div class="form-grid form-grid--quad">
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_88c34452cc46') }}</span>
-                <select v-model="draft.captionStyle.position" class="dark-input">
-                  <option value="top">{{ tr('autoUi.k_a9d35ab0a675') }}</option>
-                  <option value="center">{{ tr('autoUi.k_5009324782b9') }}</option>
-                  <option value="bottom">{{ tr('autoUi.k_435b2d8982fd') }}</option>
-                </select>
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_6e081f6c8bae') }}</span>
-                <input v-model.number="draft.captionStyle.safeMargin" class="dark-input" type="number" min="0" max="40" />
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_3ca120ca0195') }}</span>
-                <input v-model.number="draft.captionStyle.maxLines" class="dark-input" type="number" min="1" max="6" />
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_47b8b7519755') }}</span>
-                <div class="align-segment">
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'left' }" @click="draft.captionStyle.textAlign = 'left'"> {{ tr('autoUi.k_df3ee667608c') }} </button>
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'center' }" @click="draft.captionStyle.textAlign = 'center'"> {{ tr('autoUi.k_0869071c92c0') }} </button>
-                  <button type="button" :class="{ 'is-active': draft.captionStyle.textAlign === 'right' }" @click="draft.captionStyle.textAlign = 'right'"> {{ tr('autoUi.k_851cdd609190') }} </button>
-                </div>
-              </label>
-            </div>
-
-            <div class="form-grid form-grid--dual">
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_46b628553a32') }}</span>
-                <input v-model.number="draft.captionStyle.maxWidthRatio" class="dark-input" type="number" min="0.4" max="0.92" step="0.02" />
-              </label>
-              <label class="field-block">
-                <span>{{ tr('autoUi.k_d36447206aaa') }}</span>
-                <input v-model.number="draft.captionStyle.bottomMargin" class="dark-input" type="number" min="48" max="600" />
-              </label>
-            </div>
-          </section>
-        </template>
-      </article>
-    </section>
-
-    <section class="bottom-grid">
-      <article class="glass-panel work-card queue-card">
-        <div class="card-head">
-          <div>
-            <span class="section-kicker">Render Queue</span>
-            <strong>{{ tr('autoUi.k_83856208eaba') }}</strong>
-          </div>
-          <div class="segmented-tabs segmented-tabs--queue">
-            <button :class="{ 'is-active': queueTab === 'all' }" type="button" @click="queueTab = 'all'"> {{ tr('autoUi.k_778fc8f99453') }} {{ jobs.length }}
-            </button>
-            <button :class="{ 'is-active': queueTab === 'processing' }" type="button" @click="queueTab = 'processing'"> {{ tr('autoUi.k_fcb979ef0b91') }} {{ processingCount }}
-            </button>
-            <button :class="{ 'is-active': queueTab === 'completed' }" type="button" @click="queueTab = 'completed'"> {{ tr('autoUi.k_e99b48a29bdf') }} {{ completedCount }}
-            </button>
-          </div>
-        </div>
-
-        <div class="queue-table queue-table--cards">
-          <article v-for="job in visibleJobs" :key="job.id" class="queue-card-item">
-            <div class="queue-card-item__top">
-              <div class="queue-card-item__title">
-                <strong>{{ job.name }}</strong>
-                <small>{{ job.titleConfig?.singleText ? tr('autoUi.k_970dd864bf27') : job.subtitleMode }}</small>
-              </div>
-              <em class="status-chip" :class="`status-chip--${job.status}`">{{ resolveJobStatusLabel(job.status) }}</em>
-            </div>
-
-            <div class="queue-card-item__meta">
-              <span>{{ tr('autoUi.k_75e00c77cbfc') }} {{ job.sourceItems.length }}</span>
-              <span>{{ tr('autoUi.k_ded698ae1e7e') }} {{ job.outputCount }} / {{ job.sourceItems.length }}</span>
-              <span>{{ formatTime(job.createdAt) }}</span>
-            </div>
-
-            <div class="queue-card-item__progress">
-              <div class="progress-cell">
-                <div class="progress-cell__bar">
-                  <div class="progress-cell__fill" :style="{ width: `${job.progress || 0}%` }"></div>
-                </div>
-                <strong>{{ job.progress || 0 }}%</strong>
-              </div>
-              <small class="queue-batch-note">{{ describeJobBatchRuntime(job) }}</small>
-            </div>
-
-            <div class="queue-card-item__actions">
-              <button class="row-action" type="button" @click="loadJobIntoDraft(job)">{{ tr('autoUi.k_da4738cea064') }}</button>
-              <button class="row-action" type="button" :disabled="job.status !== 'processing' || controllingJob" @click="controlQueueJob(job, 'pause')"> {{ tr('autoUi.k_130448bce675') }} </button>
-              <button class="row-action" type="button" :disabled="!(job.status === 'paused' || job.status === 'failed') || controllingJob" @click="controlQueueJob(job, 'resume')"> {{ tr('autoUi.k_1fc1afc5c55e') }} </button>
-              <button
-                class="row-action"
-                type="button"
-                :disabled="!job.outputs.some((item) => item.renderStatus === 'failed') || controllingJob"
-                @click="controlQueueJob(job, 'retry_failed')"
-              > {{ tr('autoUi.k_8af761b2b4bf') }} </button>
-            </div>
-          </article>
-        </div>
-      </article>
-
-      <article class="glass-panel work-card results-card">
-        <div class="card-head">
-          <div>
-            <span class="section-kicker">Outputs</span>
-            <strong>{{ tr('autoUi.k_7da807cf5fc2') }}</strong>
-          </div>
-          <button class="text-button" type="button" @click="showAllOutputs = !showAllOutputs">
-            {{ showAllOutputs ? tr('autoUi.k_5d5815647c76') : tr('autoUi.k_4bcc8fb67a77') }}
-          </button>
-        </div>
-
-        <div class="results-strip">
-          <article
-            v-for="item in visibleOutputs"
-            :key="item.id"
-            class="result-thumb"
-            :class="{ 'is-failed': item.renderStatus === 'failed' }"
-          >
-            <div class="result-thumb__media">
-              <video
-                v-if="item.renderStatus === 'success' && mediaUrl(item.outputVideoPath)"
-                :src="mediaUrl(item.outputVideoPath)"
-                muted
-                playsinline
-                preload="metadata"
-              ></video>
-              <img
-                v-else-if="mediaUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath)"
-                :src="thumbnailUrl(item.coverImagePath || item.outputVideoPath || item.sourceVideoPath, 320)"
-                loading="lazy"
-                decoding="async"
-                :alt="item.selectedTitle || tr('autoUi.k_7da807cf5fc2')"
-              />
-              <span class="result-thumb__badge" :class="{ 'is-failed': item.renderStatus === 'failed' }">
-                {{ item.renderStatus === 'success' ? tr('autoUi.k_64ecc9a38864') : tr('autoUi.k_3e3c8068bb0e') }}
-              </span>
-            </div>
-            <div class="result-thumb__copy">
-              <strong>{{ shortFileName(item.outputVideoPath || item.sourceVideoPath) }}</strong>
-              <small>{{ item.selectedTitle || tr('autoUi.k_a72c844b7a6d') }}</small>
-            </div>
-            <div class="result-thumb__actions">
-              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="openOutputVideo(item)"> {{ tr('autoUi.k_b75a14de021c') }} </button>
-              <button class="row-action" type="button" :disabled="item.renderStatus !== 'success'" @click="showOutputInFolder(item)"> {{ tr('autoUi.k_031c10557843') }} </button>
-            </div>
-          </article>
-        </div>
-
-        <section v-if="failedOutputSummary.length" class="failed-summary">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">Failure Summary</span>
-              <strong>{{ tr('autoUi.k_2a728505ce86') }}</strong>
-            </div>
-            <span class="section-note">{{ tr('autoUi.k_3b6ef811b85a') }} {{ failedOutputs.length }} {{ tr('autoUi.k_bce2ef61514a') }}</span>
-          </div>
-          <div class="failed-summary__list">
-            <article v-for="item in failedOutputSummary" :key="item.id" class="failed-summary__item">
-              <strong>{{ item.fileName }}</strong>
-              <small>{{ item.reason }}</small>
-            </article>
-          </div>
+          <p class="bsx-help">{{ tr('bsx.dragHint') }} {{ tr('bsx.previewHint') }}</p>
+          <div v-if="previewVideoError" class="vg-notice vg-notice--danger">{{ previewVideoError }}</div>
         </section>
-      </article>
-    </section>
 
-    <div v-if="loading" class="page-loading">
-      <LoaderCircle class="h-4 w-4 animate-spin" />
-      <span>{{ tr('autoUi.k_cb59dd17afe4') }}</span>
+        <!-- 处理记录 -->
+        <section class="vg-card">
+          <div class="vg-card__head">
+            <span class="vg-card__title">{{ tr('bsx.history') }}</span>
+            <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="loading" @click="loadAll"><RefreshCcw :size="14" :class="{ 'vg-spin': loading }" /></button>
+          </div>
+          <p v-if="!shownJobs.length" class="vg-muted bsx-help">{{ tr('bsx.noHistory') }}</p>
+          <div v-for="job in shownJobs" :key="job.id" class="bsx-batch">
+            <div class="bsx-batch__head">
+              <strong>{{ formatTime(job.createdAt) }}</strong>
+              <span class="vg-muted">{{ jobDone(job) }}/{{ job.sourceItems.length }}</span>
+              <span class="vg-pill" :class="jobTone(job.status)">{{ resolveJobStatusLabel(job.status) }}</span>
+              <span class="vg-toolbar__spacer"></span>
+              <button v-if="job.status === 'processing'" type="button" class="vg-icon-btn vg-icon-btn--sm" :disabled="controllingJob" :title="tr('autoUi.k_130448bce675')" @click="controlQueueJob(job, 'pause')"><Pause :size="14" /></button>
+              <button v-if="job.status === 'paused' || job.status === 'failed'" type="button" class="vg-icon-btn vg-icon-btn--sm" :disabled="controllingJob" :title="tr('autoUi.k_1fc1afc5c55e')" @click="controlQueueJob(job, 'resume')"><Play :size="14" /></button>
+              <button v-if="job.outputs.some((item) => item.renderStatus === 'failed')" type="button" class="vg-icon-btn vg-icon-btn--sm" :disabled="controllingJob" :title="tr('autoUi.k_8af761b2b4bf')" @click="controlQueueJob(job, 'retry_failed')"><RotateCcw :size="14" /></button>
+              <button type="button" class="vg-icon-btn vg-icon-btn--sm" :disabled="!jobDone(job)" :title="tr('autoUi.k_031c10557843')" @click="openJobFolder(job)"><FolderOpen :size="14" /></button>
+              <button type="button" class="vg-icon-btn vg-icon-btn--sm" :title="tr('bsx.reuse')" @click="reuseJobSettings(job)"><Copy :size="14" /></button>
+            </div>
+            <div v-if="job.status === 'processing' || job.status === 'queued'" class="vg-progress bsx-batch__progress">
+              <span class="vg-progress__bar"><span class="vg-progress__fill" :style="{ width: `${job.progress || 0}%` }"></span></span>
+              <span>{{ job.progress || 0 }}%</span>
+            </div>
+            <button
+              v-for="item in job.outputs"
+              :key="item.id"
+              type="button"
+              class="bsx-batch__item"
+              :disabled="item.renderStatus !== 'success'"
+              :title="item.error || item.selectedTitle"
+              @click="openOutputVideo(item)"
+            >
+              <CheckCircle2 v-if="item.renderStatus === 'success'" :size="14" class="bsx-ok" />
+              <XCircle v-else :size="14" class="bsx-err" />
+              <span class="vg-ellipsis">{{ item.selectedTitle || shortFileName(item.sourceVideoPath) }}</span>
+              <small v-if="item.error" class="bsx-err vg-ellipsis">{{ item.error }}</small>
+            </button>
+          </div>
+          <button v-if="jobs.filter((job) => job.status !== 'draft').length > shownJobs.length" type="button" class="vg-btn vg-btn--sm vg-btn--ghost vg-btn--block" @click="historyShown += 10">{{ tr('bsx.moreHistory') }}</button>
+        </section>
+      </aside>
     </div>
-    </template>
-  </div>
+  </main>
 </template>
 
 <style scoped>
-.subtitle-workbench-page {
-  --bg: color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel));
-  --panel-bg: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel)), color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel)));
-  --panel-edge: color-mix(in srgb, var(--theme-panel) 8%, transparent);
-  --panel-edge-strong: color-mix(in srgb, var(--theme-tone-blue) 14%, var(--theme-panel));
-  --panel-shadow: 0 30px 80px color-mix(in srgb, var(--theme-panel) 28%, transparent);
-  --text-main: var(--theme-text);
-  --text-soft: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
-  --text-faint: color-mix(in srgb, var(--theme-text) 48%, transparent);
-  --accent: var(--theme-tone-blue);
-  --accent-soft: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
-  display: grid;
-  gap: 14px;
-  min-height: calc(100vh - 120px);
-  padding: 14px 16px 22px;
-  color: var(--text-main);
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-tone-blue) 18%, transparent), transparent 24%),
-    radial-gradient(circle at 15% 18%, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 22%),
-    linear-gradient(180deg, var(--theme-panel) 0%, var(--theme-panel) 100%);
-  overflow-y: auto;
-}
-
-.plugin-lock-panel {
-  display: grid;
-  min-height: 280px;
-  place-items: center;
-  align-content: center;
-  gap: 12px;
-  padding: 28px;
-  text-align: center;
-}
-
-.plugin-lock-panel p {
-  max-width: 560px;
-  margin: 0;
-  color: var(--text-muted);
-}
-
-.subtitle-workbench-page * {
-  box-sizing: border-box;
-}
-
-.glass-panel {
-  border: 1px solid var(--panel-edge);
-  border-radius: 20px;
-  background: var(--panel-bg);
-  box-shadow: var(--panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(18px);
-}
-
-.hero-panel {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 18px;
-  padding: 20px 22px;
-}
-
-.hero-panel--compact {
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-}
-
-.eyebrow,
-.section-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: color-mix(in srgb, var(--theme-tone-violet) 88%, transparent);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.hero-copy {
-  display: grid;
-  gap: 8px;
-  max-width: 780px;
-}
-
-.hero-copy--compact {
-  gap: 4px;
-  max-width: 520px;
-}
-
-.hero-copy h1 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.08;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.hero-copy--compact h1 {
-  font-size: 18px;
-  line-height: 1.15;
-}
-
-.hero-copy p {
-  margin: 0;
-  max-width: 680px;
-  color: var(--text-soft);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.hero-copy--compact p {
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.hero-actions {
-  display: grid;
-  gap: 12px;
-  justify-items: end;
-  min-width: 300px;
-}
-
-.hero-actions--compact {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.hero-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  width: 100%;
-}
-
-.hero-kpis--compact {
-  display: flex;
-  width: auto;
-  gap: 8px;
-}
-
-.hero-kpi {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-}
-
-.hero-kpi--compact {
-  gap: 2px;
-  min-width: 88px;
-  padding: 8px 10px;
-  border-radius: 12px;
-}
-
-.hero-kpi strong {
-  font-size: 20px;
-  letter-spacing: -0.03em;
-}
-
-.hero-kpi--compact strong {
-  font-size: 12px;
-  letter-spacing: 0;
-}
-
-.hero-kpi span {
-  color: var(--text-soft);
-  font-size: 11px;
-}
-
-.hero-kpi--compact span {
-  font-size: 10px;
-}
-
-.stepbar-panel {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 10px;
-}
-
-.stepbar-panel--compact {
-  gap: 8px;
-  padding: 8px 10px;
-}
-
-.step-chip {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 72px;
-  padding: 0 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 18px;
-  color: var(--text-soft);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel-soft) 72%, transparent), color-mix(in srgb, var(--theme-panel) 72%, transparent));
-  text-align: left;
-  cursor: default;
-}
-
-.step-chip--compact {
-  min-height: 44px;
-  padding: 0 12px;
-  border-radius: 14px;
-}
-
-.step-chip.is-active,
-.step-chip.is-done {
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 28%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-violet) 86%, transparent), color-mix(in srgb, var(--theme-tone-blue) 90%, transparent));
-  color: var(--theme-text);
-}
-
-.step-chip__index {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
-  border: 1px solid var(--theme-border);
-  font-weight: 700;
-}
-
-.step-chip--compact .step-chip__index {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  font-size: 11px;
-}
-
-.step-chip__copy {
-  display: grid;
-  gap: 3px;
-}
-
-.step-chip__copy strong {
-  font-size: 14px;
-}
-
-.step-chip--compact .step-chip__copy strong {
-  font-size: 12px;
-}
-
-.step-chip__copy small {
-  color: inherit;
-  opacity: 0.74;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.step-chip--compact .step-chip__copy small {
-  display: none;
-}
-
-.step-chip__done {
-  margin-left: auto;
-}
-
-.page-message {
-  padding: 12px 16px;
-  border-radius: 16px;
-  font-size: 13px;
-}
-
-.page-message--success {
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
-  color: var(--theme-tone-green);
-}
-
-.page-message--error {
-  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
-  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
-  color: var(--theme-text);
-}
-
-.workspace-grid,
-.bottom-grid {
-  display: grid;
-  gap: 14px;
-}
-
-.workspace-grid {
-  grid-template-columns: minmax(320px, 0.92fr) minmax(460px, 1.14fr) minmax(360px, 0.96fr);
-}
-
-.bottom-grid {
-  grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr);
-}
-
-.work-card {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  padding: 16px;
-  min-width: 0;
-}
-
-.section-heading,
-.card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-heading strong,
-.card-head strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 16px;
-  letter-spacing: -0.02em;
-}
-
-.section-note {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-.segmented-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 5px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-}
-
-.segmented-tabs button,
-.ghost-button,
-.minor-button,
-.primary-button,
-.text-button,
-.strategy-card,
-.template-preset,
-.clone-picker__item,
-.source-list-item,
-.preview-thumbs__item,
-.preview-thumbs__more,
-.row-action,
-.align-segment button,
-.mode-pills button {
-  border: 0;
-  cursor: pointer;
-  font: inherit;
-}
-
-.segmented-tabs button {
-  flex: 1 1 0;
-  min-height: 38px;
-  border-radius: 12px;
-  color: var(--text-soft);
-  background: transparent;
-  transition: background 0.22s ease, color 0.22s ease;
-}
-
-.segmented-tabs button.is-active {
-  color: var(--theme-text);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 44%, transparent), color-mix(in srgb, var(--theme-tone-blue) 44%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.ghost-button,
-.minor-button,
-.row-action,
-.toolbar-pill,
-.template-preset,
-.mode-pills button,
-.align-segment button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  color: var(--text-main);
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.ghost-button--compact {
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.ghost-button,
-.toolbar-pill,
-.template-preset,
-.mode-pills button,
-.align-segment button,
-.row-action,
-.minor-button {
-  border: 1px solid var(--theme-border);
-}
-
-.ghost-button:hover,
-.minor-button:hover,
-.row-action:hover,
-.template-preset:hover,
-.align-segment button:hover,
-.mode-pills button:hover,
-.source-list-item:hover,
-.clone-picker__item:hover,
-.preview-thumbs__item:hover {
-  background: color-mix(in srgb, var(--theme-text) 7%, transparent);
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 42px;
-  border-radius: 14px;
-  padding: 0 16px;
-  color: var(--theme-text);
-  font-weight: 600;
-}
-
-.primary-button {
-  background: linear-gradient(90deg, var(--theme-tone-blue) 0%, var(--theme-tone-violet) 100%);
-  box-shadow: 0 18px 40px rgba(108, 88, 244, 0.28);
-}
-
-
-.primary-button:disabled,
-.minor-button:disabled,
-.row-action:disabled,
-.strategy-card:disabled {
-  opacity: 0.56;
-  cursor: not-allowed;
-}
-
-.upload-zone {
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  min-height: 156px;
-  padding: 18px;
-  border: 1px dashed var(--theme-border);
-  border-radius: 20px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 72%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
-  text-align: center;
-  cursor: pointer;
-}
-
-.upload-zone__icon {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent);
-  color: var(--theme-tone-blue);
-}
-
-.upload-zone strong {
-  font-size: 16px;
-}
-
-.upload-zone span,
-.helper-copy,
-.picker-tip p,
-.capacity-card p {
-  color: var(--text-soft);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.clone-picker,
-.clone-picker__list,
-.sources-list,
-.results-strip {
-  display: grid;
-  gap: 10px;
-}
-
-.source-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.source-pager__meta {
-  display: grid;
-  gap: 2px;
-  color: var(--text-soft);
-  font-size: 12px;
-}
-
-.source-pager__meta strong {
-  color: var(--text-main);
-  font-size: 12px;
-}
-
-.source-pager__actions {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.picker-tip {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-}
-
-.minor-button--full {
-  width: 100%;
-}
-
-.clone-picker__item,
-.source-list-item {
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) 24px;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-  border: 1px solid transparent;
-  text-align: left;
-}
-
-.clone-picker__item.is-selected,
-.source-list-item.is-active {
-  border-color: var(--panel-edge-strong);
-  background: color-mix(in srgb, var(--theme-tone-blue) 12%, transparent);
-}
-
-.clone-picker__item img,
-.source-list-item img,
-.preview-thumbs__item img,
-.result-thumb__media img,
-.result-thumb__media video {
-  width: 54px;
-  height: 72px;
-  border-radius: 10px;
-  object-fit: cover;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-}
-
-.clone-picker__copy,
-.source-list-item__copy,
-.result-thumb__copy,
-.preview-meta {
-  display: grid;
-  gap: 2px;
-}
-
-.clone-picker__copy strong,
-.source-list-item__copy strong,
-.result-thumb__copy strong {
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.clone-picker__copy small,
-.source-list-item__copy small,
-.result-thumb__copy small,
-.font-meta,
-.font-help,
-.font-status {
-  color: var(--text-soft);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.source-list-item__remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  color: var(--text-soft);
-}
-
-.text-button {
-  padding: 0;
-  color: var(--theme-tone-violet);
-  background: transparent;
-}
-
-.capacity-card {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-}
-
-.batch-runtime-card {
-  display: grid;
-  gap: 6px;
-  padding-top: 4px;
-}
-
-.batch-runtime-card__head,
-.batch-runtime-card__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.batch-runtime-card__head span,
-.batch-runtime-card__meta span {
-  color: var(--text-soft);
-  font-size: 11px;
-}
-
-.batch-runtime-card__head strong {
-  font-size: 12px;
-  color: var(--text-main);
-}
-
-.capacity-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.capacity-head span {
-  color: var(--text-soft);
-  font-size: 13px;
-}
-
-.capacity-head strong {
-  font-size: 16px;
-}
-
-.sources-progress__bar,
-.progress-cell__bar,
-.preview-playerbar__track {
-  width: 100%;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
-}
-
-.sources-progress__bar {
-  height: 10px;
-}
-
-.sources-progress__fill,
-.progress-cell__fill,
-.preview-playerbar__progress {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--theme-tone-blue), var(--theme-tone-violet));
-}
-
-.preview-card {
-  gap: 12px;
-}
-
-.preview-toolbar {
-  display: flex;
-  gap: 10px;
-}
-
-.toolbar-pill {
-  min-width: 72px;
-  min-height: 38px;
-  border-radius: 14px;
-  color: var(--text-soft);
-}
-
-.toolbar-pill.is-active {
-  color: var(--theme-text);
-  border-color: var(--theme-border);
-}
-
-.preview-stage {
-  display: grid;
-}
-
-.preview-stage__frame {
-  position: relative;
-  min-height: 410px;
-  display: grid;
-  place-items: center;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at top, color-mix(in srgb, var(--theme-tone-blue) 12%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-input) 98%, transparent));
-  overflow: hidden;
-}
-
-.preview-stage__frame::before {
-  content: '';
-  position: absolute;
-  width: 232px;
-  aspect-ratio: 9 / 16;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-}
-
-.preview-stage__video {
-  position: relative;
-  z-index: 1;
-  width: 232px;
-  aspect-ratio: 9 / 16;
-  object-fit: cover;
-  border-radius: 18px;
-  background: var(--theme-input);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.34);
-}
-
-.preview-stage__empty,
-.preview-stage__loading {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  padding: 0 90px;
-  text-align: center;
-  color: var(--text-soft);
-}
-
-.preview-stage__empty strong {
-  font-size: 16px;
-}
-
-.preview-playerbar {
-  display: grid;
-  grid-template-columns: 18px auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  color: var(--text-soft);
-  font-size: 12px;
-}
-
-.preview-playerbar__track {
-  height: 4px;
-}
-
-.preview-playerbar__progress {
-  width: 22%;
-}
-
-.preview-strip {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 30px;
-  align-items: center;
-  gap: 10px;
-}
-
-.preview-strip__nav {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 64px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-  color: var(--theme-text);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.preview-strip__nav:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 22%, transparent);
-  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
-  color: var(--theme-text);
-  transform: translateY(-1px);
-}
-
-.preview-strip__nav:disabled {
-  opacity: 0.32;
-  cursor: default;
-}
-
-.preview-thumbs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) 38px;
-  gap: 7px;
-  min-width: 0;
-  padding: 4px 0;
-}
-
-.preview-thumbs__item,
-.preview-thumbs__more {
-  position: relative;
-  display: grid;
-  min-height: 64px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-  border: 1px solid var(--theme-border);
-  overflow: hidden;
-  transition:
-    border-color 0.18s ease,
-    transform 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.preview-thumbs__item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.preview-thumbs__overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 2%, transparent), color-mix(in srgb, var(--theme-panel) 58%, transparent) 100%);
-}
-
-.preview-thumbs__label {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 7px;
-  overflow: hidden;
-  color: var(--theme-text);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.preview-thumbs__item:hover {
-  border-color: var(--theme-border);
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-  transform: translateY(-1px);
-}
-
-.preview-thumbs__item.is-active {
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 88%, transparent);
-  background: color-mix(in srgb, var(--theme-tone-blue) 8%, transparent);
-  box-shadow:
-    0 0 0 1px rgba(123, 97, 255, 0.34),
-    0 10px 24px rgba(10, 10, 18, 0.22);
-}
-
-.preview-thumbs__more {
-  place-items: center;
-  color: var(--text-soft);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.preview-meta {
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-}
-
-.preview-meta strong {
-  font-size: 13px;
-}
-
-.preview-meta p,
-.preview-error {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.preview-error {
-  color: var(--theme-tone-red);
-}
-
-.preview-footer,
-.action-row,
-.mode-pills,
-.result-thumb__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.preview-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.preview-footer__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.preview-footer .minor-button {
-  min-width: auto;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.preview-footer .primary-button {
-  min-width: 220px;
-}
-
-.config-card {
-  gap: 14px;
-}
-
-.form-section {
-  display: grid;
-  gap: 12px;
-}
-
-.strategy-grid,
-.template-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.template-preset-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.strategy-card,
-.template-preset {
-  display: grid;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-  border: 1px solid var(--theme-border);
-  color: var(--text-main);
-  text-align: left;
-}
-
-.template-preset {
-  align-content: start;
-  min-height: 72px;
-}
-
-.template-preset strong {
-  font-size: 14px;
-  line-height: 1.2;
-  font-weight: 700;
-  color: var(--theme-text);
-}
-
-.template-preset span {
-  color: var(--theme-text);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.strategy-card.is-active,
-.template-preset.is-active,
-.mode-pills button.is-active,
-.align-segment button.is-active {
-  border-color: var(--panel-edge-strong);
-  background: color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
-}
-
-.template-preset.is-active span,
-.template-preset:hover span {
-  color: var(--theme-text);
-}
-
-.strategy-card small {
-  color: var(--text-soft);
-  line-height: 1.6;
-}
-
-.dark-input,
-.dark-textarea,
-.dark-select {
-  width: 100%;
-  min-height: 40px;
-  padding: 10px 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  outline: none;
-  background: color-mix(in srgb, var(--theme-input) 72%, transparent);
-  color: var(--text-main);
-  font: inherit;
-}
-
-.dark-input:focus,
-.dark-textarea:focus,
-.dark-select:focus {
-  border-color: color-mix(in srgb, var(--theme-tone-blue) 62%, transparent);
-  box-shadow: 0 0 0 1px rgba(122, 99, 247, 0.22);
-}
-
-.dark-textarea {
-  min-height: 144px;
-  resize: vertical;
-  line-height: 1.7;
-}
-
-.dark-textarea--compact {
-  min-height: 92px;
-}
-
-.dark-select {
-  appearance: none;
-}
-
-.title-item-list {
-  display: grid;
-  gap: 10px;
-  max-height: 360px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.title-item-card {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-  border: 1px solid var(--theme-border);
-}
-
-.title-item-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.title-item-card__head strong {
-  font-size: 13px;
-  color: var(--theme-text);
-}
-
-.title-item-card__head span {
-  font-size: 11px;
-  color: var(--text-soft);
-}
-
-.helper-copy--tight {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.dark-input--color {
-  min-height: 46px;
-  padding: 5px;
-}
-
-.section-heading .section-note,
-.section-heading .section-note strong {
-  align-self: center;
-}
-
-.form-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.form-grid--triple {
-  grid-template-columns: 1.6fr 0.8fr 0.8fr;
-}
-
-.form-grid--dual {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.form-grid--quad {
-  grid-template-columns: 1.05fr 0.9fr 0.8fr 1.05fr;
-}
-
-.field-block {
-  display: grid;
-  gap: 8px;
-}
-
-.field-block span {
-  color: var(--text-soft);
-  font-size: 12px;
-}
-
-.field-block--wide {
-  min-width: 0;
-}
-
-.color-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
-  gap: 10px;
-}
-
-.align-segment {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.queue-card,
-.results-card {
-  gap: 12px;
-}
-
-.segmented-tabs--queue {
-  min-width: 360px;
-}
-
-.queue-table {
-  display: grid;
-  gap: 10px;
-  padding-bottom: 2px;
-}
-
-.queue-table--cards {
-  gap: 12px;
-}
-
-.queue-card-item {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-}
-
-.queue-card-item__top,
-.queue-card-item__meta,
-.queue-card-item__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.queue-card-item__title {
-  display: grid;
-  gap: 3px;
-}
-
-.queue-card-item__title strong {
-  font-size: 14px;
-}
-
-.queue-card-item__title small,
-.queue-card-item__meta span {
-  color: var(--text-soft);
-  font-size: 11px;
-}
-
-.queue-card-item__progress {
-  display: grid;
-  gap: 6px;
-}
-
-.queue-batch-note {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-soft);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.failed-summary {
-  display: grid;
-  gap: 10px;
-  padding-top: 4px;
-}
-
-.failed-summary__list {
-  display: grid;
-  gap: 8px;
-}
-
-.failed-summary__item {
-  display: grid;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
-  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
-}
-
-.failed-summary__item strong {
-  font-size: 12px;
-}
-
-.failed-summary__item small {
-  color: var(--text-soft);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 70px;
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 6%, transparent);
-  font-style: normal;
-  font-size: 12px;
-}
-
-.status-chip--queued,
-.status-chip--draft {
-  color: var(--theme-text);
-}
-
-.status-chip--processing {
-  color: var(--theme-tone-violet);
-  background: color-mix(in srgb, var(--theme-tone-blue) 20%, transparent);
-}
-
-.status-chip--completed {
-  color: var(--theme-tone-green);
-  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
-}
-
-.status-chip--partial_failed,
-.status-chip--failed {
-  color: var(--theme-tone-red);
-  background: color-mix(in srgb, var(--theme-tone-red) 16%, transparent);
-}
-
-.progress-cell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.progress-cell__bar {
-  height: 8px;
-}
-
-.results-strip {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.result-thumb {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--theme-text) 2%, transparent);
-}
-
-.result-thumb__media {
-  position: relative;
-}
-
-.result-thumb__media img,
-.result-thumb__media video {
-  width: 100%;
-  height: 144px;
-  border-radius: 14px;
-  object-fit: cover;
-}
-
-.result-thumb__badge {
-  position: absolute;
-  left: 10px;
-  top: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-accent) 92%, transparent);
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.result-thumb__badge.is-failed {
-  background: color-mix(in srgb, var(--theme-tone-red) 92%, transparent);
-}
-
-.result-thumb__actions {
-  justify-content: space-between;
-}
-
-.page-loading {
-  position: sticky;
-  bottom: 14px;
-  justify-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
-  color: var(--text-soft);
-  backdrop-filter: blur(18px);
-}
-
-@media (max-width: 1680px) {
-  .workspace-grid {
-    grid-template-columns: minmax(300px, 0.9fr) minmax(400px, 1.05fr) minmax(340px, 0.95fr);
-  }
-}
-
-@media (max-width: 1440px) {
-  .hero-panel,
-  .workspace-grid,
-  .bottom-grid,
-  .form-grid--triple,
-  .form-grid--dual,
-  .form-grid--quad,
-  .results-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-panel,
-  .hero-actions {
-    min-width: 0;
-    justify-items: stretch;
-  }
-
-  .stepbar-panel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1080px) {
-  .subtitle-workbench-page {
-    padding: 12px;
-  }
-
-  .hero-panel,
-  .work-card {
-    padding: 14px;
-  }
-
-  .stepbar-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .preview-stage__frame {
-    min-height: 440px;
-  }
-
-  .preview-stage__frame::before,
-  .preview-stage__video {
-    width: 248px;
-  }
-
-  .strategy-grid,
-  .template-preset-grid,
-  .hero-kpis,
-  .preview-thumbs {
-    grid-template-columns: 1fr;
-  }
-
-  .segmented-tabs--queue {
-    min-width: 0;
-    width: 100%;
-  }
-}
-
-@media (max-width: 760px) {
-  .hero-copy h1 {
-    font-size: 24px;
-  }
-
-  .preview-stage__frame {
-    min-height: 360px;
-  }
-
-  .preview-stage__frame::before,
-  .preview-stage__video {
-    width: min(100%, 240px);
-  }
-
-  .preview-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .preview-strip__nav {
-    display: none;
-  }
-
-  .preview-playerbar {
-    grid-template-columns: 18px 1fr;
-  }
-
-  .preview-playerbar__track {
-    grid-column: 1 / -1;
-  }
-
-  .preview-footer .minor-button,
-  .preview-footer .primary-button {
-    width: 100%;
-  }
+.bsx { width: min(1440px, 100%); margin: 0 auto; }
+.bsx__layout { grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+.bsx-side { position: sticky; top: 12px; }
+.bsx-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bsx-help { margin-top: 6px; font-size: 12px; color: var(--theme-text-muted); }
+.bsx-help b { color: var(--theme-text); }
+.bsx-help--warn { color: var(--vg-amber); }
+
+/* 1. 视频 */
+.bsx-videos.is-dragover { border-color: var(--vg-accent); box-shadow: 0 0 0 2px var(--vg-accent-soft); }
+.bsx-videos .vg-btn.is-active { border-color: var(--vg-accent-line); color: var(--vg-accent); background: var(--vg-accent-soft); }
+.bsx-drop { display: grid; justify-items: center; gap: 6px; width: 100%; padding: 26px 12px; border: 1px dashed var(--theme-border-control, var(--theme-border)); border-radius: var(--vg-radius-sm); background: var(--theme-panel-soft); color: var(--theme-text-muted); cursor: pointer; text-align: center; transition: all .15s; }
+.bsx-drop:hover, .bsx-videos.is-dragover .bsx-drop { border-color: var(--vg-accent); color: var(--vg-accent); background: var(--vg-accent-soft); }
+.bsx-drop strong { font-size: 13px; color: var(--theme-text); }
+.bsx-drop span { font-size: 12px; }
+.bsx-rows { display: grid; gap: 4px; max-height: 420px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.bsx-row { display: grid; grid-template-columns: 32px minmax(120px, 1fr) minmax(160px, 1.4fr) 30px; align-items: center; gap: 10px; padding: 5px 6px; border: 1px solid transparent; border-radius: var(--vg-radius-sm); cursor: pointer; }
+.bsx-row:hover { background: var(--theme-panel-soft); }
+.bsx-row.is-active { background: var(--vg-accent-soft); border-color: var(--vg-accent-line); }
+.bsx-row__thumb { width: 32px; height: 56px; border-radius: 5px; overflow: hidden; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); }
+.bsx-row__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bsx-row__info { display: grid; gap: 2px; min-width: 0; }
+.bsx-row__info strong { font-size: 12.5px; font-weight: 600; color: var(--theme-text); }
+.bsx-row__info small { font-size: 11px; color: var(--theme-text-muted); }
+.bsx-row__title.is-missing { border-color: color-mix(in srgb, var(--vg-amber) 55%, transparent); }
+.bsx-row__title.is-missing::placeholder { color: var(--vg-amber); }
+.bsx-row__random { font-size: 12px; }
+.bsx-pager { display: flex; align-items: center; justify-content: center; gap: 8px; padding-top: 6px; font-size: 12px; }
+.bsx-clone { display: grid; gap: 8px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); }
+.bsx-clone__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px; max-height: 200px; overflow-y: auto; }
+.bsx-clone__item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; font-size: 12px; color: var(--theme-text); cursor: pointer; }
+.bsx-clone__item:hover, .bsx-clone__item.is-selected { background: var(--vg-accent-soft); }
+.bsx-clone__item img { width: 24px; height: 32px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+
+/* 2. 标题 */
+
+/* 3. 样式 */
+.bsx-preset__sample { font-size: 20px; font-weight: 900; line-height: 1.1; paint-order: stroke fill; }
+
+/* 4. 开始 */
+.bsx-start { display: grid; gap: 10px; }
+.bsx-start__summary { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--theme-text-secondary); }
+
+/* 预览 */
+.bsx-frame { position: relative; aspect-ratio: 9 / 16; max-height: 560px; margin: 0 auto; border-radius: var(--vg-radius-sm); overflow: hidden; background: #05070b; }
+.bsx-frame > img, .bsx-frame > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.bsx-frame__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: rgba(255, 255, 255, .6); font-size: 12.5px; }
+.bsx-frame__loading { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px; white-space: nowrap; }
+.bsx-nav { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--theme-text-secondary); text-align: center; }
+.bsx-real { display: flex; gap: 6px; margin-top: 8px; }
+.bsx-real .vg-btn { flex: 1; justify-content: center; }
+
+/* 处理记录 */
+.bsx-batch { padding: 8px 0; border-top: 1px solid var(--theme-divider); }
+.bsx-batch:first-of-type { border-top: 0; }
+.bsx-batch__head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-bottom: 4px; }
+.bsx-batch__progress { margin: 4px 0 6px; }
+.bsx-batch__item { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 2px 6px; align-items: center; width: 100%; padding: 3px 4px; border: 0; border-radius: 6px; background: transparent; font-size: 12px; color: var(--theme-text); text-align: left; cursor: pointer; }
+.bsx-batch__item:hover:not(:disabled) { background: var(--theme-panel-soft); }
+.bsx-batch__item:disabled { cursor: default; }
+.bsx-batch__item small { grid-column: 2; }
+.bsx-ok { color: var(--vg-green); }
+.bsx-err { color: var(--vg-red); }
+
+@media (max-width: 1100px) {
+  .bsx__layout { grid-template-columns: minmax(0, 1fr); }
+  .bsx-side { position: static; }
+}
+@media (max-width: 640px) {
+  .bsx-row { grid-template-columns: 32px minmax(0, 1fr) 30px; }
+  .bsx-row__title, .bsx-row__random { grid-column: 1 / -1; }
 }
 </style>

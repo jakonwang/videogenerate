@@ -11,6 +11,7 @@ import './styles/web-pages.css'
 import './styles/web-clone.css'
 import App from './App.vue'
 import { router } from './router'
+import { installChunkReload } from './lib/chunkReload'
 import { initSession } from './lib/session'
 import { requestSync } from './lib/sync'
 import { refreshResearch } from './lib/research'
@@ -53,6 +54,7 @@ async function boot() {
     installDesktopCloudApi()
     app.config.globalProperties.$t = (key: string) => WEB_I18N[key] ?? key
   }
+  installChunkReload(app, router)
   app.use(router).mount('#app')
   void requestSync()
   // 选品：恢复配对连接，取走后台采集到的商品

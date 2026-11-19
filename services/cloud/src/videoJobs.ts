@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto'
 import { copyFile, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import sharp from 'sharp'
 import { badRequest, CloudError } from './security'
 import type { CloneProviders } from './cloneJobs'
 import { transcribeWithWhisperCompatible, type WhisperCue } from '../../../src/main/modules/web-platform/whisperCompatible'
-import { TIKHUB_FETCH_ONE_BY_SHARE_URL, resolveAuthor, resolveDownloadUrl, resolveTitle } from '../../../src/main/modules/video-parser-download/tikhub'
+import { extractFirstUrl, parseShareLink, type ParsedVideo, type TikhubFetch } from '../../../src/shared/videoParserPlatforms'
 import type { VideoJobOptions, VideoJobOutput } from '../../../src/shared/cloud/videoTools'
 import { computeFrameTimeSec, fallbackCuts, round3, toSegments, MIN_SEGMENT_DURATION_SEC } from '../../../src/shared/imageMaterials'
 import { ENERGY_STEP_SEC, buildAudioChain, buildVideoChain, createEnergyParser, createSceneParser, energyFilter, sceneFilter, type LiveSlicerAnalysis } from '../../../src/shared/liveSlicer'
@@ -87,12 +88,17 @@ export async function runWatermark(input: { videoFileId: string; options: VideoJ
     // 位置按画面宽度的比例留边（和电脑端「边距」一样）
     const m = `W*${margin}`
     const pos = ({ tl: { x: m, y: m }, tr: { x: `W-w-${m}`, y: m }, bl: { x: m, y: `H-h-${m}` }, br: { x: `W-w-${m}`, y: `H-h-${m}` }, center: { x: '(W-w)/2', y: '(H-h)/2' } } as Record<string, { x: string; y: string }>)[positionKey] ?? OVERLAY_POSITION.br!
-    // Logo scaled to a share of the video width, keeping its own aspect ratio.
-    await input.providers.ffmpeg([
-      '-i', source, '-i', logo,
-      '-filter_complex', `[1:v][0:v]scale2ref=w=main_w*${scale}:h=ow/a[logo][base];[logo]format=rgba,colorchannelmixer=aa=${opacity}[l];[base][l]overlay=${pos.x}:${pos.y}`,
-      ...ENCODE, '-c:a', 'copy', '-movflags', '+faststart', output,
-    ])
+    // Logo scaled to a share of the video width, keeping its own aspect ratio. Sizes are computed here from the
+    // probed video and the logo file: scale2ref's variables (main_w / a) are swapped in the bundled ffmpeg, which
+    // made wide text logos huge and tall.
+    const { width: videoW } = await liveProbe(input.providers, source)
+    const { width: logoW, height: logoH } = await sharp(logo).metadata()
+    const ratio = logoW && logoH ? logoH / logoW : 1
+    const fade = `format=rgba,colorchannelmixer=aa=${opacity}`
+    const graph = videoW > 0
+      ? `[1:v]scale=${Math.max(2, Math.round(videoW * scale))}:${Math.max(2, Math.round(videoW * scale * ratio))},${fade}[l];[0:v][l]overlay=${pos.x}:${pos.y}`
+      : `[1:v][0:v]scale2ref=w=main_w*${scale}:h=ow/a[logo][base];[logo]${fade}[l];[base][l]overlay=${pos.x}:${pos.y}`
+    await input.providers.ffmpeg(['-i', source, '-i', logo, '-filter_complex', graph, ...ENCODE, '-c:a', 'copy', '-movflags', '+faststart', output])
   } else {
     const text = String(input.options.text || '').trim().slice(0, 40)
     if (!text) throw badRequest('请输入水印文字')
@@ -475,34 +481,37 @@ export async function runMixShots(input: { shots: Array<{ fileId: string; startS
 /* ------------------------------------------------------------------ 链接解析下载 */
 
 export async function runParseLink(input: { url: string; tikhubApiKey: string; workDir: string; files: Files; providers: VideoToolProviders }) {
-  const shareUrl = String(input.url || '').match(/https?:\/\/[^\s]+/)?.[0]
-  if (!shareUrl) throw badRequest('没有找到链接，请粘贴 TikTok / 抖音分享链接')
+  if (!extractFirstUrl(input.url)) throw badRequest('没有找到链接，请粘贴分享链接或分享文案')
   if (!input.tikhubApiKey) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置 TikHub 密钥，暂时无法解析链接', 503)
-  const api = new URL(TIKHUB_FETCH_ONE_BY_SHARE_URL)
-  api.searchParams.set('share_url', shareUrl)
-  const res = await input.providers.fetch(api.toString(), { headers: { Authorization: `Bearer ${input.tikhubApiKey}` }, signal: AbortSignal.timeout(60_000) })
-  const text = await res.text()
-  if (!res.ok) throw new CloudError('INTERNAL', `链接解析失败（HTTP ${res.status}）`, 502)
-  let payload: unknown
+  let parsed: ParsedVideo
   try {
-    payload = JSON.parse(text)
-  } catch {
-    throw new CloudError('INTERNAL', '链接解析返回异常', 502)
+    parsed = await parseShareLink({ text: input.url, apiKey: input.tikhubApiKey, fetch: input.providers.fetch as unknown as TikhubFetch })
+  } catch (error) {
+    throw new CloudError('BAD_REQUEST', (error as Error).message || '链接解析失败', 400)
   }
-  const downloadUrl = resolveDownloadUrl(payload)
-  if (!downloadUrl) throw new CloudError('BAD_REQUEST', '这个链接没有可下载的视频', 400)
-  const video = await input.providers.fetch(downloadUrl, { signal: AbortSignal.timeout(300_000) })
-  if (!video.ok) throw new CloudError('INTERNAL', `视频下载失败（HTTP ${video.status}）`, 502)
-  const body = Buffer.from(await video.arrayBuffer())
-  if (body.length < 1024) throw new CloudError('INTERNAL', '下载到的视频是空的，请稍后再试', 502)
+  const fetchFile = async (url: string, name: string) => {
+    const res = await input.providers.fetch(url, { headers: parsed.downloadHeaders, signal: AbortSignal.timeout(300_000) })
+    if (!res.ok) throw new CloudError('INTERNAL', `视频下载失败（HTTP ${res.status}）`, 502)
+    const body = Buffer.from(await res.arrayBuffer())
+    if (body.length < 1024) throw new CloudError('INTERNAL', '下载到的视频是空的，请稍后再试', 502)
+    await writeFile(join(input.workDir, name), body)
+    return body
+  }
+  let body = await fetchFile(parsed.downloadUrl, 'download.mp4')
+  // B 站 / YouTube：画面和声音分开，合并成一个文件
+  if (parsed.audioUrl) {
+    await fetchFile(parsed.audioUrl, 'audio.m4a')
+    await input.providers.ffmpeg(['-i', 'download.mp4', '-i', 'audio.m4a', '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', '-movflags', '+faststart', 'merged.mp4'], input.workDir)
+    body = await readFile(join(input.workDir, 'merged.mp4'))
+    await writeFile(join(input.workDir, 'download.mp4'), body)
+  }
   // 封面：截一帧小图，作品卡片不用加载整段视频
   let posterFileId: string | undefined
   try {
-    await writeFile(join(input.workDir, 'download.mp4'), body)
     await input.providers.ffmpeg(['-ss', '0.5', '-i', 'download.mp4', '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', 'poster.jpg'], input.workDir)
     posterFileId = input.files.store(await readFile(join(input.workDir, 'poster.jpg')), 'image/jpeg').fileId
   } catch {
     posterFileId = undefined
   }
-  return { outputs: [{ fileId: input.files.store(body, 'video/mp4').fileId, mime: 'video/mp4', posterFileId }], title: resolveTitle(payload), author: resolveAuthor(payload) }
+  return { outputs: [{ fileId: input.files.store(body, 'video/mp4').fileId, mime: 'video/mp4', posterFileId }], title: parsed.title, author: parsed.author, platform: parsed.platform }
 }

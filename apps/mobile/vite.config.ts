@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import postcss from 'postcss'
+import { defineConfig, type Plugin } from 'vite'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const webSrc = fileURLToPath(new URL('./src', import.meta.url))
@@ -11,14 +13,49 @@ const DESKTOP_SHIMS: Record<string, string> = {
   'stores/aiProducer': 'lib/desktopShims/aiProducer.ts',
   'stores/cloudAuth': 'lib/desktopShims/cloudAuth.ts',
   'lib/localMedia': 'lib/desktopShims/localMedia.ts',
+  // 电脑端本机 Web API 客户端 → 交给服务器引擎（批量字幕）
+  'lib/webApiClient': 'lib/desktopShims/webApiClient.ts',
 }
 const isDesktopFile = (importer?: string) => Boolean(importer && /[\/]src[\/]renderer[\/]src[\/]/.test(importer))
+
+/**
+ * Desktop pages reused on the web keep part of their theme rules (light / mono colour fixes, layout) in the desktop's
+ * global styles.css, which the web does not load. This virtual stylesheet is built from styles.css at build time and
+ * keeps only the rules that target these legacy page roots (original order, `.app-shell` also matching `.web-shell`),
+ * so the rules stay in one place and the desktop is untouched.
+ */
+const LEGACY_PAGE_ROOTS = ['.live-photo-page', '.listing-page', '.replacement-page']
+const PAGE_THEMES_ID = 'virtual:desktop-page-themes.css'
+function desktopPageThemes(): Plugin {
+  const stylesPath = fileURLToPath(new URL('../../src/renderer/src/styles.css', import.meta.url))
+  return {
+    name: 'desktop-page-themes',
+    resolveId: (id) => (id === PAGE_THEMES_ID ? `\0${PAGE_THEMES_ID}` : undefined),
+    load(id) {
+      if (id !== `\0${PAGE_THEMES_ID}`) return undefined
+      this.addWatchFile(stylesPath)
+      const root = postcss.parse(readFileSync(stylesPath, 'utf8'))
+      root.walkComments((comment) => void comment.remove())
+      root.walkRules((rule) => {
+        if (rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as postcss.AtRule).name)) return
+        const kept = rule.selectors.filter((selector) => LEGACY_PAGE_ROOTS.some((cls) => new RegExp(`\\.${cls.slice(1)}(?![\\w-])`).test(selector)))
+        if (!kept.length) rule.remove()
+        else rule.selectors = kept.map((selector) => selector.replace(/\.app-shell(?![\w-])/g, ':is(.app-shell, .web-shell)'))
+      })
+      // Drop at-rules left empty (media queries whose rules were all removed); keep keyframes / font-face.
+      root.walkAtRules((atRule) => {
+        if (!/keyframes$|font-face/i.test(atRule.name) && !atRule.nodes?.some((node) => node.type === 'rule' || node.type === 'atrule')) atRule.remove()
+      })
+      return root.toString()
+    },
+  }
+}
 
 // `--mode web` builds the browser version served at https://<domain>/app/ next to the cloud API.
 // The default build is the Android App (Capacitor loads it from the app bundle root).
 export default defineConfig(({ mode }) => ({
   base: mode === 'web' ? '/app/' : '/',
-  plugins: [vue()],
+  plugins: [vue(), desktopPageThemes()],
   resolve: {
     // Shared desktop components live outside this app: make them use this app's single copy of these.
     dedupe: ['vue', 'vue-router', 'lucide-vue-next', 'pinia'],

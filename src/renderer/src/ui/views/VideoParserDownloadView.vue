@@ -1,26 +1,42 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Check,
-  ChevronLeft,
+  AlertTriangle,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  CheckCircle2,
+  ClipboardPaste,
+  Copy,
   Download,
+  FolderInput,
   FolderOpen,
+  Images,
   KeyRound,
+  LayoutGrid,
   Link2,
+  List,
+  Loader2,
   Play,
   RefreshCcw,
+  Search,
   Settings2,
   Trash2,
   Video,
+  X,
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
+import MaterialPager from '../components/product-materials/MaterialPager.vue'
 import { useCloudAuthStore } from '@/stores/cloudAuth'
+import { PARSE_PLATFORM_IDS, detectPlatform, extractFirstUrl, parsePlatformLabel, type ParsePlatform } from '../../../../shared/videoParserPlatforms'
+// Page layout lives with the page so the web version (which reuses this page) gets it too.
+import '@/design-system/video-parser-download.css'
 
 type ParserVideoItem = {
   id: string
   shareUrl: string
   videoId: string
+  platform?: ParsePlatform
   title?: string
   author?: string
   coverUrl?: string
@@ -32,147 +48,220 @@ type ParserVideoItem = {
   updatedAt: number
 }
 
-const DESKTOP_USER_ID = 'desktop-local'
+type StatusFilter = 'all' | 'processing' | 'completed' | 'failed'
 
-const copy = {
-  kicker: '视频解析下载',
-  title: '打造可复用的视频素材库',
-  subtitle: '批量导入 TikTok 分享链接，自动沉淀为本地视频资产，并直接供商品图片素材库拆分使用。',
-  completed: '已完成',
-  used: '已使用',
-  failed: '失败',
-  inputTab: '输入链接',
-  libraryTab: '已下载视频',
-  back: '返回',
-  refresh: '刷新',
-  linksTitle: '批量导入分享链接',
-  linksHint: '每行一条 TikTok 分享链接，系统会逐条解析、下载并自动去重。',
-  linksPlaceholder: '每行粘贴一个 TikTok 分享链接',
-  lineCount: '有效链接',
-  submit: '开始批量下载',
-  guideA: '自动去重',
-  guideADesc: '重复导入同一作品时，系统会直接复用已存在的视频记录，不会重复创建。',
-  guideB: '素材复用',
-  guideBDesc: '下载成功后的视频会进入下方素材库，并可被商品图片素材库直接选用。',
-  libraryTitle: '视频素材库',
-  libraryHint: '像素材库一样浏览、预览和管理已下载视频，已被拆分使用的视频会自动标记。',
-  noLibrary: '暂时还没有下载好的视频素材',
-  noThumb: '暂无封面',
-  preparing: '生成预览中',
-  preview: '预览',
-  showFile: '打开文件',
-  retry: '重试',
-  remove: '删除',
-  settingsTitle: '缺少 TikHub 密钥',
-  settingsHint: '请先在设置中填写 TikHub API Key，之后才能解析和下载 TikTok 视频。',
-  openSettings: '打开设置',
-  managedTitle: '视频解析服务暂未开通',
-  managedHint: '平台还没有开通 TikTok 视频解析服务，开通后这里会自动可用。如需使用请联系客服。',
-  deleteConfirm: '确定删除这条下载记录吗？',
-  deleteDone: '已删除该视频记录',
-  importedOk: '已导入视频',
-  importedFail: '失败',
-  usedStatus: '已使用',
-  unusedStatus: '未使用',
-  statusCompleted: '下载完成',
-  statusFailed: '下载失败',
-  statusProcessing: '下载中',
-  untitled: '未命名视频',
-} as const
+const DESKTOP_USER_ID = 'desktop-local'
+const PAGE_SIZES = [24, 48, 96]
+const VIEW_KEY = 'vpd.view'
+const PAGE_SIZE_KEY = 'vpd.pageSize'
 
 const router = useRouter()
-const activeTab = ref<'input' | 'library'>('input')
 const shareInput = ref('')
 const items = ref<ParserVideoItem[]>([])
 const loading = ref(false)
 const submitting = ref(false)
-const notice = ref('')
-const errorText = ref('')
-const hasTikHubKey = ref(false)
-const previewOpen = ref(false)
-const previewSrc = ref<string | null>(null)
-const previewFallbackSrc = ref<string | null>(null)
-const previewPoster = ref<string | null>(null)
-const previewTitle = ref('')
-const brokenPosterIds = ref<string[]>([])
+const notice = ref<{ tone: 'accent' | 'danger' | 'warning'; text: string } | null>(null)
+const hasTikHubKey = ref(true)
+const query = ref('')
+const statusFilter = ref<StatusFilter>('all')
+const platformFilter = ref<'all' | ParsePlatform>('all')
+const sortNewest = ref(true)
+const viewMode = ref<'grid' | 'list'>(readView())
+const page = ref(1)
+const pageSize = ref(readPageSize())
+const selected = ref<Set<string>>(new Set())
+const brokenPosterIds = ref<Set<string>>(new Set())
+const busy = ref(false)
+const preview = ref<{ src: string; fallback: string; poster: string | null; title: string } | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
+let noticeTimer: ReturnType<typeof setTimeout> | null = null
 
-const lines = computed(() => Array.from(new Set(shareInput.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))))
+function readPageSize() {
+  try {
+    const value = Number(localStorage.getItem(PAGE_SIZE_KEY))
+    return PAGE_SIZES.includes(value) ? value : PAGE_SIZES[0]
+  } catch {
+    return PAGE_SIZES[0]
+  }
+}
+watch(pageSize, (size) => {
+  page.value = 1
+  try {
+    localStorage.setItem(PAGE_SIZE_KEY, String(size))
+  } catch {
+    /* 存不了就算了 */
+  }
+})
+
+function readView(): 'grid' | 'list' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+watch(viewMode, (mode) => {
+  try {
+    localStorage.setItem(VIEW_KEY, mode)
+  } catch {
+    /* 存不了就算了 */
+  }
+})
+
+function say(tone: 'accent' | 'danger' | 'warning', text: string) {
+  notice.value = { tone, text }
+  if (noticeTimer) clearTimeout(noticeTimer)
+  if (tone !== 'danger') noticeTimer = setTimeout(() => (notice.value = null), 5000)
+}
+const messageOf = (error: unknown) => String((error as Error)?.message ?? error)
+
+/* ------------------------------------------------------------ 粘贴框：逐行识别平台 */
+
+const shareKey = (url: string) => url.replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+const knownKeys = computed(() => new Map(items.value.map((item) => [shareKey(item.shareUrl), item])))
+
+/** 粘贴的每一行：识别出的链接、平台，以及是否重复 / 已下载 */
+const parsedLines = computed(() => {
+  const seen = new Set<string>()
+  return shareInput.value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((text) => {
+      const url = extractFirstUrl(text)
+      const platform = url ? detectPlatform(url)?.platform : undefined
+      const key = url ? shareKey(url) : ''
+      const duplicate = Boolean(key) && seen.has(key)
+      if (key) seen.add(key)
+      const existing = key ? knownKeys.value.get(key) : undefined
+      return { text, url, platform, duplicate, downloaded: existing?.status === 'completed' }
+    })
+})
+const readyLines = computed(() => parsedLines.value.filter((line) => line.platform && !line.duplicate))
+const newLines = computed(() => readyLines.value.filter((line) => !line.downloaded))
+const unknownCount = computed(() => parsedLines.value.filter((line) => !line.platform).length)
+const duplicateCount = computed(() => parsedLines.value.filter((line) => line.duplicate).length + readyLines.value.length - newLines.value.length)
+const detectedPlatforms = computed(() => {
+  const counts = new Map<ParsePlatform, number>()
+  for (const line of readyLines.value) counts.set(line.platform!, (counts.get(line.platform!) ?? 0) + 1)
+  return counts
+})
+
+async function pasteFromClipboard() {
+  try {
+    const text = (await navigator.clipboard.readText()).trim()
+    if (!text) return say('warning', '剪贴板里没有内容')
+    shareInput.value = shareInput.value.trim() ? `${shareInput.value.trim()}\n${text}` : text
+  } catch {
+    say('warning', '读不到剪贴板，请在输入框里按 Ctrl+V 粘贴')
+  }
+}
+
+async function submitLinks() {
+  if (!readyLines.value.length || submitting.value) return
+  submitting.value = true
+  try {
+    const result = await window.api.videoParserDownload.importShareUrls({
+      userId: DESKTOP_USER_ID,
+      shareUrls: readyLines.value.map((line) => line.text),
+    })
+    shareInput.value = ''
+    const failed = result.errors?.length ?? 0
+    say(failed ? 'warning' : 'accent', failed ? `已开始下载 ${result.items.length} 条，${failed} 条没能提交：${result.errors[0]?.message ?? ''}` : `已开始下载 ${result.items.length} 条，下载好会出现在下方`)
+    statusFilter.value = 'all'
+    await loadAll()
+  } catch (error) {
+    say('danger', messageOf(error))
+  } finally {
+    submitting.value = false
+  }
+}
+
+/* ------------------------------------------------------------ 视频库 */
+
+const counts = computed(() => ({
+  all: items.value.length,
+  processing: items.value.filter((item) => item.status === 'processing').length,
+  completed: items.value.filter((item) => item.status === 'completed').length,
+  failed: items.value.filter((item) => item.status === 'failed').length,
+}))
+const platformsInLibrary = computed(() => PARSE_PLATFORM_IDS.filter((id) => items.value.some((item) => platformOf(item) === id)))
+
+const filtered = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  const list = items.value.filter((item) => {
+    if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
+    if (platformFilter.value !== 'all' && platformOf(item) !== platformFilter.value) return false
+    if (!q) return true
+    return [item.title, item.author, item.shareUrl].some((text) => String(text || '').toLowerCase().includes(q))
+  })
+  return list.sort((a, b) => (sortNewest.value ? b.updatedAt - a.updatedAt : a.updatedAt - b.updatedAt))
+})
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
+/** 当前页的视频 */
+const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([query, statusFilter, platformFilter, sortNewest], () => (page.value = 1))
+// 删掉或筛选后页数变少：停在最后一页
+watch(totalPages, (count) => {
+  if (page.value > count) page.value = count
+})
+
+const selectedItems = computed(() => items.value.filter((item) => selected.value.has(item.id)))
+const allVisibleSelected = computed(() => visible.value.length > 0 && visible.value.every((item) => selected.value.has(item.id)))
+
+function toggleSelect(id: string) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function toggleSelectAll() {
+  const next = new Set(selected.value)
+  if (allVisibleSelected.value) visible.value.forEach((item) => next.delete(item.id))
+  else visible.value.forEach((item) => next.add(item.id))
+  selected.value = next
+}
+const clearSelection = () => (selected.value = new Set())
+
+function platformOf(item: ParserVideoItem): ParsePlatform {
+  return item.platform || detectPlatform(item.shareUrl)?.platform || 'tiktok'
+}
+const titleOf = (item: ParserVideoItem) => item.title?.trim() || (item.status === 'processing' ? '正在解析…' : '未命名视频')
+const hasVideo = (item: ParserVideoItem) => item.status === 'completed' && Boolean(String(item.localVideoPath || '').trim())
+/** 网页版的视频在云端：「打开文件」就是下载到这台电脑 */
+const isCloudFile = (item: ParserVideoItem) => String(item.localVideoPath || '').startsWith('cloudfile:')
 
 function mediaUrl(filePath?: string) {
   const text = String(filePath || '').trim()
   return text ? `vg://file?path=${encodeURIComponent(text)}` : ''
 }
-
 function fileVideoUrl(filePath?: string) {
   const text = String(filePath || '').trim()
   if (!text) return ''
   const normalized = text.replace(/\\/g, '/')
-  const pathname = /^[a-z]:/i.test(normalized) ? `/${normalized}` : normalized
-  return encodeURI(`file://${pathname}`)
+  return encodeURI(`file://${/^[a-z]:/i.test(normalized) ? `/${normalized}` : normalized}`)
+}
+function posterUrl(item: ParserVideoItem) {
+  if (brokenPosterIds.value.has(item.id)) return ''
+  return mediaUrl(item.thumbnailPath) || String(item.coverUrl || '').trim()
+}
+function markPosterBroken(id: string) {
+  brokenPosterIds.value = new Set(brokenPosterIds.value).add(id)
 }
 
 function formatTime(value: number) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString()
-}
-
-function formatTitle(item: ParserVideoItem) {
-  return item.title?.trim() || item.videoId || copy.untitled
-}
-
-function formatSubtitle(item: ParserVideoItem) {
-  return item.author?.trim() || item.shareUrl
-}
-
-function hasVideo(item: ParserVideoItem) {
-  return Boolean(String(item.localVideoPath || '').trim())
-}
-
-function posterUrl(item: ParserVideoItem) {
-  const localThumb = mediaUrl(item.thumbnailPath)
-  if (localThumb) return localThumb
-  const remoteCover = String(item.coverUrl || '').trim()
-  return remoteCover || ''
-}
-
-function canRenderPoster(item: ParserVideoItem) {
-  return Boolean(posterUrl(item)) && !brokenPosterIds.value.includes(item.id)
-}
-
-function markPosterBroken(id: string) {
-  if (!id || brokenPosterIds.value.includes(id)) return
-  brokenPosterIds.value = [...brokenPosterIds.value, id]
-}
-
-function statusLabel(item: ParserVideoItem) {
-  if (item.status === 'completed') return item.usedStatus === 'used' ? copy.usedStatus : copy.statusCompleted
-  if (item.status === 'failed') return copy.statusFailed
-  return copy.statusProcessing
-}
-
-function statusTone(item: ParserVideoItem) {
-  if (item.status === 'completed' && item.usedStatus === 'used') return 'is-warning'
-  if (item.status === 'completed') return 'is-success'
-  if (item.status === 'failed') return 'is-danger'
-  return 'is-info'
+  if (!value) return ''
+  const diff = Date.now() - value
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  const d = new Date(value)
+  return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function openPreview(item: ParserVideoItem) {
   if (!hasVideo(item)) return
-  previewSrc.value = fileVideoUrl(item.localVideoPath)
-  previewFallbackSrc.value = mediaUrl(item.localVideoPath)
-  previewPoster.value = posterUrl(item) || null
-  previewTitle.value = formatTitle(item)
-  previewOpen.value = true
-}
-
-function closePreview() {
-  previewOpen.value = false
-  previewSrc.value = null
-  previewFallbackSrc.value = null
-  previewPoster.value = null
-  previewTitle.value = ''
+  preview.value = { src: fileVideoUrl(item.localVideoPath), fallback: mediaUrl(item.localVideoPath), poster: posterUrl(item) || null, title: titleOf(item) }
 }
 
 async function loadAll() {
@@ -183,76 +272,95 @@ async function loadAll() {
       window.api.clone.getModelCredentials() as Promise<{ tikhubApiKey?: string }>,
     ])
     items.value = nextItems
-    brokenPosterIds.value = brokenPosterIds.value.filter((id) => nextItems.some((item) => item.id === id))
+    const ids = new Set(nextItems.map((item) => item.id))
+    selected.value = new Set([...selected.value].filter((id) => ids.has(id)))
     hasTikHubKey.value = Boolean(String(credentials?.tikhubApiKey || '').trim())
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
+  } catch (error) {
+    say('danger', messageOf(error))
   } finally {
     loading.value = false
   }
 }
 
-async function submitLinks() {
-  if (!lines.value.length || !hasTikHubKey.value) return
-  submitting.value = true
-  notice.value = ''
-  errorText.value = ''
+/* ------------------------------------------------------------ 单条 / 批量操作 */
+
+async function retry(list: ParserVideoItem[]) {
+  const failed = list.filter((item) => item.status === 'failed')
+  if (!failed.length) return say('warning', '选中的视频里没有下载失败的')
+  busy.value = true
   try {
-    const result = await window.api.videoParserDownload.importShareUrls({
-      userId: DESKTOP_USER_ID,
-      shareUrls: lines.value,
-    })
-    shareInput.value = ''
-    notice.value = result.errors?.length
-      ? `${copy.importedOk} ${result.items.length}，${copy.importedFail} ${result.errors.length}`
-      : `${copy.importedOk} ${result.items.length}`
-    activeTab.value = 'library'
+    for (const item of failed) await window.api.videoParserDownload.retryItem({ userId: DESKTOP_USER_ID, id: item.id })
+    say('accent', `已重新下载 ${failed.length} 条`)
     await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
+  } catch (error) {
+    say('danger', messageOf(error))
   } finally {
-    submitting.value = false
+    busy.value = false
   }
 }
 
-async function retryItem(id: string) {
-  errorText.value = ''
-  notice.value = ''
+async function remove(list: ParserVideoItem[]) {
+  if (!list.length) return
+  if (!window.confirm(list.length === 1 ? '确定删除这条视频吗？下载的文件也会一起删除。' : `确定删除选中的 ${list.length} 条视频吗？下载的文件也会一起删除。`)) return
+  busy.value = true
   try {
-    await window.api.videoParserDownload.retryItem({ userId: DESKTOP_USER_ID, id })
+    for (const item of list) await window.api.videoParserDownload.deleteItem({ userId: DESKTOP_USER_ID, id: item.id })
+    say('accent', `已删除 ${list.length} 条`)
+    clearSelection()
     await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
+  } catch (error) {
+    say('danger', messageOf(error))
+  } finally {
+    busy.value = false
   }
 }
 
-async function deleteItem(id: string) {
-  if (!window.confirm(copy.deleteConfirm)) return
-  errorText.value = ''
-  notice.value = ''
+async function copyLinks(list: ParserVideoItem[]) {
+  const text = list.map((item) => item.shareUrl).filter(Boolean).join('\n')
+  if (!text) return
   try {
-    await window.api.videoParserDownload.deleteItem({ userId: DESKTOP_USER_ID, id })
-    notice.value = copy.deleteDone
-    await loadAll()
-  } catch (error: any) {
-    errorText.value = error?.message ?? String(error)
+    await navigator.clipboard.writeText(text)
+    say('accent', list.length === 1 ? '已复制链接' : `已复制 ${list.length} 条链接`)
+  } catch {
+    say('danger', '复制失败，请稍后再试')
   }
+}
+
+async function saveToLibrary(list: ParserVideoItem[]) {
+  const paths = list.filter(hasVideo).map((item) => item.localVideoPath!)
+  if (!paths.length) return say('warning', '选中的视频还没有下载好')
+  busy.value = true
+  try {
+    await window.api.assetLibrary.importPaths({ paths, folderId: null })
+    say('accent', `已存入素材库 ${paths.length} 条`)
+  } catch (error) {
+    say('danger', messageOf(error))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function openFile(item: ParserVideoItem) {
+  if (!item.localVideoPath) return
+  await window.api.shell.showItemInFolder(item.localVideoPath)
+}
+
+async function downloadSelected(list: ParserVideoItem[]) {
+  const ready = list.filter(hasVideo)
+  if (!ready.length) return say('warning', '选中的视频还没有下载好')
+  for (const item of ready) await openFile(item)
+}
+
+function goMakeImages() {
+  if (router.hasRoute('plugin-product-image-materials')) void router.push({ name: 'plugin-product-image-materials' })
+  else void router.push('/product-images')
 }
 
 const cloudAuth = useCloudAuthStore()
 void cloudAuth.ensureLoaded()
 /** 商业版托管模式：TikHub 由平台统一提供，用户没有地方填 Key，不显示「打开设置」 */
 const managedAi = computed(() => Boolean(cloudAuth.status?.managedSettings))
-
-function openSettings() {
-  void router.push('/settings')
-}
-
-async function showInFolder(filePath?: string) {
-  const value = String(filePath || '').trim()
-  if (!value) return
-  await window.api.shell.showItemInFolder(value)
-}
+const onWeb = computed(() => items.value.some(isCloudFile))
 
 onMounted(async () => {
   await loadAll()
@@ -264,839 +372,262 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
+  if (noticeTimer) clearTimeout(noticeTimer)
 })
 </script>
 
 <template>
-  <div class="vpd-page plugin-workspace-standard">
-    <section class="vpd-workspace-head">
-      <div class="vpd-workspace-intro">
-        <div class="vpd-workspace-icon">
-          <Download class="icon" />
-        </div>
-        <div class="vpd-workspace-copy">
-          <h1>{{ copy.kicker }}</h1>
-          <p>{{ copy.subtitle }}</p>
-        </div>
-        <div class="vpd-workspace-actions">
-          <button class="vpd-ghost-button" type="button" @click="router.push('/plugins')">
-            <ChevronLeft class="icon" />
-            {{ copy.back }}
-          </button>
-          <button class="vpd-ghost-button" type="button" :disabled="loading" @click="loadAll">
-            <RefreshCcw class="icon" :class="{ spin: loading }" />
-            {{ copy.refresh }}
-          </button>
-        </div>
+  <div class="vg-scope vg-page vpd">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><Download :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>视频解析下载</h1>
+        <p>粘贴分享链接，自动识别平台，下载无水印视频，可直接拿去拆帧做图、存进素材库。</p>
       </div>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click="loadAll">
+          <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />刷新
+        </button>
+      </div>
+    </header>
 
-      <section class="vpd-tabs vpd-workspace-tabs">
-        <button class="vpd-tab-button" :class="{ active: activeTab === 'input' }" type="button" @click="activeTab = 'input'">
-          <Link2 class="icon icon--small" />
-          <span>{{ copy.inputTab }}</span>
-        </button>
-        <button class="vpd-tab-button" :class="{ active: activeTab === 'library' }" type="button" @click="activeTab = 'library'">
-          <Video class="icon icon--small" />
-          <span>{{ copy.libraryTab }}</span>
-          <span class="vpd-tab-badge">{{ items.length }}</span>
-        </button>
-      </section>
+    <div v-if="notice" class="vg-notice" :class="`vg-notice--${notice.tone}`">
+      <span>{{ notice.text }}</span>
+      <button class="vg-icon-btn vg-icon-btn--sm" type="button" aria-label="关闭" @click="notice = null"><X :size="13" /></button>
+    </div>
+
+    <section v-if="!hasTikHubKey" class="vg-card vpd-key">
+      <span class="vpd-key__icon"><KeyRound :size="22" /></span>
+      <div class="vpd-key__text">
+        <h2>{{ managedAi ? '视频解析服务暂未开通' : '还没有填写 TikHub 密钥' }}</h2>
+        <p>{{ managedAi ? '平台开通视频解析服务后这里会自动可用，如需使用请联系客服。' : '在设置里填写 TikHub API Key 之后，就能解析下载各平台的视频。' }}</p>
+      </div>
+      <button v-if="!managedAi" class="vg-btn vg-btn--primary" type="button" @click="router.push('/settings')"><Settings2 :size="15" />打开设置</button>
     </section>
 
-    <div v-if="notice" class="vpd-notice vpd-notice--success">{{ notice }}</div>
-    <div v-if="errorText" class="vpd-notice vpd-notice--danger">{{ errorText }}</div>
-
-    <section v-if="!hasTikHubKey" class="vpd-empty vpd-content-scroll">
-      <div class="vpd-empty__icon">
-        <KeyRound class="icon" />
-      </div>
-      <div class="vpd-empty__content">
-        <h2>{{ managedAi ? copy.managedTitle : copy.settingsTitle }}</h2>
-        <p>{{ managedAi ? copy.managedHint : copy.settingsHint }}</p>
-      </div>
-      <button v-if="!managedAi" class="vpd-primary-button" type="button" @click="openSettings">
-        <Settings2 class="icon" />
-        {{ copy.openSettings }}
-      </button>
-    </section>
-
-    <section v-else class="vpd-workspace vpd-content-scroll">
-      <section v-if="activeTab === 'input'" class="vpd-input-grid">
-        <section class="vpd-panel vpd-panel--main">
-          <div class="vpd-section-head">
-            <div class="vpd-section-head__badge">1</div>
-            <div>
-              <h2>{{ copy.linksTitle }}</h2>
-              <p>{{ copy.linksHint }}</p>
-            </div>
+    <template v-else>
+      <!-- 粘贴框：一直在顶部 -->
+      <section class="vg-card vpd-paste">
+        <div class="vpd-paste__head">
+          <span class="vpd-paste__title"><Link2 :size="16" />粘贴分享链接</span>
+          <div class="vpd-platforms">
+            <span
+              v-for="id in PARSE_PLATFORM_IDS"
+              :key="id"
+              class="vpd-platform"
+              :class="[`vpd-platform--${id}`, { 'is-on': detectedPlatforms.has(id) }]"
+            >
+              {{ parsePlatformLabel(id) }}<b v-if="detectedPlatforms.get(id)">{{ detectedPlatforms.get(id) }}</b>
+            </span>
           </div>
+        </div>
+        <textarea
+          v-model="shareInput"
+          class="vg-textarea vpd-paste__input"
+          rows="4"
+          spellcheck="false"
+          placeholder="一行一条：可以直接粘贴 App 里「分享 → 复制链接」得到的整段文字，会自动找出里面的链接&#10;支持抖音、TikTok、小红书、快手、B 站、YouTube、Instagram、Threads"
+          @keydown.ctrl.enter.prevent="submitLinks"
+          @keydown.meta.enter.prevent="submitLinks"
+        ></textarea>
+        <div class="vpd-paste__foot">
+          <div class="vpd-paste__summary">
+            <template v-if="parsedLines.length">
+              <span class="vg-pill vg-pill--green vg-pill--dot">可下载 {{ readyLines.length }}</span>
+              <span v-if="duplicateCount" class="vg-pill vg-pill--amber">重复或已下载 {{ duplicateCount }}</span>
+              <span v-if="unknownCount" class="vg-pill vg-pill--red">无法识别 {{ unknownCount }}</span>
+            </template>
+            <span v-else class="vg-muted">粘贴后自动识别，Ctrl + Enter 开始下载</span>
+          </div>
+          <div class="vg-row">
+            <button v-if="shareInput" class="vg-btn vg-btn--ghost vg-btn--sm" type="button" @click="shareInput = ''">清空</button>
+            <button class="vg-btn vg-btn--sm" type="button" @click="pasteFromClipboard"><ClipboardPaste :size="14" />从剪贴板粘贴</button>
+            <button class="vg-btn vg-btn--primary" type="button" :disabled="!readyLines.length || submitting" @click="submitLinks">
+              <Loader2 v-if="submitting" :size="15" class="vg-spin" /><Download v-else :size="15" />
+              {{ readyLines.length ? `开始下载 ${readyLines.length} 条` : '开始下载' }}
+            </button>
+          </div>
+        </div>
+      </section>
 
-          <label class="vpd-field">
-            <span>{{ copy.inputTab }}</span>
-            <textarea
-              v-model="shareInput"
-              class="vpd-textarea"
-              rows="12"
-              :placeholder="copy.linksPlaceholder"
-            ></textarea>
+      <!-- 视频库 -->
+      <section class="vg-card vg-card--flush vpd-library">
+        <div class="vpd-toolbar">
+          <div class="vg-seg vg-seg--sm" role="tablist">
+            <button
+              v-for="tab in ([['all', '全部'], ['processing', '下载中'], ['completed', '已完成'], ['failed', '失败']] as const)"
+              :key="tab[0]"
+              type="button"
+              class="vg-seg__btn"
+              :class="{ 'is-active': statusFilter === tab[0] }"
+              @click="statusFilter = tab[0]"
+            >
+              {{ tab[1] }}<span class="vpd-count" :class="{ 'is-red': tab[0] === 'failed' && counts.failed }">{{ counts[tab[0]] }}</span>
+            </button>
+          </div>
+          <div class="vg-toolbar__spacer"></div>
+          <label class="vg-search vpd-search">
+            <Search :size="15" />
+            <input v-model="query" class="vg-input vg-input--sm" placeholder="搜索标题、作者、链接" />
           </label>
-
-          <div class="vpd-input-footer">
-            <span>{{ copy.lineCount }} {{ lines.length }}</span>
-            <button class="vpd-primary-button" type="button" :disabled="!lines.length || submitting" @click="submitLinks">
-              <RefreshCcw v-if="submitting" class="icon spin" />
-              <Download v-else class="icon" />
-              {{ copy.submit }}
-            </button>
-          </div>
-        </section>
-
-        <section class="vpd-panel vpd-panel--side">
-          <div class="vpd-tip-card">
-            <strong>{{ copy.guideA }}</strong>
-            <p>{{ copy.guideADesc }}</p>
-          </div>
-          <div class="vpd-tip-card">
-            <strong>{{ copy.guideB }}</strong>
-            <p>{{ copy.guideBDesc }}</p>
-          </div>
-        </section>
-      </section>
-
-      <section v-else class="vpd-library">
-        <div class="vpd-library__intro">
-          <div>
-            <strong>{{ copy.libraryTitle }}</strong>
-            <span>{{ copy.libraryHint }}</span>
+          <select v-model="platformFilter" class="vg-select vg-select--sm vpd-platform-select" aria-label="平台">
+            <option value="all">全部平台</option>
+            <option v-for="id in platformsInLibrary" :key="id" :value="id">{{ parsePlatformLabel(id) }}</option>
+          </select>
+          <button class="vg-btn vg-btn--sm" type="button" @click="sortNewest = !sortNewest">
+            <ArrowDownWideNarrow v-if="sortNewest" :size="14" /><ArrowUpNarrowWide v-else :size="14" />{{ sortNewest ? '最新' : '最早' }}
+          </button>
+          <div class="vg-seg vg-seg--sm" role="group" aria-label="显示方式">
+            <button type="button" class="vg-seg__btn" :class="{ 'is-active': viewMode === 'grid' }" title="卡片" @click="viewMode = 'grid'"><LayoutGrid :size="14" /></button>
+            <button type="button" class="vg-seg__btn" :class="{ 'is-active': viewMode === 'list' }" title="列表" @click="viewMode = 'list'"><List :size="14" /></button>
           </div>
         </div>
 
-        <div v-if="!items.length && !loading" class="vpd-empty-copy">{{ copy.noLibrary }}</div>
-        <div v-else class="vpd-album-grid">
-          <article v-for="item in items" :key="item.id" class="vpd-album-card">
-            <button class="vpd-album-card__media" type="button" :disabled="!hasVideo(item)" @click="openPreview(item)">
-              <img
-                v-if="canRenderPoster(item)"
-                class="vpd-album-thumb"
-                :src="posterUrl(item)"
-                alt=""
-                loading="lazy"
-                decoding="async"
-                @error="markPosterBroken(item.id)"
-              />
-              <div v-else class="vpd-album-card__placeholder">
-                <Video class="vpd-album-card__placeholder-icon" />
-                <span>{{ item.status === 'processing' ? copy.preparing : copy.noThumb }}</span>
-              </div>
-
-              <div class="vpd-album-card__overlay">
-                <span class="vpd-status-pill" :class="statusTone(item)">{{ statusLabel(item) }}</span>
-                <div class="vpd-album-card__actions-top">
-                  <span v-if="item.usedStatus === 'used'" class="vpd-ghost-chip vpd-ghost-chip--mini">
-                    <Check class="icon icon--tiny" />
-                    {{ copy.usedStatus }}
-                  </span>
-                  <button
-                    v-if="hasVideo(item)"
-                    class="vpd-icon-action"
-                    type="button"
-                    @click.stop="openPreview(item)"
-                  >
-                    <Play class="icon icon--tiny" />
-                  </button>
-                  <button
-                    v-if="item.status === 'failed'"
-                    class="vpd-icon-action"
-                    type="button"
-                    @click.stop="retryItem(item.id)"
-                  >
-                    <RefreshCcw class="icon icon--tiny" />
-                  </button>
-                  <button
-                    class="vpd-icon-action vpd-icon-action--danger"
-                    type="button"
-                    @click.stop="deleteItem(item.id)"
-                  >
-                    <Trash2 class="icon icon--tiny" />
-                  </button>
-                </div>
-              </div>
+        <div v-if="filtered.length" class="vpd-selectbar" :class="{ 'is-active': selected.size }">
+          <label class="vpd-check">
+            <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
+            <span>{{ selected.size ? `已选 ${selected.size} 条` : totalPages > 1 ? `全选本页（共 ${filtered.length} 条）` : `共 ${filtered.length} 条` }}</span>
+          </label>
+          <template v-if="selected.size">
+            <button class="vg-btn vg-btn--xs" type="button" :disabled="busy" @click="downloadSelected(selectedItems)">
+              <component :is="onWeb ? Download : FolderOpen" :size="13" />{{ onWeb ? '下载到电脑' : '打开文件位置' }}
             </button>
+            <button class="vg-btn vg-btn--xs" type="button" :disabled="busy" @click="saveToLibrary(selectedItems)"><FolderInput :size="13" />存入素材库</button>
+            <button class="vg-btn vg-btn--xs" type="button" @click="copyLinks(selectedItems)"><Copy :size="13" />复制链接</button>
+            <button v-if="selectedItems.some((item) => item.status === 'failed')" class="vg-btn vg-btn--xs" type="button" :disabled="busy" @click="retry(selectedItems)"><RefreshCcw :size="13" />重试失败</button>
+            <button class="vg-btn vg-btn--xs vg-btn--danger" type="button" :disabled="busy" @click="remove(selectedItems)"><Trash2 :size="13" />删除</button>
+            <button class="vg-btn vg-btn--xs vg-btn--ghost" type="button" @click="clearSelection">取消</button>
+          </template>
+          <template v-else>
+            <div class="vg-toolbar__spacer"></div>
+            <button v-if="counts.failed" class="vg-btn vg-btn--xs" type="button" :disabled="busy" @click="retry(items)"><RefreshCcw :size="13" />全部重试（{{ counts.failed }}）</button>
+            <button v-if="counts.completed" class="vg-btn vg-btn--xs vg-btn--soft" type="button" @click="goMakeImages"><Images :size="13" />去拆帧做图生图</button>
+          </template>
+        </div>
 
-            <div class="vpd-album-card__body">
-              <div class="vpd-album-card__topline">
-                <strong>{{ formatTitle(item) }}</strong>
+        <div v-if="!filtered.length" class="vg-empty vpd-empty">
+          <span class="vg-empty__icon"><Video :size="22" /></span>
+          <p v-if="items.length">没有符合条件的视频</p>
+          <p v-else>还没有下载过视频。把分享链接粘贴到上面，点「开始下载」就行</p>
+        </div>
+
+        <!-- 卡片 -->
+        <div v-else-if="viewMode === 'grid'" class="vpd-grid">
+          <article
+            v-for="item in visible"
+            :key="item.id"
+            class="vpd-card"
+            :class="{ 'is-selected': selected.has(item.id), [`is-${item.status}`]: true }"
+          >
+            <div class="vpd-card__media" @click="hasVideo(item) ? openPreview(item) : undefined">
+              <img v-if="posterUrl(item)" :src="posterUrl(item)" alt="" loading="lazy" decoding="async" @error="markPosterBroken(item.id)" />
+              <span v-else class="vpd-card__noposter"><Video :size="26" /></span>
+              <label class="vpd-card__check" @click.stop>
+                <input type="checkbox" :checked="selected.has(item.id)" @change="toggleSelect(item.id)" />
+              </label>
+              <span class="vpd-badge" :class="`vpd-platform--${platformOf(item)}`">{{ parsePlatformLabel(platformOf(item)) }}</span>
+              <span v-if="item.usedStatus === 'used'" class="vpd-card__used">已使用</span>
+              <div v-if="item.status === 'processing'" class="vpd-card__state">
+                <Loader2 :size="22" class="vg-spin" /><span>下载中…</span>
               </div>
-              <div class="vpd-album-card__meta">
-                <span>{{ formatSubtitle(item) }}</span>
-                <span>{{ item.usedStatus === 'used' ? copy.usedStatus : copy.unusedStatus }}</span>
+              <div v-else-if="item.status === 'failed'" class="vpd-card__state is-failed" @click.stop>
+                <AlertTriangle :size="20" />
+                <span class="vpd-card__error" :title="item.error">{{ item.error || '下载失败' }}</span>
+                <button class="vg-btn vg-btn--xs vg-btn--primary" type="button" :disabled="busy" @click="retry([item])"><RefreshCcw :size="12" />重试</button>
               </div>
-              <div class="vpd-album-card__time">{{ formatTime(item.updatedAt) }}</div>
-              <div v-if="item.error" class="vpd-album-card__error">{{ item.error }}</div>
-              <div class="vpd-album-card__footer">
-                <button class="vpd-ghost-chip" type="button" :disabled="!hasVideo(item)" @click="openPreview(item)">
-                  <Play class="icon icon--tiny" />
-                  {{ copy.preview }}
-                </button>
-                <button class="vpd-ghost-chip" type="button" :disabled="!item.localVideoPath" @click="showInFolder(item.localVideoPath)">
-                  <FolderOpen class="icon icon--tiny" />
-                  {{ copy.showFile }}
-                </button>
+              <span v-else class="vpd-card__play"><Play :size="20" /></span>
+            </div>
+            <div class="vpd-card__body">
+              <strong class="vpd-card__title" :title="titleOf(item)">{{ titleOf(item) }}</strong>
+              <div class="vpd-card__meta">
+                <span class="vg-ellipsis">{{ item.author || item.shareUrl }}</span>
+                <span>{{ formatTime(item.updatedAt) }}</span>
               </div>
+            </div>
+            <div class="vpd-card__actions">
+              <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!hasVideo(item)" :title="isCloudFile(item) ? '下载到电脑' : '打开文件位置'" @click="openFile(item)">
+                <component :is="isCloudFile(item) ? Download : FolderOpen" :size="14" />
+              </button>
+              <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!hasVideo(item)" title="存入素材库" @click="saveToLibrary([item])"><FolderInput :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm" type="button" title="复制链接" @click="copyLinks([item])"><Copy :size="14" /></button>
+              <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" title="删除" @click="remove([item])"><Trash2 :size="14" /></button>
             </div>
           </article>
         </div>
+
+        <!-- 列表 -->
+        <div v-else class="vg-table-wrap vpd-table-wrap">
+          <table class="vg-table vg-table--compact">
+            <thead>
+              <tr>
+                <th class="vpd-col-check"></th>
+                <th>视频</th>
+                <th>平台</th>
+                <th>状态</th>
+                <th>时间</th>
+                <th class="vpd-col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in visible" :key="item.id" :class="{ 'is-selected': selected.has(item.id) }">
+                <td class="vpd-col-check"><input type="checkbox" :checked="selected.has(item.id)" @change="toggleSelect(item.id)" /></td>
+                <td>
+                  <div class="vpd-row-video">
+                    <button class="vg-thumb vpd-row-thumb" type="button" :disabled="!hasVideo(item)" @click="openPreview(item)">
+                      <img v-if="posterUrl(item)" :src="posterUrl(item)" alt="" loading="lazy" @error="markPosterBroken(item.id)" />
+                      <Video v-else :size="16" />
+                    </button>
+                    <div class="vpd-row-text">
+                      <strong class="vg-ellipsis" :title="titleOf(item)">{{ titleOf(item) }}</strong>
+                      <span class="vg-ellipsis">{{ item.author || item.shareUrl }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="vpd-badge is-inline" :class="`vpd-platform--${platformOf(item)}`">{{ parsePlatformLabel(platformOf(item)) }}</span></td>
+                <td>
+                  <span v-if="item.status === 'processing'" class="vg-pill vg-pill--blue"><Loader2 :size="12" class="vg-spin" />下载中</span>
+                  <span v-else-if="item.status === 'failed'" class="vg-pill vg-pill--red" :title="item.error">失败</span>
+                  <span v-else-if="item.usedStatus === 'used'" class="vg-pill vg-pill--amber">已使用</span>
+                  <span v-else class="vg-pill vg-pill--green"><CheckCircle2 :size="12" />已完成</span>
+                </td>
+                <td class="vg-muted">{{ formatTime(item.updatedAt) }}</td>
+                <td class="vpd-col-actions">
+                  <div class="vg-row">
+                    <button v-if="item.status === 'failed'" class="vg-icon-btn vg-icon-btn--sm" type="button" title="重试" @click="retry([item])"><RefreshCcw :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!hasVideo(item)" title="预览" @click="openPreview(item)"><Play :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!hasVideo(item)" :title="isCloudFile(item) ? '下载到电脑' : '打开文件位置'" @click="openFile(item)">
+                      <component :is="isCloudFile(item) ? Download : FolderOpen" :size="14" />
+                    </button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" title="复制链接" @click="copyLinks([item])"><Copy :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" title="删除" @click="remove([item])"><Trash2 :size="14" /></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <MaterialPager
+          v-if="filtered.length > PAGE_SIZES[0]"
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          class="vpd-pager"
+          :total-pages="totalPages"
+          :total="filtered.length"
+          :sizes="PAGE_SIZES"
+          :labels="{ prev: '上一页', next: '下一页', perPage: '每页', items: '条' }"
+        />
       </section>
-    </section>
+    </template>
 
     <VideoPreviewModal
-      :open="previewOpen"
-      :src="previewSrc"
-      :fallback-src="previewFallbackSrc"
-      :poster="previewPoster"
-      :title="previewTitle"
+      :open="Boolean(preview)"
+      :src="preview?.src ?? null"
+      :fallback-src="preview?.fallback ?? null"
+      :poster="preview?.poster ?? null"
+      :title="preview?.title ?? ''"
       media-type="video"
-      @close="closePreview"
+      @close="preview = null"
     />
   </div>
 </template>
-
-<style>
-.vpd-page {
-  display: grid;
-  gap: 16px;
-  color: var(--theme-text);
-}
-
-.vpd-hero,
-.vpd-workspace,
-.vpd-empty {
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--theme-tone-blue) 14%, transparent), transparent 30%),
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 20px rgba(4, 10, 24, 0.24);
-}
-
-.vpd-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  padding: 20px 22px;
-}
-
-.vpd-hero__content {
-  display: grid;
-  gap: 10px;
-}
-
-.vpd-hero__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--theme-text);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.vpd-hero__eyebrow-icon {
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-blue) 84%, transparent));
-}
-
-.vpd-hero h1,
-.vpd-hero p {
-  margin: 0;
-}
-
-.vpd-hero h1 {
-  font-size: 30px;
-  line-height: 1.08;
-  letter-spacing: -0.04em;
-}
-
-.vpd-hero p {
-  max-width: 760px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--theme-text);
-}
-
-.vpd-hero__stats {
-  display: flex;
-  gap: 10px;
-}
-
-.vpd-stat {
-  min-width: 118px;
-  display: grid;
-  gap: 6px;
-  align-content: center;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 88%, transparent), color-mix(in srgb, var(--theme-panel) 88%, transparent));
-  border: 1px solid var(--theme-border);
-}
-
-.vpd-stat strong {
-  font-size: 24px;
-}
-
-.vpd-stat span {
-  font-size: 11px;
-  color: var(--theme-text);
-}
-
-.vpd-notice {
-  padding: 12px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-}
-
-.vpd-notice--success {
-  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 24%, transparent);
-}
-
-.vpd-notice--danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-tone-red) 24%, transparent);
-}
-
-.vpd-empty {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 22px;
-}
-
-.vpd-empty__icon {
-  width: 52px;
-  height: 52px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 90%, transparent), color-mix(in srgb, var(--theme-tone-blue) 75%, transparent));
-}
-
-.vpd-empty__content {
-  flex: 1;
-  display: grid;
-  gap: 6px;
-}
-
-.vpd-empty__content h2,
-.vpd-empty__content p {
-  margin: 0;
-}
-
-.vpd-empty__content p {
-  color: var(--theme-text);
-  font-size: 13px;
-}
-
-.vpd-workspace {
-  display: grid;
-  gap: 14px;
-  padding: 18px;
-}
-
-.vpd-workspace__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.vpd-tabs {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.vpd-tab-button,
-.vpd-ghost-button,
-.vpd-primary-button,
-.vpd-ghost-chip,
-.vpd-icon-action {
-  border: 0;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.vpd-tab-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  color: var(--theme-text);
-}
-
-.vpd-tab-button.active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 32%, transparent), color-mix(in srgb, var(--theme-tone-blue) 24%, transparent));
-  color: var(--theme-text);
-}
-
-.vpd-tab-badge {
-  min-width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--theme-text) 10%, transparent);
-  font-size: 11px;
-}
-
-.vpd-input-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
-}
-
-.vpd-panel {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid var(--theme-border);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-panel) 92%, transparent)),
-    color-mix(in srgb, var(--theme-panel) 95%, transparent);
-}
-
-.vpd-panel--side {
-  align-content: start;
-}
-
-.vpd-section-head {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.vpd-section-head h2,
-.vpd-section-head p {
-  margin: 0;
-}
-
-.vpd-section-head h2 {
-  font-size: 16px;
-}
-
-.vpd-section-head p {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.65;
-  color: var(--theme-text);
-}
-
-.vpd-section-head__badge {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-tone-blue) 92%, transparent), color-mix(in srgb, var(--theme-tone-blue) 90%, transparent));
-  color: var(--theme-text);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.vpd-field {
-  display: grid;
-  gap: 8px;
-}
-
-.vpd-field span {
-  font-size: 13px;
-  color: var(--theme-text);
-}
-
-.vpd-textarea {
-  width: 100%;
-  min-height: 280px;
-  resize: vertical;
-  border-radius: 16px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-panel) 86%, transparent);
-  color: var(--theme-text);
-  padding: 14px;
-  font: inherit;
-}
-
-.vpd-input-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--theme-text);
-}
-
-.vpd-tip-card {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
-}
-
-.vpd-tip-card strong {
-  font-size: 13px;
-}
-
-.vpd-tip-card p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--theme-text);
-}
-
-.vpd-library {
-  display: grid;
-  gap: 12px;
-}
-
-.vpd-library__intro strong,
-.vpd-library__intro span {
-  display: block;
-}
-
-.vpd-library__intro strong {
-  font-size: 14px;
-}
-
-.vpd-library__intro span {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--theme-text);
-}
-
-.vpd-album-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.vpd-album-card {
-  min-width: 0;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--theme-tone-blue) 24%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--theme-tone-blue) 98%, transparent), color-mix(in srgb, var(--theme-panel-soft) 98%, transparent)),
-    color-mix(in srgb, var(--theme-panel) 95%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 20px rgba(4, 10, 24, 0.24);
-}
-
-.vpd-album-card__media {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  overflow: hidden;
-  aspect-ratio: 0.84 / 1;
-  border-bottom: 1px solid color-mix(in srgb, var(--theme-tone-blue) 16%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 98%, transparent), color-mix(in srgb, var(--theme-panel) 98%, transparent));
-}
-
-.vpd-album-card__media:disabled {
-  cursor: default;
-}
-
-.vpd-album-thumb,
-.vpd-album-card__placeholder {
-  width: 100%;
-  height: 100%;
-}
-
-.vpd-album-thumb {
-  object-fit: cover;
-  display: block;
-  transition: transform 0.25s ease;
-}
-
-.vpd-album-card:hover .vpd-album-thumb {
-  transform: scale(1.04);
-}
-
-.vpd-album-card__placeholder {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: color-mix(in srgb, var(--theme-text) 52%, transparent);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-.vpd-album-card__placeholder-icon {
-  width: 24px;
-  height: 24px;
-}
-
-.vpd-album-card__overlay {
-  position: absolute;
-  inset: 0;
-  padding: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-panel) 54%, transparent), color-mix(in srgb, var(--theme-panel) 2%, transparent) 42%, color-mix(in srgb, var(--theme-panel) 30%, transparent));
-}
-
-.vpd-album-card__actions-top {
-  display: flex;
-  gap: 6px;
-}
-
-.vpd-album-card__body {
-  display: grid;
-  gap: 5px;
-  padding: 10px;
-}
-
-.vpd-album-card__topline,
-.vpd-album-card__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
-
-.vpd-album-card__topline strong {
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.vpd-album-card__topline span,
-.vpd-album-card__meta span {
-  color: var(--theme-text);
-  font-size: 11px;
-}
-
-.vpd-album-card__meta span:first-child {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vpd-album-card__meta span:last-child {
-  flex: 0 0 auto;
-}
-
-.vpd-album-card__time {
-  font-size: 10px;
-  color: color-mix(in srgb, var(--theme-text) 56%, transparent);
-}
-
-.vpd-album-card__error {
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--theme-tone-red);
-}
-
-.vpd-album-card__footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.vpd-status-pill {
-  min-height: 24px;
-  padding: 0 9px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  backdrop-filter: blur(10px);
-}
-
-.vpd-ghost-button,
-.vpd-primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.vpd-ghost-button {
-  background: color-mix(in srgb, var(--theme-text) 4%, transparent);
-  color: var(--theme-text);
-}
-
-.vpd-primary-button {
-  background: linear-gradient(135deg, var(--theme-tone-blue), var(--theme-tone-blue));
-  color: var(--theme-text);
-  box-shadow: 0 14px 30px rgba(52, 120, 255, 0.26);
-}
-
-.vpd-ghost-chip,
-.vpd-icon-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--theme-border);
-  background: color-mix(in srgb, var(--theme-panel) 34%, transparent);
-  color: var(--theme-text);
-}
-
-.vpd-icon-action {
-  width: 26px;
-  height: 26px;
-  backdrop-filter: blur(10px);
-}
-
-.vpd-icon-action--danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.vpd-ghost-chip {
-  min-width: 0;
-  padding: 5px 8px;
-  font-size: 11px;
-}
-
-.vpd-ghost-chip--mini {
-  min-height: 24px;
-  padding: 0 8px;
-  color: var(--theme-text);
-}
-
-.vpd-ghost-chip--danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--theme-tone-red) 28%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.vpd-empty-copy {
-  padding: 24px 12px;
-  text-align: center;
-  color: var(--theme-text);
-}
-
-.is-success {
-  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
-  color: var(--theme-accent);
-}
-
-.is-warning {
-  background: color-mix(in srgb, var(--theme-tone-amber) 18%, transparent);
-  color: var(--theme-tone-amber);
-}
-
-.is-danger {
-  background: color-mix(in srgb, var(--theme-tone-red) 20%, transparent);
-  color: var(--theme-tone-red);
-}
-
-.is-info {
-  background: color-mix(in srgb, var(--theme-tone-blue) 18%, transparent);
-  color: var(--theme-tone-blue);
-}
-
-.vpd-ghost-button:disabled,
-.vpd-primary-button:disabled,
-.vpd-ghost-chip:disabled,
-.vpd-icon-action:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.icon {
-  width: 16px;
-  height: 16px;
-}
-
-.icon--small {
-  width: 14px;
-  height: 14px;
-}
-
-.icon--tiny {
-  width: 12px;
-  height: 12px;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 1080px) {
-  .vpd-hero,
-  .vpd-input-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .vpd-album-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .vpd-hero__stats {
-    width: 100%;
-  }
-
-  .vpd-stat {
-    flex: 1;
-  }
-}
-
-@media (max-width: 820px) {
-  .vpd-workspace__head,
-  .vpd-input-footer,
-  .vpd-empty {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .vpd-album-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-</style>

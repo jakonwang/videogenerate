@@ -21,7 +21,7 @@ function getWorker() {
     if (message.error) request.reject(new Error(message.error))
     else request.resolve(message.result)
   })
-  worker.on('error', (error) => {
+  worker.on('error', (error: Error) => {
     for (const request of pending.values()) request.reject(error)
     pending.clear()
     worker = null

@@ -67,6 +67,8 @@ export type VideoJobResult = {
   /** 链接解析：视频标题、作者 */
   title?: string
   author?: string
+  /** 链接解析：来源平台 */
+  platform?: string
 }
 
 export const VIDEO_TOOL_LABELS: Record<VideoToolKind, string> = {

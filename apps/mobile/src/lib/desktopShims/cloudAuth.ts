@@ -36,8 +36,21 @@ export function statusFromSession() {
   }
 }
 
+/** 和电脑端 stores/cloudAuth 同样的成员（status / enforced / licensed / ensureLoaded / refresh / setStatus / hasFeature） */
+const status = computed(() => statusFromSession())
 const store = reactive({
-  status: computed(() => statusFromSession()),
+  status,
+  enforced: computed(() => status.value.mode === 'enforced'),
+  licensed: computed(() => status.value.licensed),
+  hasFeature(feature: string | null) {
+    const s = status.value
+    if (!feature) return true
+    if ((s.disabledFeatures as string[]).includes(feature)) return false
+    return s.licensed && (s.features.includes('*') || s.features.includes(feature as never))
+  },
+  async ensureLoaded() {
+    return statusFromSession()
+  },
   async refresh() {
     await refreshAccount()
     return statusFromSession()

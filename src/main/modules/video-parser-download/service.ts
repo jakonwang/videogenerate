@@ -1,16 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import {
-  tikhubFetchOneUrl,
-  isHttpUrl,
-  isKnownNonVideoAssetUrl,
-  resolveAuthor,
-  resolveCoverUrl,
-  resolveDownloadUrl,
-  resolveTitle,
-  resolveVideoId,
-  topLevelKeysOf,
-} from './tikhub'
-import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import { isHttpUrl, tikhubApiBase } from './tikhub'
+import { detectPlatform, extractFirstUrl, parseShareLink, type ParsedVideo, type TikhubFetch } from '../../../shared/videoParserPlatforms'
+import { runFfmpeg } from '../ffmpeg/runner'
+import { access, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { generateThumbnailJpg } from '../media/thumbnail'
@@ -24,11 +16,36 @@ import type { VideoParserDownloadItem } from './types'
 type VideoParserDownloadServiceDeps = {
   fetchImpl: typeof fetch
   generateThumbnailJpg: typeof generateThumbnailJpg
+  /** 画面和声音分开下载时合并（B 站、YouTube） */
+  mergeAudioVideo: (videoPath: string, audioPath: string, outputPath: string) => Promise<void>
 }
+
+const defaultMerge = (videoPath: string, audioPath: string, outputPath: string) =>
+  runFfmpeg({ args: ['-y', '-i', videoPath, '-i', audioPath, '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', '-movflags', '+faststart', outputPath] })
 
 let deps: VideoParserDownloadServiceDeps = {
   fetchImpl: fetch,
   generateThumbnailJpg,
+  mergeAudioVideo: defaultMerge,
+}
+
+/** 后台下载：同时最多 2 条，页面每 4 秒刷新看进度 */
+const DOWNLOAD_CONCURRENCY = 2
+const queue: Array<() => Promise<void>> = []
+let active = 0
+function enqueue(task: () => Promise<void>) {
+  queue.push(task)
+  const pump = () => {
+    while (active < DOWNLOAD_CONCURRENCY && queue.length) {
+      const next = queue.shift()!
+      active += 1
+      void next().finally(() => {
+        active -= 1
+        pump()
+      })
+    }
+  }
+  pump()
 }
 
 function now() {
@@ -49,6 +66,11 @@ function normalizeShareUrls(input: string[]) {
   return Array.from(new Set((input || []).map((item) => String(item || '').trim()).filter(Boolean)))
 }
 
+/** 同一条分享链接的标识（去掉参数），用来认出重复导入 */
+function shareKey(text: string) {
+  return extractFirstUrl(text).replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+}
+
 function normalizeItem(item?: Partial<VideoParserDownloadItem> | null): VideoParserDownloadItem | null {
   if (!item) return null
   const userId = String(item.userId || '').trim()
@@ -60,7 +82,7 @@ function normalizeItem(item?: Partial<VideoParserDownloadItem> | null): VideoPar
     userId,
     shareUrl,
     videoId,
-    platform: 'tiktok',
+    platform: item.platform || detectPlatform(shareUrl)?.platform || 'tiktok',
     title: String(item.title || '').trim() || undefined,
     author: String(item.author || '').trim() || undefined,
     coverUrl: String(item.coverUrl || '').trim() || undefined,
@@ -86,50 +108,35 @@ async function ensureReadable(filePath?: string) {
   }
 }
 
+/** 检查过能播放的文件（路径 → 大小:修改时间），列表每 4 秒刷新时不用每条都重新 ffprobe */
+const playableChecked = new Map<string, string>()
+
 async function ensurePlayableVideo(filePath?: string) {
   const value = String(filePath || '').trim()
   if (!value) return false
   try {
+    const info = await stat(value)
+    const signature = `${info.size}:${info.mtimeMs}`
+    if (playableChecked.get(value) === signature) return true
     const meta = await probeMedia(value)
-    return Number(meta.durationSec || 0) > 0.1 && Number(meta.width || 0) > 0 && Number(meta.height || 0) > 0
+    const ok = Number(meta.durationSec || 0) > 0.1 && Number(meta.width || 0) > 0 && Number(meta.height || 0) > 0
+    if (ok) playableChecked.set(value, signature)
+    else playableChecked.delete(value)
+    return ok
   } catch {
+    playableChecked.delete(value)
     return false
   }
 }
 
-async function downloadBinaryFile(url: string, targetPath: string) {
-  const response = await deps.fetchImpl(url)
+async function downloadBinaryFile(url: string, targetPath: string, headers?: Record<string, string>) {
+  const response = await deps.fetchImpl(url, headers ? { headers } : undefined)
   if (!response.ok) {
-    throw new Error(`Video download failed: HTTP ${response.status}`)
+    throw new Error(`视频下载失败（HTTP ${response.status}），链接可能已过期，请重试`)
   }
   const arrayBuffer = await response.arrayBuffer()
   await mkdir(dirname(targetPath), { recursive: true })
   await writeFile(targetPath, Buffer.from(arrayBuffer))
-}
-
-async function fetchTikHubPayload(apiKey: string, shareUrl: string) {
-  const url = new URL(tikhubFetchOneUrl())
-  url.searchParams.set('share_url', shareUrl)
-  const response = await deps.fetchImpl(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-  })
-  const text = await response.text()
-  if (!response.ok) {
-    throw new Error(`TikHub request failed: HTTP ${response.status} ${text.slice(0, 240)}`)
-  }
-  let json: any
-  try {
-    json = JSON.parse(text)
-  } catch {
-    throw new Error('TikHub response is not valid JSON')
-  }
-  const code = Number(json?.code ?? 0)
-  if (Number.isFinite(code) && code !== 200 && code !== 0) {
-    throw new Error(String(json?.message || json?.msg || `TikHub returned code ${code}`))
-  }
-  return json
 }
 
 async function removeItemArtifacts(item: VideoParserDownloadItem) {
@@ -162,93 +169,86 @@ async function invalidateBrokenCompletedItem(item: VideoParserDownloadItem, erro
   })
 }
 
-async function upsertProcessingItem(input: {
-  userId: string
-  shareUrl: string
-  item?: VideoParserDownloadItem | null
-  payload?: unknown
-}) {
-  const existing = input.item
-  const videoId = resolveVideoId(input.payload) || String(existing?.videoId || '').trim()
-  if (!videoId) throw new Error('TikHub response did not include a video id')
-  const normalized = normalizeItem({
+async function parseLink(shareText: string): Promise<ParsedVideo> {
+  const credentials = await cloneRepo.getCredentials()
+  const apiKey = String(credentials.tikhubApiKey || '').trim()
+  if (!apiKey) throw new Error('还没有填写 TikHub 密钥，请先到设置里填写')
+  return await parseShareLink({ text: shareText, apiKey, baseUrl: tikhubApiBase(), fetch: deps.fetchImpl as unknown as TikhubFetch })
+}
+
+/** 解析 + 下载一条（在后台队列里跑）：做完把记录改成完成或失败 */
+async function downloadOne(input: { userId: string; shareText: string; existing: VideoParserDownloadItem }) {
+  let item = input.existing
+  try {
+    const parsed = await parseLink(input.shareText)
+    // 同一个视频已经下载好：复用文件，删掉这条重复的占位记录
+    const duplicate = await videoParserDownloadRepo.getItemByVideoId(input.userId, parsed.videoId)
+    if (duplicate && duplicate.id !== item.id && duplicate.status === 'completed' && (await ensureReadable(duplicate.localVideoPath)) && (await ensurePlayableVideo(duplicate.localVideoPath))) {
+      await videoParserDownloadRepo.removeItem(input.userId, item.id).catch(() => undefined)
+      return await videoParserDownloadRepo.upsertItem({ ...duplicate, title: parsed.title || duplicate.title, author: parsed.author || duplicate.author, coverUrl: parsed.coverUrl || duplicate.coverUrl, error: undefined })
+    }
+    item = await videoParserDownloadRepo.upsertItem({
+      ...item,
+      platform: parsed.platform,
+      videoId: parsed.videoId || item.videoId,
+      title: parsed.title || item.title,
+      author: parsed.author || item.author,
+      coverUrl: parsed.coverUrl || item.coverUrl,
+      downloadUrl: parsed.downloadUrl,
+      status: 'processing',
+      error: undefined,
+    })
+    const titlePart = safeName(item.title || '').slice(0, 60) || safeName(item.videoId).slice(0, 60) || 'video'
+    const itemDir = itemRoot(item.id)
+    await mkdir(itemDir, { recursive: true })
+    const localVideoPath = join(itemDir, `${titlePart}.mp4`)
+    if (parsed.audioUrl) {
+      const videoPart = join(itemDir, 'video-part.mp4')
+      const audioPart = join(itemDir, 'audio-part.m4a')
+      await downloadBinaryFile(parsed.downloadUrl, videoPart, parsed.downloadHeaders)
+      await downloadBinaryFile(parsed.audioUrl, audioPart, parsed.downloadHeaders)
+      await deps.mergeAudioVideo(videoPart, audioPart, localVideoPath)
+      await Promise.all([rm(videoPart, { force: true }), rm(audioPart, { force: true })]).catch(() => undefined)
+    } else {
+      await downloadBinaryFile(parsed.downloadUrl, localVideoPath, parsed.downloadHeaders)
+    }
+    if (!(await ensurePlayableVideo(localVideoPath))) {
+      await rm(localVideoPath, { force: true }).catch(() => undefined)
+      throw new Error('下载到的文件不是可播放的视频，请重新复制分享链接后重试')
+    }
+    const thumbnailPath = await deps.generateThumbnailJpg({ filePath: localVideoPath, atSec: 0.5 })
+    return await videoParserDownloadRepo.upsertItem({ ...item, localVideoPath, thumbnailPath: thumbnailPath || undefined, status: 'completed', error: undefined })
+  } catch (error) {
+    const message = String((error as Error)?.message || error || '未知错误').trim()
+    return await videoParserDownloadRepo.upsertItem({ ...item, status: 'failed', error: message })
+  }
+}
+
+/** 先建一条「下载中」的记录（页面马上能看到），再交给后台队列 */
+async function startDownload(userId: string, shareText: string, existing?: VideoParserDownloadItem | null) {
+  const shareUrl = extractFirstUrl(shareText) || shareText
+  const placeholder = normalizeItem({
+    ...(existing ?? {}),
     id: existing?.id || randomUUID(),
-    userId: input.userId,
-    shareUrl: input.shareUrl,
-    videoId,
-    title: resolveTitle(input.payload) || existing?.title,
-    author: resolveAuthor(input.payload) || existing?.author,
-    coverUrl: resolveCoverUrl(input.payload) || existing?.coverUrl,
-    downloadUrl: resolveDownloadUrl(input.payload) || existing?.downloadUrl,
-    localVideoPath: existing?.localVideoPath,
-    thumbnailPath: existing?.thumbnailPath,
+    userId,
+    shareUrl,
+    videoId: existing?.videoId || `pending:${shareKey(shareUrl) || randomUUID()}`,
+    platform: existing?.platform || detectPlatform(shareUrl)?.platform,
     status: 'processing',
     error: undefined,
     usedStatus: existing?.usedStatus || 'unused',
     createdAt: existing?.createdAt || now(),
+  })!
+  const saved = await videoParserDownloadRepo.upsertItem(placeholder)
+  enqueue(async () => {
+    await downloadOne({ userId, shareText, existing: saved })
   })
-  if (!normalized) throw new Error('Failed to normalize download item')
-  return await videoParserDownloadRepo.upsertItem(normalized)
+  return saved
 }
 
-async function downloadOne(input: { userId: string; shareUrl: string; existing?: VideoParserDownloadItem | null }) {
-  const credentials = await cloneRepo.getCredentials()
-  const apiKey = String(credentials.tikhubApiKey || '').trim()
-  if (!apiKey) throw new Error('TikHub API key is missing. Please set it in Settings first.')
-
-  const payload = await fetchTikHubPayload(apiKey, input.shareUrl)
-  const videoId = resolveVideoId(payload)
-  if (!videoId) {
-    throw new Error(`TikHub response is missing video id. Keys: ${topLevelKeysOf(payload).join(', ')}`)
-  }
-
-  const deduped = (await videoParserDownloadRepo.getItemByVideoId(input.userId, videoId)) ?? input.existing ?? null
-  if (deduped?.status === 'completed' && (await ensureReadable(deduped.localVideoPath)) && (await ensurePlayableVideo(deduped.localVideoPath))) {
-    return await videoParserDownloadRepo.upsertItem({
-      ...deduped,
-      shareUrl: input.shareUrl,
-      title: resolveTitle(payload) || deduped.title,
-      author: resolveAuthor(payload) || deduped.author,
-      coverUrl: resolveCoverUrl(payload) || deduped.coverUrl,
-      downloadUrl: resolveDownloadUrl(payload) || deduped.downloadUrl,
-      error: undefined,
-    })
-  }
-  const processingItem = await upsertProcessingItem({
-    userId: input.userId,
-    shareUrl: input.shareUrl,
-    item: deduped,
-    payload,
-  })
-
-  const downloadUrl = String(processingItem.downloadUrl || '').trim()
-  if (!downloadUrl || !isHttpUrl(downloadUrl)) {
-    throw new Error(`TikHub response is missing a playable MP4 URL. Keys: ${topLevelKeysOf(payload).join(', ')}`)
-  }
-
-  const titlePart = safeName(processingItem.title || processingItem.videoId || 'tiktok-video') || processingItem.videoId
-  const itemDir = itemRoot(processingItem.id)
-  await mkdir(itemDir, { recursive: true })
-  const localVideoPath = join(itemDir, `${titlePart}.mp4`)
-  await downloadBinaryFile(downloadUrl, localVideoPath)
-  const playable = await ensurePlayableVideo(localVideoPath)
-  if (!playable) {
-    try {
-      await rm(localVideoPath, { force: true })
-    } catch {
-      // Ignore invalid-file cleanup failures before surfacing the real error.
-    }
-    throw new Error('Downloaded file is not a playable video. Please retry after refreshing the share link.')
-  }
-  const thumbnailPath = await deps.generateThumbnailJpg({ filePath: localVideoPath, atSec: 0.5 })
-
-  return await videoParserDownloadRepo.upsertItem({
-    ...processingItem,
-    localVideoPath,
-    thumbnailPath: thumbnailPath || undefined,
-    status: 'completed',
-    error: undefined,
-  })
+/** 测试用：等后台队列清空 */
+export async function waitForVideoParserQueue() {
+  while (active > 0 || queue.length) await new Promise((resolve) => setTimeout(resolve, 20))
 }
 
 export const videoParserDownloadService = {
@@ -259,7 +259,7 @@ export const videoParserDownloadService = {
       await videoParserDownloadRepo.upsertItem({
         ...item,
         status: item.localVideoPath && (await ensureReadable(item.localVideoPath)) ? 'completed' : 'failed',
-        error: item.localVideoPath && (await ensureReadable(item.localVideoPath)) ? undefined : 'Interrupted during previous download run',
+        error: item.localVideoPath && (await ensureReadable(item.localVideoPath)) ? undefined : '上次下载被中断，请重试',
       })
     }
   },
@@ -272,11 +272,12 @@ export const videoParserDownloadService = {
       const readable = await ensureReadable(item.localVideoPath)
       const playable = readable ? await ensurePlayableVideo(item.localVideoPath) : false
       if (readable && playable) continue
-      await invalidateBrokenCompletedItem(item, 'Downloaded file is not a playable video. Please retry.')
+      await invalidateBrokenCompletedItem(item, '视频文件丢失或损坏，请重试')
     }
     return await videoParserDownloadRepo.listItems(safeUserId)
   },
 
+  /** 导入分享链接：每行一条（也可以整段分享文案），马上返回「下载中」的记录，下载在后台进行；同一链接不重复下载 */
   async importShareUrls(input: { userId: string; shareUrls: string[] }) {
     const userId = String(input.userId || '').trim()
     if (!userId) throw new Error('userId is required')
@@ -284,35 +285,29 @@ export const videoParserDownloadService = {
     if (!shareUrls.length) throw new Error('shareUrls is required')
     const items: VideoParserDownloadItem[] = []
     const errors: Array<{ shareUrl: string; message: string }> = []
-    for (const shareUrl of shareUrls) {
-      try {
-        if (!isHttpUrl(shareUrl)) throw new Error('Share link must start with http or https')
-        const completed = await downloadOne({ userId, shareUrl })
-        items.push(completed)
-      } catch (error: any) {
-        const message = String(error?.message || error || 'Unknown error').trim()
-        errors.push({ shareUrl, message })
-        const existing = (await videoParserDownloadRepo.listItems(userId)).find((item) => item.shareUrl === shareUrl) ?? null
-        const fallbackVideoId = String(existing?.videoId || '').trim() || randomUUID()
-        await videoParserDownloadRepo.upsertItem({
-          id: existing?.id || randomUUID(),
-          userId,
-          shareUrl,
-          videoId: fallbackVideoId,
-          platform: 'tiktok',
-          title: existing?.title,
-          author: existing?.author,
-          coverUrl: existing?.coverUrl,
-          downloadUrl: existing?.downloadUrl,
-          localVideoPath: existing?.localVideoPath,
-          thumbnailPath: existing?.thumbnailPath,
-          status: 'failed',
-          error: message,
-          usedStatus: existing?.usedStatus || 'unused',
-          createdAt: existing?.createdAt || now(),
-          updatedAt: now(),
-        })
+    const existingItems = await videoParserDownloadRepo.listItems(userId)
+    const seen = new Set<string>()
+    for (const raw of shareUrls) {
+      const shareUrl = extractFirstUrl(raw)
+      if (!shareUrl || !isHttpUrl(shareUrl)) {
+        errors.push({ shareUrl: raw, message: '没有找到链接' })
+        continue
       }
+      if (!detectPlatform(shareUrl)) {
+        errors.push({ shareUrl, message: '暂不支持这个平台的链接' })
+        continue
+      }
+      const key = shareKey(shareUrl)
+      if (seen.has(key)) continue
+      seen.add(key)
+      const existing = existingItems.find((item) => shareKey(item.shareUrl) === key) ?? null
+      // 已下载好的直接复用；下载中的不重复提交
+      if (existing && (existing.status === 'processing' || (existing.status === 'completed' && (await ensureReadable(existing.localVideoPath))))) {
+        items.push(existing)
+        continue
+      }
+      // 整段分享文案也传给接口（小红书等平台要文案）
+      items.push(await startDownload(userId, raw, existing))
     }
     return {
       ok: errors.length === 0,
@@ -326,8 +321,9 @@ export const videoParserDownloadService = {
     const id = String(input.id || '').trim()
     if (!userId || !id) throw new Error('userId and id are required')
     const current = await videoParserDownloadRepo.getItem(userId, id)
-    if (!current) throw new Error('Download item does not exist')
-    return await downloadOne({ userId, shareUrl: current.shareUrl, existing: current })
+    if (!current) throw new Error('这条下载记录不存在')
+    if (current.status === 'processing') return current
+    return await startDownload(userId, current.shareUrl, current)
   },
 
   async deleteItem(input: { userId: string; id: string }) {
@@ -359,6 +355,7 @@ export const videoParserDownloadService = {
     deps = {
       fetchImpl: fetch,
       generateThumbnailJpg,
+      mergeAudioVideo: defaultMerge,
     }
   },
 }

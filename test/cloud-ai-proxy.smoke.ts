@@ -330,7 +330,10 @@ async function main() {
   assert.deepEqual(c('POST', '/v1/chat/completions', 'veo3-fast'), { kind: 'charge', capability: 'video', track: false })
   assert.deepEqual(c('POST', '/v1/messages', 'claude-sonnet'), { kind: 'free' })
   assert.deepEqual(c('DELETE', '/v1/videos/abc'), { kind: 'unknown' })
-  assert.deepEqual(c('GET', '/api/v1/anything', '', 'tikhub'), { kind: 'free' })
+  assert.deepEqual(c('GET', '/api/v1/tiktok/app/v3/fetch_one_video_by_share_url', '', 'tikhub'), { kind: 'free' })
+  assert.deepEqual(c('GET', '/api/v1/xiaohongshu/app_v2/get_video_note_detail', '', 'tikhub'), { kind: 'free' })
+  assert.equal(c('GET', '/api/v1/anything', '', 'tikhub').kind, 'blocked', 'other TikHub endpoints are not open')
+  assert.equal(c('GET', '/api/v1/tikhub/user/get_user_info', '', 'tikhub').kind, 'blocked', 'TikHub account info is not exposed')
   console.log('  ✓ 各平台提交 / 查询接口分类正确')
 
   console.log('\ncloud ai-proxy smoke passed')

@@ -224,6 +224,9 @@ function onFiles(event: DragEvent) {
   const paths = files.map((file) => window.api.getPathForFile(file)).filter(Boolean)
   if (paths.length) void window.api.productReplacement.importPaths(paths).then((items: ImageInput[]) => { sourceImages.value = [...sourceImages.value, ...items] })
 }
+function openLocation(path: string) {
+  void window.api.shell.showItemInFolder(path)
+}
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 function hasActiveReplacementWork() {
   return batches.value.some((batch) => ['queued', 'processing', 'running'].includes(batch.status)
@@ -316,7 +319,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
             <label v-if="item.outputPath" class="result-select"><input type="checkbox" :checked="selectedResultIds.includes(item.id)" :aria-label="`${t('productReplacement.selectResult')}: ${item.sourceName}`" @change="toggleResultSelection(item.id)" /></label>
             <span v-else class="result-select-placeholder" aria-hidden="true"></span>
             <div class="history-preview">
-              <img v-if="item.outputPath" :src="thumbnailUrl(item.outputPath, 320)" loading="lazy" decoding="async" :title="t('productReplacement.openLocation')" @click="window.api.showItemInFolder(item.outputPath)" />
+              <img v-if="item.outputPath" :src="thumbnailUrl(item.outputPath, 320)" loading="lazy" decoding="async" :title="t('productReplacement.openLocation')" @click="openLocation(item.outputPath)" />
               <div v-else class="result-placeholder"><span v-if="item.status === 'failed'">!</span><span v-else class="loader"></span></div>
             </div>
             <div class="history-product-info">
@@ -333,7 +336,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
               <button v-if="batch.status === 'processing' || batch.status === 'queued'" :title="t('productReplacement.pause')" @click="batchAction('pauseBatch', batch.id)"><CirclePause :size="16" /></button>
               <button v-if="batch.status === 'paused'" :title="t('productReplacement.resume')" @click="batchAction('resumeBatch', batch.id)"><Play :size="16" /></button>
               <button v-if="['failed','partial_failed'].includes(batch.status)" :title="t('productReplacement.retryFailed')" @click="batchAction('retryFailed', batch.id)"><RotateCcw :size="16" /></button>
-              <button v-if="item.outputPath" type="button" :title="t('productReplacement.openLocation')" @click="window.api.showItemInFolder(item.outputPath)"><Images :size="17" /></button>
+              <button v-if="item.outputPath" type="button" :title="t('productReplacement.openLocation')" @click="openLocation(item.outputPath)"><Images :size="17" /></button>
               <button v-if="item.outputPath" type="button" :title="t('productReplacement.export')" @click="exportBatch({ ...batch, items: [item] })"><Download :size="17" /></button>
               <button type="button" title="更多"><MoreHorizontal :size="18" /></button>
             </div>

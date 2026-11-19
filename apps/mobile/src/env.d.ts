@@ -39,3 +39,9 @@ declare module '@desktop-src/stores/cloneTopbar' {
   /** 电脑端复刻页面的步骤条 store（pinia），网页顶栏的步骤条读同一个 */
   export const useCloneTopbarStore: () => any
 }
+
+/** 电脑端主进程代码里用到、网页类型检查经 lib/desktopApi/contract.ts 间接读到的无类型包 */
+declare module 'fontkit' {
+  const fontkit: any
+  export default fontkit
+}

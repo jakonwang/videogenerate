@@ -725,7 +725,9 @@ const api = {
     onRuntimeLog: (cb: (payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => void) => {
       const handler = (_: unknown, payload: { level?: 'info' | 'success' | 'error'; message?: string; time?: number }) => cb(payload)
       ipcRenderer.on('clone:runtimeLog', handler)
-      return () => ipcRenderer.off('clone:runtimeLog', handler)
+      return () => {
+        ipcRenderer.off('clone:runtimeLog', handler)
+      }
     },
   },
 
@@ -773,7 +775,9 @@ const api = {
     onSegmentSplitProgress: (cb: (p: Record<string, unknown>) => void) => {
       const fn = (_: unknown, p: Record<string, unknown>) => cb(p)
       ipcRenderer.on('media:segmentSplitProgress', fn)
-      return () => ipcRenderer.removeListener('media:segmentSplitProgress', fn)
+      return () => {
+        ipcRenderer.removeListener('media:segmentSplitProgress', fn)
+      }
     },
   },
 
@@ -804,7 +808,9 @@ const api = {
     onProgress: (cb: (p: Record<string, any>) => void) => {
       const fn = (_: unknown, p: Record<string, any>) => cb(p)
       ipcRenderer.on('liveSlicer:progress', fn)
-      return () => ipcRenderer.removeListener('liveSlicer:progress', fn)
+      return () => {
+        ipcRenderer.removeListener('liveSlicer:progress', fn)
+      }
     },
   },
 
@@ -977,7 +983,9 @@ const api = {
     onSyncProgress: (callback: (progress: import('../main/modules/tiktok-gmv-max/types').GmvMaxSyncProgress) => void) => {
       const handler = (_event: unknown, progress: import('../main/modules/tiktok-gmv-max/types').GmvMaxSyncProgress) => callback(progress)
       ipcRenderer.on('plugin:tiktokGmvMax:syncProgress', handler)
-      return () => ipcRenderer.off('plugin:tiktokGmvMax:syncProgress', handler)
+      return () => {
+        ipcRenderer.off('plugin:tiktokGmvMax:syncProgress', handler)
+      }
     },
     getSopWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getSopWorkspace'),
     getCoachWorkspace: () => ipcRenderer.invoke('plugin:tiktokGmvMax:getCoachWorkspace'),
@@ -1057,7 +1065,9 @@ const api = {
     onChanged: (callback: (payload: { taskIds: string[] }) => void) => {
       const handler = (_event: unknown, payload: { taskIds: string[] }) => callback(payload)
       ipcRenderer.on('plugin:tiktokCreative:changed', handler)
-      return () => ipcRenderer.off('plugin:tiktokCreative:changed', handler)
+      return () => {
+        ipcRenderer.off('plugin:tiktokCreative:changed', handler)
+      }
     },
     getSettings: () => ipcRenderer.invoke('plugin:tiktokCreative:getSettings'),
     saveSettings: (payload: { imageRetryLimit?: number; qualityCheckerEnabled?: boolean }) => ipcRenderer.invoke('plugin:tiktokCreative:saveSettings', payload),
@@ -1262,7 +1272,9 @@ const api = {
       const handler = (_event: unknown, events: any[]) => forward(events)
       ipcRenderer.on('agentOs:event', handler)
       void ipcRenderer.invoke('agentOs:listEvents', { afterSequence: lastSequence, limit: 1000 }).then(forward)
-      return () => ipcRenderer.off('agentOs:event', handler)
+      return () => {
+        ipcRenderer.off('agentOs:event', handler)
+      }
     },
   },
 
@@ -1275,7 +1287,9 @@ const api = {
     onChanged: (callback: (batch: any) => void) => {
       const handler = (_event: unknown, batch: any) => callback(batch)
       ipcRenderer.on('videoWatermark:changed', handler)
-      return () => ipcRenderer.off('videoWatermark:changed', handler)
+      return () => {
+        ipcRenderer.off('videoWatermark:changed', handler)
+      }
     },
   },
 
@@ -1309,7 +1323,9 @@ const api = {
     onChanged: (callback: (payload: { kind: string; counts?: { pending: number; approved: number; redo: number; discarded: number } }) => void) => {
       const handler = (_event: unknown, payload: any) => callback(payload)
       ipcRenderer.on('contentHub:changed', handler)
-      return () => ipcRenderer.off('contentHub:changed', handler)
+      return () => {
+        ipcRenderer.off('contentHub:changed', handler)
+      }
     },
   },
 
@@ -1355,7 +1371,9 @@ const api = {
     onProgress: (callback: (p: import('../shared/mixPool').MixPoolProgress) => void) => {
       const handler = (_event: unknown, p: import('../shared/mixPool').MixPoolProgress) => callback(p)
       ipcRenderer.on('mixPool:progress', handler)
-      return () => ipcRenderer.off('mixPool:progress', handler)
+      return () => {
+        ipcRenderer.off('mixPool:progress', handler)
+      }
     },
   },
   tasks: {
@@ -1372,7 +1390,9 @@ const api = {
     onEvent: (cb: (evt: any) => void) => {
       const handler = (_: any, evt: any) => cb(evt)
       ipcRenderer.on('tasks:event', handler)
-      return () => ipcRenderer.off('tasks:event', handler)
+      return () => {
+        ipcRenderer.off('tasks:event', handler)
+      }
     },
   },
 
@@ -1389,7 +1409,9 @@ const api = {
     onUpdateDownloaded: (cb: (payload: { version: string }) => void) => {
       const handler = (_: unknown, payload: { version: string }) => cb(payload)
       ipcRenderer.on('updater:update-downloaded', handler)
-      return () => ipcRenderer.off('updater:update-downloaded', handler)
+      return () => {
+        ipcRenderer.off('updater:update-downloaded', handler)
+      }
     },
   },
 
@@ -1421,7 +1443,9 @@ const api = {
     onStatusChanged: (handler: (status: CloudLicenseStatus) => void) => {
       const listener = (_event: unknown, status: CloudLicenseStatus) => handler(status)
       ipcRenderer.on('cloud:statusChanged', listener)
-      return () => ipcRenderer.off('cloud:statusChanged', listener)
+      return () => {
+        ipcRenderer.off('cloud:statusChanged', listener)
+      }
     },
   },
 }

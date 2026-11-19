@@ -12,6 +12,11 @@ export function setTikhubBaseUrlOverride(baseUrl: string | null) {
   tikhubBaseUrlOverride = baseUrl ? baseUrl.replace(/\/+$/, '') : null
 }
 
+/** TikHub 接口根地址（托管模式下是云端代理），多平台解析（shared/videoParserPlatforms）用 */
+export function tikhubApiBase() {
+  return tikhubBaseUrlOverride ?? 'https://api.tikhub.io'
+}
+
 export function tikhubFetchOneUrl() {
   return tikhubBaseUrlOverride ? `${tikhubBaseUrlOverride}${TIKHUB_FETCH_ONE_PATH}` : TIKHUB_FETCH_ONE_BY_SHARE_URL
 }

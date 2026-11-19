@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { thumbnailUrl } from '@/lib/localMedia'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   CheckCircle2,
@@ -57,6 +57,7 @@ type ExportCategoryConfig = {
 }
 
 const router = useRouter()
+const route = useRoute()
 const { t: tr } = useI18n()
 
 const categoryOptions = computed<Array<{ value: Category; label: string }>>(() => [
@@ -584,6 +585,12 @@ onMounted(async () => {
     pushRuntimeLog(`[tiktok-listing] initial export config load failed message=${safeText(error?.message ?? error, 'unknown error')}`, 'error')
   }
   await refresh()
+  // Direct link to one item (?id=…, e.g. from the AI producer): open it in the editor.
+  const linked = items.value.find((item) => item.id === String(route.query.id || ''))
+  if (linked) {
+    editItem(linked)
+    activeTab.value = 'editor'
+  }
 })
 
 onBeforeUnmount(() => {

@@ -1,4 +1,4 @@
-export type VideoParserPlatform = 'tiktok'
+export type VideoParserPlatform = import('../../../shared/videoParserPlatforms').ParsePlatform
 
 export type VideoParserDownloadStatus = 'processing' | 'completed' | 'failed'
 

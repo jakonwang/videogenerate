@@ -47,6 +47,31 @@ function isModelChannelUnavailable(status: number, text: string) {
   return false
 }
 
+/** 上游临时忙（排队满、限流、网关错误）：等一会儿重试通常就好 */
+function isUpstreamBusy(status: number, text: string) {
+  if (isModelChannelUnavailable(status, text)) return false
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 529) return true
+  return /saturated|overloaded|rate[\s_-]*limit|too many requests|try again later|server is busy/i.test(String(text || ''))
+}
+
+/** 从上游返回里取出可读的错误说明（JSON 的 error.message / message），取不到就截一段原文 */
+function upstreamErrorMessage(text: string) {
+  try {
+    const json = JSON.parse(text)
+    const message = json?.error?.message || json?.message || json?.error
+    if (typeof message === 'string' && message.trim()) return message.trim().slice(0, 200)
+  } catch {
+    // not json
+  }
+  return String(text || '').trim().slice(0, 200)
+}
+
+/** 忙时重试前等多久（毫秒）；上游给了 Retry-After 就照它（最多 10 秒） */
+let busyRetryDelaysMs = [2000, 5000]
+export function setChatBusyRetryDelaysForTests(delays: number[]) {
+  busyRetryDelaysMs = delays
+}
+
 function parseChatContent(endpointStyle: string, text: string) {
   if (endpointStyle === 'gemini_native') {
     try {
@@ -166,33 +191,45 @@ export async function generateChatCompletion(input: {
     }
 
     const timeoutMs = Math.max(0, Number(input.timeoutMs || 0))
-    const controller = timeoutMs ? new AbortController() : undefined
-    const timer = controller
-      ? setTimeout(() => controller.abort(new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
-      : undefined
-    let res: Response
-    let text: string
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller?.signal,
-      })
-      text = await res.text()
-    } catch (error) {
-      if (controller?.signal.aborted) {
-        throw new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)
+    let res!: Response
+    let text = ''
+    // 上游临时忙（如 429「upstream load is saturated」）：等一会儿自动重试，最多 1 + busyRetryDelaysMs.length 次
+    for (let attempt = 0; ; attempt += 1) {
+      const controller = timeoutMs ? new AbortController() : undefined
+      const timer = controller
+        ? setTimeout(() => controller.abort(new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
+        : undefined
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller?.signal,
+        })
+        text = await res.text()
+      } catch (error) {
+        if (controller?.signal.aborted) {
+          throw new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)
+        }
+        throw error
+      } finally {
+        if (timer) clearTimeout(timer)
       }
-      throw error
-    } finally {
-      if (timer) clearTimeout(timer)
+      if (res.ok || !isUpstreamBusy(res.status, text) || attempt >= busyRetryDelaysMs.length) break
+      const retryAfterSec = Number(res.headers?.get?.('retry-after') || 0)
+      const waitMs = retryAfterSec > 0 ? Math.min(10_000, retryAfterSec * 1000) : busyRetryDelaysMs[attempt]
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
     }
     if (!res.ok) {
       lastFailureStatus = res.status
       lastFailureText = text
+      // 只有「这个模型的通道不存在」才换备用模型；忙的时候只重试后台设置的模型，不换成别的模型
+      // （换过去的模型不是管理员选的，平台对它的转换也可能出错，如 HTTP 400「input json is empty」）
       if (!isLastCandidate && isModelChannelUnavailable(res.status, text)) continue
-      throw new Error(`${VECTOR_ENGINE_LABEL} chat request failed HTTP ${res.status}: ${text.slice(0, 500)}`)
+      if (isUpstreamBusy(res.status, text)) {
+        throw new Error(`AI 服务现在太忙（模型 ${model}，HTTP ${res.status}），已自动重试 ${busyRetryDelaysMs.length} 次仍未成功，请过一两分钟再试。上游说明：${upstreamErrorMessage(text)}`)
+      }
+      throw new Error(`${VECTOR_ENGINE_LABEL} AI 请求失败（模型 ${model}，HTTP ${res.status}）：${upstreamErrorMessage(text)}`)
     }
 
     return {
@@ -206,7 +243,5 @@ export async function generateChatCompletion(input: {
     }
   }
 
-  throw new Error(
-    `${VECTOR_ENGINE_LABEL} chat request failed HTTP ${lastFailureStatus || 503}: ${String(lastFailureText || 'all fallback chat models unavailable').slice(0, 500)}`,
-  )
+  throw new Error(`${VECTOR_ENGINE_LABEL} AI 请求失败（HTTP ${lastFailureStatus || 503}）：${upstreamErrorMessage(lastFailureText || 'all fallback chat models unavailable')}`)
 }

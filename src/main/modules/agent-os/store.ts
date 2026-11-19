@@ -77,6 +77,18 @@ function normalizeDb(input: AgentOsDb | null | undefined): AgentOsDb {
   }
 }
 
+/**
+ * 事件只追加不删除，整个文件每次读写都要完整解析 / 序列化（在主进程上）。
+ * 只留最近的一批；带 deliveryKey 的投递记录用于防重复发送，始终保留。
+ */
+const MAX_EVENTS = 2000
+
+function trimEvents(db: AgentOsDb) {
+  if (db.events.length <= MAX_EVENTS) return
+  const cutoff = db.events.length - MAX_EVENTS
+  db.events = db.events.filter((item, index) => index >= cutoff || Boolean(item.payload?.deliveryKey))
+}
+
 let mutationQueue = Promise.resolve()
 const listeners = new Set<StoreListener>()
 
@@ -109,6 +121,7 @@ export const agentOsStore = {
           return event
         }
         const result = await mutator(db, emit)
+        trimEvents(db)
         await writeJsonFile(dbPath(), db)
         if (emitted.length) {
           for (const listener of listeners) {

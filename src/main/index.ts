@@ -7,6 +7,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { ensureAppDirs, getAppPaths } from './lib/paths'
+import { getRecentSlowIpc } from './lib/ipcTiming'
 import { canThumbnail, getThumbnail, normalizeThumbnailWidth } from './lib/mediaThumbnails'
 import { backgroundRecordStore } from './lib/backgroundRecordStore'
 import { gmvMaxWorkerClient } from './modules/tiktok-gmv-max/workerClient'
@@ -128,6 +129,7 @@ function startEventLoopMonitoring() {
       rssMb: Math.round(memory.rss / 1024 / 1024),
       heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
       url: mainWindow?.webContents.getURL() || '',
+      recentSlowIpc: getRecentSlowIpc(),
     }
     console.warn('[performance] main event loop delayed', details)
     void persistRendererDiagnostic('main-event-loop-delay', details)

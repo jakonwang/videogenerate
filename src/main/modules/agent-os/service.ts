@@ -507,7 +507,11 @@ async function failStep(run: AgentRun, step: AgentWorkflowStep, error: string) {
     const storedRun = db.runs.find((item) => item.id === run.id)
     const storedStep = db.steps.find((item) => item.id === step.id)
     if (!storedRun || !storedStep) return
+    // 执行前就失败（员工不可用 / 没有能力权限）时步骤还是 ready，状态机不允许 ready → failed。
+    // 以前因此一直停在 ready，executeRun 会立刻重跑它，死循环把主进程占满（窗口点不动）。
+    if (storedStep.status === 'ready') transitionStep(storedStep, 'running')
     if (canStepTransition(storedStep.status, 'failed')) transitionStep(storedStep, 'failed')
+    else if (canStepTransition(storedStep.status, 'blocked')) transitionStep(storedStep, 'blocked')
     storedStep.error = error
     appendEvent({ emit, type: 'agent.step.failed', aggregateType: 'step', aggregateId: storedStep.id, conversationId: storedRun.conversationId, runId: storedRun.id, stepId: storedStep.id, correlationId: storedRun.id, payload: { error } })
   })
@@ -555,6 +559,9 @@ async function finishRun(runId: string) {
 }
 
 async function executeRun(runId: string) {
+  // 兜底：执行完一轮 ready 步骤后状态毫无变化，说明卡在某个分支里，别无限空转占满主进程
+  let stalledRounds = 0
+  let lastReadySignature = ''
   while (true) {
     const db = await agentOsStore.read()
     const run = db.runs.find((item) => item.id === runId)
@@ -582,6 +589,10 @@ async function executeRun(runId: string) {
     }
     const ready = steps.filter((item) => item.status === 'ready').slice(0, 2)
     if (ready.length) {
+      const signature = ready.map((item) => `${item.id}:${item.updatedAt}`).join('|')
+      stalledRounds = signature === lastReadySignature ? stalledRounds + 1 : 0
+      lastReadySignature = signature
+      if (stalledRounds >= 3) throw new Error(`Steps made no progress: ${ready.map((item) => item.title).join(', ')}`)
       await Promise.all(ready.map((item) => executeStep(run.id, item.id)))
       continue
     }

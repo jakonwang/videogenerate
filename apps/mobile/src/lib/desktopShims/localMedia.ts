@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { parseCloudFileRef } from '@shared/cloud/relay'
 import { fileLink } from '@/lib/fileLinks'
 
 /**
@@ -36,10 +37,66 @@ function pump() {
   }
 }
 
+const VIDEO_NAME = /\.(mp4|mov|m4v|webm|mkv)$/i
+
+/** 云端视频当图片用（电脑端页面拿视频路径当缩略图）：在浏览器里截一帧 */
+async function videoFrame(fileId: string, width?: number) {
+  const video = document.createElement('video')
+  video.muted = true
+  video.preload = 'auto'
+  video.src = await fileLink(fileId)
+  await new Promise<void>((resolveLoad, reject) => {
+    video.onloadeddata = () => resolveLoad()
+    video.onerror = () => reject(new Error('video'))
+    setTimeout(() => reject(new Error('timeout')), 15_000)
+  })
+  await new Promise<void>((resolveSeek) => {
+    video.onseeked = () => resolveSeek()
+    video.currentTime = Math.min(0.5, (video.duration || 1) / 2)
+    setTimeout(resolveSeek, 4000)
+  })
+  const scale = width ? Math.min(1, width / Math.max(1, video.videoWidth)) : 1
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+  canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.78)
+}
+
+/** 网页上传 / 选的文件（`cloudfile:<fileId>/<名字>`，见 lib/desktopApi）：本来就在云端，直接取签名链接；视频要缩略图时截一帧 */
+function cloudFileUrl(fileId: string, name = '', width?: number): string {
+  if (width && VIDEO_NAME.test(name)) {
+    const key = `cloudframe:${fileId}|${width}`
+    if (urls[key]) return urls[key]!
+    if (!requested.has(key)) {
+      requested.add(key)
+      videoFrame(fileId, width)
+        .then((url) => (urls[key] = url))
+        .catch(() => requested.delete(key))
+    }
+    return ''
+  }
+  const key = `cloudfile:${fileId}`
+  const hit = urls[key]
+  if (hit) return hit
+  if (!requested.has(key)) {
+    requested.add(key)
+    fileLink(fileId)
+      .then((url) => {
+        if (url) urls[key] = url
+        else requested.delete(key)
+      })
+      .catch(() => requested.delete(key))
+  }
+  return ''
+}
+
 export function localMediaUrl(path?: string | null, options: { width?: number } = {}): string {
   const text = String(path || '').trim()
   if (!text) return ''
   if (PASSTHROUGH.test(text)) return text
+  const cloud = parseCloudFileRef(text)
+  if (cloud) return cloudFileUrl(cloud.fileId, cloud.name, options.width)
   if (/^vg:/i.test(text)) {
     const inner = new URL(text).searchParams.get('path')
     return inner ? localMediaUrl(inner, options) : ''
@@ -66,6 +123,11 @@ export function thumbnailUrl(path?: string | null, width = 320): string {
 export async function openDesktopFile(path: string) {
   const text = String(path || '').trim()
   if (!text) return
+  const cloud = parseCloudFileRef(text)
+  if (cloud) {
+    window.open(await fileLink(cloud.fileId), '_blank', 'noopener')
+    return
+  }
   const published = await media()?.publish({ path: text })
   if (!published) throw new Error('电脑端不在线')
   window.open(await fileLink(published.fileId), '_blank', 'noopener')
@@ -94,6 +156,10 @@ async function resolveVgNow(value: string): Promise<string> {
   }
   const path = url.searchParams.get('path')
   if (!path) return ''
+  // Web stand-ins may hand the page a ready address (e.g. a thumbnail drawn in the browser); the page wraps it in vg://.
+  if (PASSTHROUGH.test(path)) return path
+  const cloud = parseCloudFileRef(path)
+  if (cloud) return fileLink(cloud.fileId)
   const width = Number(url.searchParams.get('w')) || undefined
   const published = await media()?.publish({ path, width })
   return published ? await fileLink(published.fileId) : ''

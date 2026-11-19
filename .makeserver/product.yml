@@ -1,0 +1,58 @@
+# 项目档案：Moordesk「概览」页显示的内容。和代码一起提交，换电脑、交接都不会丢。
+# title 名称 · tagline 一句话介绍 · kind 类型 · stage 阶段 · entries 入口地址 · modules 功能模块（status：规划中 / 开发中 / 测试中 / 已上线 / 已下线）· stack 技术栈
+title: TiktokCut
+tagline: 批量生成 TikTok 带货短视频：桌面工作台 + 网页版 + 云同步
+kind: 产品
+stage: 已上线（桌面端 v5）
+audience: TikTok Shop 卖家和短视频投放团队
+about: |-
+  围绕 AI 视频生产的工具：从选品、商品素材、脚本创意到批量出片、发布和投放优化，一条链路做完。
+  桌面端（Electron）在本机渲染视频，适合大批量混剪；服务器上运行云服务（账号、计费、云同步）、网页版、官网 / 用户中心 / 后台，以及桌面端的自动更新下载。
+entries:
+  - name: 官网 / 用户中心
+    url: https://tiktokcut.banono-us.com/
+  - name: 网页版
+    url: https://tiktokcut.banono-us.com/app/
+  - name: 桌面端更新
+    url: https://tiktokcut.banono-us.com/updates/
+modules:
+  - name: 混剪工作室
+    desc: 素材池 + 批量混剪，一次出多条不重复的视频，去重处理
+    status: 已上线
+  - name: 视频克隆
+    desc: 参考爆款拆分镜，生成分镜图和分镜视频复刻
+    status: 已上线
+  - name: 图生视频
+    desc: 商品图生成动态短视频
+    status: 已上线
+  - name: tk 创意室
+    desc: 生成脚本和创意，结果可复用到克隆镜头
+    status: 已上线
+  - name: 选品与商品库
+    desc: 选品调研、商品库、商品图素材、换品、加水印
+    status: 已上线
+  - name: 字幕与配音
+    desc: 批量字幕、TTS 配音、视频水印
+    status: 已上线
+  - name: 发布与上架
+    desc: TikTok 批量发布、达人中心、商品上架文案助手
+    status: 已上线
+  - name: GMV MAX 优化
+    desc: 按数据分组看素材，一键排除或重新推送到 TikTok
+    status: 已上线
+  - name: 直播切片
+    desc: 直播录像自动切成短视频
+    status: 已上线
+  - name: 自动化
+    desc: 每天把投放简报推送到飞书，自动驾驶模式生成上架文案
+    status: 已上线
+  - name: 云服务
+    desc: 账号登录、套餐计费、云同步、手机端、网页版
+    status: 已上线
+stack:
+  - Electron
+  - Vue 3
+  - Next.js
+  - Node.js
+  - FFmpeg
+  - SQLite

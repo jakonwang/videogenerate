@@ -5,10 +5,10 @@
  */
 
 /* root: beat the view's scoped `.live-photo-page` grid + gradient, and the legacy
-   styles.css `.app-shell .live-photo-page` rule (fixed height + overflow hidden, !important)
-   so the page flows and `.ds-workspace` scrolls it. */
+   `.app-shell .live-photo-page` rule (now in live-photo-page.css; fixed height + overflow hidden, !important)
+   so the page flows and `.ds-workspace` scrolls it. `.web-shell`: the web version reuses this page. */
 html body .live-photo-page.lp,
-html[data-app-theme] body #app .app-shell .live-photo-page.lp {
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .live-photo-page.lp {
   display: block !important; height: auto !important; min-height: 100% !important;
   padding: 0 !important; gap: 0 !important; overflow: visible !important; background: transparent !important;
 }

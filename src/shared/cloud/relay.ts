@@ -19,6 +19,10 @@ export const RELAY_MODULES = {
   products: { channel: 'products:', only: ['list'] },
   /** 设置 → 模型与 AI：电脑端的模型密钥（托管字段只返回掩码） */
   clone: { channel: 'clone:', blocked: ['debugLog'] },
+  /** 图生视频：网页上由服务器引擎执行（cloneEngine.ts 总是转给引擎，不会到电脑） */
+  livePhoto: { channel: 'plugin:livePhoto:' },
+  /** 批量字幕：电脑端页面调用的本地 Web API，网页上由服务器引擎里的同一个 API 处理（总是交给引擎） */
+  webApi: { channel: 'webApi:', only: ['request'] },
   /** 网页显示电脑端页面里的本地图片 / 视频：电脑把文件传到云端（只限软件数据目录） */
   media: { channel: 'relayMedia:', only: ['publish'] },
 } as const satisfies Record<string, { channel: string; blocked?: readonly string[]; only?: readonly string[] }>

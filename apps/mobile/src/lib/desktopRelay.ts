@@ -65,7 +65,8 @@ function proxyFor(ns: RelayNamespace) {
       if (!relayAllows(ns, method)) return async () => { throw new Error('这个操作需要在电脑端完成') }
       return async (...args: unknown[]) => {
         try {
-          const toServer = ns === 'clone' || serverTargets.has(ns)
+          // clone / livePhoto always run on the server engine (services/cloud/src/cloneEngine.ts)
+          const toServer = ns === 'clone' || ns === 'livePhoto' || serverTargets.has(ns)
           const result = await cloud.relay.call(ns, method, args, serverTargets.has(ns) ? 'server' : undefined)
           if (!toServer) desktopRelayOnline.value = true
           return result
@@ -109,9 +110,11 @@ export function installDesktopRelayApi() {
   w.api = { ...(w.api ?? {}), ...Object.fromEntries(RELAY_NAMESPACES.map((ns) => [ns, proxyFor(ns)])) }
   w.api.pickFiles ??= pickFilesViaCloud
   // 电脑端页面的「打开文件 / 在文件夹中显示」：把电脑上的文件经云端在新标签页打开；导出到电脑文件夹要在电脑端做
-  w.api.shell ??= {
+  // Merged: lib/researchApi installs shell.openExternal first.
+  w.api.shell = {
     openPath: (path: string) => openDesktopFile(path).then(() => '').catch((error) => toast(errorMessage(error))),
     showItemInFolder: (path: string) => openDesktopFile(path).catch((error) => toast(errorMessage(error))),
+    ...((w.api.shell as object | undefined) ?? {}),
   }
   const desktopOnly = async () => {
     toast('选择电脑上的文件夹要在电脑端操作；网页上可以在作品库下载成片')

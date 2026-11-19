@@ -39,6 +39,8 @@ import {
   ZoomOut,
 } from 'lucide-vue-next'
 import LiveSlicerTimeline from '@/ui/components/live-slicer/LiveSlicerTimeline.vue'
+// The page brings its own stylesheet so the web version (which reuses this page) gets it too.
+import '@/design-system/live-slicer.css'
 import {
   buildSegments,
   formatDuration,

@@ -1,6 +1,7 @@
 import { reactive, ref, watch } from 'vue'
 import { SYNC_COLLECTIONS, type SyncAsset, type SyncGeneration, type SyncVideoToolRun } from '@shared/cloud/sync'
 import type { VideoJobOptions, VideoJobResult, VideoToolKind } from '@shared/cloud/videoTools'
+import { detectPlatform, extractFirstUrl } from '@shared/videoParserPlatforms'
 import { cloud } from './session'
 
 /** Place in the server's ffmpeg queue per job id (in memory only; changes too often to sync). */
@@ -30,7 +31,7 @@ export function useToolRuns(kind: VideoToolKind) {
   return items
 }
 
-type RunExtra = Pick<SyncVideoToolRun, 'inputNames' | 'batchId' | 'archiveFolder' | 'url' | 'options' | 'jobKind'>
+type RunExtra = Pick<SyncVideoToolRun, 'inputNames' | 'batchId' | 'archiveFolder' | 'url' | 'shareText' | 'platform' | 'options' | 'jobKind'>
 
 async function submit(kind: VideoToolKind, label: string, request: Parameters<typeof cloud.ai.createJob>[0], inputFileIds: string[], extra: RunExtra = {}) {
   const jobKind = extra.jobKind ?? kind
@@ -75,15 +76,19 @@ export async function runMixShots(shots: Array<{ fileId: string; startSec: numbe
 }
 
 /** 链接下载：同一个分享链接已经在下 / 下好了就不再重复下载（和电脑端「自动去重」一样）；返回实际提交的条数 */
-export async function runDownloads(urls: string[]) {
+/** 每条可以是链接，也可以是整段分享文案（小红书等平台解析要文案，原样交给云端） */
+export async function runDownloads(shares: string[]) {
   const records = await listRecords<SyncVideoToolRun>(SYNC_COLLECTIONS.videoToolRuns)
   const known = new Set(records.filter((r) => r.data?.kind === 'parse-link' && r.data.status !== 'failed').map((r) => normalizeShareUrl(r.data!.url || '')).filter(Boolean))
   let submitted = 0
-  for (const url of urls) {
+  for (const share of shares) {
+    const text = String(share || '').trim()
+    const url = extractFirstUrl(text) || text
     const key = normalizeShareUrl(url)
     if (key && known.has(key)) continue
     known.add(key)
-    await submit('parse-link', url.replace(/^https?:\/\//, '').slice(0, 40), { kind: 'parse-link', url }, [], { url })
+    const shareText = text !== url ? text.slice(0, 2000) : undefined
+    await submit('parse-link', url.replace(/^https?:\/\//, '').slice(0, 40), { kind: 'parse-link', url: shareText ?? url }, [], { url, shareText, platform: detectPlatform(url)?.platform })
     submitted += 1
   }
   return submitted
@@ -113,7 +118,7 @@ export async function runVideoBatch(
 export async function retryRun(run: VideoToolRunItem) {
   const { id, ...data } = run
   const request: Parameters<typeof cloud.ai.createJob>[0] =
-    run.kind === 'parse-link' ? { kind: run.kind, url: run.url || run.label } : { kind: run.jobKind ?? run.kind, videoFileId: run.inputFileIds[0], options: run.options ?? {} }
+    run.kind === 'parse-link' ? { kind: run.kind, url: run.shareText || run.url || run.label } : { kind: run.jobKind ?? run.kind, videoFileId: run.inputFileIds[0], options: run.options ?? {} }
   const { job } = await cloud.ai.createJob({ ...request, purpose: run.kind })
   await saveRecord<SyncVideoToolRun>(SYNC_COLLECTIONS.videoToolRuns, id, { ...data, jobId: job.id, status: job.status, error: undefined, outputs: [] })
   startToolPolling()
@@ -183,6 +188,7 @@ export async function refreshToolRuns(): Promise<number> {
       transcript: result.transcript?.text,
       title: result.title ?? run.title,
       author: result.author ?? run.author,
+      platform: result.platform ?? run.platform,
       archived: run.archived || archive,
       error: job.error,
     })

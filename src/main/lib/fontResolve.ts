@@ -83,11 +83,20 @@ async function listFontFilesInDir(dir: string): Promise<string[]> {
 }
 
 /** 主进程 out/main/resources/fonts、或项目根 resources/fonts（开发 cwd） */
+/** 随软件带的常用表情图片（resources/fonts/emoji，Twemoji SVG），批量字幕离线画表情用 */
+export function bundledEmojiDir(): string | null {
+  const fontsDir = findBundledFontsDir()
+  const dir = fontsDir ? join(fontsDir, 'emoji') : null
+  return dir && existsSync(dir) ? dir : null
+}
+
 function findBundledFontsDir(): string | null {
   const candidates = [
+    // 服务器引擎（services/cloud/engine）指定的字体目录：子进程的工作目录是用户数据目录，找不到项目里的字体
+    String(process.env.VIDEOGENERATE_FONTS_DIR || '').trim(),
     join(__dirname, 'resources', 'fonts'),
     join(process.cwd(), 'resources', 'fonts'),
-  ]
+  ].filter(Boolean)
   for (const d of candidates) {
     if (!existsSync(d)) continue
     try {

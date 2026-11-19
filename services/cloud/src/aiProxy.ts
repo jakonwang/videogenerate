@@ -11,6 +11,7 @@ import {
 import type { BillingService } from './billing'
 import type { CloudDb } from './db'
 import { CloudError } from './security'
+import { TIKHUB_PARSE_PATHS } from '../../../src/shared/videoParserPlatforms'
 
 /**
  * 云端 AI 代理：商业版电脑端的视频 / 图片 / 对话请求都先到这里，由服务器带上后台的平台 Key 转发给平台。
@@ -77,7 +78,11 @@ export function classifyProxyRequest(input: {
 }): ProxyDecision {
   const path = input.path.toLowerCase().replace(/\/+$/, '')
   if (BLOCKED.some((re) => re.test(path))) return { kind: 'blocked', reason: '这个接口不对客户端开放' }
-  if (input.platform === 'tikhub') return { kind: 'free' }
+  // TikHub 用平台的账户：只放行视频解析用到的接口（账户信息、其它付费接口一律不开放）
+  if (input.platform === 'tikhub') {
+    const allowed = (input.method.toUpperCase() === 'GET' || input.method.toUpperCase() === 'HEAD') && TIKHUB_PARSE_PATHS.includes(path)
+    return allowed ? { kind: 'free' } : { kind: 'blocked', reason: '这个接口不对客户端开放' }
+  }
   const method = input.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD') return { kind: 'free' }
   if (method !== 'POST') return { kind: 'unknown' }

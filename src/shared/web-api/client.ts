@@ -51,6 +51,8 @@ export type WebApiClientOptions = {
   getBaseUrl: () => Promise<string> | string
   getToken?: () => string
   onUnauthorized?: () => void
+  /** 默认用全局 fetch；网页版把请求转给服务器引擎（apps/mobile/src/lib/desktopShims/webApiClient.ts） */
+  fetch?: typeof fetch
 }
 
 export function createWebApiClient(options: WebApiClientOptions) {
@@ -65,7 +67,7 @@ export function createWebApiClient(options: WebApiClientOptions) {
     if (token) {
       headers.set('Authorization', `Bearer ${token}`)
     }
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await (options.fetch ?? fetch)(`${baseUrl}${path}`, {
       ...init,
       headers,
     })

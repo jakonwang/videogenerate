@@ -561,7 +561,7 @@ async function importCloudAssets(session: Session, state: SyncStateFile, changes
       const path = await downloadImage(session, state, { fileId: asset.fileId, mime: asset.mime })
       const ext = extname(asset.name) ? '' : MIME_EXT[asset.mime] || ''
       const folder = asset.folder?.trim()
-      await phoneImportTargets.importAsset(path, `${asset.name}${ext}`.replace(/[\\/:*?"<>|]/g, '_'), folder ? [CLOUD_ASSET_FOLDER, folder] : [CLOUD_ASSET_FOLDER])
+      await phoneImportTargets.importAsset(path, `${asset.name}${ext}`.replace(/[\\/:*?"<>|]/g, '_'), folder ? [CLOUD_ASSET_FOLDER, ...folder.split('/').map((part) => part.trim()).filter(Boolean)] : [CLOUD_ASSET_FOLDER])
       done[change.id] = asset.fileId
       imported += 1
     } catch (error) {

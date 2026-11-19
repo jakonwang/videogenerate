@@ -30,6 +30,8 @@ export const SYNC_COLLECTIONS = {
   gmvDecisions: 'gmv-decisions',
   businessDigest: 'business-digest',
   assets: 'assets',
+  /** 素材库里的文件夹（空文件夹、回收站里的文件夹）；有素材的文件夹由素材的 folder 路径自然得出 */
+  assetFolders: 'asset-folders',
   creativeRequests: 'creative-requests',
   brand: 'brand',
   templates: 'templates',
@@ -252,7 +254,7 @@ export type SyncAsset = {
   fileId: string
   mime: string
   size: number
-  /** 文件夹名，空表示未分类 */
+  /** 文件夹，空表示未分类；「 / 」分隔层级（如「AI 成片 / 加水印」） */
   folder?: string
   durationSec?: number
   width?: number
@@ -263,6 +265,9 @@ export type SyncAsset = {
   trashedAt?: number
   createdAt: number
 }
+
+/** 素材库文件夹：path 用「 / 」分隔层级（和素材的 folder 相同写法） */
+export type SyncAssetFolder = { path: string; createdAt: number; /** 移入回收站的时间；同一次删除的素材 trashedAt 相同 */ trashedAt?: number }
 
 export type SyncJobState = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -354,6 +359,10 @@ export type SyncVideoToolRun = {
   archived?: boolean
   /** 链接下载：分享链接、标题、作者；被「图生图」拆过后标记已使用 */
   url?: string
+  /** 整段分享文案（小红书等平台解析要用；重试时沿用） */
+  shareText?: string
+  /** 来源平台（抖音 / TikTok / 小红书 …） */
+  platform?: string
   title?: string
   author?: string
   used?: boolean

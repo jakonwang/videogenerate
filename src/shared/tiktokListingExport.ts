@@ -10,7 +10,7 @@ const RING_EXPORT_CONFIG: ListingExportCategoryConfig = {
   category: 'ring',
   categoryId: '605273',
   productAttributes:
-    '[{"attributeId":"100347","attributeName":"S? l??ng tr?n m?i g?i","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100392","attributeName":"D?p","values":[{"valueId":"1001082","valueName":"H?ng ng?y"}]},{"attributeId":"100445","attributeName":"Gi?i","values":[{"valueId":"1001452","valueName":"Phi gi?i t?nh"}]},{"attributeId":"100701","attributeName":"V?t li?u","values":[{"valueId":"1001475","valueName":"Ph? kim lo?i"}]},{"attributeId":"100757","attributeName":"Thi?t k?","values":[{"valueId":"1003618","valueName":"H?nh h?c"}]},{"attributeId":"101155","attributeName":"Ph? ki?n c?p ??i","values":[{"valueId":"1000059","valueName":"Kh?ng"}]},{"attributeId":"101157","attributeName":"B? nh?n","values":[{"valueId":"1000059","valueName":"Kh?ng"}]}]',
+    '[{"attributeId":"100347","attributeName":"Số lượng trên mỗi gói","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100392","attributeName":"Dịp","values":[{"valueId":"1001082","valueName":"Hằng ngày"}]},{"attributeId":"100445","attributeName":"Giới","values":[{"valueId":"1001452","valueName":"Phi giới tính"}]},{"attributeId":"100701","attributeName":"Vật liệu","values":[{"valueId":"1001475","valueName":"Phủ kim loại"}]},{"attributeId":"100757","attributeName":"Thiết kế","values":[{"valueId":"1003618","valueName":"Hình học"}]},{"attributeId":"101155","attributeName":"Phụ kiện cặp đôi","values":[{"valueId":"1000059","valueName":"Không"}]},{"attributeId":"101157","attributeName":"Bộ nhẫn","values":[{"valueId":"1000059","valueName":"Không"}]}]',
 }
 
 export const DEFAULT_LISTING_EXPORT_CONFIG: Record<TiktokListingCategory, ListingExportCategoryConfig> = {
@@ -18,7 +18,7 @@ export const DEFAULT_LISTING_EXPORT_CONFIG: Record<TiktokListingCategory, Listin
     category: 'earring',
     categoryId: '605268',
     productAttributes:
-      '[{"attributeId":"100392","attributeName":"D?p","values":[{"valueId":"1001532","valueName":"?i?m l?nh"}]},{"attributeId":"100347","attributeName":"S? l??ng tr?n m?i g?i","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100462","attributeName":"Ki?u b?ng tai","values":[{"valueId":"1001168","valueName":"Thanh l?ch"}]},{"attributeId":"100461","attributeName":"Lo?i b?ng tai","values":[{"valueId":"1001538","valueName":"B?ng tai v?ng"}]},{"attributeId":"100445","attributeName":"Gi?i","values":[{"valueId":"1001450","valueName":"N?"}]},{"attributeId":"100701","attributeName":"V?t li?u","values":[{"valueId":"1001475","valueName":"Ph? kim lo?i"}]},{"attributeId":"100757","attributeName":"Thi?t k?","values":[{"valueId":"1001230","valueName":"Kim c??ng gi?"}]},{"attributeId":"101152","attributeName":"B? b?ng tai","values":[{"valueId":"1000059","valueName":"Kh?ng"}]}]',
+      '[{"attributeId":"100392","attributeName":"Dịp","values":[{"valueId":"1001532","valueName":"Điềm lành"}]},{"attributeId":"100347","attributeName":"Số lượng trên mỗi gói","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100462","attributeName":"Kiểu bông tai","values":[{"valueId":"1001168","valueName":"Thanh lịch"}]},{"attributeId":"100461","attributeName":"Loại bông tai","values":[{"valueId":"1001538","valueName":"Bông tai vòng"}]},{"attributeId":"100445","attributeName":"Giới","values":[{"valueId":"1001450","valueName":"Nữ"}]},{"attributeId":"100701","attributeName":"Vật liệu","values":[{"valueId":"1001475","valueName":"Phủ kim loại"}]},{"attributeId":"100757","attributeName":"Thiết kế","values":[{"valueId":"1001230","valueName":"Kim cương giả"}]},{"attributeId":"101152","attributeName":"Bộ bông tai","values":[{"valueId":"1000059","valueName":"Không"}]}]',
   },
   ring: RING_EXPORT_CONFIG,
   necklace: { ...RING_EXPORT_CONFIG, category: 'necklace' },
@@ -141,7 +141,34 @@ export function mergeListingExportConfigs(saved: Array<Partial<ListingExportCate
   for (const category of Object.keys(DEFAULT_LISTING_EXPORT_CONFIG) as TiktokListingCategory[]) map.set(category, { ...DEFAULT_LISTING_EXPORT_CONFIG[category] })
   for (const config of saved) {
     if (!config?.category || !map.has(config.category)) continue
-    map.set(config.category, { category: config.category, categoryId: String(config.categoryId || '').trim(), productAttributes: String(config.productAttributes || '').trim() })
+    map.set(config.category, { category: config.category, categoryId: String(config.categoryId || '').trim(), productAttributes: repairAttributeNames(String(config.productAttributes || '').trim()) })
   }
   return [...map.values()]
+}
+
+/** 旧版默认属性里的越南文被存成了「?」：按属性 / 取值 id 换回默认配置里的正确名字（用户自己改过的 id 不动） */
+function repairAttributeNames(json: string) {
+  if (!json.includes('?')) return json
+  const names = new Map<string, string>()
+  for (const config of Object.values(DEFAULT_LISTING_EXPORT_CONFIG)) {
+    try {
+      for (const attr of JSON.parse(config.productAttributes) as Array<{ attributeId: string; attributeName: string; values?: Array<{ valueId: string; valueName: string }> }>) {
+        names.set(`a:${attr.attributeId}`, attr.attributeName)
+        for (const value of attr.values ?? []) names.set(`v:${value.valueId}`, value.valueName)
+      }
+    } catch {
+      /* 默认配置一定是合法 JSON */
+    }
+  }
+  try {
+    const attrs = JSON.parse(json) as Array<{ attributeId?: string; attributeName?: string; values?: Array<{ valueId?: string; valueName?: string }> }>
+    if (!Array.isArray(attrs)) return json
+    for (const attr of attrs) {
+      if (attr.attributeName?.includes('?')) attr.attributeName = names.get(`a:${attr.attributeId}`) ?? attr.attributeName
+      for (const value of attr.values ?? []) if (value.valueName?.includes('?')) value.valueName = names.get(`v:${value.valueId}`) ?? value.valueName
+    }
+    return JSON.stringify(attrs)
+  } catch {
+    return json
+  }
 }

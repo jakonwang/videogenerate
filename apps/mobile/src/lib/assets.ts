@@ -113,6 +113,9 @@ function probe(file: File, kind: AssetKind): Promise<Probe> {
   })
 }
 
+/** 文件夹路径最长字数（多层文件夹「A / B / C」） */
+export const ASSET_FOLDER_MAX = 120
+
 /** Uploads one file into the library. Files are content-addressed, so re-uploading costs no extra space. */
 export async function uploadAsset(file: File, folder = ''): Promise<AssetItem> {
   const kind = kindOf(file)
@@ -128,7 +131,7 @@ export async function uploadAsset(file: File, folder = ''): Promise<AssetItem> {
     fileId: uploaded.fileId,
     mime: uploaded.mime || mime,
     size: uploaded.size || file.size,
-    folder: folder.trim().slice(0, 40) || undefined,
+    folder: folder.trim().slice(0, ASSET_FOLDER_MAX) || undefined,
     ...meta,
     posterFileId,
     createdAt: Date.now(),
@@ -157,7 +160,7 @@ export async function addFileToAssets(input: { fileId: string; mime?: string; na
     fileId: input.fileId,
     mime: input.mime || DEFAULT_MIME[input.kind],
     size: 0,
-    folder: input.folder?.trim().slice(0, 40) || undefined,
+    folder: input.folder?.trim().slice(0, ASSET_FOLDER_MAX) || undefined,
     createdAt: Date.now(),
   })
   return id
@@ -167,7 +170,7 @@ export async function updateAsset(item: AssetItem, patch: Partial<Pick<SyncAsset
   const { id, updatedAt: _u, pending: _p, ...data } = item
   const next: SyncAsset = { ...data, ...patch }
   next.name = String(next.name || '').trim().slice(0, 80) || item.name
-  next.folder = String(next.folder || '').trim().slice(0, 40) || undefined
+  next.folder = String(next.folder || '').trim().slice(0, ASSET_FOLDER_MAX) || undefined
   await saveRecord(SYNC_COLLECTIONS.assets, id, next)
 }
 

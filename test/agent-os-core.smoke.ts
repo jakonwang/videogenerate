@@ -323,6 +323,27 @@ async function main() {
     assert.equal(stillPaused.run.status, 'paused')
     assert.equal(stillPaused.steps[0].status, 'blocked')
 
+    // 执行前就失败（员工没有该能力权限）的步骤必须直接失败，不能停在 ready 被无限重跑
+    const deniedConversation = await agentOsService.createConversation()
+    const denied = await agentOsService.sendMessage({
+      conversationId: deniedConversation.id,
+      content: 'Inspect the product library.',
+    })
+    const deniedStep = denied.steps?.[0] ?? (await agentOsService.getRun(denied.run.id)).steps[0]
+    await agentOsStore.mutate((db) => {
+      const owner = db.employees.find((item) => item.id === deniedStep.employeeId)!
+      owner.allowedCapabilities = []
+    })
+    const deniedRevision = denied.run.revisions[0]
+    await agentOsService.approveRun({ runId: denied.run.id, revision: deniedRevision.version, planHash: deniedRevision.hash })
+    const deniedDone = await waitForRun(agentOsService, denied.run.id, ['completed', 'failed'], 5000)
+    assert.equal(deniedDone.run.status, 'failed')
+    assert.equal(deniedDone.steps[0].status, 'failed')
+    const deniedFailures = (await agentOsStore.read()).events.filter(
+      (item) => item.runId === denied.run.id && item.type === 'agent.step.failed',
+    )
+    assert.equal(deniedFailures.length, 1)
+
     console.log('agent-os-core.smoke: ok')
   } finally {
     planner.resetAgentPlannerTestDependencies()

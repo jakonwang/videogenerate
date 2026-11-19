@@ -41,6 +41,17 @@ npm run start:web-next
 
 云服务的环境变量、PM2 与 Nginx 示例见 `services/cloud/README.md` 与 `services/cloud/deploy/`。
 
+网页版的「批量字幕」「图生视频字幕」在服务器上用 Remotion（无界面 Chrome）渲染，部署时额外做一次：
+
+```bash
+npm run setup:fonts            # 字幕字体（CLOUD_FONTS_DIR，默认 resources/fonts）
+npm run cloud:remotion-browser # 预先下载无界面 Chrome（约 110 MB）
+# Debian / Ubuntu：Chrome 依赖的系统库
+apt-get install -y libnss3 libdbus-1-3 libatk1.0-0 libgbm1 libasound2 libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2
+```
+
+同时渲染数用 `CLOUD_SUBTITLE_RENDER_SLOTS` 控制（默认 1，全服务器共用；每个渲染约占几百 MB 内存）。
+
 ## 环境模板
 
 - 预发布：`env/staging.env.example`
