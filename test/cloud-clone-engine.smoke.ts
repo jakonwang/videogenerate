@@ -74,6 +74,10 @@ async function main() {
     // Paths outside the user's own engine folder are refused (other users' data, server files).
     await assert.rejects(web.relay.call('clone', 'bindProjectReferenceVideo', [{ cloneProjectId: projectId, videoPath: video }]), /只能使用自己上传的文件/)
     await assert.rejects(web.relay.call('clone', 'bindProjectReferenceVideo', [{ cloneProjectId: projectId, videoPath: serverPath + '/../../../../../cloud.sqlite' }]), /只能使用自己上传的文件/)
+    // ffmpeg protocol forms read server files without a leading slash.
+    for (const videoPath of [`concat:${join(root, 'cloud', 'cloud.sqlite')}|${serverPath}`, `file://localhost/${join(root, 'cloud', 'cloud.sqlite').replace(/\\/g, '/')}`]) {
+      await assert.rejects(web.relay.call('clone', 'bindProjectReferenceVideo', [{ cloneProjectId: projectId, videoPath }]), /只能使用自己上传的文件/, videoPath)
+    }
     // Keys are the administrator's: never readable from the web.
     await assert.rejects(web.relay.call('clone', 'getModelCredentials', []), (error: any) => error instanceof CloudClientError && error.code === 'DESKTOP_OFFLINE')
     // ...nor through the batch-subtitle Web API by walking out of its allowed prefix.

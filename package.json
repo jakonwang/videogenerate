@@ -68,6 +68,8 @@
     "test:cloud-clone": "tsx test/cloud-clone.smoke.ts",
     "test:cloud-clone-engine": "tsx test/cloud-clone-engine.smoke.ts",
     "test:cloud-clone-engine-cap": "tsx test/cloud-clone-engine-cap.smoke.ts",
+    "test:cloud-engine-own-paths": "tsx test/cloud-engine-own-paths.smoke.ts",
+    "test:template-video-import": "tsx test/template-video-import.smoke.ts",
     "test:producer-plan": "tsx test/producer-plan.smoke.ts",
     "test:cloud-video-tools": "tsx test/cloud-video-tools.smoke.ts",
     "test:video-parser-platforms": "tsx test/video-parser-platforms.smoke.ts",

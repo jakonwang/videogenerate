@@ -51,6 +51,15 @@ function readBody(req: http.IncomingMessage, maxBytes = MAX_BODY_BYTES): Promise
   })
 }
 
+/** 原始请求体按 JSON 解析；格式坏了是请求的错（400），不是服务器出错 */
+function parseJsonBody(buffer: Buffer): any {
+  try {
+    return JSON.parse(buffer.toString('utf8') || '{}')
+  } catch {
+    throw badRequest('JSON 格式错误')
+  }
+}
+
 function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   if (trustProxy) {
     const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
@@ -134,7 +143,7 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('GET', '/api/v1/relay/status', (ctx) => relay.online(user(ctx).id))
   route('GET', '/api/v1/relay/next', (ctx) => relay.next(member(ctx).id, Number(ctx.url.searchParams.get('wait')) || undefined))
   // Large results allowed: the body is read raw (custom size), so parse it here.
-  route('POST', '/api/v1/relay/result', (ctx) => relay.result(member(ctx).id, JSON.parse(ctx.bodyBuffer.toString('utf8') || '{}')), { maxBodyBytes: 16 * 1024 * 1024 })
+  route('POST', '/api/v1/relay/result', (ctx) => relay.result(member(ctx).id, parseJsonBody(ctx.bodyBuffer)), { maxBodyBytes: 16 * 1024 * 1024 })
   route('GET', '/api/v1/sync/usage', (ctx) => sync.usage(user(ctx).id))
   route('PUT', '/api/v1/files', (ctx) => sync.uploadFile(member(ctx).id, ctx.bodyBuffer, String(ctx.req.headers['content-type'] || '')), { maxBodyBytes: SYNC_MAX_FILE_BYTES })
   route('GET', '/api/v1/files/:id', (ctx) => {
@@ -271,7 +280,13 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
         if (!m) continue
         pathMatched = true
         if (r.method !== method) continue
-        matched = { handler: r.handler, options: r.options, params: Object.fromEntries(r.keys.map((key, i) => [key, decodeURIComponent(m[i + 1])])) }
+        let params: Record<string, string>
+        try {
+          params = Object.fromEntries(r.keys.map((key, i) => [key, decodeURIComponent(m[i + 1])]))
+        } catch {
+          throw badRequest('网址格式错误')
+        }
+        matched = { handler: r.handler, options: r.options, params }
         break
       }
       if (!matched) {

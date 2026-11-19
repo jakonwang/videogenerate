@@ -34,6 +34,12 @@ async function main() {
     const web = createCloudClient({ getBaseUrl: () => base, getToken: () => webToken })
     webToken = (await web.login({ account: 'relay@example.com', password: 'password-123', client: 'web' } as any)).sessionToken
 
+    // Broken requests are the caller's fault (400), not a server error (500).
+    const badUrl = await fetch(`${base}/api/v1/orders/%E0%A4%A`, { headers: { authorization: `Bearer ${webToken}` } })
+    assert.equal(badUrl.status, 400, 'malformed %-escape in a route parameter → 400')
+    const badJson = await fetch(`${base}/api/v1/relay/result`, { method: 'POST', headers: { authorization: `Bearer ${desktopToken}`, 'content-type': 'application/json' }, body: '{"id":' })
+    assert.equal(badJson.status, 400, 'broken relay result JSON → 400')
+
     // computer not running yet → the web gets a clear "offline" answer immediately
     await assert.rejects(web.relay.call('tiktokGmvMax', 'getAlerts', []), (error: any) => error instanceof CloudClientError && /电脑端不在线/.test(error.message))
     assert.equal((await web.relay.status()).online, false)

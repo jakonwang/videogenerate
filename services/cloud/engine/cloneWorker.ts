@@ -13,6 +13,7 @@ import type { ModelCredentials } from '../../../src/main/modules/clone/types'
 import { isMeteredRequest } from './meterRule'
 import { AI_PROXY_PATH } from '../../../src/shared/cloud/managedSettings'
 import { WEB_API_RENDER, assertWebApiPath } from './webApiPath'
+import { assertOwnPaths as assertOwnPathsIn } from './ownPaths'
 
 type InitMessage = { type: 'init'; baseUrl: string; token: string; userId: string; credentials: ModelCredentials; idleMs: number }
 type CallMessage = { type: 'call'; id: string; ns: string; method: string; args: unknown[] }
@@ -253,18 +254,7 @@ async function publishMedia(input: { path?: string; width?: number }) {
 
 /** 参数里的本地路径只能在这个用户自己的目录里（不能读服务器上的其它文件或别人的数据） */
 function assertOwnPaths(value: unknown) {
-  const root = resolve(process.env.VIDEOGENERATE_USER_DATA_DIR!)
-  const check = (item: unknown) => {
-    if (typeof item === 'string') {
-      if (item.length > 2048) return
-      if (/^(?:[A-Za-z]:[\\/]|[\\/]|file:|\.\.)/i.test(item) || /(^|[\\/])\.\.([\\/]|$)/.test(item)) {
-        const full = resolve(item.replace(/^file:[\\/]*/i, process.platform === 'win32' ? '' : '/'))
-        if (full !== root && !full.startsWith(root + sep)) throw new Error('只能使用自己上传的文件')
-      }
-    } else if (Array.isArray(item)) item.forEach(check)
-    else if (item && typeof item === 'object') Object.values(item).forEach(check)
-  }
-  check(value)
+  assertOwnPathsIn(value, process.env.VIDEOGENERATE_USER_DATA_DIR!)
 }
 
 /* ------------------------------------------------------------------ 渲染名额（父进程统一分配） */
