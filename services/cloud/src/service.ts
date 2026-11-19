@@ -585,27 +585,38 @@ export function createCloudService(deps: {
     return `vgp1.${payload}.${sig}`
   }
 
+  /**
+   * 服务器复刻引擎用的代理令牌：绑定子进程的登录会话（子进程退出时会话被撤销，令牌随之失效），
+   * 不绑设备（服务器上没有设备）。引擎拿到的只有这个令牌，拿不到后台的平台 Key。
+   */
+  function issueEngineProxyToken(userId: string, engineSessionToken: string) {
+    const payload = b64url(JSON.stringify({ v: 1, sub: userId, sh: sha256(engineSessionToken), eng: 1, exp: now() + PROXY_TOKEN_TTL_MS }))
+    const sig = b64url(createHmac('sha256', proxySecret).update(payload).digest())
+    return `vgp1.${payload}.${sig}`
+  }
+
   function verifyAiProxyToken(token: string): { userId: string } {
     const parts = String(token || '').split('.')
     if (parts.length !== 3 || parts[0] !== 'vgp1') throw unauthorized('代理令牌无效，请重新登录软件')
     const expected = createHmac('sha256', proxySecret).update(parts[1]).digest()
     const actual = Buffer.from(parts[2], 'base64url')
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw unauthorized('代理令牌无效，请重新登录软件')
-    let payload: { sub?: string; sh?: string; mid?: string; exp?: number }
+    let payload: { sub?: string; sh?: string; mid?: string; eng?: number; exp?: number }
     try {
       payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
     } catch {
       throw unauthorized('代理令牌无效，请重新登录软件')
     }
     const t = now()
-    if (!payload.sub || !payload.sh || !payload.mid || !payload.exp || payload.exp <= t) throw unauthorized('代理令牌已过期，请联网后重启软件')
+    const engine = payload.eng === 1
+    if (!payload.sub || !payload.sh || (!engine && !payload.mid) || !payload.exp || payload.exp <= t) throw unauthorized('代理令牌已过期，请联网后重启软件')
     const session = repo.getSession(payload.sh)
     if (!session || session.revokedAt || session.expiresAt <= t || session.userId !== payload.sub) throw unauthorized('登录已失效，请重新登录')
     const user = repo.getUserById(payload.sub)
     if (!user) throw unauthorized('登录已失效，请重新登录')
     if (user.status !== 'active') throw new CloudError('ACCOUNT_DISABLED', '账号已被停用，请联系客服', 403)
     if (!entitlementFor(user).active) throw new CloudError('NO_ENTITLEMENT', '会员已过期，续费后才能继续生成', 402)
-    if (!repo.getActiveDeviceByMachine(user.id, payload.mid)) throw forbidden('本机已解绑，请重新登录')
+    if (!engine && !repo.getActiveDeviceByMachine(user.id, payload.mid!)) throw forbidden('本机已解绑，请重新登录')
     return { userId: user.id }
   }
 
@@ -627,6 +638,10 @@ export function createCloudService(deps: {
     const entitlement = entitlementFor(user)
     if (!entitlement.active) throw new CloudError('NO_ENTITLEMENT', '当前账号没有有效会员', 402)
     if (!machineId || !repo.getActiveDeviceByMachine(user.id, machineId)) throw forbidden('本机未激活')
+    return qiniuGrant(input)
+  }
+
+  function qiniuGrant(input: { fileName?: unknown; keyPrefix?: unknown }) {
     const { settings } = readManagedSettings()
     const q = settings.qiniu
     if (!settings.enabled || !q.accessKey || !q.secretKey || !q.bucket || !q.domain) throw forbidden('后台没有配置七牛云存储，请联系客服')
@@ -1010,6 +1025,15 @@ export function createCloudService(deps: {
       return issueSession(user, 'web', null)
     },
     revokeSessionToken: (token: string) => repo.revokeSession(sha256(token), now()),
+    /** 仅云端内部使用：服务器复刻引擎子进程的 AI 代理令牌 */
+    issueEngineProxyToken,
+    /** 仅云端内部使用：服务器复刻引擎上传素材到七牛的单次凭证（子进程拿不到七牛 SK） */
+    engineQiniuUploadGrant: (userId: string, input: { fileName?: unknown; keyPrefix?: unknown }) => {
+      const user = repo.getUserById(userId)
+      if (!user || user.status !== 'active') throw unauthorized()
+      if (!entitlementFor(user).active) throw new CloudError('NO_ENTITLEMENT', '当前账号没有有效会员', 402)
+      return qiniuGrant(input)
+    },
     /** 仅云端内部使用（AI 网关读取平台密钥），不对外返回 */
     readManagedSettings: () => readManagedSettings().settings,
     ensureSeed,

@@ -11,6 +11,8 @@ import { existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import type { ModelCredentials } from '../../../src/main/modules/clone/types'
 import { isMeteredRequest } from './meterRule'
+import { AI_PROXY_PATH } from '../../../src/shared/cloud/managedSettings'
+import { WEB_API_RENDER, assertWebApiPath } from './webApiPath'
 
 type InitMessage = { type: 'init'; baseUrl: string; token: string; userId: string; credentials: ModelCredentials; idleMs: number }
 type CallMessage = { type: 'call'; id: string; ns: string; method: string; args: unknown[] }
@@ -112,13 +114,42 @@ function askMeter(): Promise<void> {
   })
 }
 
-/** 复刻代码向 AI 平台发起的每次生成都先经父进程计数（超过每日上限直接失败，原因显示在复刻页面上） */
+/* ------------------------------------------------------------------ 七牛上传凭证（父进程签发，子进程拿不到 SK） */
+
+const grantWaiters = new Map<string, (result: { ok: boolean; grant?: unknown; error?: string }) => void>()
+let grantSeq = 0
+function askQiniuGrant(input: { fileName: string; keyPrefix?: string }): Promise<any> {
+  const id = String(++grantSeq)
+  return new Promise((resolveGrant, rejectGrant) => {
+    const timer = setTimeout(() => {
+      grantWaiters.delete(id)
+      rejectGrant(new Error('获取上传凭证超时，请稍后重试'))
+    }, 15_000)
+    grantWaiters.set(id, (result) => {
+      clearTimeout(timer)
+      if (result.ok && result.grant) resolveGrant(result.grant)
+      else rejectGrant(new Error(result.error || '获取上传凭证失败'))
+    })
+    send({ type: 'qiniuGrant', id, fileName: input.fileName, keyPrefix: input.keyPrefix })
+  })
+}
+
+/**
+ * 复刻代码向 AI 平台发起的每次生成都先经父进程计数（超过每日上限直接失败，原因显示在复刻页面上）。
+ * 发往云端 AI 代理的请求带上 x-vg-client: web，后台统计时能和电脑端分开。
+ */
 function installFetchMeter(cloudBaseUrl: string) {
   const original = globalThis.fetch
+  const proxyRoot = `${cloudBaseUrl.replace(/\/+$/, '')}${AI_PROXY_PATH}/`
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const method = init?.method || (typeof input === 'object' && 'method' in input ? input.method : 'GET')
     if (isMeteredRequest(url, method, cloudBaseUrl)) await askMeter()
+    if (url.startsWith(proxyRoot)) {
+      const headers = new Headers(init?.headers ?? (typeof input === 'object' && !(input instanceof URL) ? input.headers : undefined))
+      headers.set('x-vg-client', 'web')
+      return original(input as never, { ...init, headers })
+    }
     return original(input as never, init)
   }) as typeof fetch
 }
@@ -137,9 +168,13 @@ async function init(message: InitMessage) {
   ])
   const client = createCloudClient({ getBaseUrl: () => message.baseUrl, getToken: () => message.token })
   ;(globalThis as { __cloneEngineClient?: unknown }).__cloneEngineClient = client
-  // 服务器复刻用的是后台的平台密钥：每次视频 / 图片生成都按这个用户的套餐扣点
-  const { setUsageMeter, createCloudUsageMeter } = await import('../../../src/main/modules/clone/usageMeter')
-  setUsageMeter(createCloudUsageMeter({ client: () => client, clientKind: 'web' }))
+  // 生成请求走云端 AI 代理（凭据里的平台地址就是代理），由代理按次扣点，这里不再自己冻结点数，避免重复扣
+  const [{ setQiniuUploadGrantProvider }, { setTikhubBaseUrlOverride }] = await Promise.all([
+    import('../../../src/main/modules/clone/qiniu'),
+    import('../../../src/main/modules/video-parser-download/tikhub'),
+  ])
+  setQiniuUploadGrantProvider((input) => askQiniuGrant(input))
+  setTikhubBaseUrlOverride(`${message.baseUrl.replace(/\/+$/, '')}${AI_PROXY_PATH}/tikhub`)
   sync.setCloudSyncMode('clone-engine')
   sync.setCloudSyncSessionSource(() => ({ client, userId: message.userId, canWrite: true }))
   await cloneService.setModelCredentials(message.credentials)
@@ -258,8 +293,6 @@ async function withRenderSlot<T>(run: () => Promise<T> | T): Promise<T> {
  * 只开放批量字幕插件和复刻项目列表；用 node:http 发请求，不经过 fetch 计数（真正的 AI 请求在 API 里面照常计数）。
  */
 type WebApiRequest = { method?: string; path?: string; body?: unknown }
-const WEB_API_ALLOWED = [/^\/plugins\/video-batch-subtitle(\/[a-zA-Z0-9_%.-]+)*$/, /^\/clone\/projects$/]
-const WEB_API_RENDER = /^\/plugins\/video-batch-subtitle\/(preview-frame|jobs\/[^/]+\/(run|resume))$/
 let webApiPort: Promise<number> | null = null
 
 async function ensureWebApi() {
@@ -278,16 +311,14 @@ async function ensureWebApi() {
 
 async function webApiRequest(input: WebApiRequest) {
   const method = String(input.method || 'GET').toUpperCase()
-  const path = String(input.path || '').split('?')[0]!
   if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new Error('请求方法不合法')
-  if (!WEB_API_ALLOWED.some((re) => re.test(path))) throw new Error('服务器上没有这个功能')
-  if (path === '/clone/projects' && method !== 'GET') throw new Error('服务器上没有这个功能')
+  const { path, requestPath } = assertWebApiPath(method, String(input.path || ''))
   const port = await ensureWebApi()
   const send = async () => {
     const http = await import('node:http')
     const body = input.body === undefined || method === 'GET' ? undefined : JSON.stringify(input.body)
     return await new Promise<{ status: number; text: string }>((resolveReq, reject) => {
-      const req = http.request({ host: '127.0.0.1', port, path: String(input.path), method, headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {} }, (res) => {
+      const req = http.request({ host: '127.0.0.1', port, path: requestPath, method, headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {} }, (res) => {
         const chunks: Buffer[] = []
         res.on('data', (chunk: Buffer) => chunks.push(chunk))
         res.on('end', () => resolveReq({ status: res.statusCode || 0, text: Buffer.concat(chunks).toString('utf8') }))
@@ -348,6 +379,12 @@ process.on('message', (raw: unknown) => {
     const id = String((message as unknown as { id: string }).id)
     slotWaiters.get(id)?.()
     slotWaiters.delete(id)
+    return
+  }
+  if ((message as { type?: string })?.type === 'qiniuGrantResult') {
+    const result = message as unknown as { id: string; ok: boolean; grant?: unknown; error?: string }
+    grantWaiters.get(String(result.id))?.(result)
+    grantWaiters.delete(String(result.id))
     return
   }
   if ((message as { type?: string })?.type === 'meterResult') {

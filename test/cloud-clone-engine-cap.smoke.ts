@@ -25,12 +25,16 @@ async function main() {
   assert.equal(isMeteredRequest('https://api.example.com/v1/videos/abc', 'GET', cloud), false, 'GET never counts')
   assert.equal(isMeteredRequest('https://up-z2.qiniup.com/', 'POST', cloud), false, 'storage upload does not count')
   assert.equal(isMeteredRequest(`${cloud}/api/v1/sync/push`, 'POST', cloud), false, 'the cloud itself does not count')
+  assert.equal(isMeteredRequest(`${cloud}/api/v1/ai-proxy/vectorengine/v1/chat/completions`, 'POST', cloud), true, 'generation through the cloud AI proxy counts')
+  assert.equal(isMeteredRequest(`${cloud}/api/v1/ai-proxy/grsai/v1/draw/result`, 'POST', cloud), false, 'polling through the proxy does not count')
   console.log('✓ only generation requests to AI platforms are counted')
 
   // Fake AI platform: counts what reaches it.
   let hits = 0
+  const auths: string[] = []
   const fake = http.createServer((req, res) => {
     hits += 1
+    auths.push(String(req.headers.authorization || ''))
     req.resume()
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ choices: [{ message: { content: '{}' } }] }))
@@ -54,6 +58,10 @@ async function main() {
   settings.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
   settings.capabilities.video = { platform: 'vectorengine', model: 'veo_3_1-fast' }
   app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: settings, scope: 'private', description: '', updatedBy: null, now: Date.now() })
+  let proxied = 0
+  app.server.on('request', (req) => {
+    if (String(req.url || '').startsWith('/api/v1/ai-proxy/vectorengine/')) proxied += 1
+  })
   await app.listen()
   const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
   try {
@@ -93,6 +101,10 @@ async function main() {
     // Analysis keeps going with what it has and records why AI was skipped; generation steps fail with the same message.
     assert.ok(/今天服务器复刻的 AI 生成次数已用完（每天 2 次）/.test(projectText) || errors.some((message) => /今天服务器复刻的 AI 生成次数已用完/.test(message)), 'the project says why AI stopped')
     assert.equal(usage.usedToday, 0, 'clone engine calls do not use up the general AI allowance')
+    // The engine never holds the administrator's key: it talks to the cloud AI proxy, which swaps in the real key.
+    assert.ok(auths.length && auths.every((auth) => auth === 'Bearer test-key'), 'the platform only sees the real key, added by the proxy')
+    assert.equal(proxied, hits, `every platform request went through the cloud AI proxy (proxy ${proxied}, platform ${hits})`)
+    console.log('✓ the engine reaches AI platforms only through the cloud AI proxy (no real key in the worker)')
     console.log('✓ the daily cap stops further generation requests and says why')
     console.log('cloud clone engine cap smoke test passed')
   } finally {

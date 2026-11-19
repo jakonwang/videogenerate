@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { createCloneEngine } from './cloneEngine'
 import { createRelay } from './relay'
 import { createAiProxy } from './aiProxy'
-import { applyManagedSettings } from '../../../src/shared/cloud/managedSettings'
+import { applyManagedSettings, toProxiedManagedSettings } from '../../../src/shared/cloud/managedSettings'
 import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
@@ -61,10 +61,13 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     baseUrl: () => `http://127.0.0.1:${listenPort}`,
     issueToken: (userId) => service.issueEngineSession(userId),
     revokeToken: (token) => service.revokeSessionToken(token),
-    credentials: () => {
+    // 平台 Key 只留在这个进程：子进程拿到的是指向云端 AI 代理的地址 + 代理令牌，生成由代理按次扣点（和电脑端一样）
+    credentials: (userId, engineSessionToken) => {
       const settings = service.readManagedSettings()
-      return normalizeCredentials({ ...applyManagedSettings({}, settings), allowMockWhenNoKey: config.cloneEngineAllowMock && !config.isProduction, openaiImageQuality: settings.capabilities.image.quality })
+      const proxied = settings.enabled ? toProxiedManagedSettings(settings, { cloudBaseUrl: `http://127.0.0.1:${listenPort}`, token: service.issueEngineProxyToken(userId, engineSessionToken) }) : settings
+      return normalizeCredentials({ ...applyManagedSettings({}, proxied), allowMockWhenNoKey: config.cloneEngineAllowMock && !config.isProduction, openaiImageQuality: settings.capabilities.image.quality })
     },
+    qiniuGrant: (userId, input) => service.engineQiniuUploadGrant(userId, input),
     meter: (userId) => ai.cloneEngine.meter(userId),
     maxWorkers: Math.max(1, config.cloneEngineMaxWorkers),
     idleMs: Math.max(1, config.cloneEngineIdleMinutes) * 60_000,

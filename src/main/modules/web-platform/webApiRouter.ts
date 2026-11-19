@@ -162,6 +162,12 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
   const pathname = url.pathname
   const token = authTokenOf(req)
 
+  // 服务器复刻引擎里平台密钥是后台的，不能经任何路径读出或改掉
+  if (process.env.VIDEOGENERATE_CLONE_ENGINE === '1' && pathname.startsWith('/clone/model-credentials')) {
+    json(res, 403, { ok: false, error: '服务器上没有这个功能' })
+    return
+  }
+
   try {
     if (req.method === 'GET' && pathname === '/health') {
       json(res, 200, {

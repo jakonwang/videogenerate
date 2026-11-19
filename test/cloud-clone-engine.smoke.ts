@@ -76,6 +76,16 @@ async function main() {
     await assert.rejects(web.relay.call('clone', 'bindProjectReferenceVideo', [{ cloneProjectId: projectId, videoPath: serverPath + '/../../../../../cloud.sqlite' }]), /只能使用自己上传的文件/)
     // Keys are the administrator's: never readable from the web.
     await assert.rejects(web.relay.call('clone', 'getModelCredentials', []), (error: any) => error instanceof CloudClientError && error.code === 'DESKTOP_OFFLINE')
+    // ...nor through the batch-subtitle Web API by walking out of its allowed prefix.
+    for (const path of [
+      '/plugins/video-batch-subtitle/../../clone/model-credentials',
+      '/plugins/video-batch-subtitle/%2e%2e/%2e%2e/clone/model-credentials',
+      '/plugins/video-batch-subtitle/.%2e/.%2e/clone/model-credentials',
+      '/plugins/video-batch-subtitle/x/../../../clone/model-credentials?a=1',
+    ]) {
+      await assert.rejects(web.relay.call('webApi', 'request', [{ method: 'GET', path }]), /服务器上没有这个功能/, path)
+    }
+    assert.ok(await web.relay.call('webApi', 'request', [{ method: 'GET', path: '/plugins/video-batch-subtitle/jobs' }]), 'allowed path still works')
     console.log('✓ reference video from the web bound on the server; previews and path isolation OK')
 
     // 3) The project reaches the computer.

@@ -94,6 +94,8 @@ export function classifyProxyRequest(input: {
   if (/\/v1\/video\/[a-z0-9._-]+$/.test(path)) return { kind: 'charge', capability: 'video', track: true }
   if (CHAT_LIKE.some((re) => re.test(path))) {
     const model = input.model
+    // 看不出模型就不能判断是不是在生成图片 / 视频：拒绝，而不是当成免费放行
+    if (!model) return { kind: 'unknown' }
     const isVideo = input.isVideoModel?.(model) || VIDEO_MODEL_RE.test(model)
     if (isVideo) return { kind: 'charge', capability: 'video', track: false }
     const isImage = input.isImageModel?.(model) || IMAGE_MODEL_RE.test(model)
@@ -103,25 +105,49 @@ export function classifyProxyRequest(input: {
   return { kind: 'unknown' }
 }
 
-/** 从请求里找模型：JSON 的 model 字段、generateContent 路径、multipart 的 model 字段 */
-export function extractModel(path: string, contentType: string, body: Buffer): string {
+const MODEL_FIELDS = ['model', 'model_name', 'modelName']
+
+/**
+ * 从请求里找出所有写了模型的地方：generateContent 路径、查询串 ?model=、JSON 的 model / model_name / modelName、multipart 的同名字段。
+ * 不看 Content-Type 决定要不要解析 JSON：很多平台不管请求头照样按 JSON 读，只按请求头判断会让人去掉请求头免费生成。
+ */
+export function extractModelCandidates(path: string, contentType: string, body: Buffer, query?: URLSearchParams): string[] {
+  const found: string[] = []
+  const add = (value: unknown) => {
+    if (typeof value !== 'string' && typeof value !== 'number') return
+    const text = String(value).trim().slice(0, 120)
+    if (text && !found.includes(text)) found.push(text)
+  }
   const fromPath = /\/models\/([^/:]+):/i.exec(path)
-  if (fromPath) return decodeURIComponent(fromPath[1]).slice(0, 120)
-  if (!body.length) return ''
-  if (contentType.includes('json')) {
+  if (fromPath) {
     try {
-      const json = JSON.parse(body.toString('utf8'))
-      return String(json?.model ?? json?.model_name ?? json?.modelName ?? '').trim().slice(0, 120)
+      add(decodeURIComponent(fromPath[1]))
     } catch {
-      return ''
+      add(fromPath[1])
     }
   }
-  if (contentType.includes('multipart/form-data')) {
-    const head = body.subarray(0, Math.min(body.length, 256 * 1024)).toString('latin1')
-    const match = /name="model"\r\n(?:[^\r\n]*\r\n)*\r\n([^\r\n]{1,120})/i.exec(head)
-    return match ? match[1].trim() : ''
+  for (const field of MODEL_FIELDS) for (const value of query?.getAll(field) ?? []) add(value)
+  if (!body.length) return found
+  const text = body.toString('utf8')
+  if (/^\s*[{[]/.test(text)) {
+    try {
+      const json = JSON.parse(text)
+      if (json && typeof json === 'object' && !Array.isArray(json)) for (const field of MODEL_FIELDS) add(json[field])
+    } catch {
+      // 不是合法 JSON：交给下面的 multipart / 平台自己处理
+    }
   }
-  return ''
+  if (contentType.includes('multipart/form-data') || /content-disposition:\s*form-data/i.test(body.subarray(0, 4096).toString('latin1'))) {
+    const all = body.toString('latin1')
+    const re = /name="?(model|model_name|modelName)"?\r\n(?:[^\r\n]*\r\n)*?\r\n([^\r\n]{1,120})/gi
+    for (let m = re.exec(all); m; m = re.exec(all)) add(m[2])
+  }
+  return found
+}
+
+/** 兼容旧调用：取第一个写了的模型 */
+export function extractModel(path: string, contentType: string, body: Buffer, query?: URLSearchParams): string {
+  return extractModelCandidates(path, contentType, body, query)[0] ?? ''
 }
 
 /* ------------------------------------------------------------------ 解析平台响应 */
@@ -403,7 +429,10 @@ export function createAiProxy(deps: {
       if (!upstream) throw new CloudError('FORBIDDEN', '后台没有配置这个平台，请联系客服', 403)
       const body = method === 'GET' || method === 'HEAD' ? Buffer.alloc(0) : await readBody(req, maxBody)
       const contentType = String(req.headers['content-type'] || '').toLowerCase()
-      const model = extractModel(rest, contentType, body)
+      const models = extractModelCandidates(rest, contentType, body, url.searchParams)
+      // 不同字段写了不同模型：计费看的和平台实际用的可能不是同一个，直接拒绝
+      if (models.length > 1) throw new CloudError('BAD_REQUEST', `请求里同时写了多个模型（${models.join('、')}），请只保留一个`, 400)
+      const model = models[0] ?? ''
       const decision = classifyProxyRequest({
         platform,
         method,
@@ -447,7 +476,10 @@ export function createAiProxy(deps: {
       }
 
       // 扣点：先冻结，再转发
-      const hold = deps.billing.hold(identity.userId, { capability: decision.capability, platform, model, client: 'desktop', feature: 'ai-proxy' })
+      // x-vg-client 只用于后台统计（服务器复刻引擎带 web），不影响扣多少点
+      const clientHeader = String(req.headers['x-vg-client'] || '')
+      const client = clientHeader === 'web' || clientHeader === 'mobile' ? clientHeader : 'desktop'
+      const hold = deps.billing.hold(identity.userId, { capability: decision.capability, platform, model, client, feature: 'ai-proxy' })
       let upstreamRes: Response
       let responseBody: Buffer
       try {

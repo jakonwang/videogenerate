@@ -14,7 +14,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCloudApp } from '../services/cloud/src/app'
-import { classifyProxyRequest } from '../services/cloud/src/aiProxy'
+import { classifyProxyRequest, extractModelCandidates } from '../services/cloud/src/aiProxy'
 import { MANAGED_SETTINGS_KEY } from '../services/cloud/src/service'
 import { hashPassword, newId } from '../services/cloud/src/security'
 import { CloudClientError, createCloudClient } from '../src/shared/cloud/client'
@@ -74,7 +74,7 @@ const upstream = http.createServer((req, res) => {
         }, 30)
         return
       }
-      return json(200, { id: 'chatcmpl-1', choices: [{ message: { content: parsed.model.includes('image') ? '![img](https://cdn.example.com/b.png)' : 'hello' } }] })
+      return json(200, { id: 'chatcmpl-1', choices: [{ message: { content: String(parsed.model ?? '').includes('image') ? '![img](https://cdn.example.com/b.png)' : 'hello' } }] })
     }
     // GRS.AI 风格
     if (req.method === 'POST' && p === '/grs/v1/video/veo') {
@@ -238,6 +238,28 @@ async function main() {
   assert.equal(await balance(), 86)
   console.log('  ✓ 图片扣点；普通对话免费，对话里用图片模型扣点；流式输出原样转发')
 
+  // ---- 绕过扣点的尝试：去掉 / 改掉 Content-Type、模型写在查询串、多个模型字段打架、对话不写模型
+  const imageBody = JSON.stringify({ model: 'gemini-2.5-flash-image', messages: [] })
+  for (const contentType of ['text/plain', 'application/x-www-form-urlencoded', '']) {
+    res = await proxy('vectorengine', '/v1/chat/completions', { method: 'POST', body: imageBody, headers: { 'Content-Type': contentType } })
+    await res.text()
+  }
+  assert.equal(await balance(), 80, '改 Content-Type 照样按图片模型扣点（3 次 × 2 点）')
+  res = await post('vectorengine', '/v1/chat/completions?model=gemini-2.5-flash-image', { messages: [] })
+  await res.text()
+  assert.equal(await balance(), 78, '模型写在查询串里也扣点')
+  const beforeConflict = seen.length
+  res = await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', model_name: 'gemini-2.5-flash-image', messages: [] })
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error.message, /多个模型/)
+  res = await post('vectorengine', '/v1/chat/completions', { messages: [] })
+  assert.equal(res.status, 403, '对话不写模型：看不出是不是生成，拒绝')
+  await res.text()
+  assert.equal(seen.length, beforeConflict, '被拒的请求不会到平台')
+  assert.equal(await balance(), 78)
+  app.db.prepare('UPDATE users SET credits = 86 WHERE account = ?').run('alice@example.com')
+  console.log('  ✓ 去掉 Content-Type / 查询串写模型 / 多个模型字段 / 不写模型都不能免费生成')
+
   // ---- 未知 / 敏感接口
   const before = seen.length
   res = await post('vectorengine', '/v1/some/new/generate', { model: 'x' })
@@ -303,6 +325,26 @@ async function main() {
   assert.match(tikhubFetchOneUrl(), /^https:\/\/api\.tikhub\.io\//)
   console.log('  ✓ TikHub 走云端代理，不扣点，Key 只在服务器')
 
+  // ---- 服务器复刻引擎的代理令牌：不绑设备，只扣一次点，统计记为网页，子进程会话撤销后失效
+  const aliceId = app.repo.getUserByAccount('alice@example.com')!.id
+  const engineSession = app.service.issueEngineSession(aliceId)
+  const engineToken = app.service.issueEngineProxyToken(aliceId, engineSession)
+  const balanceBeforeEngine = await balance()
+  res = await proxy('vectorengine', '/v1/images/generations', { method: 'POST', body: JSON.stringify({ model: 'gpt-image-1', prompt: 'x' }), headers: { 'x-vg-client': 'web' } }, engineToken)
+  assert.equal(res.status, 200)
+  await res.text()
+  assert.equal(seen.at(-1)!.auth, 'Bearer sk-REAL-VE-KEY', '平台看到的是后台 Key，引擎只有代理令牌')
+  assert.equal(await balance(), balanceBeforeEngine - 2, '引擎生成只在代理扣一次点')
+  const engineHold = app.db.prepare("SELECT client FROM usage_holds WHERE user_id = ? AND feature = 'ai-proxy' ORDER BY created_at DESC LIMIT 1").get(aliceId) as { client: string }
+  assert.equal(engineHold.client, 'web')
+  const engineGrant = app.service.engineQiniuUploadGrant(aliceId, { fileName: 'a.png', keyPrefix: 'grsai-input/images' })
+  assert.match(engineGrant.key, /^vg\/grsai-input\/images\//, '引擎不用设备也能拿七牛单次凭证')
+  app.service.revokeSessionToken(engineSession)
+  res = await proxy('vectorengine', '/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'gpt-4o-mini', messages: [] }) }, engineToken)
+  assert.equal(res.status, 401, '子进程退出（会话撤销）后引擎令牌失效')
+  await res.text()
+  console.log('  ✓ 服务器复刻引擎走代理：不绑设备、只扣一次点、会话撤销即失效')
+
   // ---- 退出登录 / 解绑后令牌立即失效
   await desk.client.logout()
   res = await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', messages: [] })
@@ -329,6 +371,11 @@ async function main() {
   assert.deepEqual(c('POST', '/v1beta/models/gemini-2.5-pro:generateContent', 'gemini-2.5-pro'), { kind: 'free' })
   assert.deepEqual(c('POST', '/v1/chat/completions', 'veo3-fast'), { kind: 'charge', capability: 'video', track: false })
   assert.deepEqual(c('POST', '/v1/messages', 'claude-sonnet'), { kind: 'free' })
+  assert.deepEqual(c('POST', '/v1/chat/completions', ''), { kind: 'unknown' }, '对话不写模型不能当免费')
+  assert.deepEqual(extractModelCandidates('/v1/chat/completions', '', Buffer.from('{"model":"gpt-image-1"}')), ['gpt-image-1'])
+  assert.deepEqual(extractModelCandidates('/v1/videos', 'application/json', Buffer.from('{"model":"cheap","model_name":"kling-v2-master"}')), ['cheap', 'kling-v2-master'])
+  const multipart = Buffer.from('--b\r\nContent-Disposition: form-data; name=model\r\n\r\ngpt-image-1\r\n--b--\r\n', 'latin1')
+  assert.deepEqual(extractModelCandidates('/v1/chat/completions', 'multipart/form-data; boundary=b', multipart), ['gpt-image-1'])
   assert.deepEqual(c('DELETE', '/v1/videos/abc'), { kind: 'unknown' })
   assert.deepEqual(c('GET', '/api/v1/tiktok/app/v3/fetch_one_video_by_share_url', '', 'tikhub'), { kind: 'free' })
   assert.deepEqual(c('GET', '/api/v1/xiaohongshu/app_v2/get_video_note_detail', '', 'tikhub'), { kind: 'free' })

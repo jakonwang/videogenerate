@@ -21,7 +21,10 @@ export type CloneEngineDeps = {
   /** 给子进程用的登录会话（子进程通过本机 HTTP 同步数据） */
   issueToken: (userId: string) => string
   revokeToken: (token: string) => void
-  credentials: () => ModelCredentials
+  /** 子进程用的模型凭据：平台地址指向云端 AI 代理、Key 是这个子进程的代理令牌（拿不到后台真实 Key） */
+  credentials: (userId: string, engineSessionToken: string) => ModelCredentials
+  /** 子进程上传素材到七牛前要的单次凭证（七牛 SK 留在父进程） */
+  qiniuGrant?: (userId: string, input: { fileName?: unknown; keyPrefix?: unknown }) => unknown
   /** 子进程每次向 AI 平台发起生成前计数；超过每日上限时抛错（错误信息会显示在复刻页面上） */
   meter: (userId: string) => void
   maxWorkers: number
@@ -98,6 +101,18 @@ export function createCloneEngine(deps: CloneEngineDeps) {
           slotHolders.delete(`${child.pid}:${raw.id}`)
           return grantSlots()
         }
+        if (raw?.type === 'qiniuGrant') {
+          let grant: unknown = null
+          let error = ''
+          try {
+            if (!deps.qiniuGrant) throw new Error('后台没有配置七牛云存储，请联系客服')
+            grant = deps.qiniuGrant(userId, { fileName: raw.fileName, keyPrefix: raw.keyPrefix })
+          } catch (grantError) {
+            error = (grantError as Error).message || '获取上传凭证失败'
+          }
+          if (child.connected) child.send({ type: 'qiniuGrantResult', id: raw.id, ok: !error, grant, error })
+          return
+        }
         if (raw?.type === 'meter') {
           let error = ''
           try {
@@ -123,7 +138,7 @@ export function createCloneEngine(deps: CloneEngineDeps) {
       })
     })
     worker.ready.catch(() => undefined)
-    child.send({ type: 'init', baseUrl: deps.baseUrl(), token, userId, credentials: deps.credentials(), idleMs: deps.idleMs })
+    child.send({ type: 'init', baseUrl: deps.baseUrl(), token, userId, credentials: deps.credentials(userId, token), idleMs: deps.idleMs })
     workers.set(userId, worker)
     return worker
   }
