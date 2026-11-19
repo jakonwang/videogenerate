@@ -1333,6 +1333,11 @@ const api = {
     list: () => ipcRenderer.invoke('templates:list'),
     upsert: (payload: any) => ipcRenderer.invoke('templates:upsert', payload),
     remove: (id: string) => ipcRenderer.invoke('templates:remove', id),
+    /** 导入一条视频，AI 识别分镜结构，返回模板草稿（不会自动保存） */
+    analyzeVideo: (payload: { videoPath: string; locale?: string }) =>
+      ipcRenderer.invoke('templates:analyzeVideo', payload) as Promise<
+        import('../main/modules/templates/analyzeVideoTemplate').VideoTemplateDraft
+      >,
   },
 
   mixStudio: {

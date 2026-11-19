@@ -2,6 +2,7 @@ import type { BrowserWindow, IpcMain } from 'electron'
 import { createBatchTasks } from '../modules/tasks/createBatchTasks'
 import { taskQueue } from '../modules/tasks/queue'
 import { templatesRepo } from '../modules/templates/repo'
+import { analyzeVideoToTemplateDraft } from '../modules/templates/analyzeVideoTemplate'
 import { getLanIPv4 } from '../lib/lanAddress'
 import { ensurePreviewHttpServer } from '../lib/previewHttpServer'
 
@@ -12,6 +13,9 @@ export function registerTemplatesTasksIpc(
   ipcMain.handle('templates:list', async () => templatesRepo.list())
   ipcMain.handle('templates:upsert', async (_e, payload) => templatesRepo.upsert(payload))
   ipcMain.handle('templates:remove', async (_e, id: string) => templatesRepo.remove(id))
+  ipcMain.handle('templates:analyzeVideo', async (_e, payload: { videoPath?: string; locale?: string }) =>
+    analyzeVideoToTemplateDraft({ videoPath: String(payload?.videoPath ?? ''), locale: payload?.locale }),
+  )
 
   ipcMain.handle('tasks:list', async () => taskQueue.list())
   ipcMain.handle('tasks:stats', async () => taskQueue.stats())

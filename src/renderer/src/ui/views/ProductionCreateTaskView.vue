@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, ClipboardList, FolderOpen, Loader, Rocket, Settings2 } from 'lucide-vue-next'
 
@@ -8,6 +8,7 @@ type Product = { id: string; name: string }
 type Template = { id: string; name: string }
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const products = ref<Product[]>([])
 const templates = ref<Template[]>([])
@@ -34,6 +35,9 @@ async function refresh() {
   products.value = (await window.api.products.list()) as Product[]
   templates.value = (await window.api.templates.list()) as Template[]
   if (!form.productId) form.productId = products.value[0]?.id ?? ''
+  // 从模板库「用此模板混剪」进来时带 templateId
+  const fromQuery = String(route.query.templateId ?? '')
+  if (fromQuery && templates.value.some((x) => x.id === fromQuery)) form.templateId = fromQuery
   if (!form.templateId) form.templateId = templates.value[0]?.id ?? ''
   if (!form.outDir) {
     try {

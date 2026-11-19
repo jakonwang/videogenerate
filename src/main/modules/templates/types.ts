@@ -133,12 +133,36 @@ export type StickerConfig = {
   heightPx: number
 }
 
+/** AI 识别出的参考视频分镜（只用于展示与对照，不参与渲染） */
+export type TemplateReferenceShot = {
+  index: number
+  /** 归入的模板段位 key */
+  segment: string
+  startSec: number
+  durationSec: number
+  motion: string
+  transitionIn: string
+  scriptText: string
+  onScreenText: string
+  visual: string
+  thumbnailPath?: string
+}
+
 export type Template = {
   id: string
   name: string
   meta?: {
-    source?: 'clone_blueprint'
+    /** clone_blueprint：复刻蓝图转来；video_ai：模板库导入视频 AI 识别 */
+    source?: 'clone_blueprint' | 'video_ai'
     cloneProjectId?: string
+    sourceVideoName?: string
+    sourceDurationSec?: number
+    aspectRatio?: string
+    summary?: string
+    sellingLogic?: string
+    hookLine?: string
+    ctaLine?: string
+    referenceShots?: TemplateReferenceShot[]
     hookType?: string
     productCategory?: string
     rhythm?: {
