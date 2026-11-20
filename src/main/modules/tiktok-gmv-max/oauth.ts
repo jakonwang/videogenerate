@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { shell } from 'electron'
 import type { OAuthClientProvider, OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { GMV_MAX_CALLBACK_URL, type GmvMaxOAuthSecrets } from './types'
@@ -75,6 +74,9 @@ export class GmvMaxOAuthProvider implements OAuthClientProvider {
   async redirectToAuthorization(authorizationUrl: URL) {
     if (!this.interactive) return
     this.callbackPromise = this.startCallbackServer()
+    // Loaded here, not at the top: this file also runs inside the GMV MAX worker thread, where
+    // 'electron' cannot be required. Only the interactive (main-process) login reaches this line.
+    const { shell } = await import('electron')
     await shell.openExternal(authorizationUrl.toString())
   }
 
