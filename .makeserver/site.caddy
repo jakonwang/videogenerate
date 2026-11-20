@@ -3,8 +3,9 @@
 #   /app/*     网页版（云服务提供）
 #   /updates/* 桌面端自动更新文件（服务器 /srv/apps/<实例>/shared/update/）
 #   其他       官网 + 用户中心 + 后台（Next.js）
-# 主域名 + 不带 www 的根域名（用户手动输入 klipmill.com 也能打开）
-${DOMAIN}, klipmill.com {
+# 不带 www 的 klipmill.com 由服务器上单独的 /srv/edge/sites/klipmill-apex.caddy 跳转到这里，
+# 这里不要再写 klipmill.com，否则同一个域名出现两次，Caddy 会拒绝加载。
+${DOMAIN} {
 	encode zstd gzip
 
 	# 电脑端 AI 代理：平台 Key 只在服务器，生成请求经这里转发并扣点。
