@@ -124,7 +124,7 @@ async function submit() {
         <div v-if="orders.length" class="cr-orders">
           <div v-for="order in orders.slice(0, 20)" :key="order.id" class="cr-order">
             <div class="cr-order__head">
-              <strong>{{ order.productName || '商品' }} · {{ order.referenceFileIds.length }} 张</strong>
+              <strong>{{ order.productName || '商品' }} · {{ order.styleVideoFileId ? '同款视频' : `${order.referenceFileIds.length} 张` }}</strong>
               <span class="vg-pill vg-pill--dot" :class="order.state === 'completed' ? 'vg-pill--green' : order.state === 'failed' || order.state === 'skipped' ? 'vg-pill--red' : order.state === 'running' ? 'vg-pill--blue' : 'vg-pill--amber'">{{ CREATIVE_STATE_LABEL[order.state] }}</span>
             </div>
             <small class="vg-muted">{{ relativeTime(order.createdAt) }}<template v-if="order.reportedAt"> · 电脑 {{ relativeTime(order.reportedAt) }}更新</template></small>

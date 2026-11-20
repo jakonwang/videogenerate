@@ -41,6 +41,33 @@ export async function submitCreativeOrder(input: { productId: string; productNam
   return id
 }
 
+/** 同款参考视频：每个商品一单，电脑分析这条视频后出一条同款视频 */
+export async function submitCreativeStyleOrders(input: {
+  products: Array<{ id: string; name?: string }>
+  video: { fileId: string; name?: string; posterFileId?: string }
+  mode: 'reference_to_video' | 'image_to_video'
+}) {
+  if (!input.video?.fileId) throw new Error('请先上传参考视频')
+  if (!input.products.length) throw new Error('请至少选择一个商品')
+  const ids: string[] = []
+  for (const product of input.products) {
+    const id = newId('creative')
+    await saveRecord<SyncCreativeRequest>(SYNC_COLLECTIONS.creativeRequests, id, {
+      productId: product.id,
+      productName: product.name,
+      referenceFileIds: [],
+      mode: input.mode,
+      styleVideoFileId: input.video.fileId,
+      styleVideoName: input.video.name,
+      styleVideoPosterFileId: input.video.posterFileId,
+      createdAt: Date.now(),
+      state: 'pending',
+    })
+    ids.push(id)
+  }
+  return ids
+}
+
 export const CREATIVE_STATE_LABEL: Record<SyncCreativeRequest['state'], string> = {
   pending: '等电脑接单',
   running: '电脑出片中',

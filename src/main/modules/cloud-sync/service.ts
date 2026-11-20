@@ -1177,6 +1177,23 @@ async function acceptCreativeRequests(session: Session, state: SyncStateFile, ch
       continue
     }
     try {
+      if (request.styleVideoFileId) {
+        if (!service.createFromStyleVideo) throw new Error('这台电脑的 tk创意室版本太旧，不支持同款参考视频，请先更新软件')
+        // One file per cloud video, so every order using the same clip hits the analysis cache.
+        const styleDir = join(getAppPaths().dataDir, 'cloud-creative', 'style-videos')
+        await mkdir(styleDir, { recursive: true })
+        const videoPath = join(styleDir, `${request.styleVideoFileId.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`)
+        if (!existsSync(videoPath)) {
+          const blob = await session.client.sync.downloadFile(request.styleVideoFileId)
+          await writeFile(videoPath, Buffer.from(await blob.arrayBuffer()))
+        }
+        const task = await service.createFromStyleVideo({ videoPath, productId: localProductId, mode: request.mode })
+        const running: SyncCreativeRequest = { ...request, state: 'running', taskId: task.id, shots: [{ status: 'running' as const }], error: undefined, reportedAt: Date.now() }
+        tracked[change.id] = { taskId: task.id, request: running, uploaded: {}, reported: reportFingerprint(running) }
+        tracked[change.id].updatedAt = await pushCreative(session, change.id, running, change.updatedAt)
+        queue.shift()
+        continue
+      }
       const dir = join(getAppPaths().dataDir, 'cloud-creative', change.id.replace(/[^a-zA-Z0-9_-]/g, '_'))
       await mkdir(dir, { recursive: true })
       const paths: string[] = []

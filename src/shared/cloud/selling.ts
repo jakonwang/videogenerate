@@ -140,6 +140,14 @@ export type SyncCreativeRequest = {
   /** 参考场景图（云端文件 id），每张出一条视频 */
   referenceFileIds: string[]
   mode?: 'reference_to_video' | 'image_to_video'
+  /**
+   * 同款参考视频（云端文件 id）：有它时电脑先分析这条视频，再出一条同款视频，referenceFileIds 为空。
+   * 不认识这个字段的旧版电脑端会因「没有参考图」直接报失败，不会拿错素材出片。
+   */
+  styleVideoFileId?: string
+  styleVideoName?: string
+  /** 同款参考视频的封面（云端文件 id），网页列表里显示 */
+  styleVideoPosterFileId?: string
   createdAt: number
   /** pending = 等电脑接单；running = 电脑在出片；completed / failed / skipped 为最终状态 */
   state: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'

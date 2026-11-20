@@ -8,6 +8,8 @@ import type { SyncCreativeRequest } from '../../../shared/cloud/selling'
 export type CreativeTaskShot = { shotId: string; status: string; resultVideoPath?: string; lastError?: string }
 export type CreativeService = {
   createFromReference(input: { referenceImagePaths: string[]; productId: string; mode?: 'reference_to_video' | 'image_to_video' }): Promise<{ id: string }>
+  /** 同款参考视频: analyse the clip (cached per file) and start one video copying it. */
+  createFromStyleVideo?(input: { videoPath: string; productId: string; mode?: 'reference_to_video' | 'image_to_video' }): Promise<{ id: string }>
   get(taskId: string): Promise<{ id: string; shots: CreativeTaskShot[] } | null>
 }
 
@@ -32,8 +34,13 @@ export async function defaultCreativeService(): Promise<CreativeService | null> 
   try {
     const { tiktokCreativeStudioService } = await import('../tiktok-creative-studio/service')
     const { tiktokCreativeStudioRepo } = await import('../tiktok-creative-studio/repo')
+    const { styleReferenceService } = await import('../style-reference/service')
     return {
       createFromReference: (input) => tiktokCreativeStudioService.createFromReference(input),
+      createFromStyleVideo: async (input) => {
+        const template = await styleReferenceService.analyze({ videoPath: input.videoPath })
+        return tiktokCreativeStudioService.createFromReference({ referenceImagePaths: [], productId: input.productId, mode: input.mode, styleReferenceId: template.id })
+      },
       get: (taskId) => tiktokCreativeStudioRepo.get(taskId),
     }
   } catch {

@@ -5,13 +5,13 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertTriangle, Boxes, Check, ChevronDown, Circle, Download, FolderOpen, ImagePlus, Inbox, KeyRound, LayoutGrid, LoaderCircle, Monitor, RefreshCw, ShieldCheck, Sparkles, X } from 'lucide-vue-next'
+import { AlertTriangle, Boxes, Check, ChevronDown, Circle, Clapperboard, Download, FolderOpen, ImagePlus, Inbox, KeyRound, LayoutGrid, LoaderCircle, Monitor, RefreshCw, ShieldCheck, Sparkles, X } from 'lucide-vue-next'
 import CloudImage from '@/components/CloudImage.vue'
 import CloudVideo from '@/components/CloudVideo.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ProductPicker from '@/components/ProductPicker.vue'
-import { useAssets } from '@/lib/assets'
-import { CREATIVE_REQUEST_MAX_IMAGES, CREATIVE_STATE_LABEL, submitCreativeOrder, useCreativeOrders } from '@/lib/creative'
+import { uploadVideo, useAssets } from '@/lib/assets'
+import { CREATIVE_REQUEST_MAX_IMAGES, CREATIVE_STATE_LABEL, submitCreativeOrder, submitCreativeStyleOrders, useCreativeOrders } from '@/lib/creative'
 import { desktopRelayOnline, refreshDesktopRelayStatus } from '@/lib/desktopRelay'
 import { fileBlob, uploadImage } from '@/lib/files'
 import { useGenerations } from '@/lib/generate'
@@ -31,7 +31,7 @@ const derived = useGenerations((item) => item.kind === 'image' && item.status ==
 const scenes = ref<string[]>([])
 const product = ref<ProductItem | null>(null)
 const mode = ref<'reference_to_video' | 'image_to_video'>('reference_to_video')
-const picking = ref<'' | 'product' | 'assets' | 'derived'>('')
+const picking = ref<'' | 'product' | 'products' | 'assets' | 'derived'>('')
 const uploading = ref(0)
 const submitting = ref(false)
 const input = ref<HTMLInputElement>()
@@ -61,7 +61,55 @@ function toggleScene(fileId?: string) {
   else if (!full.value) scenes.value = [...scenes.value, fileId]
 }
 
+/* ---------------------------------------------------------------- 同款参考视频（可选） */
+type StyleVideo = { fileId: string; name: string; posterFileId?: string }
+const styleVideo = ref<StyleVideo | null>(null)
+const styleUploading = ref(false)
+const styleProducts = ref<ProductItem[]>([])
+const videoInput = ref<HTMLInputElement>()
+async function onStyleVideo(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  ;(event.target as HTMLInputElement).value = ''
+  if (!file) return
+  styleUploading.value = true
+  try {
+    const video = await uploadVideo(file)
+    styleVideo.value = { fileId: video.fileId, name: video.name, posterFileId: video.posterFileId }
+  } catch (error) {
+    toast(`上传失败：${errorMessage(error)}`)
+  } finally {
+    styleUploading.value = false
+  }
+}
+function clearStyleVideo() {
+  styleVideo.value = null
+  styleProducts.value = []
+}
+async function submitStyle() {
+  if (!styleVideo.value || !styleProducts.value.length) return
+  submitting.value = true
+  try {
+    const ids = await submitCreativeStyleOrders({ products: styleProducts.value, video: styleVideo.value, mode: mode.value })
+    styleProducts.value = []
+    toast(`已提交 ${ids.length} 条同款视频，${desktopRelayOnline.value ? '电脑会在下一次同步时开始' : '电脑打开后开始执行'}`)
+    tab.value = 'library'
+  } catch (error) {
+    toast(errorMessage(error))
+  } finally {
+    submitting.value = false
+  }
+}
+const styleHint = computed(() =>
+  mode.value === 'image_to_video'
+    ? '电脑接单时会先分析这条视频（约半分钟，同一条视频只分析一次），再把每个商品换进它的开头和结尾两张画面，视频模型只负责中间的动作。'
+    : '电脑接单时会先分析这条视频（约半分钟，同一条视频只分析一次），再把每个商品换进它的开头画面，按它的运镜生成。',
+)
+const orderCells = (order: { styleVideoFileId?: string; styleVideoPosterFileId?: string; referenceFileIds: string[] }) =>
+  order.styleVideoFileId ? [order.styleVideoPosterFileId || ''] : order.referenceFileIds
+const styleButtonLabel = computed(() => `生成 ${styleProducts.value.length} 条同款视频`)
+
 async function submit() {
+  if (styleVideo.value) return submitStyle()
   if (!product.value || !scenes.value.length) return
   submitting.value = true
   try {
@@ -149,7 +197,30 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
 
     <div v-if="tab === 'create'" class="tc-create">
       <div class="tc-main">
-        <section class="vg-card tc-card">
+        <section class="vg-card tc-card" :class="{ 'tc-style--on': styleVideo }" data-testid="creative-style-video">
+          <header class="tc-card__head">
+            <div><h2>同款参考视频 <em class="tc-optional">可选</em></h2><p>上传一条效果好的视频，批量给多个商品生成同款：运镜、光线、构图照着它来</p></div>
+            <div v-if="styleVideo" class="tc-card__actions">
+              <button type="button" class="vg-btn vg-btn--sm" :disabled="styleUploading" @click="videoInput?.click()"><RefreshCw :size="13" /> 更换</button>
+              <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" @click="clearStyleVideo"><X :size="13" /> 不用了</button>
+            </div>
+          </header>
+          <input ref="videoInput" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" hidden @change="onStyleVideo" />
+          <div v-if="styleVideo && !styleUploading" class="tc-style">
+            <div class="tc-style__video"><CloudVideo :file-id="styleVideo.fileId" controls muted /></div>
+            <div class="tc-style__facts">
+              <strong :title="styleVideo.name">{{ styleVideo.name }}</strong>
+              <p>{{ styleHint }}</p>
+              <p class="tc-style__tip">5–10 秒的单镜头产品视频效果最好；有多个镜头时只照着最长的一个生成。</p>
+            </div>
+          </div>
+          <label v-else class="tc-drop" @click.prevent="styleUploading || videoInput?.click()">
+            <span class="tc-drop__icon"><LoaderCircle v-if="styleUploading" :size="20" class="vg-spin" /><Clapperboard v-else :size="20" /></span>
+            <span><strong>{{ styleUploading ? '正在上传参考视频…' : '上传参考视频' }}</strong><small>5–10 秒的单镜头产品视频效果最好 · 同一条视频只分析一次</small></span>
+          </label>
+        </section>
+
+        <section v-if="!styleVideo" class="vg-card tc-card">
           <header class="tc-card__head">
             <div><h2>参考图片</h2><p>支持 JPG、PNG、WEBP，可多选（最多 {{ CREATIVE_REQUEST_MAX_IMAGES }} 张）</p></div>
             <div class="tc-card__actions">
@@ -177,7 +248,16 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
               <button type="button" class="vg-seg__btn" :class="{ 'is-active': mode === 'image_to_video' }" @click="mode = 'image_to_video'">首帧生视频</button>
             </div>
           </div>
-          <div class="tc-row"><span class="tc-row__label">商品</span>
+          <div v-if="styleVideo" class="tc-row"><span class="tc-row__label">商品</span>
+            <div class="tc-row__control">
+              <button type="button" class="tc-product" data-testid="creative-style-products" @click="picking = 'products'">
+                <span class="tc-product__img"><Boxes :size="16" /></span>
+                <strong>{{ styleProducts.length ? `已选 ${styleProducts.length} 个商品` : '选择商品（可多选，需已同步到电脑端）' }}</strong><ChevronDown :size="15" />
+              </button>
+              <small class="vg-muted tc-tiny">每个商品生成一条同款视频</small>
+            </div>
+          </div>
+          <div v-else class="tc-row"><span class="tc-row__label">商品</span>
             <button type="button" class="tc-product" @click="picking = 'product'">
               <span class="tc-product__img"><CloudImage v-if="product" :file-id="product.coverFileId || product.images[0]?.fileId" /><Boxes v-else :size="16" /></span>
               <strong>{{ product?.name || '选择商品（需已同步到电脑端）' }}</strong><ChevronDown :size="15" />
@@ -187,14 +267,18 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
 
         <section class="vg-card tc-summary">
           <div class="tc-summary__text">
-            <span class="tc-checks">
+            <span v-if="styleVideo" class="tc-checks">
+              <span class="is-ok"><Check :size="13" /> 同款参考视频</span>
+              <span :class="{ 'is-ok': styleProducts.length }"><Check v-if="styleProducts.length" :size="13" /><Circle v-else :size="12" /> 商品 {{ styleProducts.length }}</span>
+            </span>
+            <span v-else class="tc-checks">
               <span :class="{ 'is-ok': scenes.length }"><Check v-if="scenes.length" :size="13" /><Circle v-else :size="12" /> 参考图片 {{ scenes.length }}</span>
               <span :class="{ 'is-ok': product }"><Check v-if="product" :size="13" /><Circle v-else :size="12" /> {{ product?.name || '商品' }}</span>
             </span>
             <small class="vg-muted"><ShieldCheck :size="13" /> 由你的电脑用 TikTok 创意账号执行；电脑关着时会等它打开再执行。</small>
           </div>
-          <button type="button" class="vg-btn vg-btn--primary vg-btn--lg" data-testid="creative-submit" :disabled="submitting || !product || !scenes.length" @click="submit">
-            <LoaderCircle v-if="submitting" :size="16" class="vg-spin" /><Sparkles v-else :size="16" /> 创建任务 ({{ scenes.length }})
+          <button type="button" class="vg-btn vg-btn--primary vg-btn--lg" data-testid="creative-submit" :disabled="submitting || (styleVideo ? !styleProducts.length : !product || !scenes.length)" @click="submit">
+            <LoaderCircle v-if="submitting" :size="16" class="vg-spin" /><Sparkles v-else :size="16" /> <template v-if="styleVideo">{{ styleButtonLabel }}</template><template v-else>创建任务 ({{ scenes.length }})</template>
           </button>
         </section>
       </div>
@@ -238,14 +322,14 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
       <div v-if="shown.length" class="tc-orders">
         <article v-for="order in shown" :key="order.id" class="tc-order">
           <div class="tc-order__head">
-            <strong>{{ order.productName || '商品' }} · {{ order.referenceFileIds.length }} 张</strong>
+            <strong>{{ order.productName || '商品' }} · {{ order.styleVideoFileId ? '同款视频' : `${order.referenceFileIds.length} 张` }}</strong>
             <span class="vg-pill vg-pill--dot" :class="pillOf(order.state)">{{ CREATIVE_STATE_LABEL[order.state] }}</span>
             <span class="vg-muted tc-tiny">{{ relativeTime(order.createdAt) }}<template v-if="order.reportedAt"> · 电脑 {{ relativeTime(order.reportedAt) }}更新</template></span>
           </div>
           <p v-if="order.error" class="tc-err"><AlertTriangle :size="12" /> {{ order.error }}</p>
           <div class="tc-order__media">
-            <div v-for="(fileId, i) in order.referenceFileIds" :key="fileId" class="tc-cell">
-              <div class="tc-cell__ref"><CloudImage :file-id="fileId" /></div>
+            <div v-for="(fileId, i) in orderCells(order)" :key="`${fileId}-${i}`" class="tc-cell">
+              <div class="tc-cell__ref"><CloudImage v-if="fileId" :file-id="fileId" /><span v-else class="tc-cell__state"><Clapperboard :size="14" /></span></div>
               <div class="tc-cell__out">
                 <CloudVideo v-if="order.shots?.[i]?.outputFileId" :file-id="order.shots[i].outputFileId" controls />
                 <span v-else class="tc-cell__state" :title="order.shots?.[i]?.error">
@@ -260,6 +344,7 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
     </section>
 
     <ProductPicker v-if="picking === 'product'" @close="picking = ''" @pick="(item: ProductItem) => { product = item; picking = '' }" />
+    <ProductPicker v-else-if="picking === 'products'" multiple :selected-ids="styleProducts.map((item) => item.id)" @close="picking = ''" @pick-many="(items: ProductItem[]) => { styleProducts = items; picking = '' }" />
     <div v-else-if="picking" class="vg-backdrop" @click.self="picking = ''">
       <div class="vg-dialog tc-dialog" role="dialog" aria-modal="true">
         <div class="vg-dialog__head"><span class="vg-dialog__title">{{ picking === 'assets' ? '从素材库选图' : '从衍生图选图' }}</span><button type="button" class="vg-icon-btn" aria-label="关闭" @click="picking = ''"><X :size="16" /></button></div>
@@ -357,6 +442,17 @@ const pillOf = (state: string) => (state === 'completed' ? 'vg-pill--green' : st
 .tc-cell__ref :deep(img), .tc-cell__out :deep(video) { width: 100%; height: 100%; object-fit: cover; }
 .tc-cell__state { display: grid; place-items: center; height: 100%; color: var(--theme-text-muted); }
 .tc-dialog { width: min(720px, calc(100vw - 32px)); }
+.tc-optional { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 11px; font-style: normal; font-weight: 500; }
+.tc-style--on { border-color: var(--vg-accent-line, var(--vg-accent)); }
+.tc-style { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: start; }
+.tc-style__video { aspect-ratio: 9 / 16; overflow: hidden; border-radius: 10px; border: 1px solid var(--theme-border); background: var(--theme-panel-soft); }
+.tc-style__video :deep(video) { width: 100%; height: 100%; object-fit: cover; }
+.tc-style__facts { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tc-style__facts strong { overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+.tc-style__facts p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--theme-text-secondary); }
+.tc-style__tip { color: var(--theme-text-muted) !important; }
+.tc-row__control { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+@media (max-width: 640px) { .tc-style { grid-template-columns: 1fr; } .tc-style__video { width: 140px; } }
 .tc-dialog__foot { display: flex; align-items: center; justify-content: space-between; }
 .tc-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 60vh; overflow: auto; }
 .tc-pick { aspect-ratio: 1; overflow: hidden; padding: 0; border: 2px solid transparent; border-radius: 10px; background: var(--theme-panel-soft); cursor: pointer; }

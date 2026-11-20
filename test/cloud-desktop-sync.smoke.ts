@@ -629,6 +629,39 @@ async function main() {
     assert.equal(assets.length, assetsBefore, 'our own output is not re-imported into this computer')
     assert.equal((await phone.sync.pull(0, ['creative-requests'])).changes.find((c) => c.id === 'cr1')!.seq, seqBefore, 'finished order is not reported again')
 
+    // 同款参考视频: the web uploads one clip; each product's order downloads it once and copies it
+    const styleCalls: any[] = []
+    sync.setCloudSyncCreativeSource(async () => ({
+      createFromReference: async () => { throw new Error('style orders must not use reference images') },
+      createFromStyleVideo: async (input) => {
+        styleCalls.push(input)
+        const task = { id: `style-task-${styleCalls.length}`, shots: [{ shotId: 's0', status: 'running' }] }
+        tasks.set(task.id, task)
+        return { id: task.id }
+      },
+      get: async (taskId) => tasks.get(taskId) ?? null,
+    }))
+    const styleClip = await phone.sync.uploadFile(new Blob([Buffer.from('0000001866747970', 'hex')], { type: 'video/mp4' }), 'video/mp4')
+    const styleAt = Date.now() + 25000
+    await phone.sync.push([
+      { collection: 'creative-requests', id: 'cr-style', updatedAt: styleAt, deleted: false, data: { productId: product.id, referenceFileIds: [], styleVideoFileId: styleClip.fileId, mode: 'image_to_video', state: 'pending', createdAt: styleAt } },
+    ])
+    result = await sync.runCloudSync()
+    assert.equal(result.lastError, '', result.lastError)
+    assert.equal(styleCalls.length, 1)
+    assert.ok(existsSync(styleCalls[0].videoPath), 'reference clip downloaded')
+    assert.equal(styleCalls[0].mode, 'image_to_video')
+    orders = Object.fromEntries((await phone.sync.pull(0, ['creative-requests'])).changes.map((c) => [c.id, c.data as any]))
+    assert.equal(orders['cr-style'].state, 'running')
+    assert.equal(orders['cr-style'].shots.length, 1)
+    // an older computer without style support says so instead of guessing
+    sync.setCloudSyncCreativeSource(async () => ({ createFromReference: async () => ({ id: 'x' }), get: async () => null }))
+    await phone.sync.push([{ collection: 'creative-requests', id: 'cr-style-old', updatedAt: Date.now() + 26000, deleted: false, data: { productId: product.id, referenceFileIds: [], styleVideoFileId: styleClip.fileId, state: 'pending', createdAt: Date.now() } }])
+    await sync.runCloudSync()
+    orders = Object.fromEntries((await phone.sync.pull(0, ['creative-requests'])).changes.map((c) => [c.id, c.data as any]))
+    assert.equal(orders['cr-style-old'].state, 'failed')
+    assert.match(orders['cr-style-old'].error, /不支持同款参考视频/)
+
     // a computer without tk创意室 tells the web instead of leaving the order hanging
     sync.setCloudSyncCreativeSource(async () => null)
     await phone.sync.push([{ collection: 'creative-requests', id: 'cr2', updatedAt: Date.now() + 30000, deleted: false, data: { productId: product.id, referenceFileIds: [scene.fileId], state: 'pending', createdAt: Date.now() } }])

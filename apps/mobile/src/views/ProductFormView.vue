@@ -77,7 +77,7 @@ const history = computed(() =>
   [
     ...productContent.value.map((item) => ({ key: item.id, at: item.createdAt, title: `${PURPOSE_LABEL[item.purpose] || item.purpose} · ${item.label}`, sub: item.review === 'approved' ? '已通过' : item.review === 'rejected' ? '已拒绝' : item.status === 'succeeded' ? '待审核' : '生成中' })),
     ...productClones.value.map((p) => ({ key: p.id, at: p.createdAt, title: `复刻 · ${p.name}`, sub: p.finalFileId ? '已出成片' : '进行中' })),
-    ...productOrders.value.map((o) => ({ key: o.id, at: o.createdAt, title: `tk创意室 · ${o.referenceFileIds.length} 张场景图`, sub: o.state === 'completed' ? '已完成' : '电脑执行中' })),
+    ...productOrders.value.map((o) => ({ key: o.id, at: o.createdAt, title: o.styleVideoFileId ? 'tk创意室 · 同款视频' : `tk创意室 · ${o.referenceFileIds.length} 张场景图`, sub: o.state === 'completed' ? '已完成' : '电脑执行中' })),
   ]
     .sort((a, b) => b.at - a.at)
     .slice(0, 8),
