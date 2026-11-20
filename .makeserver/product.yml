@@ -10,11 +10,11 @@ about: |-
   桌面端（Electron）在本机渲染视频，适合大批量混剪；服务器上运行云服务（账号、计费、云同步）、网页版、官网 / 用户中心 / 后台，以及桌面端的自动更新下载。
 entries:
   - name: 官网 / 用户中心
-    url: https://tiktokcut.banono-us.com/
+    url: https://www.klipmill.com/
   - name: 网页版
-    url: https://tiktokcut.banono-us.com/app/
+    url: https://www.klipmill.com/app/
   - name: 桌面端更新
-    url: https://tiktokcut.banono-us.com/updates/
+    url: https://www.klipmill.com/updates/
 modules:
   - name: 混剪工作室
     desc: 素材池 + 批量混剪，一次出多条不重复的视频，去重处理
