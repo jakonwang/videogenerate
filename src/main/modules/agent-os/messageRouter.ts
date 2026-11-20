@@ -60,7 +60,9 @@ export function routeAgentMessage(input: {
     text(input.context.sourceVideoPath) ||
     (Array.isArray(input.context.videoPaths) && input.context.videoPaths.some((item) => text(item))),
   )
-  const needsSourceVideo = /(subtitle|material|clone|replicate|publish|post to|\u5b57\u5e55|\u7d20\u6750|\u590d\u523b|\u53c2\u8003\u89c6\u9891|\u53d1\u5e03|\u4e0a\u4f20\u5230)/.test(prompt)
+  // "\u7d20\u6750/material" is deliberately not here: it names ad creatives and product content in general
+  // (e.g. "this creative sells best, make variants"), which the planner handles from the product context.
+  const needsSourceVideo = /(subtitle|clone|replicate|publish|post to|\u5b57\u5e55|\u590d\u523b|\u53c2\u8003\u89c6\u9891|\u53d1\u5e03|\u4e0a\u4f20\u5230)/.test(prompt)
   if (needsSourceVideo && !hasSourceVideo) {
     return { kind: 'clarification', responseCode: 'source_video' }
   }
