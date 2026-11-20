@@ -24,6 +24,7 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:enqueueClone', async (_e, payload) => await livePhotoService.enqueueCloneItems(payload))
   ipcMain.handle('plugin:livePhoto:startClone', async (_e, payload) => await livePhotoService.startCloneItems(payload))
   ipcMain.handle('plugin:livePhoto:createFromReference', async (_e, payload) => await livePhotoService.createFromReference(payload))
+  ipcMain.handle('plugin:livePhoto:createFromStyleReference', async (_e, payload) => await livePhotoService.createFromStyleReference(payload))
   ipcMain.handle('plugin:livePhoto:createFromCloneShots', async (_e, payload) => await livePhotoService.createFromCloneShots(payload))
   ipcMain.handle(
     'plugin:livePhoto:applySubtitleVideoToItem',

@@ -24,6 +24,7 @@ import { runFfmpeg } from '../ffmpeg/runner'
 import { probeMedia } from '../ffmpeg/probe'
 import type { TiktokCreativeAccount, TiktokCreativeShotTask, TiktokCreativeTask, TiktokCreativeTaskLog } from './types'
 import { createTiktokZoomedLastFrame } from './imageAspect'
+import { buildStyleReferenceMotionPrompt, styleReferenceService } from '../style-reference/service'
 
 // Keep paid image retries bounded. The limit counts automatic retries after
 // the initial image generation attempt.
@@ -214,6 +215,18 @@ function resolveGenerationMode(value: unknown) {
 function resolveZoomPercent(value: unknown) {
   const numeric = Number(value)
   return [10, 20, 30, 40, 50, 60, 70, 80].includes(numeric) ? numeric : 20
+}
+
+/**
+ * Closing frame for image-to-video: the 同款模板 closing frame with the product swapped in
+ * when there is one, otherwise a zoomed copy of the opening frame (a plain push-in).
+ */
+async function resolveClosingFramePath(input: { taskId: string; shotId: string; firstFramePath: string; zoomPercent?: number }) {
+  const task = await tiktokCreativeStudioRepo.get(input.taskId)
+  const shot = task?.shots.find((item) => item.shotId === input.shotId)
+  const templateClosing = String(shot?.lastFramePreparation?.generatedStillPath || '').trim()
+  if (shot?.lastFrameReferencePath && !shot.lastFrameFallback && templateClosing && existsSync(templateClosing)) return templateClosing
+  return (await createTiktokZoomedLastFrame(input.firstFramePath, await defaultShotRoot(input.taskId, input.shotId), resolveZoomPercent(input.zoomPercent ?? shot?.zoomPercent))).path
 }
 
 function taskCreditCost(durationSec: number) {
@@ -750,6 +763,32 @@ async function processReferenceShot(taskId: string, shotId: string) {
       scheduleShot(taskId, shotId, 10000)
       return
     }
+    // 同款模板 in image-to-video: swap the product into the template's closing frame too,
+    // so the model interpolates between two real frames of the reference.
+    if (resolveGenerationMode(shot.mode) === 'image_to_video' && shot.lastFrameReferencePath && !shot.lastFrameFallback) {
+      const lastPrepared = await prepareReferenceImageForExternalWorkflow({
+        workflowId: `${taskId}-${shotId}-last`,
+        referenceImagePath: shot.lastFrameReferencePath,
+        productId: String(task.productId || '').trim(),
+        outputRoot: join(await defaultShotRoot(taskId, shotId), 'last-frame'),
+        state: shot.lastFramePreparation,
+        promptVersion,
+        qualityCheckerEnabled,
+      })
+      await persistShot(taskId, shotId, (current) => ({
+        ...current,
+        lastFramePreparation: lastPrepared.state,
+        lastFrameFallback: lastPrepared.failed ? true : current.lastFrameFallback,
+        updatedAt: now(),
+        logs: lastPrepared.failed
+          ? [...(current.logs || []), buildLog(`[tiktok-creative] closing frame swap failed, using zoomed opening frame: ${lastPrepared.error || 'unknown'}`, 'error')].slice(-200)
+          : current.logs,
+      }))
+      if (!lastPrepared.failed && (lastPrepared.pending || !lastPrepared.preparedImagePath)) {
+        scheduleShot(taskId, shotId, 10000)
+        return
+      }
+    }
     // Preserve the provider output dimensions. The official API accepts the
     // generated image as returned; downstream video encoding handles framing.
     const preparedImagePath = prepared.preparedImagePath
@@ -773,7 +812,7 @@ async function processReferenceShot(taskId: string, shotId: string) {
             const mode = resolveGenerationMode(shot.mode)
             await persistShot(taskId, shotId, (current) => ({ ...current, mode, updatedAt: now() }))
             const lastFramePath = mode === 'image_to_video'
-              ? (await createTiktokZoomedLastFrame(preparedImagePath, await defaultShotRoot(taskId, shotId), resolveZoomPercent(shot.zoomPercent))).path
+              ? await resolveClosingFramePath({ taskId, shotId, firstFramePath: preparedImagePath, zoomPercent: shot.zoomPercent })
               : undefined
             await persistShot(taskId, shotId, (current) => ({
               ...current,
@@ -998,8 +1037,12 @@ export const tiktokCreativeStudioService = {
     })
   },
 
-  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number }) {
-    const referenceImagePaths = Array.from(new Set((Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths : []).map((item) => String(item || '').trim()).filter(Boolean)))
+  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number; styleReferenceId?: string }) {
+    const styleReference = input.styleReferenceId ? await styleReferenceService.get(input.styleReferenceId) : undefined
+    if (input.styleReferenceId && !styleReference) throw new Error('同款模板不存在，请重新上传参考视频')
+    const referenceImagePaths = styleReference
+      ? [styleReference.firstFramePath]
+      : Array.from(new Set((Array.isArray(input.referenceImagePaths) ? input.referenceImagePaths : []).map((item) => String(item || '').trim()).filter(Boolean)))
     if (!referenceImagePaths.length) throw new Error('Reference images are required')
     const productId = String(input.productId || '').trim()
     const product = (await productsRepo.list()).find((item) => item.id === productId)
@@ -1017,9 +1060,13 @@ export const tiktokCreativeStudioService = {
     const imagePrompt = promptKind === 'image'
       ? String(input.prompt || '').trim() || selectedImagePromptVersion.prompt
       : selectedImagePromptVersion.prompt
-    const videoPrompt = (promptKind === 'video' ? String(input.prompt || '').trim() : '') || templatePrompt
-    const effectiveVideoPrompt = resolveOfficialVideoPrompt(videoPrompt)
     const mode = resolveGenerationMode(input.mode)
+    const videoPrompt = styleReference
+      ? buildStyleReferenceMotionPrompt({ ...styleReference, hasLastFrame: mode === 'image_to_video' })
+      : (promptKind === 'video' ? String(input.prompt || '').trim() : '') || templatePrompt
+    const effectiveVideoPrompt = resolveOfficialVideoPrompt(videoPrompt)
+    // TikTok only offers 5s and 10s; pick the one closest to the reference shot.
+    const durationSec = styleReference ? (styleReference.durationSec <= 7 ? 5 : 10) : DEFAULT_DURATION_SEC
     const zoomPercent = resolveZoomPercent(input.zoomPercent)
     const shots: TiktokCreativeShotTask[] = referenceImagePaths.map((referenceImagePath, index) => ({
       id: randomUUID(),
@@ -1031,7 +1078,11 @@ export const tiktokCreativeStudioService = {
       mode,
       zoomPercent,
       prompt: effectiveVideoPrompt,
-      durationSec: DEFAULT_DURATION_SEC,
+      durationSec,
+      ...(styleReference ? {
+        styleReferenceId: styleReference.id,
+        lastFrameReferencePath: mode === 'image_to_video' ? styleReference.lastFramePath : undefined,
+      } : {}),
       status: 'running',
       remoteStatus: 'queued',
       imagePreparation: {
@@ -1052,10 +1103,23 @@ export const tiktokCreativeStudioService = {
       productName: String(product.name || '').trim() || 'Product',
       status: 'running',
       shots,
-      logs: [buildLog(`[tiktok-creative] queued ${shots.length} reference image tasks`)],
+      logs: [buildLog(styleReference
+        ? `[tiktok-creative] queued 同款 task from ${styleReference.videoName} (${durationSec}s, ${mode})`
+        : `[tiktok-creative] queued ${shots.length} reference image tasks`)],
     })
     task.shots.forEach((shot) => scheduleShot(task.id, shot.shotId))
     return task
+  },
+
+  /** 同款批量：one task per product, all copying the same reference clip. */
+  async createFromStyleReference(input: { styleReferenceId: string; productIds: string[]; mode?: 'reference_to_video' | 'image_to_video' }) {
+    const productIds = Array.from(new Set((Array.isArray(input.productIds) ? input.productIds : []).map((id) => String(id || '').trim()).filter(Boolean)))
+    if (!productIds.length) throw new Error('请至少选择一个商品')
+    const tasks: TiktokCreativeTask[] = []
+    for (const productId of productIds) {
+      tasks.push(await this.createFromReference({ referenceImagePaths: [], productId, styleReferenceId: input.styleReferenceId, mode: input.mode }))
+    }
+    return { count: tasks.length, taskIds: tasks.map((task) => task.id) }
   },
 
   async resumePending() {
@@ -1203,7 +1267,7 @@ export const tiktokCreativeStudioService = {
             const mode = resolveGenerationMode(latestShot.mode)
             await persistShot(task.id, shotId, (current) => ({ ...current, mode, updatedAt: now() }))
             const lastFramePath = mode === 'image_to_video'
-              ? (await createTiktokZoomedLastFrame(imagePath, await defaultShotRoot(task.id, shotId), resolveZoomPercent(latestShot.zoomPercent))).path
+              ? await resolveClosingFramePath({ taskId: task.id, shotId, firstFramePath: imagePath, zoomPercent: latestShot.zoomPercent })
               : undefined
             await persistShot(task.id, shotId, (current) => ({
               ...current,

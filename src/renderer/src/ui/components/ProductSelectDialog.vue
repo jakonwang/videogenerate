@@ -18,11 +18,17 @@ const props = defineProps<{
   open: boolean
   products: ProductOption[]
   selectedId?: string
+  /** Pick several products (同款批量); confirms with selectMany. */
+  multiple?: boolean
+  selectedIds?: string[]
+  /** Optional per-product reason it can't be picked, shown on the card. */
+  disabledReason?: (product: ProductOption) => string
 }>()
 
 const emit = defineEmits<{
   close: []
   select: [id: string]
+  selectMany: [ids: string[]]
 }>()
 
 const query = ref('')
@@ -41,9 +47,26 @@ const filteredProducts = computed(() => {
   return props.products.filter((product) => `${product.name} ${product.id}`.toLowerCase().includes(keyword))
 })
 
+const picked = ref<string[]>([])
+
 watch(() => props.open, (open) => {
-  if (open) query.value = ''
+  if (!open) return
+  query.value = ''
+  picked.value = [...(props.selectedIds || [])]
 })
+
+function isSelected(id: string) {
+  return props.multiple ? picked.value.includes(id) : props.selectedId === id
+}
+
+function blockedReason(product: ProductOption) {
+  return props.multiple && props.disabledReason ? props.disabledReason(product) : ''
+}
+
+function confirmMany() {
+  emit('selectMany', [...picked.value])
+  emit('close')
+}
 
 function previewSrc(path?: string) {
   const value = String(path || '').trim()
@@ -57,6 +80,12 @@ function productImage(product: ProductOption) {
 }
 
 function selectProduct(id: string) {
+  if (props.multiple) {
+    const product = props.products.find((item) => item.id === id)
+    if (product && blockedReason(product)) return
+    picked.value = picked.value.includes(id) ? picked.value.filter((item) => item !== id) : [...picked.value, id]
+    return
+  }
   emit('select', id)
   emit('close')
 }
@@ -85,32 +114,41 @@ function selectProduct(id: string) {
           :key="product.id"
           type="button"
           class="product-dialog__card"
-          :class="{ selected: selectedId === product.id }"
+          :class="{ selected: isSelected(product.id), blocked: blockedReason(product) }"
+          :title="blockedReason(product) || undefined"
           @click="selectProduct(product.id)"
         >
           <div class="product-dialog__cover">
             <img v-if="productImage(product)" :src="previewSrc(productImage(product))" alt="product cover" />
             <Package v-else class="h-6 w-6" />
-            <span v-if="selectedId === product.id" class="product-dialog__selected"><Check class="h-3 w-3" />{{ labels.selected }}</span>
+            <span v-if="isSelected(product.id)" class="product-dialog__selected"><Check class="h-3 w-3" />{{ labels.selected }}</span>
           </div>
           <div class="product-dialog__copy">
             <strong>{{ product.name }}</strong>
-            <small>ID: {{ product.id }}</small>
+            <small v-if="blockedReason(product)" class="product-dialog__blocked">{{ blockedReason(product) }}</small>
+            <small v-else>ID: {{ product.id }}</small>
           </div>
         </button>
       </div>
       <div v-else class="product-dialog__empty"><Package class="h-7 w-7" /><span>{{ labels.empty }}</span></div>
+      <footer v-if="multiple" class="product-dialog__footer">
+        <span>已选 {{ picked.length }} 个商品，每个商品生成一条视频</span>
+        <button v-if="picked.length" type="button" class="product-dialog__clear" @click="picked = []">清空</button>
+        <button type="button" class="product-dialog__confirm" :disabled="!picked.length" @click="confirmMany">确定</button>
+      </footer>
     </section>
   </div>
 </template>
 
 <style scoped>
 .product-dialog{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:18px;background:var(--theme-overlay);backdrop-filter:blur(8px)}
-.product-dialog__panel{width:min(980px,100%);max-height:calc(100vh - 36px);display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:14px;padding:18px;border:1px solid var(--theme-border);border-radius:14px;background:var(--theme-panel);box-shadow:var(--theme-shadow-dialog);color:var(--theme-text);overflow:hidden}
+.product-dialog__panel{width:min(980px,100%);max-height:calc(100vh - 36px);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:14px;padding:18px;border:1px solid var(--theme-border);border-radius:14px;background:var(--theme-panel);box-shadow:var(--theme-shadow-dialog);color:var(--theme-text);overflow:hidden}
 .product-dialog__header,.product-dialog__toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px}.product-dialog__header strong{font-size:20px}.product-dialog__header p{margin:5px 0 0;color:var(--theme-text-muted);font-size:12px}.product-dialog__close{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--theme-border);border-radius:8px;background:var(--theme-control);color:var(--theme-text-secondary)}.product-dialog__close:hover{background:var(--theme-control-hover);color:var(--theme-text)}
 .product-dialog__search{min-width:260px;max-width:520px;flex:1;display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:center;padding:0 12px;border:1px solid var(--theme-border-control);border-radius:8px;background:var(--theme-input);color:var(--theme-text-muted)}.product-dialog__search:focus-within{border-color:var(--color-focus);box-shadow:0 0 0 3px var(--theme-accent-soft)}.product-dialog__search input{min-height:40px;border:0;outline:0;background:transparent;color:var(--theme-text);font-size:13px}.product-dialog__toolbar>span{color:var(--theme-text-muted);font-size:11px}
 .product-dialog__grid{min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:2px}.product-dialog__card{min-width:0;display:grid;gap:9px;padding:9px;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-panel);color:var(--theme-text);text-align:left;transition:border-color .16s ease,background-color .16s ease}.product-dialog__card:hover{border-color:var(--theme-border-control);background:var(--theme-control-hover)}.product-dialog__card.selected{border-color:var(--theme-accent);background:var(--theme-accent-soft);box-shadow:inset 0 0 0 1px var(--theme-accent)}
 .product-dialog__cover{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;display:grid;place-items:center;background:var(--theme-panel-soft);color:var(--theme-text-muted)}.product-dialog__cover img{width:100%;height:100%;object-fit:cover}.product-dialog__selected{position:absolute;right:7px;top:7px;display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:var(--theme-accent);color:var(--theme-on-accent);font-size:10px}
 .product-dialog__copy{display:grid;gap:4px;min-width:0}.product-dialog__copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.product-dialog__copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-muted);font-size:9px}.product-dialog__empty{min-height:280px;display:grid;place-items:center;align-content:center;gap:10px;color:var(--theme-text-muted);font-size:12px}
+.product-dialog__card.blocked{opacity:.55;cursor:not-allowed}.product-dialog__blocked{color:var(--color-warning,#b7791f)!important;white-space:normal!important}
+.product-dialog__footer{display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid var(--theme-border);font-size:12px;color:var(--theme-text-muted)}.product-dialog__footer>span{flex:1}.product-dialog__clear{border:0;background:none;color:var(--theme-text-muted);font-size:12px;cursor:pointer}.product-dialog__confirm{min-width:96px;height:36px;padding:0 16px;border:0;border-radius:8px;background:var(--theme-accent);color:var(--theme-on-accent);font-size:13px;font-weight:600;cursor:pointer}.product-dialog__confirm:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:900px){.product-dialog__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:640px){.product-dialog__toolbar{align-items:stretch;flex-direction:column}.product-dialog__search{min-width:0;max-width:none}.product-dialog__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
 import ProductSelectDialog from '../components/ProductSelectDialog.vue'
+import StyleReferenceCard, { type StyleReference } from '../components/StyleReferenceCard.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 // The page brings its own stylesheets so the web version (which reuses this page) gets them too.
 import '@/design-system/live-photo.css'
@@ -335,6 +336,13 @@ const libraryStatusFilters = computed(() => [
   { key: 'success_not_subtitled', label: t('livePhoto.workspace.successNotSubtitled') },
 ])
 const selectedProductId = ref('')
+// 同款模板: one reference clip copied onto several products.
+const styleReference = ref<StyleReference | null>(null)
+const styleProductIds = ref<string[]>([])
+const styleProductPickerOpen = ref(false)
+function livePhotoProductBlockedReason(product: { analysisBoardPath?: string; livePhotoReferenceImagePath?: string }) {
+  return String(product.analysisBoardPath || product.livePhotoReferenceImagePath || '').trim() ? '' : '缺少商品主图，先到商品页补上'
+}
 const productPickerOpen = ref(false)
 const referenceImagePaths = ref<string[]>([])
 const referenceMissingPaths = ref<string[]>([])
@@ -1615,7 +1623,28 @@ function removeReferenceImage(path: string) {
   }
 }
 
+async function createStyleReferenceItems() {
+  const template = styleReference.value
+  const productIds = [...styleProductIds.value]
+  if (!template || !productIds.length) return
+  creatingReference.value = true
+  errorText.value = ''
+  notice.value = ''
+  try {
+    const result = await window.api.livePhoto.createFromStyleReference({ styleReferenceId: template.id, productIds })
+    notice.value = `已提交 ${result?.count ?? productIds.length} 条同款视频`
+    styleProductIds.value = []
+    activeTab.value = 'library'
+    void refreshLibraryItems()
+  } catch (error: any) {
+    errorText.value = error?.message ?? String(error)
+  } finally {
+    creatingReference.value = false
+  }
+}
+
 async function createReferenceItem() {
+  if (styleReference.value) return createStyleReferenceItems()
   if (!referenceImagePaths.value.length || !selectedProductId.value) return
   if (!selectedProductReadyForLivePhoto.value) {
     errorText.value = t('autoUi.k_df905e7370e1')
@@ -2166,6 +2195,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </header>
 
             <div class="lp-field">
+              <StyleReferenceCard v-model="styleReference" bare />
+            </div>
+
+            <div v-if="!styleReference" class="lp-field">
               <div class="lp-field__label">
                 <span>{{ uiText.referenceImage }}</span>
                 <small v-if="referenceImagePaths.length" class="vg-num">{{ referenceImagePaths.length }} {{ uiText.referenceQueuedSuffix }}</small>
@@ -2202,7 +2235,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <div class="lp-field">
               <div class="lp-field__label"><span>{{ uiText.product }}</span></div>
-              <div class="lp-product">
+              <div v-if="styleReference" class="lp-product">
+                <button class="lp-product__pick" type="button" @click="styleProductPickerOpen = true">
+                  <span class="lp-product__thumb"><Package :size="16" /></span>
+                  <span class="lp-product__name">
+                    <strong>{{ styleProductIds.length ? `已选 ${styleProductIds.length} 个商品` : '选择商品（可多选）' }}</strong>
+                    <small>每个商品生成一条同款视频</small>
+                  </span>
+                  <ChevronDown :size="15" class="lp-product__chev" />
+                </button>
+              </div>
+              <div v-else class="lp-product">
                 <button class="lp-product__pick" data-testid="live-photo-product-select" type="button" @click="productPickerOpen = true">
                   <span class="lp-product__thumb">
                     <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="" />
@@ -2230,10 +2273,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
             <footer class="lp-card__foot">
               <span class="lp-safe"><ShieldCheck :size="14" />{{ uiText.referenceSafe }}</span>
-              <button class="vg-btn vg-btn--primary vg-btn--lg" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto" @click="createReferenceItem">
+              <button class="vg-btn vg-btn--primary vg-btn--lg" data-testid="live-photo-create-reference" type="button" :disabled="creatingReference || (styleReference ? !styleProductIds.length : !referenceImagePaths.length || !selectedProductId || !selectedProductReadyForLivePhoto)" @click="createReferenceItem">
                 <LoaderCircle v-if="creatingReference" :size="16" class="vg-spin" />
                 <Sparkles v-else :size="16" />
-                {{ creatingReference ? t('livePhoto.actions.creating') : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
+                {{ creatingReference ? t('livePhoto.actions.creating') : styleReference ? `生成 ${styleProductIds.length} 条同款视频` : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
               </button>
             </footer>
           </article>
@@ -3074,6 +3117,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       :selected-id="selectedProductId"
       @close="productPickerOpen = false"
       @select="selectedProductId = $event"
+    />
+    <ProductSelectDialog
+      :open="styleProductPickerOpen"
+      :products="products"
+      multiple
+      :selected-ids="styleProductIds"
+      :disabled-reason="livePhotoProductBlockedReason"
+      @close="styleProductPickerOpen = false"
+      @select-many="styleProductIds = $event"
     />
 
     <RuntimeLogDialog

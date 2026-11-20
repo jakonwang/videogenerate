@@ -41,6 +41,7 @@ import { registerProductsIpc } from './ipc/registerProductsIpc'
 import { registerCloneIpc } from './ipc/registerCloneIpc'
 import { registerClonePromptTemplatesIpc } from './ipc/registerClonePromptTemplatesIpc'
 import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
+import { registerStyleReferenceIpc } from './ipc/registerStyleReferenceIpc'
 import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMaterialsIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
@@ -901,6 +902,7 @@ function wireIpc() {
   registerProductsIpc(recordIpcHandlers(ipcMain))
   registerClonePromptTemplatesIpc(ipcMain)
   registerLivePhotoIpc(ipcMain)
+  registerStyleReferenceIpc(ipcMain)
   registerProductImageMaterialsIpc(ipcMain)
   registerTiktokCreativeStudioIpc(recordIpcHandlers(ipcMain), () => mainWindow)
   registerTiktokListingIpc(ipcMain)

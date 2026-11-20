@@ -246,7 +246,10 @@ async function main() {
   assert.match(service, /firstFramePath/)
   assert.match(service, /lastFramePath/)
   assert.match(service, /resolveGenerationMode\(shot\.mode\)/)
-  assert.match(service, /resolveZoomPercent\(shot\.zoomPercent\)/)
+  assert.match(service, /resolveZoomPercent\(input\.zoomPercent \?\? shot\?\.zoomPercent\)/)
+  // 同款模板: the closing frame comes from the reference clip when there is one.
+  assert.match(service, /resolveClosingFramePath\(\{ taskId, shotId, firstFramePath: preparedImagePath, zoomPercent: shot\.zoomPercent \}\)/)
+  assert.match(service, /createFromStyleReference/)
   assert.match(service, /zoomPercent,/)
   assert.match(view, /zoomPercentOptions = \[10, 20, 30, 40, 50, 60, 70, 80\]/)
   assert.match(view, /zoomPercent: generationMode\.value === "image_to_video" \? zoomPercent\.value : undefined/)

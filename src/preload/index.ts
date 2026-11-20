@@ -1058,6 +1058,10 @@ const api = {
     remove: (id: string) => ipcRenderer.invoke('plugin:tiktokListing:remove', id),
     exportExcel: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:tiktokListing:exportExcel', payload),
   },
+  styleReference: {
+    analyze: (payload: { videoPath: string }) => ipcRenderer.invoke('plugin:styleReference:analyze', payload),
+    list: () => ipcRenderer.invoke('plugin:styleReference:list'),
+  },
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),
     listSummary: (payload?: { ids?: string[] }) => ipcRenderer.invoke('plugin:tiktokCreative:listSummary', payload),
@@ -1081,7 +1085,8 @@ const api = {
     updateAccount: (payload: { id: string; name?: string; enabled?: boolean; priority?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:updateAccount', payload),
     testAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:testAccount', id),
     removeAccount: (id: string) => ipcRenderer.invoke('plugin:tiktokCreative:removeAccount', id),
-    createFromReference: (payload: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromReference', payload),
+    createFromReference: (payload: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number; styleReferenceId?: string }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromReference', payload),
+    createFromStyleReference: (payload: { styleReferenceId: string; productIds: string[]; mode?: 'reference_to_video' | 'image_to_video' }) => ipcRenderer.invoke('plugin:tiktokCreative:createFromStyleReference', payload),
     retryShot: (payload: {
       id: string
       shotId: string
@@ -1145,6 +1150,8 @@ const api = {
       ipcRenderer.invoke('plugin:livePhoto:startClone', payload),
     createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromReference', payload),
+    createFromStyleReference: (payload: { styleReferenceId: string; productIds: string[] }) =>
+      ipcRenderer.invoke('plugin:livePhoto:createFromStyleReference', payload),
     createFromCloneShots: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromCloneShots', payload),
     applySubtitleVideoToItem: (payload: { id: string; subtitleVideoPath: string; subtitleCoverImagePath?: string }) =>

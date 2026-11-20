@@ -93,6 +93,7 @@
     "test:clone-shot-video-succeeded-url-downloads-from-retryable": "tsx test/clone-shot-video-succeeded-url-downloads-from-retryable.smoke.ts",
     "test:tiktok-listing-plugin": "tsx test/tiktok-listing-plugin.smoke.ts",
     "test:tiktok-creative-studio": "tsx test/tiktok-creative-studio-reference.smoke.ts",
+    "test:style-reference": "tsx test/style-reference.smoke.ts",
     "test:tiktok-gmv-max": "tsx test/tiktok-gmv-max-optimizer.smoke.ts",
     "test:tiktok-gmv-max-decision": "tsx test/tiktok-gmv-max-decision-engine.smoke.ts",
     "test:tiktok-gmv-max-decision-electron": "node test/tiktok-gmv-max-decision-electron.e2e.cjs",

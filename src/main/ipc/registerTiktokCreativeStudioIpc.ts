@@ -27,6 +27,7 @@ export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain, getWindow: () 
   ipcMain.handle('plugin:tiktokCreative:testAccount', async (_e, id: string) => await tiktokCreativeStudioService.testAccount(id))
   ipcMain.handle('plugin:tiktokCreative:removeAccount', async (_e, id: string) => await tiktokCreativeStudioService.removeAccount(id))
   ipcMain.handle('plugin:tiktokCreative:createFromReference', async (_e, payload) => await tiktokCreativeStudioService.createFromReference(payload))
+  ipcMain.handle('plugin:tiktokCreative:createFromStyleReference', async (_e, payload) => await tiktokCreativeStudioService.createFromStyleReference(payload))
   ipcMain.handle(
     'plugin:tiktokCreative:retryShot',
     async (_e, payload: {

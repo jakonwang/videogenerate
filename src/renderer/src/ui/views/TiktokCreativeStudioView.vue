@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { openAssetLibraryPicker } from "@/lib/assetLibraryPicker";
 import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
+import StyleReferenceCard, { type StyleReference } from "../components/StyleReferenceCard.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
 import {
   Activity,
@@ -232,6 +233,10 @@ const generationMode = ref<"reference_to_video" | "image_to_video">("reference_t
 const zoomPercentOptions = [10, 20, 30, 40, 50, 60, 70, 80] as const;
 const zoomPercent = ref<(typeof zoomPercentOptions)[number]>(20);
 const selectedProductId = ref("");
+// 同款模板: one reference clip copied onto several products.
+const styleReference = ref<StyleReference | null>(null);
+const styleProductIds = ref<string[]>([]);
+const styleProductPickerOpen = ref(false);
 const productPickerOpen = ref(false);
 const accountDialogOpen = ref(false);
 const materialDialogOpen = ref(false);
@@ -1350,7 +1355,37 @@ async function saveRetrySettings() {
     retrySettingsBusy.value = false;
   }
 }
+async function createStyleReferenceTasks() {
+  const template = styleReference.value;
+  const productIds = [...styleProductIds.value];
+  if (!template || !productIds.length) return;
+  if (!enabledAccounts.value.length) {
+    accountDialogOpen.value = true;
+    errorText.value = tr("autoUi.k_e13c090fda1b");
+    return;
+  }
+  creating.value = true;
+  notice.value = "";
+  errorText.value = "";
+  try {
+    const result = await window.api.tiktokCreative.createFromStyleReference({
+      styleReferenceId: template.id,
+      productIds,
+      mode: generationMode.value,
+    });
+    notice.value = `已提交 ${result?.count ?? productIds.length} 条同款视频`;
+    styleProductIds.value = [];
+    libraryPage.value = 1;
+    setActiveTab("library");
+    await refresh();
+  } catch (error: any) {
+    errorText.value = error?.message || String(error);
+  } finally {
+    creating.value = false;
+  }
+}
 async function createTasks() {
+  if (styleReference.value) return createStyleReferenceTasks();
   if (!referenceImagePaths.value.length || !selectedProductId.value) return;
   if (!enabledAccounts.value.length) {
     accountDialogOpen.value = true;
@@ -5157,8 +5192,10 @@ onBeforeUnmount(() => {
     </div>
     <section v-if="activeTab === 'reference'" class="vg-scope ts-create">
       <div class="ts-main">
+        <StyleReferenceCard v-model="styleReference" :uses-last-frame="generationMode === 'image_to_video'" />
+
         <!-- reference images -->
-        <article class="ts-card ts-block">
+        <article v-if="!styleReference" class="ts-card ts-block">
           <header class="ts-block__head">
             <div class="ts-block__title">
               <h2>{{ tr("autoUi.k_2132324c5c89") }}<em v-if="referenceImagePaths.length">{{ referenceImagePaths.length }}</em></h2>
@@ -5210,7 +5247,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div v-if="generationMode === 'image_to_video'" class="ts-form__row">
+            <div v-if="generationMode === 'image_to_video' && !styleReference" class="ts-form__row">
               <span class="ts-form__label">{{ tr("tiktokCreative.generationMode.zoomPercentLabel") }}</span>
               <div class="ts-form__control">
                 <div class="ts-seg" role="group" :aria-label="tr('tiktokCreative.generationMode.zoomPercentLabel')">
@@ -5221,7 +5258,15 @@ onBeforeUnmount(() => {
             </div>
             <div class="ts-form__row">
               <span class="ts-form__label">{{ tr("autoUi.k_004922066efd") }}</span>
-              <div class="ts-form__control">
+              <div v-if="styleReference" class="ts-form__control">
+                <button class="ts-product" type="button" @click="styleProductPickerOpen = true">
+                  <span class="ts-product__thumb"><Package :size="16" /></span>
+                  <span class="ts-product__name" :class="{ 'is-empty': !styleProductIds.length }">{{ styleProductIds.length ? `已选 ${styleProductIds.length} 个商品` : "选择商品（可多选）" }}</span>
+                  <ChevronDown :size="15" />
+                </button>
+                <small class="ts-form__hint">每个商品生成一条同款视频</small>
+              </div>
+              <div v-else class="ts-form__control">
                 <button class="ts-product" type="button" @click="productPickerOpen = true">
                   <span class="ts-product__thumb">
                     <img v-if="selectedProduct?.coverImagePath" :src="previewSrc(selectedProduct.coverImagePath)" alt="product" />
@@ -5238,19 +5283,25 @@ onBeforeUnmount(() => {
         <!-- sticky action bar -->
         <div class="ts-actionbar">
           <div class="ts-actionbar__summary">
+            <template v-if="styleReference">
+              <span class="is-ok"><Check :size="13" />同款参考视频</span>
+              <span :class="{ 'is-ok': styleProductIds.length }"><Check v-if="styleProductIds.length" :size="13" /><i v-else />商品 {{ styleProductIds.length }}</span>
+            </template>
+            <template v-else>
             <span :class="{ 'is-ok': referenceImagePaths.length }"><Check v-if="referenceImagePaths.length" :size="13" /><i v-else />{{ tr("autoUi.k_2132324c5c89") }} {{ referenceImagePaths.length }}</span>
             <span :class="{ 'is-ok': selectedProductId }"><Check v-if="selectedProductId" :size="13" /><i v-else />{{ selectedProduct?.name || tr("autoUi.k_004922066efd") }}</span>
+            </template>
             <small><ShieldCheck :size="13" />{{ tr("autoUi.k_b8ef551f9203") }}</small>
           </div>
           <button
             class="vg-btn vg-btn--primary vg-btn--lg ts-create-btn"
             type="button"
             data-testid="tiktok-create-reference"
-            :disabled="creating || !referenceImagePaths.length || !selectedProductId"
+            :disabled="creating || (styleReference ? !styleProductIds.length : !referenceImagePaths.length || !selectedProductId)"
             @click="createTasks"
           >
             <LoaderCircle v-if="creating" :size="16" class="vg-spin" /><Sparkles v-else :size="16" />
-            {{ creating ? tr("autoUi.k_14b16d7121c1") : tr("autoUi.k_dbb37b794ab3", { p0: referenceImagePaths.length }) }}
+            {{ creating ? tr("autoUi.k_14b16d7121c1") : styleReference ? `生成 ${styleProductIds.length} 条同款视频` : tr("autoUi.k_dbb37b794ab3", { p0: referenceImagePaths.length }) }}
           </button>
         </div>
       </div>
@@ -6091,6 +6142,14 @@ onBeforeUnmount(() => {
       :selected-id="selectedProductId"
       @close="productPickerOpen = false"
       @select="selectedProductId = $event"
+    />
+    <ProductSelectDialog
+      :open="styleProductPickerOpen"
+      :products="products"
+      multiple
+      :selected-ids="styleProductIds"
+      @close="styleProductPickerOpen = false"
+      @select-many="styleProductIds = $event"
     />
     <RuntimeLogDialog
       v-if="runtimeTask"

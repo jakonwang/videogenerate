@@ -90,6 +90,13 @@ export type TiktokCreativeShotTask = {
   subtitleAppliedAt?: number
   exportedAt?: number
   exportedVideoPath?: string
+  /** 同款模板 this shot copies; its first frame is imagePath. */
+  styleReferenceId?: string
+  /** Template's closing frame, product swapped in before the image-to-video call. */
+  lastFrameReferencePath?: string
+  lastFramePreparation?: ExternalReferenceImagePreparationState
+  /** Closing-frame swap failed; fall back to the zoomed first frame. */
+  lastFrameFallback?: boolean
   /** Clone shot this shot was made for (clone → tk创意室). */
   sourceCloneShotId?: string
   /** Swap the finished video into that clone shot automatically. */

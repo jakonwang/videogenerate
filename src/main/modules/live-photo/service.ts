@@ -7,6 +7,7 @@ import { runFfmpeg } from '../ffmpeg/runner'
 import { getAppPaths } from '../../lib/paths'
 import { productsRepo } from '../products/repo'
 import { cloneRepo } from '../clone/repo'
+import { buildStyleReferenceMotionPrompt, styleReferenceService } from '../style-reference/service'
 import { analyzeProductStructureWithGrs, type ProductAnalysisResult } from '../clone/aiScriptAnalyzer'
 import {
   buildGptFramePrompt,
@@ -920,10 +921,48 @@ function livePhotoMotionText(template: LivePhotoMotionTemplate) {
   return 'product fully frozen, with only extremely subtle non-product micro-movement and no push-in'
 }
 
+/**
+ * 同款模板: copy the reference clip's camera work and look instead of the default
+ * near-static hold. The default negative list bans push-ins, orbits and handheld
+ * movement, so this branch uses its own lean list that only guards the product.
+ */
+function buildStyleReferenceLivePhotoVideoPrompts(input: { item: LivePhotoItem; styleReference: NonNullable<LivePhotoItem['styleReference']> }) {
+  const categorySpecificRules = input.item.productSnapshot
+    ? buildLivePhotoCategorySpecificPromptRules(input.item.productSnapshot, 'video')
+    : []
+  const positivePrompt = [
+    buildStyleReferenceMotionPrompt({ ...input.styleReference, durationSec: 6, hasLastFrame: false }),
+    ...(categorySpecificRules.length ? ['', ...categorySpecificRules] : []),
+  ].join('\n')
+  const negativePrompt = [
+    'product reconstruction',
+    'product redesign',
+    'wrong product identity',
+    'different product',
+    'product morphing',
+    'product warping',
+    'wrong product scale',
+    'scale drift',
+    'extra product parts',
+    'extra hands',
+    'extra fingers',
+    'distorted hands',
+    'scene change',
+    'hard cut',
+    'camera jitter',
+    'flicker',
+    'text',
+    'watermark',
+    'logo',
+  ].join(', ')
+  return { positivePrompt, negativePrompt }
+}
+
 function buildLivePhotoVideoPrompts(input: {
   shot: ShotSpec
   item: LivePhotoItem
 }) {
+  if (input.item.styleReference) return buildStyleReferenceLivePhotoVideoPrompts({ item: input.item, styleReference: input.item.styleReference })
   const normalizedAnalysis = normalizeLivePhotoProductAnalysis(input.item.productSnapshot?.productAnalysis)
   const categorySpecificRules = input.item.productSnapshot
     ? buildLivePhotoCategorySpecificPromptRules(input.item.productSnapshot, 'video')
@@ -4686,7 +4725,20 @@ function enqueueLivePhotoAutoFlow(
 }
 
 async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInput) {
-  const referenceImagePaths = normalizeLivePhotoScenePaths(input)
+  const template = input.styleReferenceId ? await styleReferenceService.get(input.styleReferenceId) : undefined
+  if (input.styleReferenceId && !template) throw new Error('同款模板不存在，请重新上传参考视频')
+  const styleReference: LivePhotoItem['styleReference'] = template
+    ? {
+        id: template.id,
+        videoName: template.videoName,
+        camera: template.camera,
+        action: template.action,
+        lighting: template.lighting,
+        background: template.background,
+        style: template.style,
+      }
+    : undefined
+  const referenceImagePaths = template ? [template.firstFramePath] : normalizeLivePhotoScenePaths(input)
   const product = await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
   const promptVersion = livePhotoPromptVersionService.getActive('video')
@@ -4709,6 +4761,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
       productId: product.id,
       productSnapshot: product,
       referenceImagePath,
+      styleReference,
       packagingStatus: 'processing',
       promptPreview: buildReferencePromptPreview({ product, referenceImagePath }),
       imagePromptPreview: imagePromptPreview,
@@ -4722,6 +4775,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
           productId: product.id,
           productSnapshot: product,
           referenceImagePath,
+          styleReference,
           packagingStatus: 'processing',
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -4741,6 +4795,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
         buildLivePhotoLog('[live-photo] reference task created'),
         buildLivePhotoLog(`[live-photo] reference image selected: ${referenceImagePath}`),
         buildLivePhotoLog(`[live-photo] product selected: ${product.name}`),
+        ...(styleReference ? [buildLivePhotoLog(`[live-photo] 同款模板: ${styleReference.videoName}`)] : []),
       ],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -5239,6 +5294,18 @@ export const livePhotoService = {
     const queued = await createReferenceProcessingItems(input)
     startReferenceCompletionBatch(queued)
     return queued.referenceImagePaths.length === 1 ? queued.created[0] : queued.created
+  },
+
+  /** 同款批量：one item per product, all copying the same reference clip. */
+  async createFromStyleReference(input: { styleReferenceId: string; productIds: string[] }) {
+    const productIds = Array.from(new Set((Array.isArray(input.productIds) ? input.productIds : []).map((id) => String(id || '').trim()).filter(Boolean)))
+    if (!productIds.length) throw new Error('请至少选择一个商品')
+    const batches = []
+    for (const productId of productIds) {
+      batches.push(await createReferenceProcessingItems({ productId, styleReferenceId: input.styleReferenceId }))
+    }
+    batches.forEach((queued) => startReferenceCompletionBatch(queued))
+    return { count: batches.length, ids: batches.flatMap((queued) => queued.created.map((item) => item.id)) }
   },
 
   async createFromCloneShots(input: CreateCloneShotLivePhotosInput) {

@@ -192,6 +192,16 @@ export type LivePhotoItem = {
   productSnapshot?: LivePhotoProductSnapshot
   cloneShotSnapshot?: LivePhotoCloneShotSnapshot
   referenceImagePath?: string
+  /** 同款模板 this item copies: camera work and look of a reference clip. */
+  styleReference?: {
+    id: string
+    videoName: string
+    camera: string
+    action: string
+    lighting: string
+    background: string
+    style: string
+  }
   generatedStillPath?: string
   originalMotionVideoPath?: string
   motionVideoPath?: string
@@ -253,6 +263,8 @@ export type CreateReferenceLivePhotoInput = {
   referenceImagePaths?: string[]
   productId: string
   motionTemplate?: LivePhotoMotionTemplate
+  /** 同款模板: use its opening frame as the scene and its camera work as the motion. */
+  styleReferenceId?: string
 }
 
 export type CreateCloneShotLivePhotosInput = {
