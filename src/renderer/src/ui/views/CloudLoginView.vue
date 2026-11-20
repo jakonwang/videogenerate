@@ -16,6 +16,7 @@ const cloudAuth = useCloudAuthStore()
 const tab = ref<'login' | 'register'>('login')
 const account = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const displayName = ref('')
 const submitting = ref(false)
 const error = ref('')
@@ -33,8 +34,12 @@ function goNext() {
 }
 
 async function submit() {
-  submitting.value = true
   error.value = ''
+  if (tab.value === 'register' && password.value !== confirmPassword.value) {
+    error.value = t('cloud.login.passwordMismatch')
+    return
+  }
+  submitting.value = true
   try {
     const result =
       tab.value === 'login'
@@ -46,6 +51,7 @@ async function submit() {
     }
     cloudAuth.setStatus(result.status)
     password.value = ''
+    confirmPassword.value = ''
     if (!result.activation.ok && result.activation.reason === 'device_limit') {
       devices.value = (result.activation.devices ?? []) as typeof devices.value
     }
@@ -166,6 +172,10 @@ onMounted(async () => {
             <span v-if="tab === 'register'" class="vg-field__hint">{{ t('cloud.login.passwordHint') }}</span>
           </div>
           <div v-if="tab === 'register'" class="vg-field">
+            <label for="cloud-confirm-password">{{ t('cloud.login.confirmPassword') }}</label>
+            <input id="cloud-confirm-password" v-model="confirmPassword" class="vg-input" type="password" autocomplete="new-password" required data-testid="cloud-login-confirm-password" />
+          </div>
+          <div v-if="tab === 'register'" class="vg-field">
             <label for="cloud-display-name">{{ t('cloud.login.displayName') }}</label>
             <input id="cloud-display-name" v-model="displayName" class="vg-input" autocomplete="nickname" />
           </div>
@@ -178,7 +188,7 @@ onMounted(async () => {
                 : tab === 'login' ? t('cloud.login.submitLogin') : t('cloud.login.submitRegister')
             }}
           </button>
-          <button type="button" class="vg-link cloud-login__switch" @click="(tab = tab === 'login' ? 'register' : 'login'), (error = '')">
+          <button type="button" class="vg-link cloud-login__switch" @click="(tab = tab === 'login' ? 'register' : 'login'), (error = ''), (confirmPassword = '')">
             {{ tab === 'login' ? t('cloud.login.toRegister') : t('cloud.login.toLogin') }}
           </button>
         </form>

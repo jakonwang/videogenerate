@@ -7,6 +7,8 @@
     "account": "Số điện thoại hoặc email",
     "password": "Mật khẩu",
     "passwordHint": "Ít nhất 8 ký tự",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "passwordMismatch": "Hai mật khẩu không khớp",
     "displayName": "Biệt danh (không bắt buộc)",
     "submitLogin": "Đăng nhập",
     "submitRegister": "Đăng ký và đăng nhập",

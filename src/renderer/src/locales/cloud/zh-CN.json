@@ -7,6 +7,8 @@
     "account": "手机号或邮箱",
     "password": "密码",
     "passwordHint": "至少 8 位",
+    "confirmPassword": "确认密码",
+    "passwordMismatch": "两次输入的密码不一致",
     "displayName": "昵称（可选）",
     "submitLogin": "登录",
     "submitRegister": "注册并登录",

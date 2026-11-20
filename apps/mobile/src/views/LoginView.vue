@@ -14,7 +14,7 @@ import { requestSync } from '@/lib/sync'
 
 const router = useRouter()
 const route = useRoute()
-const form = reactive({ account: '', password: '', displayName: '' })
+const form = reactive({ account: '', password: '', confirmPassword: '', displayName: '' })
 /** 网页版（电脑浏览器）用电脑端的登录页样式，并支持注册 */
 const tab = ref<'login' | 'register'>('login')
 const busy = ref(false)
@@ -37,6 +37,10 @@ async function saveServer() {
 async function submit() {
   if (!form.account.trim() || !form.password) {
     error.value = '请输入账号和密码'
+    return
+  }
+  if (tab.value === 'register' && form.password !== form.confirmPassword) {
+    error.value = '两次输入的密码不一致'
     return
   }
   busy.value = true
@@ -85,6 +89,10 @@ async function submit() {
             <span v-if="tab === 'register'" class="vg-field__hint">至少 8 位</span>
           </div>
           <div v-if="tab === 'register'" class="vg-field">
+            <label for="web-confirm-password">确认密码</label>
+            <input id="web-confirm-password" v-model="form.confirmPassword" class="vg-input" type="password" autocomplete="new-password" required />
+          </div>
+          <div v-if="tab === 'register'" class="vg-field">
             <label for="web-display-name">昵称（可选）</label>
             <input id="web-display-name" v-model="form.displayName" class="vg-input" autocomplete="nickname" />
           </div>
@@ -93,7 +101,7 @@ async function submit() {
             <LoaderCircle v-if="busy" :size="16" class="vg-spin" />
             {{ busy ? (tab === 'login' ? '登录中…' : '注册中…') : tab === 'login' ? '登录' : '注册并登录' }}
           </button>
-          <button type="button" class="vg-link cloud-login__switch" @click="(tab = tab === 'login' ? 'register' : 'login'), (error = '')">
+          <button type="button" class="vg-link cloud-login__switch" @click="(tab = tab === 'login' ? 'register' : 'login'), (error = ''), (form.confirmPassword = '')">
             {{ tab === 'login' ? '没有账号？注册' : '已有账号？登录' }}
           </button>
         </form>
