@@ -3,9 +3,8 @@
 #   /app/*     网页版（云服务提供）
 #   /updates/* 桌面端自动更新文件（服务器 /srv/apps/<实例>/shared/update/）
 #   其他       官网 + 用户中心 + 后台（Next.js）
-# 同时服务三个地址：主域名、不带 www 的根域名，以及旧域名 tiktokcut.banono-us.com。
-# 已安装的桌面端 / 安卓 App 连的是旧域名，去掉它会让老用户无法登录和更新，别删。
-${DOMAIN}, klipmill.com, tiktokcut.banono-us.com {
+# 主域名 + 不带 www 的根域名（用户手动输入 klipmill.com 也能打开）
+${DOMAIN}, klipmill.com {
 	encode zstd gzip
 
 	# 电脑端 AI 代理：平台 Key 只在服务器，生成请求经这里转发并扣点。
