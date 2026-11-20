@@ -27,7 +27,7 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
           - arch: x64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
@@ -72,10 +72,18 @@ jobs:
       - name: 检查产物
         run: |
           ls -la release
-          APP="release/mac$([ "${{ matrix.arch }}" = "arm64" ] && echo -arm64)/Klipmill.app"
-          test -d "$APP"
-          file "$APP/Contents/MacOS/Klipmill"
-          find "$APP/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release" -name '*.node' -exec file {} \;
+          ls -la release/mac* || true
+          APP=$(find release -maxdepth 2 -name '*.app' -type d | head -1)
+          echo "app: $APP"
+          test -n "$APP"
+          file "$APP/Contents/MacOS/"*
+          # 数据库原生模块必须在包里、而且是这台机器的 CPU 架构，否则程序一启动就崩
+          NODE=$(find "$APP/Contents/Resources" -name 'better_sqlite3.node' | head -1)
+          echo "better-sqlite3: $NODE"
+          test -n "$NODE"
+          file "$NODE"
+          file "$NODE" | grep -q "${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}"
+          ls -la "$APP/Contents/Resources/creatok" || true
           codesign -dv "$APP" 2>&1 | head -5 || true
 
       - uses: actions/upload-artifact@v4
