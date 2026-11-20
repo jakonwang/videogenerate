@@ -7,6 +7,7 @@
  * - 选素材（视频拆解图片库）：网页版图生图素材接口（云端数据，路径是 cloudfile:，引擎用的时候自动下载）。
  * - 导出：引擎导到用户自己的目录，再由浏览器逐个下载。
  * - 字幕视频：服务器装好 Remotion 前，引擎会提示「即将支持」。
+ * - 同款参考视频：分析走 livePhoto 通道（analyzeStyleReference），批量生成（createFromStyleReference）原样交给引擎。
  */
 import { cloud, errorMessage } from '../session'
 import { fileBlob } from '../files'
@@ -39,6 +40,11 @@ async function exportItems(payload: { ids: string[]; outputDir?: string; setting
 /** 这个页面打开期间替换的 window.api 部分（其余 livePhoto 方法原样交给服务器引擎） */
 export default {
   livePhoto: { exportItems },
+  // 同款参考视频：上传的视频（cloudfile:）由引擎下载后分析，首尾帧留在引擎里
+  styleReference: {
+    analyze: (payload: { videoPath: string }) => engine<unknown>('livePhoto', 'analyzeStyleReference', [payload]),
+    list: async () => [],
+  },
   products: { list: () => engine<unknown[]>('products', 'list', []) },
   productImageMaterials: {
     listMaterials: imageMaterialsApi.productImageMaterials.listMaterials,

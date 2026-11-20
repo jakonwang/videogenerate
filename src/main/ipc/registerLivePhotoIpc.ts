@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron'
 import { livePhotoService } from '../modules/live-photo/service'
+import { styleReferenceService } from '../modules/style-reference/service'
 
 export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:list', async () => await livePhotoService.list())
@@ -25,6 +26,8 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:livePhoto:startClone', async (_e, payload) => await livePhotoService.startCloneItems(payload))
   ipcMain.handle('plugin:livePhoto:createFromReference', async (_e, payload) => await livePhotoService.createFromReference(payload))
   ipcMain.handle('plugin:livePhoto:createFromStyleReference', async (_e, payload) => await livePhotoService.createFromStyleReference(payload))
+  // Web: the page's 同款参考视频 analysis runs on the server engine, which only forwards livePhoto channels.
+  ipcMain.handle('plugin:livePhoto:analyzeStyleReference', async (_e, payload) => await styleReferenceService.analyze(payload))
   ipcMain.handle('plugin:livePhoto:createFromCloneShots', async (_e, payload) => await livePhotoService.createFromCloneShots(payload))
   ipcMain.handle(
     'plugin:livePhoto:applySubtitleVideoToItem',
