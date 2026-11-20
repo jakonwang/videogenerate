@@ -51,7 +51,7 @@ public class PublishPlugin extends Plugin {
             try {
                 String mime = mimeOf(call);
                 File video = download(call);
-                String name = "Vidloom_" + System.currentTimeMillis() + extOf(mime);
+                String name = "Klipmill_" + System.currentTimeMillis() + extOf(mime);
                 Uri saved = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? saveWithMediaStore(video, name, mime) : saveLegacy(video, name, mime);
                 JSObject result = new JSObject();
                 result.put("uri", saved == null ? "" : saved.toString());
@@ -153,7 +153,7 @@ public class PublishPlugin extends Plugin {
         ContentValues values = new ContentValues();
         values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-        values.put(MediaStore.MediaColumns.RELATIVE_PATH, (image ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_MOVIES) + "/Vidloom");
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, (image ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_MOVIES) + "/Klipmill");
         values.put(MediaStore.MediaColumns.IS_PENDING, 1);
         Uri uri = resolver.insert(image ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI : MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
         if (uri == null) throw new IllegalStateException("MediaStore insert");
@@ -170,7 +170,7 @@ public class PublishPlugin extends Plugin {
     /** Android 8–9：写到公共 Movies 目录并通知图库（需要存储权限，清单里已按 maxSdk 28 声明） */
     @SuppressWarnings("deprecation")
     private Uri saveLegacy(File video, String name, String mime) throws Exception {
-        File dir = new File(Environment.getExternalStoragePublicDirectory(isImage(mime) ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_MOVIES), "Vidloom");
+        File dir = new File(Environment.getExternalStoragePublicDirectory(isImage(mime) ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_MOVIES), "Klipmill");
         if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("media dir");
         File target = new File(dir, name);
         try (InputStream in = new FileInputStream(video); OutputStream out = new FileOutputStream(target)) {

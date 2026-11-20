@@ -41,7 +41,7 @@ const LOCAL: Partial<Record<RelayNamespace, Record<string, (...args: any[]) => u
   },
   dianxiaomiInventory: {
     openLogin: async () => {
-      throw new Error('店小秘登录要在电脑端完成：打开电脑上的 Vidloom → 店小秘库存 → 登录')
+      throw new Error('店小秘登录要在电脑端完成：打开电脑上的 Klipmill → 店小秘库存 → 登录')
     },
   },
   tiktokCreatorHub: {

@@ -87,7 +87,7 @@ async function main() {
     }
 
     // ---- text watermark keeps size and sound
-    let job = await runJob({ kind: 'watermark', videoFileId: videoId, options: { text: 'Vidloom 官方', position: 'br', opacity: 0.8 } })
+    let job = await runJob({ kind: 'watermark', videoFileId: videoId, options: { text: 'Klipmill 官方', position: 'br', opacity: 0.8 } })
     let info = probe(await download(job.outputFileId!, 'wm-text.mp4'))
     assert.equal(info.streams.find((s: any) => s.codec_type === 'video').width, 360)
     assert.ok(info.streams.some((s: any) => s.codec_type === 'audio'), 'audio kept')

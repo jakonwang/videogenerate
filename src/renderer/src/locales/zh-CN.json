@@ -2065,7 +2065,7 @@
   },
   "auth": {
     "title": "授权激活",
-    "subtitle": "输入授权码以继续使用 Vidloom",
+    "subtitle": "输入授权码以继续使用 Klipmill",
     "machineId": "机器标识",
     "licenseKey": "授权码",
     "licensePlaceholder": "请输入你的授权码",
@@ -2423,7 +2423,7 @@
       "cancel": "取消配对",
       "actionComplete": "操作已经完成。",
       "unknownError": "操作失败，请稍后重试。",
-      "restartRequired": "桌面服务尚未更新，请完全退出并重新启动 Vidloom。"
+      "restartRequired": "桌面服务尚未更新，请完全退出并重新启动 Klipmill。"
     },
     "actions": {
       "checkUpdates": "检查更新",
@@ -4457,7 +4457,7 @@
       "modelAuthenticationRequired": "Hermes 已正常运行，但模型认证无效或尚未配置。请在当前工作台的模型设置中更新。",
       "modelSettings": {
         "title": "模型设置",
-        "subtitle": "无需离开 Vidloom 即可配置 Hermes 推理服务",
+        "subtitle": "无需离开 Klipmill 即可配置 Hermes 推理服务",
         "provider": "模型服务",
         "customProvider": "自定义兼容端点",
         "endpoint": "接口地址",

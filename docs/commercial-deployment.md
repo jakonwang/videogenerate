@@ -1,6 +1,6 @@
-# Vidloom 商业化部署与运营手册
+# Klipmill 商业化部署与运营手册
 
-本文说明 Vidloom 上线后的真实使用流程、服务器部署方式，以及客户端发版和自动更新。
+本文说明 Klipmill 上线后的真实使用流程、服务器部署方式，以及客户端发版和自动更新。
 云端服务的接口与环境变量细节见 `services/cloud/README.md`。
 
 ---
@@ -8,7 +8,7 @@
 ## 1. 整体结构
 
 ```
-用户电脑（Windows 客户端 Vidloom）
+用户电脑（Windows 客户端 Klipmill）
    │  登录、激活设备、拉取授权令牌与软件设置、扫码购买
    ▼
 api.你的域名  ── 云端服务 services/cloud（Node + SQLite，端口 18300）
@@ -178,8 +178,8 @@ $env:VG_CLOUD_API_BASE = "https://api.你的域名"; npm run dist:internal
 
 打包结果在 `release/` 目录：
 
-- `Vidloom-<版本>-Setup.exe`：安装包
-- `Vidloom-<版本>-Setup.exe.blockmap`：增量更新用
+- `Klipmill-<版本>-Setup.exe`：安装包
+- `Klipmill-<版本>-Setup.exe.blockmap`：增量更新用
 - `latest.yml`：更新描述文件（客户端靠它发现新版本）
 
 打包前务必确认 `src/shared/cloud/entitlementPublicKey.ts` 是 4.3 生成的正式公钥。

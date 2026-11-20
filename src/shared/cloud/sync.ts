@@ -342,7 +342,7 @@ export type SyncVideoToolRun = {
   kind: import('./videoTools').VideoToolKind
   jobId: string
   status: SyncJobState
-  /** 给人看的说明，如「文字水印：Vidloom」「每段 30 秒」 */
+  /** 给人看的说明，如「文字水印：Klipmill」「每段 30 秒」 */
   label: string
   inputFileIds: string[]
   /** 原始文件名（和 inputFileIds 一一对应，显示用） */

@@ -2572,7 +2572,7 @@
   },
   "auth": {
     "title": "License Activation",
-    "subtitle": "Enter your license key to continue using Vidloom",
+    "subtitle": "Enter your license key to continue using Klipmill",
     "machineId": "Machine ID",
     "licenseKey": "License Key",
     "licensePlaceholder": "Enter your license key",
@@ -2839,7 +2839,7 @@
     },
     "hermesManagement": {
       "title": "Hermes Management",
-      "subtitle": "Manage the runtime, models, skills, channels, memory, and backups without leaving Vidloom.",
+      "subtitle": "Manage the runtime, models, skills, channels, memory, and backups without leaving Klipmill.",
       "tabs": {
         "runtime": "Runtime",
         "models": "Models",
@@ -2928,7 +2928,7 @@
       "cancel": "Cancel pairing",
       "actionComplete": "Action completed.",
       "unknownError": "The operation failed. Try again.",
-      "restartRequired": "The desktop service is out of date. Fully quit and restart Vidloom."
+      "restartRequired": "The desktop service is out of date. Fully quit and restart Klipmill."
     },
     "actions": {
       "checkUpdates": "Check Updates",
@@ -4466,13 +4466,13 @@
       "diagnostics": "Runtime diagnostics",
       "runtimeHint": "Hermes is required for the home workspace.",
       "idleTitle": "What should your AI employees handle?",
-      "idleSubtitle": "Ask a question or assign a complete workflow. Hermes can reason, use skills and memory, delegate work, and call approved Vidloom capabilities.",
+      "idleSubtitle": "Ask a question or assign a complete workflow. Hermes can reason, use skills and memory, delegate work, and call approved Klipmill capabilities.",
       "sessionUnavailable": "The Hermes session could not be created.",
       "generationFailed": "Hermes could not complete this response.",
       "modelAuthenticationRequired": "Hermes is running, but its model authentication is invalid or missing. Open the model settings in this workspace to update it.",
       "modelSettings": {
         "title": "Model settings",
-        "subtitle": "Configure Hermes inference without leaving Vidloom",
+        "subtitle": "Configure Hermes inference without leaving Klipmill",
         "provider": "Provider",
         "customProvider": "Custom compatible endpoint",
         "endpoint": "Endpoint URL",

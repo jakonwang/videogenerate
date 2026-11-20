@@ -116,7 +116,7 @@ public final class ResearchEvents {
         if (current != null && snapshot != null) current.onTask(snapshot);
     }
 
-    /** A finished phone-side task brings Vidloom back to the front so the user sees the results. */
+    /** A finished phone-side task brings Klipmill back to the front so the user sees the results. */
     static void returnToApp(Context context) {
         Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         if (launch == null) return;

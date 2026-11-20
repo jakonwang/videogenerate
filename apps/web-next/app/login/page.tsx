@@ -128,7 +128,7 @@ export default function LoginPage() {
       <aside className="relative hidden overflow-hidden border-r border-[var(--border-base)] bg-[var(--bg-shell)] p-12 lg:flex lg:flex-col">
         <Link href="/" className="flex items-center gap-2.5">
           <BrandMark size={32} />
-          <span className="text-[17px] font-semibold">Vidloom</span>
+          <span className="text-[17px] font-semibold">Klipmill</span>
         </Link>
         <div className="my-auto grid max-w-[440px] gap-5">
           <h2 className="text-[34px] font-semibold leading-[1.15] tracking-[-0.03em]">一条爆款，批量变成你的带货视频</h2>
@@ -138,12 +138,12 @@ export default function LoginPage() {
             <li>· 微信 / 支付宝扫码开通，时长可叠加</li>
           </ul>
         </div>
-        <p className="text-sm text-[var(--text-muted)]">© {new Date().getFullYear()} Vidloom</p>
+        <p className="text-sm text-[var(--text-muted)]">© {new Date().getFullYear()} Klipmill</p>
       </aside>
       <main className="flex flex-col px-4 py-8 sm:px-8">
         <Link href="/" className="flex items-center gap-2.5 lg:hidden">
           <BrandMark size={28} />
-          <span className="font-semibold">Vidloom</span>
+          <span className="font-semibold">Klipmill</span>
         </Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <Suspense>

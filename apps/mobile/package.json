@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Vidloom 手机端（Vue 3 + Capacitor）",
+  "description": "Klipmill 手机端（Vue 3 + Capacitor）",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",

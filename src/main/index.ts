@@ -946,8 +946,8 @@ app.whenReady().then(async () => {
   markStartupStage('window-created')
   try {
     crashReporter.start({
-        productName: 'Vidloom',
-      companyName: 'Vidloom',
+        productName: 'Klipmill',
+      companyName: 'Klipmill',
       submitURL: '',
       uploadToServer: false,
       compress: false,
@@ -1013,7 +1013,7 @@ app.whenReady().then(async () => {
         })
         if (!mainWindow || mainWindow.isDestroyed()) {
           dialog.showErrorBox(
-            'Vidloom Startup Failed',
+            'Klipmill Startup Failed',
             String(error?.message ?? error ?? 'Unknown startup error'),
           )
         }

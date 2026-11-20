@@ -1,6 +1,6 @@
 # 项目档案：Moordesk「概览」页显示的内容。和代码一起提交，换电脑、交接都不会丢。
 # title 名称 · tagline 一句话介绍 · kind 类型 · stage 阶段 · entries 入口地址 · modules 功能模块（status：规划中 / 开发中 / 测试中 / 已上线 / 已下线）· stack 技术栈
-title: Vidloom
+title: Klipmill
 tagline: 批量生成 TikTok 带货短视频：桌面工作台 + 网页版 + 云同步
 kind: 产品
 stage: 已上线（桌面端 v5）

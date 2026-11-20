@@ -25,7 +25,7 @@ const native = registerPlugin<PublishPluginApi>('Publish')
 export const publishAvailable = true
 export const publishLabels = isWeb
   ? { gallery: '下载', galleryDone: '已下载，可在浏览器的下载列表里找到', other: '分享 / 下载' }
-  : { gallery: '存到相册', galleryDone: '已保存到相册「Movies/Vidloom」', other: '其他应用' }
+  : { gallery: '存到相册', galleryDone: '已保存到相册「Movies/Klipmill」', other: '其他应用' }
 
 /** Web upload pages the browser opens after downloading the video. */
 const WEB_UPLOAD_PAGES: Record<'tiktok' | 'douyin', string> = {

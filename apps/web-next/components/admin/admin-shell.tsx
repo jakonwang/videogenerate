@@ -115,7 +115,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <Link href="/admin" className="admin-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand-logo.png" alt="" className="admin-brand__mark" draggable={false} />
-          <span className="admin-brand__name">Vidloom</span>
+          <span className="admin-brand__name">Klipmill</span>
           <span className="admin-brand__tag">管理后台</span>
         </Link>
         <nav className="admin-crumbs" aria-label="当前位置">

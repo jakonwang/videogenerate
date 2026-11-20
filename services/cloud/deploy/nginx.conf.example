@@ -1,4 +1,4 @@
-# Vidloom · Nginx 示例（把 example.com 换成你的域名，证书用 certbot 或云厂商证书）
+# Klipmill · Nginx 示例（把 example.com 换成你的域名，证书用 certbot 或云厂商证书）
 #   www.example.com    官网 + 用户中心 + 管理后台（/admin）  -> Next.js :18280
 #   api.example.com    云端 API（客户端、网页、支付回调都走这里） -> :18300
 #   update.example.com 客户端安装包与自动更新文件（静态目录）

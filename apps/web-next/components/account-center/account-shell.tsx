@@ -49,7 +49,7 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center gap-4 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark size={30} />
-            <span className="font-semibold">Vidloom</span>
+            <span className="font-semibold">Klipmill</span>
           </Link>
           <span className="hidden text-sm text-[var(--text-muted)] sm:inline">用户中心</span>
           <div className="ml-auto flex items-center gap-2">

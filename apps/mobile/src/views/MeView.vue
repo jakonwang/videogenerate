@@ -183,7 +183,7 @@ async function logout() {
             <dl class="vg-kv">
               <dt>服务器</dt><dd>{{ session.baseUrl }}</dd>
               <dt>本机标识</dt><dd>{{ session.deviceId }}</dd>
-              <dt>版本</dt><dd>Vidloom 网页版 v{{ APP_VERSION }}</dd>
+              <dt>版本</dt><dd>Klipmill 网页版 v{{ APP_VERSION }}</dd>
             </dl>
           </template>
         </section>
@@ -254,7 +254,7 @@ async function logout() {
     <section class="m-section">
       <button type="button" class="m-btn m-btn--danger m-btn--block" @click="logout"><LogOut :size="18" /> 退出登录</button>
     </section>
-    <p class="version">Vidloom {{ isWeb ? '网页版' : '手机版' }} v{{ APP_VERSION }}</p>
+    <p class="version">Klipmill {{ isWeb ? '网页版' : '手机版' }} v{{ APP_VERSION }}</p>
   </main>
   </template>
 </template>

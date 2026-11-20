@@ -105,7 +105,7 @@ public class ResearchPlugin extends Plugin {
             JSONObject qr = new JSONObject(scan.getContents());
             pair(call, qr.getString("endpoint"), qr.getString("pairingCode"));
         } catch (Exception error) {
-            call.reject("不是 Vidloom 的配对二维码", "INVALID_QR");
+            call.reject("不是 Klipmill 的配对二维码", "INVALID_QR");
         }
     }
 

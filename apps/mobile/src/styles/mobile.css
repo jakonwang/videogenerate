@@ -1,4 +1,4 @@
-/* Vidloom 手机端：沿用桌面端 themes.css 的颜色变量（--theme-*），这里只定义移动端版式。 */
+/* Klipmill 手机端：沿用桌面端 themes.css 的颜色变量（--theme-*），这里只定义移动端版式。 */
 
 :root {
   --m-gutter: 16px;

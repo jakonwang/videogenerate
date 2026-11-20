@@ -1,4 +1,4 @@
-# Vidloom 云端服务（services/cloud）
+# Klipmill 云端服务（services/cloud）
 
 账号、会员授权、扫码支付、兑换码、全局配置与管理后台 API。桌面端和 Web 管理后台（`apps/web-next/app/admin`）都连这里。
 

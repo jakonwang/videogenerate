@@ -142,7 +142,7 @@ const productResearch = {
     // Phone captures without a computer yet: a read-only 手机采集 scheme.
     if (!schemes.some((s) => s.id === MOBILE_SCHEME_ID) && results.some((r) => r.schemeId === MOBILE_SCHEME_ID)) {
       const ts = Math.max(...results.filter((r) => r.schemeId === MOBILE_SCHEME_ID).map((r) => r.capturedAt))
-      schemes.push({ id: MOBILE_SCHEME_ID, name: '手机采集', need: '在 Vidloom 手机 App 上直接采集的抖音商品', market: '抖音', status: 'active', sopStage: 2, keywordCount: 0, resultCount: results.filter((r) => r.schemeId === MOBILE_SCHEME_ID).length, candidateCount: 0, createdAt: ts, updatedAt: ts })
+      schemes.push({ id: MOBILE_SCHEME_ID, name: '手机采集', need: '在 Klipmill 手机 App 上直接采集的抖音商品', market: '抖音', status: 'active', sopStage: 2, keywordCount: 0, resultCount: results.filter((r) => r.schemeId === MOBILE_SCHEME_ID).length, candidateCount: 0, createdAt: ts, updatedAt: ts })
     }
     return schemes.sort((a, b) => b.updatedAt - a.updatedAt)
   },
@@ -201,7 +201,7 @@ const productResearch = {
     const keyword = String(input.keyword || '').trim()
     if (!keyword) throw new Error('Keyword is required.')
     const { record, online } = await status()
-    if (!online) throw new Error('电脑端不在线：采集任务要由电脑派发给连接的手机，请打开电脑上的 Vidloom')
+    if (!online) throw new Error('电脑端不在线：采集任务要由电脑派发给连接的手机，请打开电脑上的 Klipmill')
     if (!record?.devices.some((device) => device.connected)) throw new Error('No paired phone is online.')
     const id = await sendRequest({ action: 'createTask', keyword, schemeId: input.schemeId, sort: input.sort, targetCount: input.targetCount })
     return { id: `req:${id}`, schemeId: input.schemeId, keyword, sort: input.sort ?? 'sales', targetCount: input.targetCount ?? 100, status: 'queued', collectedCount: 0, createdAt: Date.now() } as ProductResearchTask
@@ -236,7 +236,7 @@ const productResearch = {
   },
 
   async createPairing(): Promise<never> {
-    throw new Error('手机配对需要在电脑端操作：打开电脑上的 Vidloom →「选品」→「连接手机」，配对后这里会显示在线手机。')
+    throw new Error('手机配对需要在电脑端操作：打开电脑上的 Klipmill →「选品」→「连接手机」，配对后这里会显示在线手机。')
   },
 }
 

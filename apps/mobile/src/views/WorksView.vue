@@ -82,7 +82,7 @@ function toGallery() {
   if (!item?.outputFileId || needNative()) return
   void run('gallery', async () => {
     await saveToGallery({ fileId: item.outputFileId!, label: labelOf(item), generationId: item.id, mime: item.outputMime })
-    toast(isWeb ? publishLabels.galleryDone : item.kind === 'image' ? '已保存到相册「Pictures/Vidloom」' : '已保存到相册「Movies/Vidloom」')
+    toast(isWeb ? publishLabels.galleryDone : item.kind === 'image' ? '已保存到相册「Pictures/Klipmill」' : '已保存到相册「Movies/Klipmill」')
   })
 }
 

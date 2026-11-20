@@ -50,7 +50,7 @@ onBeforeUnmount(() => {
       <div class="vg-scope dm-bar">
         <div class="vg-notice vg-notice--warning dm-offline">
           <Monitor :size="16" />
-          <span><strong>电脑端不在线。</strong>{{ reason ?? `${title}要用电脑上登录的 TikTok 账号执行` }}，打开电脑上的 Vidloom（登录同一账号）后，这里会显示和电脑上完全一样的页面，所有操作实时交给电脑执行。{{ offlineNote ?? '下面是电脑上次同步的摘要。' }}</span>
+          <span><strong>电脑端不在线。</strong>{{ reason ?? `${title}要用电脑上登录的 TikTok 账号执行` }}，打开电脑上的 Klipmill（登录同一账号）后，这里会显示和电脑上完全一样的页面，所有操作实时交给电脑执行。{{ offlineNote ?? '下面是电脑上次同步的摘要。' }}</span>
           <button type="button" class="vg-btn vg-btn--sm" :disabled="checking" @click="check"><RefreshCw :size="14" :class="{ 'vg-spin': checking }" /> 重新检测</button>
         </div>
       </div>

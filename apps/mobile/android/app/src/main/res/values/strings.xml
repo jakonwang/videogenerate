@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Vidloom</string>
-    <string name="title_activity_main">Vidloom</string>
+    <string name="app_name">Klipmill</string>
+    <string name="title_activity_main">Klipmill</string>
     <string name="package_name">com.tiktokcut.mobile</string>
     <string name="custom_url_scheme">com.tiktokcut.mobile</string>
-    <string name="accessibility_label">Vidloom 选品采集</string>
-    <string name="accessibility_service_description">开启后，Vidloom 会在你发起选品任务时自动打开抖音搜索商品并按销量采集。只读取抖音页面，不会操作其他应用。</string>
+    <string name="accessibility_label">Klipmill 选品采集</string>
+    <string name="accessibility_service_description">开启后，Klipmill 会在你发起选品任务时自动打开抖音搜索商品并按销量采集。只读取抖音页面，不会操作其他应用。</string>
 </resources>

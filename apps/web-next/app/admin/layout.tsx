@@ -7,7 +7,7 @@ import './admin-theme.css'
 import { AdminThemeRoot } from '@/components/admin/admin-theme'
 
 export const metadata: Metadata = {
-  title: 'Vidloom 管理后台',
+  title: 'Klipmill 管理后台',
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

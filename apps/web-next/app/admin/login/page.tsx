@@ -64,7 +64,7 @@ export default function AdminLoginPage() {
       <header className="flex h-12 items-center gap-2.5 border-b border-[var(--theme-border)] px-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand-logo.png" alt="" className="admin-brand__mark" draggable={false} />
-        <span className="admin-brand__name">Vidloom</span>
+        <span className="admin-brand__name">Klipmill</span>
         <span className="admin-brand__tag">管理后台</span>
         <div className="ml-auto">
           <AdminThemeToggle />

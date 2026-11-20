@@ -5,7 +5,7 @@ import { uploadImageBlob } from './files'
 import { getRecord, saveRecord } from './sync'
 
 /**
- * 选品采集（原「选品助手」App 的功能，现在内置在 Vidloom 里）。
+ * 选品采集（原「选品助手」App 的功能，现在内置在 Klipmill 里）。
  * 两种用法：
  *  - 手机采集：在本机直接搜索抖音、按销量采集，结果同步到云端
  *  - 连接电脑：扫电脑端二维码配对，电脑下发任务、结果回传电脑

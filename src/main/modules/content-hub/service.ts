@@ -97,7 +97,7 @@ async function runScheduledAutomations() {
       if (!latest || latest.periodKey !== briefs.dayKey(now)) {
         const brief = await briefs.generateDaily({ summarize: settings.aiSummary })
         const problems = brief.items.filter((item) => item.level !== 'ok').length
-        if (problems) notify('Vidloom 每日简报', brief.headline)
+        if (problems) notify('Klipmill 每日简报', brief.headline)
         await pushBrief(settings, brief)
         await emitChange('brief')
       }
@@ -106,7 +106,7 @@ async function runScheduledAutomations() {
       const latest = await briefs.latest('weekly')
       if (!latest || latest.periodKey !== briefs.weekKey(now)) {
         const brief = await briefs.generateWeekly({ summarize: settings.aiSummary })
-        notify('Vidloom 每周复盘', brief.headline)
+        notify('Klipmill 每周复盘', brief.headline)
         await pushBrief(settings, brief)
         await emitChange('brief')
       }
@@ -301,7 +301,7 @@ export const contentHubService = {
     const current = await readSettings()
     const target = normalizeFeishuSettings({ ...current.feishu, ...(input || {}) })
     if (!target.webhookUrl) throw new Error('请先填写有效的飞书 Webhook 地址')
-    await sendFeishuMessage(target, { msg_type: 'text', content: { text: 'Vidloom：飞书推送已连通，之后的每日简报和每周复盘会发到这个群。' } })
+    await sendFeishuMessage(target, { msg_type: 'text', content: { text: 'Klipmill：飞书推送已连通，之后的每日简报和每周复盘会发到这个群。' } })
     return { ok: true }
   },
   async pushLatestBrief(kind: 'daily' | 'weekly') {

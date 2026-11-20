@@ -37,7 +37,7 @@ public final class ConnectionService extends Service {
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("Vidloom 选品连接")
+            .setContentTitle("Klipmill 选品连接")
             .setContentText("已连接电脑，等待采集任务")
             .setOngoing(true)
             .build());

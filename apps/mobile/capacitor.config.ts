@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'com.tiktokcut.mobile',
-  appName: 'Vidloom',
+  appName: 'Klipmill',
   webDir: 'dist',
   backgroundColor: '#070910',
   android: {

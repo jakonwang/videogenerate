@@ -1,10 +1,10 @@
 {
   "name": "videogenerate",
-  "productName": "Vidloom",
+  "productName": "Klipmill",
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.134",
+  "version": "5.0.135",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -213,7 +213,7 @@
   },
   "build": {
     "appId": "com.videogenerate.app",
-    "productName": "Vidloom",
+    "productName": "Klipmill",
     "npmRebuild": false,
     "directories": {
       "output": "release"

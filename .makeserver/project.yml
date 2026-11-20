@@ -1,4 +1,4 @@
-# makeserver 部署规范：videogenerate（Vidloom 服务端）
+# makeserver 部署规范：videogenerate（Klipmill 服务端）
 # 云服务（API + 网页版 /app/）+ Next.js 官网/用户中心/后台 + 桌面端更新文件
 # Electron 桌面端不在服务器上运行；更新文件放到 shared/update，由入口 Caddy 提供下载。
 name: videogenerate

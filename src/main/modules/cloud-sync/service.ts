@@ -806,7 +806,7 @@ export function setCloudSyncResearchSource(source: () => Promise<ResearchService
   researchSource = source
 }
 
-const RESEARCH_ERROR: Array<[RegExp, string]> = [[/No paired phone is online/i, '没有在线的采集手机：请在电脑端「选品 → 连接手机」配对，并保持手机上的 Vidloom 打开']]
+const RESEARCH_ERROR: Array<[RegExp, string]> = [[/No paired phone is online/i, '没有在线的采集手机：请在电脑端「选品 → 连接手机」配对，并保持手机上的 Klipmill 打开']]
 const researchError = (error: unknown) => {
   const message = (error as Error)?.message ?? String(error)
   return (RESEARCH_ERROR.find(([pattern]) => pattern.test(message))?.[1] ?? message).slice(0, 300)

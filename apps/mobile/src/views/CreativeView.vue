@@ -66,7 +66,7 @@ async function submit() {
 </script>
 
 <template>
-  <PageHeader title="tk创意室" back="/create" description="场景图换上你的商品，用 TikTok 创意账号批量出短视频。由你的电脑执行（需开着 Vidloom 并已登录同一账号）。">
+  <PageHeader title="tk创意室" back="/create" description="场景图换上你的商品，用 TikTok 创意账号批量出短视频。由你的电脑执行（需开着 Klipmill 并已登录同一账号）。">
     <template #actions>
       <button type="button" class="vg-btn" @click="router.push('/business?tab=creative')"><Monitor :size="14" /> 电脑端任务进度</button>
       <button type="button" class="vg-btn" @click="router.push('/review')"><Inbox :size="14" /> 审核收件箱</button>

@@ -58,7 +58,7 @@ const LEVEL_ICON: Record<string, string> = { error: '🔴', warning: '🟠', ok:
 const GROWTH_ICON = '📈'
 
 export function buildBriefCard(brief: Pick<Brief, 'kind' | 'headline' | 'items' | 'summary' | 'periodKey' | 'metrics'>) {
-  const title = brief.kind === 'weekly' ? 'Vidloom 每周复盘' : 'Vidloom 每日简报'
+  const title = brief.kind === 'weekly' ? 'Klipmill 每周复盘' : 'Klipmill 每日简报'
   const lines = brief.items.slice(0, 12).map((item) => {
     const icon = item.kind === 'growth' ? GROWTH_ICON : LEVEL_ICON[item.level] || '•'
     const detail = item.detail ? `：${item.detail}` : ''
@@ -73,7 +73,7 @@ export function buildBriefCard(brief: Pick<Brief, 'kind' | 'headline' | 'items' 
     elements.push({ tag: 'hr' })
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: lines.join('\n') } })
   }
-  elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: `${brief.periodKey} · 打开 Vidloom 工作台处理` }] })
+  elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: `${brief.periodKey} · 打开 Klipmill 工作台处理` }] })
   const problems = brief.items.some((item) => item.level === 'error') ? 'red' : brief.items.some((item) => item.level === 'warning') ? 'orange' : 'green'
   return {
     msg_type: 'interactive',

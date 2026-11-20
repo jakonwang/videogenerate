@@ -73,7 +73,7 @@ async function submit() {
         <header class="cloud-login__brand">
           <span class="vg-page-head__icon"><ShieldCheck :size="20" /></span>
           <div>
-            <h1>{{ tab === 'login' ? '登录 Vidloom' : '注册账号' }}</h1>
+            <h1>{{ tab === 'login' ? '登录 Klipmill' : '注册账号' }}</h1>
             <p class="vg-muted">{{ tab === 'login' ? '登录账号后即可使用全部已开通的功能' : '注册后购买会员或使用兑换码即可开始使用' }}</p>
           </div>
         </header>
@@ -120,7 +120,7 @@ async function submit() {
     <div class="login__glow" aria-hidden="true" />
     <div class="login__brand">
       <img :src="brandLogo" alt="" class="login__logo" />
-      <h1>Vidloom</h1>
+      <h1>Klipmill</h1>
       <p>智能视频生产工作台 · {{ isWeb ? '网页版' : '手机版' }}</p>
     </div>
 
