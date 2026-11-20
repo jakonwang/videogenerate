@@ -416,7 +416,8 @@
       "ads_unprofitable": "ROI 14 ngày là {roi}, thấp hơn ROI hòa vốn {breakEvenRoi}.",
       "creator_winner": "Video \"{name}\" của nhà sáng tạo {creator} mang về {orders} đơn. Có thể dùng làm mẫu.",
       "creators_awaiting_content": "{count} nhà sáng tạo đã nhận mẫu nhưng chưa đăng video."
-    }
+    },
+    "variantNeedVideoPrompt": "Với sản phẩm \"{product}\", nội dung quảng cáo \"{name}\" bán tốt nhất. Tôi muốn làm biến thể theo cấu trúc của nó. Video này không làm trong phần mềm, tôi gửi video gốc làm video tham chiếu."
   },
   "perf": {
     "title": "Bằng chứng bán hàng",
@@ -454,7 +455,8 @@
     "variantPlanSummary": "{count} biến thể của \"{title}\" → duyệt",
     "noLinkableHint": "Chưa có video hoàn thành để liên kết. Quay lại khi video đã sẵn sàng.",
     "showAll": "Hiện tất cả {count}",
-    "collapse": "Thu gọn"
+    "collapse": "Thu gọn",
+    "linkFirst": "Nội dung quảng cáo \"{name}\" chưa liên kết với video. Chọn video tương ứng ở dòng bên dưới và bấm Liên kết, sau đó biến thể sẽ theo cấu trúc video đó."
   },
   "brand": {
     "title": "Bộ nhớ thương hiệu",

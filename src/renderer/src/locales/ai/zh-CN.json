@@ -416,7 +416,8 @@
       "ads_unprofitable": "近 14 天 ROI {roi}，低于盈亏平衡 ROI {breakEvenRoi}。",
       "creator_winner": "达人 {creator} 的视频「{name}」出了 {orders} 单，可以照它复刻。",
       "creators_awaiting_content": "{count} 位达人已收到样品，还没有发视频。"
-    }
+    },
+    "variantNeedVideoPrompt": "商品「{product}」的投放素材「{name}」出单最好，我想照着它的结构复刻一批变体。这条视频不是在软件里做的，我把原视频发给你（作为参考视频）。"
   },
   "perf": {
     "title": "出单验证",
@@ -454,7 +455,8 @@
     "variantPlanSummary": "照「{title}」做 {count} 条变体 → 送审",
     "noLinkableHint": "还没有已完成的成片可以关联，做好成片后再回来手动关联。",
     "showAll": "展开全部 {count} 条",
-    "collapse": "收起"
+    "collapse": "收起",
+    "linkFirst": "投放素材「{name}」还没关联到成片。在下面这一行选出它对应的成片并点「关联」，就会接着按那条成片的结构做变体。"
   },
   "brand": {
     "title": "品牌记忆",

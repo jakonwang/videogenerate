@@ -416,7 +416,8 @@
       "ads_unprofitable": "ROI over 14 days is {roi}, below the break-even ROI of {breakEvenRoi}.",
       "creator_winner": "The video \"{name}\" by creator {creator} drove {orders} orders. Use it as a reference.",
       "creators_awaiting_content": "{count} creator(s) received samples and have not posted yet."
-    }
+    },
+    "variantNeedVideoPrompt": "For product \"{product}\", ad creative \"{name}\" sells best. I want variants that copy its structure. It was not made in this app, so I am sending you the original video as the reference."
   },
   "perf": {
     "title": "Sales proof",
@@ -454,7 +455,8 @@
     "variantPlanSummary": "{count} variants of \"{title}\" → review",
     "noLinkableHint": "No finished video to link yet. Come back once a video is ready.",
     "showAll": "Show all {count}",
-    "collapse": "Show less"
+    "collapse": "Show less",
+    "linkFirst": "Ad creative \"{name}\" is not linked to a video yet. Pick its video in the row below and click Link; the variants will then follow that video."
   },
   "brand": {
     "title": "Brand memory",

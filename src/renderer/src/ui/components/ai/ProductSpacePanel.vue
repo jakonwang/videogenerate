@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Brain, Clapperboard, GitBranch, Images, Inbox, Lightbulb, PlaySquare, Save, Send, Wand2 } from 'lucide-vue-next'
@@ -88,11 +88,34 @@ function makeContent() {
   void ai.open({ recipeId: 'product-content-pack', context: { recipePreset: { productId: props.productId } } })
 }
 
-/** A winning ad creative: when it is matched to a local video, plan variants from that video itself. */
+/** The winning creative the user is asked to link first (highlighted in the performance table). */
+const focusCreativeId = ref('')
+
+/**
+ * A winning ad creative: when it is matched to a local video, plan variants from that video itself.
+ * The ad video itself can't be fetched from TikTok, so an unmatched creative is linked first (the
+ * table below); when nothing here can be linked, the AI asks for the original video instead of guessing.
+ */
 function makeVariant(name: string, creativeId = '') {
-  const source = creativeId ? (overview.value?.items || []).find((item) => item.performance?.creativeId === creativeId) : undefined
+  const items = overview.value?.items || []
+  const source = creativeId ? items.find((item) => item.performance?.creativeId === creativeId) : undefined
   if (source) return makeVariantFrom(source)
-  void ai.open({ fresh: true, prompt: t('ai.spine.variantPrompt', { product: props.productName, name }), context: { productId: props.productId } })
+  const unlinked = Boolean(creativeId) && (overview.value?.performance?.unlinkedCreatives || []).some((item) => item.creativeId === creativeId)
+  const linkable = items.some((item) => !item.performance && item.line !== 'publish' && item.status === 'ready')
+  if (unlinked && linkable && overview.value?.spine?.tiktokProductIds.length) {
+    focusCreativeId.value = ''
+    void nextTick(() => (focusCreativeId.value = creativeId))
+    return
+  }
+  void ai.open({ fresh: true, prompt: t('ai.spine.variantNeedVideoPrompt', { product: props.productName, name }), context: { productId: props.productId } })
+}
+
+/** Linked the highlighted creative: go straight on to the variant plan from that video. */
+async function onLinkedForVariant(ref: string) {
+  focusCreativeId.value = ''
+  await load()
+  const item = (overview.value?.items || []).find((entry) => entry.ref === ref)
+  if (item) makeVariantFrom(item)
 }
 
 const VARIANT_PROJECTS = 2
@@ -224,7 +247,9 @@ defineExpose({ makeContent })
       v-if="overview?.performance && overview.spine?.tiktokProductIds.length"
       :items="overview.items"
       :performance="overview.performance"
+      :focus-creative-id="focusCreativeId"
       @make-variant="makeVariantFrom($event as Item)"
+      @linked-for-variant="onLinkedForVariant"
       @changed="load"
     />
 

@@ -188,6 +188,8 @@ export async function decideAgentTurn(input: {
       : 'The current request contains no explicit business execution signal. You must not choose workflow.',
     `Follow the employee planning policy: ${input.employee.plannerPolicy}`,
     'When the request names a product or project, resolve it against workspace.products / workspace.recentProjects and put its id into context.productId or context.cloneProjectId.',
+    'Variants of a well-selling video are Intent.CommerceVideoCreate (a clone of a reference video), not a batch remix: never ask for a remix template or an output directory for them.',
+    'A long numeric ad creative id (for example 7699314466432896264) is a TikTok ad video that cannot be downloaded here; if no reference video is attached and context has no variantOfProjectId or sourceRef, clarify by asking the user to attach that original video (or to link the creative to a finished video on the product page).',
     input.memoryGuidance ? `Apply this brand memory to every plan and reply:\n${input.memoryGuidance}` : '',
   ].filter(Boolean).join(' ')
   const prompt = JSON.stringify({

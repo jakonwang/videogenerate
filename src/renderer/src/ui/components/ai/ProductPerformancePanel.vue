@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { BadgeCheck, ChevronDown, ChevronUp, Link2, Unlink, Wand2 } from 'lucide-vue-next'
@@ -15,8 +15,8 @@ export type ProductPerformance = {
   unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number }>
 }
 
-const props = defineProps<{ items: PerformanceItem[]; performance: ProductPerformance }>()
-const emit = defineEmits<{ (event: 'make-variant', item: PerformanceItem): void; (event: 'changed'): void }>()
+const props = defineProps<{ items: PerformanceItem[]; performance: ProductPerformance; focusCreativeId?: string }>()
+const emit = defineEmits<{ (event: 'make-variant', item: PerformanceItem): void; (event: 'changed'): void; (event: 'linked-for-variant', ref: string): void }>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -56,8 +56,23 @@ async function run(key: string, action: () => Promise<unknown>) {
 function link(creative: { creativeId: string; name: string }) {
   const target = picks[creative.creativeId]
   if (!target) return
-  void run(creative.creativeId, () => window.api.contentHub.linkContentPerformance({ ref: target, creativeId: creative.creativeId, creativeName: creative.name }))
+  const forVariant = creative.creativeId === props.focusCreativeId
+  void run(creative.creativeId, async () => {
+    await window.api.contentHub.linkContentPerformance({ ref: target, creativeId: creative.creativeId, creativeName: creative.name })
+    if (forVariant) emit('linked-for-variant', target)
+  })
 }
+
+/** 「机会」里点了做变体、但这条投放素材还没关联成片：把它那一行亮出来，提示先关联 */
+const focusCreative = computed(() => creatives.value.find((item) => item.creativeId === props.focusCreativeId))
+const root = ref<HTMLElement>()
+watch(() => props.focusCreativeId, async (creativeId) => {
+  if (!creativeId) return
+  const index = creatives.value.findIndex((item) => item.creativeId === creativeId)
+  if (index >= COLLAPSED_COUNT) expanded.value = true
+  await nextTick()
+  root.value?.querySelector(`[data-testid="product-performance-creative-${creativeId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}, { immediate: true })
 
 function unlink(item: PerformanceItem) {
   void run(item.ref, () => window.api.contentHub.unlinkContentPerformance(item.ref))
@@ -65,7 +80,7 @@ function unlink(item: PerformanceItem) {
 </script>
 
 <template>
-  <section class="vg-card pp" data-testid="product-performance">
+  <section ref="root" class="vg-card pp" data-testid="product-performance">
     <div class="vg-card__head">
       <span class="vg-card__title"><BadgeCheck :size="16" /> {{ t('ai.perf.title') }} <small>{{ performance.measuredCount }}</small></span>
       <span class="vg-muted pp__hint">{{ t('ai.perf.hint', { days: performance.windowDays, roi: number(performance.productRoi) }) }}</span>
@@ -112,6 +127,7 @@ function unlink(item: PerformanceItem) {
         <h4>{{ t('ai.perf.unlinkedTitle') }} <small>{{ creatives.length }}</small></h4>
         <span v-if="!linkable.length" class="vg-muted pp__subhint">{{ t('ai.perf.noLinkableHint') }}</span>
       </div>
+      <p v-if="focusCreative" class="pp__focus" data-testid="product-performance-link-first"><Wand2 :size="14" /> {{ t('ai.perf.linkFirst', { name: focusCreative.name }) }}</p>
       <div class="vg-table-wrap">
         <table class="vg-table vg-table--compact pp__creatives">
           <thead>
@@ -125,7 +141,7 @@ function unlink(item: PerformanceItem) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="creative in visibleCreatives" :key="creative.creativeId" :data-testid="`product-performance-creative-${creative.creativeId}`">
+            <tr v-for="creative in visibleCreatives" :key="creative.creativeId" :class="{ 'pp__row--focus': creative.creativeId === focusCreativeId }" :data-testid="`product-performance-creative-${creative.creativeId}`">
               <td><span class="pp__creative-name vg-ellipsis" :title="creative.name">{{ creative.name }}</span></td>
               <td class="pp__num">{{ number(creative.spend) }}</td>
               <td class="pp__num">{{ number(creative.revenue) }}</td>
@@ -155,6 +171,9 @@ function unlink(item: PerformanceItem) {
 
 <style scoped>
 .pp__hint { font-size: 11.5px; }
+.pp__focus { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--vg-accent-line, var(--vg-accent)); border-radius: 8px; background: var(--vg-accent-soft); color: var(--theme-text); font-size: 12.5px; }
+.pp__focus svg { flex-shrink: 0; color: var(--vg-accent); }
+.pp__row--focus td { background: var(--vg-accent-soft); }
 .pp__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pp__title { display: block; max-width: 320px; padding: 0; border: 0; background: transparent; color: var(--theme-text); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
 .pp__title:hover { color: var(--vg-accent); }
