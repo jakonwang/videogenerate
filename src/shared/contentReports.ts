@@ -22,7 +22,7 @@ export type InsightsReport = {
   recommendations: string[]
 }
 export type BriefItem = {
-  kind: 'review_pending' | 'failed_work' | 'health' | 'publish_ready' | 'publish_failed' | 'running' | 'suggestion'
+  kind: 'review_pending' | 'failed_work' | 'health' | 'publish_ready' | 'publish_failed' | 'running' | 'suggestion' | 'business' | 'growth'
   level: ReportLevel
   title: string
   detail: string
@@ -30,7 +30,7 @@ export type BriefItem = {
   aiPrompt?: string
   count?: number
 }
-export type Brief = { id: string; kind: 'daily' | 'weekly'; periodKey: string; createdAt: number; headline: string; items: BriefItem[]; insights?: InsightsReport; summary?: string }
+export type Brief = { id: string; kind: 'daily' | 'weekly'; periodKey: string; createdAt: number; headline: string; metrics?: string; items: BriefItem[]; insights?: InsightsReport; summary?: string }
 
 export const LINE_LABEL: Record<ReportLine, string> = { clone: '复刻', creative: 'tk创意室', livephoto: '图生视频', production: '批量混剪', publish: '发布' }
 
@@ -204,4 +204,4 @@ export function weeklyBrief(insights: InsightsReport): { headline: string; items
   return { headline: `本周产出 ${produced} 条，通过 ${approved} 条`, items }
 }
 
-export const BRIEF_SUMMARY_SYSTEM = 'You are an AI content producer writing a short brief for a TikTok e-commerce content team. Reply in Simplified Chinese, at most 3 short sentences, concrete and actionable, no greetings.'
+export const BRIEF_SUMMARY_SYSTEM = 'You are an AI content producer writing a short brief for a TikTok e-commerce team. Reply in Simplified Chinese, at most 3 short sentences, concrete and actionable, no greetings. If business metrics are given, start with the most important change in them.'

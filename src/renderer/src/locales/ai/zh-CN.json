@@ -35,7 +35,7 @@
     "livePhoto": "图生视频",
     "production": "批量混剪",
     "publish": "发布中心",
-    "insights": "数据复盘",
+    "insights": "数据概览",
     "products": "商品库",
     "models": "模特库",
     "assets": "素材库",
@@ -595,11 +595,18 @@
           "sub": "下一批更好"
         }
       }
+    },
+    "pulse": {
+      "title": "经营概览",
+      "range": "近 7 天",
+      "all": "查看全部",
+      "more": "还有 {count} 个问题",
+      "allGood": "没有发现异常，一切正常"
     }
   },
   "insights": {
-    "title": "数据复盘",
-    "desc": "看清每条生产线产出了多少、通过了多少、发出去多少，再决定下一步。",
+    "title": "数据概览",
+    "desc": "整套系统一眼看清：哪里在增长、哪里出了问题、哪些事等你处理。",
     "days": "{count} 天",
     "generateWeekly": "生成本周复盘",
     "produced": "产出",
@@ -609,7 +616,7 @@
     "published": "已发布",
     "byLine": "按生产线",
     "line": "生产线",
-    "dataNote": "「效果」目前以审核通过率和发布成功为准；发布渠道暂不提供播放和成交数据。",
+    "dataNote": "投放数据来自 GMV MAX，达人数据来自达人中心；素材效果以审核通过率和发布结果为准。",
     "recommendations": "AI 建议",
     "askPlan": "根据最近的复盘数据，帮我拟定下周的内容计划，优先使用通过率高的生产方式",
     "askPlanButton": "让 AI 拟定下周计划",
@@ -626,7 +633,42 @@
     "publishFailed": "失败",
     "openPublish": "打开发布中心",
     "weeklyHistory": "历次周复盘",
-    "noWeekly": "还没有周复盘"
+    "noWeekly": "还没有周复盘",
+    "overview": {
+      "askAi": "让 AI 解读",
+      "askAiPrompt": "根据数据概览，帮我判断现在最该优先处理的三件事，并给出具体做法",
+      "vsPrev": "比上一期",
+      "notConnected": "未连接",
+      "connect": "去连接",
+      "otherCurrencies": "另有 {list} 币种的投放未计入金额合计",
+      "problems": "异常",
+      "growth": "增长",
+      "todos": "待办",
+      "noProblems": "没有发现异常",
+      "noGrowth": "暂时没有明显增长",
+      "noTodos": "没有待办",
+      "askAiItem": "交给 AI",
+      "funnel": "全链路",
+      "funnelHint": "从素材到出单，看看哪一段在漏",
+      "detail": "内容生产明细",
+      "points": "{value} 个百分点",
+      "kpi": {
+        "gmv": "投放 GMV",
+        "spend": "投放花费",
+        "roi": "ROI",
+        "orders": "投放订单",
+        "creatorGmv": "达人带货 GMV",
+        "produced": "素材产出",
+        "approvalRate": "审核通过率",
+        "published": "已发布"
+      },
+      "step": {
+        "produced": "素材产出",
+        "approved": "审核通过",
+        "published": "已发布",
+        "orders": "出单"
+      }
+    }
   },
   "tools": {
     "title": "工具箱",

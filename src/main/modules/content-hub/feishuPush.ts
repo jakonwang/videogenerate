@@ -55,17 +55,19 @@ export function signFeishu(timestamp: number, secret: string) {
 }
 
 const LEVEL_ICON: Record<string, string> = { error: '🔴', warning: '🟠', ok: '🟢' }
+const GROWTH_ICON = '📈'
 
-export function buildBriefCard(brief: Pick<Brief, 'kind' | 'headline' | 'items' | 'summary' | 'periodKey'>) {
+export function buildBriefCard(brief: Pick<Brief, 'kind' | 'headline' | 'items' | 'summary' | 'periodKey' | 'metrics'>) {
   const title = brief.kind === 'weekly' ? 'TiktokCut 每周复盘' : 'TiktokCut 每日简报'
   const lines = brief.items.slice(0, 12).map((item) => {
-    const icon = LEVEL_ICON[item.level] || '•'
+    const icon = item.kind === 'growth' ? GROWTH_ICON : LEVEL_ICON[item.level] || '•'
     const detail = item.detail ? `：${item.detail}` : ''
     return `${icon} **${item.title}**${detail}`
   })
   const elements: Array<Record<string, unknown>> = [
     { tag: 'div', text: { tag: 'lark_md', content: `**${brief.headline}**` } },
   ]
+  if (brief.metrics) elements.push({ tag: 'div', text: { tag: 'lark_md', content: `📊 ${brief.metrics}` } })
   if (brief.summary) elements.push({ tag: 'div', text: { tag: 'lark_md', content: brief.summary } })
   if (lines.length) {
     elements.push({ tag: 'hr' })

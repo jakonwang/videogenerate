@@ -1312,6 +1312,7 @@ const api = {
     removeFeedback: (id: string) => ipcRenderer.invoke('contentHub:removeFeedback', id),
     healthCheck: (force?: boolean) => ipcRenderer.invoke('contentHub:healthCheck', force),
     insights: (rangeDays?: number) => ipcRenderer.invoke('contentHub:insights', rangeDays),
+    overview: (rangeDays?: number) => ipcRenderer.invoke('contentHub:overview', rangeDays) as Promise<import('../shared/overviewReport').OverviewReport>,
     latestBriefs: () => ipcRenderer.invoke('contentHub:latestBriefs'),
     generateBrief: (kind: 'daily' | 'weekly') => ipcRenderer.invoke('contentHub:generateBrief', kind),
     listBriefs: (limit?: number) => ipcRenderer.invoke('contentHub:listBriefs', limit),

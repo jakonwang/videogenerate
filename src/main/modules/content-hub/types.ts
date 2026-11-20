@@ -195,6 +195,9 @@ export type BriefItemKind =
   | 'publish_failed'
   | 'running'
   | 'suggestion'
+  /** Ads / creators / inventory / product signal from the business overview. */
+  | 'business'
+  | 'growth'
 
 export type BriefItem = {
   kind: BriefItemKind
@@ -233,6 +236,8 @@ export type Brief = {
   periodKey: string
   createdAt: number
   headline: string
+  /** One line of business numbers (ads GMV, ROI, creator GMV) when those modules are connected. */
+  metrics?: string
   items: BriefItem[]
   insights?: InsightsReport
   summary?: string

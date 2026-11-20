@@ -35,7 +35,7 @@
     "livePhoto": "Live Photo",
     "production": "Trộn hàng loạt",
     "publish": "Trung tâm đăng",
-    "insights": "Phân tích",
+    "insights": "Tổng quan",
     "products": "Sản phẩm",
     "models": "Người mẫu",
     "assets": "Thư viện tư liệu",
@@ -595,11 +595,18 @@
           "sub": "Lô sau tốt hơn"
         }
       }
+    },
+    "pulse": {
+      "title": "Tình hình kinh doanh",
+      "range": "7 ngày qua",
+      "all": "Xem tất cả",
+      "more": "Còn {count} vấn đề",
+      "allGood": "Không phát hiện vấn đề, mọi thứ ổn"
     }
   },
   "insights": {
-    "title": "Phân tích",
-    "desc": "Xem mỗi dây chuyền tạo bao nhiêu, duyệt bao nhiêu, đăng bao nhiêu rồi quyết định bước tiếp.",
+    "title": "Tổng quan",
+    "desc": "Nhìn toàn bộ hệ thống trong một trang: chỗ nào tăng trưởng, chỗ nào có vấn đề, việc gì đang chờ bạn.",
     "days": "{count} ngày",
     "generateWeekly": "Tạo tổng kết tuần",
     "produced": "Đã tạo",
@@ -609,7 +616,7 @@
     "published": "Đã đăng",
     "byLine": "Theo dây chuyền",
     "line": "Dây chuyền",
-    "dataNote": "Hiệu quả hiện tính theo tỷ lệ duyệt và đăng thành công; kênh đăng chưa cung cấp lượt xem hay doanh số.",
+    "dataNote": "Dữ liệu quảng cáo lấy từ GMV MAX, dữ liệu nhà sáng tạo từ Creator Hub; chất lượng nội dung tính theo tỷ lệ duyệt và kết quả đăng.",
     "recommendations": "Gợi ý của AI",
     "askPlan": "Dựa trên dữ liệu tổng kết gần đây, lập kế hoạch nội dung tuần tới, ưu tiên dây chuyền có tỷ lệ duyệt cao",
     "askPlanButton": "Để AI lập kế hoạch tuần tới",
@@ -626,7 +633,42 @@
     "publishFailed": "Thất bại",
     "openPublish": "Mở Trung tâm đăng",
     "weeklyHistory": "Các lần tổng kết tuần",
-    "noWeekly": "Chưa có tổng kết tuần"
+    "noWeekly": "Chưa có tổng kết tuần",
+    "overview": {
+      "askAi": "Nhờ AI giải thích",
+      "askAiPrompt": "Dựa trên dữ liệu tổng quan, cho tôi biết ba việc cần ưu tiên xử lý và cách làm",
+      "vsPrev": "so với kỳ trước",
+      "notConnected": "Chưa kết nối",
+      "connect": "Kết nối",
+      "otherCurrencies": "Quảng cáo bằng {list} không được cộng vào tổng tiền",
+      "problems": "Vấn đề",
+      "growth": "Tăng trưởng",
+      "todos": "Việc cần làm",
+      "noProblems": "Không phát hiện vấn đề",
+      "noGrowth": "Chưa có tăng trưởng rõ rệt",
+      "noTodos": "Không có việc chờ",
+      "askAiItem": "Giao cho AI",
+      "funnel": "Toàn chuỗi",
+      "funnelHint": "Từ nội dung đến đơn hàng, xem khâu nào bị rơi",
+      "detail": "Chi tiết sản xuất nội dung",
+      "points": "{value} điểm %",
+      "kpi": {
+        "gmv": "GMV quảng cáo",
+        "spend": "Chi phí quảng cáo",
+        "roi": "ROI",
+        "orders": "Đơn quảng cáo",
+        "creatorGmv": "GMV nhà sáng tạo",
+        "produced": "Nội dung tạo ra",
+        "approvalRate": "Tỷ lệ duyệt",
+        "published": "Đã đăng"
+      },
+      "step": {
+        "produced": "Tạo ra",
+        "approved": "Đã duyệt",
+        "published": "Đã đăng",
+        "orders": "Đơn hàng"
+      }
+    }
   },
   "tools": {
     "title": "Hộp công cụ",

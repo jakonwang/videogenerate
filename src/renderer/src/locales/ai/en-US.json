@@ -35,7 +35,7 @@
     "livePhoto": "Live Photo",
     "production": "Batch remix",
     "publish": "Publishing",
-    "insights": "Insights",
+    "insights": "Overview",
     "products": "Products",
     "models": "Models",
     "assets": "Asset library",
@@ -595,11 +595,18 @@
           "sub": "Better next batch"
         }
       }
+    },
+    "pulse": {
+      "title": "Business pulse",
+      "range": "Last 7 days",
+      "all": "View all",
+      "more": "{count} more problems",
+      "allGood": "No problems found, all good"
     }
   },
   "insights": {
-    "title": "Insights",
-    "desc": "See what each line produced, how much was approved and published, then decide what's next.",
+    "title": "Overview",
+    "desc": "The whole system at a glance: what is growing, what is broken and what is waiting for you.",
     "days": "{count} days",
     "generateWeekly": "Generate weekly review",
     "produced": "Produced",
@@ -609,7 +616,7 @@
     "published": "Published",
     "byLine": "By production line",
     "line": "Line",
-    "dataNote": "Performance currently means approval rate and publishing success; the publishing channel does not expose views or sales yet.",
+    "dataNote": "Ad data comes from GMV MAX and creator data from Creator Hub; content quality is measured by review approval and publishing results.",
     "recommendations": "AI suggestions",
     "askPlan": "Based on the recent review data, draft next week's content plan, favouring the lines with the best approval rate",
     "askPlanButton": "Let AI draft next week",
@@ -626,7 +633,42 @@
     "publishFailed": "Failed",
     "openPublish": "Open Publishing",
     "weeklyHistory": "Weekly reviews",
-    "noWeekly": "No weekly reviews yet"
+    "noWeekly": "No weekly reviews yet",
+    "overview": {
+      "askAi": "Ask AI to explain",
+      "askAiPrompt": "Based on the overview data, tell me the three things I should handle first and how",
+      "vsPrev": "vs previous period",
+      "notConnected": "Not connected",
+      "connect": "Connect",
+      "otherCurrencies": "Ads in {list} are not included in the money totals",
+      "problems": "Problems",
+      "growth": "Growth",
+      "todos": "To do",
+      "noProblems": "No problems found",
+      "noGrowth": "No notable growth yet",
+      "noTodos": "Nothing waiting",
+      "askAiItem": "Hand to AI",
+      "funnel": "Pipeline",
+      "funnelHint": "From content to orders, see where it leaks",
+      "detail": "Content production details",
+      "points": "{value} pts",
+      "kpi": {
+        "gmv": "Ads GMV",
+        "spend": "Ad spend",
+        "roi": "ROI",
+        "orders": "Ad orders",
+        "creatorGmv": "Creator GMV",
+        "produced": "Content produced",
+        "approvalRate": "Approval rate",
+        "published": "Published"
+      },
+      "step": {
+        "produced": "Produced",
+        "approved": "Approved",
+        "published": "Published",
+        "orders": "Orders"
+      }
+    }
   },
   "tools": {
     "title": "Toolbox",

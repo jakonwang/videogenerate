@@ -8,10 +8,19 @@ import { reviewInbox } from './reviewInbox'
 import { briefStore } from './stores'
 import type { Brief, BriefItem } from './types'
 import { BRIEF_SUMMARY_SYSTEM, dailyBriefItems, dailyHeadline, dayKey, weekKey, weeklyBrief } from '../../../shared/contentReports'
+import { overviewMetricsLine, withBusinessSignals, type OverviewReport } from '../../../shared/overviewReport'
+import { buildBusinessOverview } from './overview'
 
-async function dailyItems(): Promise<BriefItem[]> {
-  const [counts, all, health] = await Promise.all([reviewInbox.counts(), contentIndex.listAll(), getHealthReport(30 * 60_000)])
-  return dailyBriefItems({ pendingReviews: counts.pending, items: all, health: health.items }) as BriefItem[]
+async function dailyItems(): Promise<{ items: BriefItem[]; metrics: string }> {
+  const [counts, all, health, overview] = await Promise.all([
+    reviewInbox.counts(),
+    contentIndex.listAll(),
+    getHealthReport(30 * 60_000),
+    // The brief must still go out if a business source is broken.
+    buildBusinessOverview(7).catch(() => null as OverviewReport | null),
+  ])
+  const content = dailyBriefItems({ pendingReviews: counts.pending, items: all, health: health.items }) as BriefItem[]
+  return { items: withBusinessSignals(content, overview) as BriefItem[], metrics: overviewMetricsLine(overview) }
 }
 
 async function summarize(brief: Brief): Promise<string | undefined> {
@@ -21,7 +30,7 @@ async function summarize(brief: Brief): Promise<string | undefined> {
       credentials,
       timeoutMs: 20_000,
       system: BRIEF_SUMMARY_SYSTEM,
-      prompt: JSON.stringify({ kind: brief.kind, items: brief.items.map(({ title, detail }) => ({ title, detail })), insights: brief.insights }),
+      prompt: JSON.stringify({ kind: brief.kind, metrics: brief.metrics, items: brief.items.map(({ title, detail }) => ({ title, detail })), insights: brief.insights }),
     })
     return String(response.content || '').trim().slice(0, 400) || undefined
   } catch {
@@ -36,13 +45,14 @@ export const briefs = {
       const existing = (await briefStore.read()).briefs.find((item) => item.kind === 'daily' && item.periodKey === periodKey)
       if (existing) return existing
     }
-    const items = await dailyItems()
+    const { items, metrics } = await dailyItems()
     const brief: Brief = {
       id: randomUUID(),
       kind: 'daily',
       periodKey,
       createdAt: Date.now(),
       headline: dailyHeadline(items),
+      ...(metrics ? { metrics } : {}),
       items,
     }
     if (options.summarize) brief.summary = await summarize(brief)

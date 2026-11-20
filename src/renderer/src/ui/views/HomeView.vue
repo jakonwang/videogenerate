@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  ChevronRight,
   Captions,
   CheckCircle2,
   Clapperboard,
@@ -30,6 +31,8 @@ import {
 import heroImage from '@/assets/home-hero.png'
 import { thumbnailUrl } from '@/lib/localMedia'
 import { useAiProducerStore } from '@/stores/aiProducer'
+import { formatKpi, kpiDeltaText, kpiDeltaTone } from '@/lib/overviewFormat'
+import type { OverviewReport, OverviewSignal } from '../../../../shared/overviewReport'
 
 type BriefItem = { kind: string; level: 'ok' | 'warning' | 'error'; title: string; detail: string; route?: string; aiPrompt?: string; count?: number }
 type Brief = { headline: string; summary?: string; items: BriefItem[]; createdAt: number }
@@ -41,6 +44,7 @@ const ai = useAiProducerStore()
 
 const brief = ref<Brief | null>(null)
 const projects = ref<Project[]>([])
+const overview = ref<OverviewReport | null>(null)
 const goal = ref('')
 const loading = ref(false)
 const regenerating = ref(false)
@@ -74,6 +78,19 @@ const tools = computed(() => [
   { to: '/plugins', icon: LayoutGrid, title: t('ai.home.tools.all'), tone: 'gray' },
 ])
 
+// Home shows a short version of 数据概览: the four most telling numbers and the three most urgent problems.
+const PULSE_KPIS = ['gmv', 'roi', 'creatorGmv', 'produced', 'approvalRate', 'published']
+const pulseKpis = computed(() => {
+  const kpis = overview.value?.kpis.filter((kpi) => kpi.available) || []
+  return PULSE_KPIS.map((key) => kpis.find((kpi) => kpi.key === key)).filter((kpi) => !!kpi).slice(0, 4)
+})
+const pulseProblems = computed(() => overview.value?.problems.slice(0, 3) || [])
+const moreProblems = computed(() => Math.max(0, (overview.value?.problems.length || 0) - pulseProblems.value.length))
+
+function openSignal(signal: OverviewSignal) {
+  void router.push(signal.route || '/insights')
+}
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 6) return t('ai.home.greeting.night')
@@ -85,9 +102,14 @@ const greeting = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [briefs, recent] = await Promise.all([window.api.contentHub.latestBriefs(), window.api.contentHub.recentProjects(8)])
+    const [briefs, recent, report] = await Promise.all([
+      window.api.contentHub.latestBriefs(),
+      window.api.contentHub.recentProjects(8),
+      window.api.contentHub.overview(7).catch(() => null),
+    ])
     brief.value = (briefs as { daily: Brief | null }).daily
     projects.value = recent as Project[]
+    overview.value = report as OverviewReport | null
   } catch {
     // Home must render even if the hub is unavailable.
   } finally {
@@ -142,6 +164,36 @@ onBeforeUnmount(() => unsubscribe?.())
           <input v-model="goal" class="home-goal__input" data-testid="home-goal-input" :placeholder="t('ai.home.goalPlaceholder')" />
           <button type="submit" class="vg-btn vg-btn--primary vg-btn--sm" data-testid="home-goal-submit">{{ t('ai.home.goalSubmit') }} <ArrowRight :size="14" /></button>
         </form>
+      </div>
+    </section>
+
+    <section v-if="overview" class="vg-card home-pulse" data-testid="home-pulse">
+      <div class="vg-card__head">
+        <span class="vg-card__title"><BarChart3 :size="16" /> {{ t('ai.home.pulse.title') }} <small>{{ t('ai.home.pulse.range') }}</small></span>
+        <div class="vg-card__actions">
+          <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" data-testid="home-pulse-all" @click="router.push('/insights')">{{ t('ai.home.pulse.all') }} <ChevronRight :size="14" /></button>
+        </div>
+      </div>
+      <div class="home-pulse__body">
+        <div class="home-pulse__kpis">
+          <button v-for="kpi in pulseKpis" :key="kpi.key" type="button" class="home-pulse__kpi" @click="router.push(kpi.route)">
+            <span class="home-pulse__label">{{ t(`ai.insights.overview.kpi.${kpi.key}`) }}</span>
+            <strong class="home-pulse__value vg-num">{{ formatKpi(kpi, locale) }}</strong>
+            <span v-if="kpiDeltaText(kpi, t)" class="vg-pill home-pulse__delta" :class="kpiDeltaTone(kpi) ? `vg-pill--${kpiDeltaTone(kpi)}` : ''">{{ kpiDeltaText(kpi, t) }}</span>
+          </button>
+        </div>
+        <div class="home-pulse__problems">
+          <button v-for="signal in pulseProblems" :key="signal.id" type="button" class="home-pulse__problem" :class="`home-pulse__problem--${signal.level}`" @click="openSignal(signal)">
+            <span class="home-pulse__dot"></span>
+            <span class="home-pulse__problem-copy">
+              <strong>{{ signal.title }}</strong>
+              <small>{{ signal.detail }}</small>
+            </span>
+            <ArrowRight :size="14" class="home-brief__arrow" />
+          </button>
+          <button v-if="moreProblems" type="button" class="vg-link home-pulse__more" @click="router.push('/insights')">{{ t('ai.home.pulse.more', { count: moreProblems }) }}</button>
+          <p v-if="!pulseProblems.length" class="home-pulse__ok"><CheckCircle2 :size="16" /> {{ t('ai.home.pulse.allGood') }}</p>
+        </div>
       </div>
     </section>
 
@@ -296,6 +348,24 @@ onBeforeUnmount(() => unsubscribe?.())
 .home-auto__label strong { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-auto__label small { font-size: 11.5px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.home-pulse__body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.home-pulse__kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.home-pulse__kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel-soft); color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s; }
+.home-pulse__kpi:hover { border-color: var(--vg-accent-line); }
+.home-pulse__label { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.home-pulse__value { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.home-pulse__delta { height: 19px; padding: 0 7px; font-size: 11.5px; }
+.home-pulse__problems { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.home-pulse__problem { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius-sm); background: transparent; color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; }
+.home-pulse__problem:hover { border-color: var(--vg-accent-line); }
+.home-pulse__dot { width: 8px; height: 8px; margin-top: 6px; flex-shrink: 0; border-radius: 50%; background: var(--vg-amber); }
+.home-pulse__problem--error .home-pulse__dot { background: var(--vg-red); }
+.home-pulse__problem-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.home-pulse__problem-copy strong { font-size: 13px; font-weight: 600; }
+.home-pulse__problem-copy small { font-size: 12px; color: var(--theme-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-pulse__more { align-self: flex-start; font-size: 12px; background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.home-pulse__ok { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px; border-radius: var(--vg-radius-sm); background: color-mix(in srgb, var(--vg-green) 10%, transparent); color: var(--vg-green); font-size: 13px; }
+
 .home-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .home-line { --tone: var(--vg-accent); display: flex; flex-direction: column; gap: 10px; padding: 16px; }
 .home-line--violet { --tone: var(--vg-violet); }
@@ -329,6 +399,7 @@ onBeforeUnmount(() => unsubscribe?.())
 
 @media (max-width: 1120px) {
   .home-lower { grid-template-columns: 1fr; }
+  .home-pulse__body { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {
   .home-auto__head { flex-wrap: wrap; }
@@ -338,5 +409,6 @@ onBeforeUnmount(() => unsubscribe?.())
 }
 @media (max-width: 760px) {
   .home-hero__copy { padding: 20px; }
+  .home-pulse__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

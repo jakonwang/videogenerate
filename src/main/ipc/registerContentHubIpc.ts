@@ -27,6 +27,7 @@ export function registerContentHubIpc(ipcMain: IpcMain, getWindow: () => Browser
   ipcMain.handle('contentHub:removeFeedback', async (_event, id: string) => await contentHubService.removeFeedback(id))
 
   ipcMain.handle('contentHub:healthCheck', async (_event, force?: boolean) => await contentHubService.healthCheck(Boolean(force)))
+  ipcMain.handle('contentHub:overview', async (_event, rangeDays?: number) => await contentHubService.overview(Number(rangeDays) || 7))
   ipcMain.handle('contentHub:insights', async (_event, rangeDays?: number) => await contentHubService.insights(rangeDays))
   ipcMain.handle('contentHub:latestBriefs', async () => await contentHubService.latestBriefs())
   ipcMain.handle('contentHub:generateBrief', async (_event, kind: 'daily' | 'weekly') => await contentHubService.generateBrief(kind))

@@ -8,6 +8,7 @@ import { briefs } from './briefs'
 import { contentIndex } from './contentIndex'
 import { runHealthCheck, getHealthReport } from './healthCheck'
 import { buildInsights } from './insights'
+import { buildBusinessOverview } from './overview'
 import { contentPerformance } from './performance'
 import { DEFAULT_FEISHU_SETTINGS, buildBriefCard, normalizeFeishuSettings, pushBriefToFeishu, sendFeishuMessage, type FeishuPushSettings } from './feishuPush'
 import { productSpine, readPublishTasks } from './productSpine'
@@ -252,6 +253,9 @@ export const contentHubService = {
   },
   async insights(rangeDays = 7) {
     return await buildInsights(rangeDays)
+  },
+  async overview(rangeDays = 7) {
+    return await buildBusinessOverview(rangeDays)
   },
   async latestBriefs() {
     const settings = await readSettings()

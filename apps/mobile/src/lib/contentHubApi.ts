@@ -17,6 +17,7 @@ import {
   type ReportLine,
   type ReportReview,
 } from '@shared/contentReports'
+import { computeOverview } from '@shared/overviewReport'
 import { approve, reject, type GenerationItem } from './generate'
 import { cloud } from './session'
 import { cachedFileLink, resolveFileLinks } from './fileLinks'
@@ -228,6 +229,12 @@ export function installContentHubApi() {
     async insights(rangeDays = 7) {
       const snap = await snapshot()
       return computeInsights({ items: snap.items, reviews: snap.reviews, feedback: feedbackOf(snap), rangeDays })
+    },
+    // Web only knows the synced content; ads / creators / inventory stay "not connected" until they sync too.
+    async overview(rangeDays = 7) {
+      const snap = await snapshot()
+      const pendingReviews = Object.values(snap.reviews).filter((r) => r.decision === 'pending').length
+      return computeOverview({ rangeDays, content: { items: snap.items, reviews: snap.reviews, feedback: feedbackOf(snap), pendingReviews } })
     },
     async latestBriefs() {
       const all = await loadBriefs()
