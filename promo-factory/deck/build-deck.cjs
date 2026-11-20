@@ -1,4 +1,4 @@
-// Builds the factory-facing TiktokCut deck.
+// Builds the factory-facing Vidloom deck.
 // Run: NODE_PATH=<dir with pptxgenjs> node promo-factory/deck/build-deck.cjs
 const path = require('path')
 const fs = require('fs')
@@ -7,13 +7,13 @@ const sharp = require('sharp')
 
 const DIR = __dirname
 const IMG = path.join(DIR, 'img')
-const OUT = path.join(DIR, '..', 'TiktokCut-工厂版产品介绍.pptx')
+const OUT = path.join(DIR, '..', 'Vidloom-工厂版产品介绍.pptx')
 const PUB = path.join(DIR, '..', 'video', 'public')
 const narration = JSON.parse(fs.readFileSync(path.join(DIR, '..', 'narration.json'), 'utf8'))
 const say = (id) => (narration.scenes.find((s) => s.id === id)?.lines || []).join('')
 
 const THEME = {
-  name: 'TiktokCut Factory',
+  name: 'Vidloom Factory',
   headFontFace: 'Microsoft YaHei',
   bodyFontFace: 'Microsoft YaHei',
   colors: {dk1: 'EEF4F8', lt1: '05090F', dk2: '8A9AAC', lt2: '0E1724', accent1: '46F897', accent2: '22D3B4', accent3: '4EA8FF', accent4: 'FFB547', accent5: 'FF5F6D', accent6: '9A83FF', hlink: '46F897', folHlink: '22D3B4'},
@@ -54,15 +54,15 @@ async function icon(name, color) {
 const pres = new pptxgen()
 pres.layout = 'LAYOUT_WIDE' // 13.333 x 7.5
 pres.theme = {headFontFace: FONT, bodyFontFace: FONT}
-pres.title = 'TiktokCut 工厂版产品介绍'
-pres.author = 'TiktokCut'
-pres.company = 'TiktokCut'
+pres.title = 'Vidloom 工厂版产品介绍'
+pres.author = 'Vidloom'
+pres.company = 'Vidloom'
 
 const W = 13.333
 const LOGO = path.join(PUB, 'brand.png')
 const footer = [
   {image: {x: 0.6, y: 6.98, w: 0.24, h: 0.24, path: LOGO}},
-  {text: {text: 'TiktokCut · 出海工厂 AI 带货内容系统', options: {x: 0.9, y: 6.95, w: 5, h: 0.3, fontFace: FONT, fontSize: 10, color: K.dim, margin: 0, valign: 'middle'}}},
+  {text: {text: 'Vidloom · 出海工厂 AI 带货内容系统', options: {x: 0.9, y: 6.95, w: 5, h: 0.3, fontFace: FONT, fontSize: 10, color: K.dim, margin: 0, valign: 'middle'}}},
 ]
 pres.defineSlideMaster({
   title: 'COVER',
@@ -113,13 +113,13 @@ async function build() {
     s.addImage({path: path.join(PUB, 'hero.png'), x: 6.6, y: 0, w: 6.733, h: 7.5, sizing: {type: 'cover', w: 6.733, h: 7.5}, transparency: 25})
     s.addShape(pres.shapes.RECTANGLE, {x: 6.6, y: 0, w: 6.733, h: 7.5, fill: {color: K.bg, transparency: 45}, line: {color: K.bg, width: 0}})
     s.addImage({path: LOGO, x: 0.6, y: 1.1, w: 0.8, h: 0.8})
-    txt(s, 'TiktokCut', 1.55, 1.18, 4, 0.64, {size: 32, bold: true, valign: 'middle'})
+    txt(s, 'Vidloom', 1.55, 1.18, 4, 0.64, {size: 32, bold: true, valign: 'middle'})
     s.addText([{text: '一台电脑\n', options: {color: K.text}}, {text: '就是一支带货内容团队', options: {color: K.green}}], {placeholder: 'title'})
     s.addText('专为出海工厂打造的 AI 带货内容系统 —— 选品、出片、发布、投放、复盘，全链路一次打通', {placeholder: 'body'})
     const tags = ['选品', '建商品', '备素材', '出成片', '质检', '发布', '投放', '复盘']
     tags.forEach((t, i) => pill(s, t, 0.6 + i * 0.86, 5.35, 0.76, K.green, i === 3, 12))
     txt(s, '工厂版产品介绍', 0.6, 6.7, 4, 0.35, {size: 12, color: K.dim})
-    s.addNotes('开场：' + say('hook') + '\n今天用 20 分钟，带大家看 TiktokCut 怎么把工厂的“货”变成 TikTok 上源源不断的“内容”。')
+    s.addNotes('开场：' + say('hook') + '\n今天用 20 分钟，带大家看 Vidloom 怎么把工厂的“货”变成 TikTok 上源源不断的“内容”。')
   }
 
   /* 2 pain */
@@ -153,7 +153,7 @@ async function build() {
     txt(s, '→', 6.0, 3.8, 0.8, 0.8, {size: 40, bold: true, color: K.green, align: 'center', valign: 'middle'})
     box(s, 6.9, 2.0, 5.83, 4.5, {fill: K.panel2, line: K.green})
     await iconDot(s, 'monitor', 7.25, 2.3, 0.8, K.green)
-    txt(s, 'TiktokCut', 8.25, 2.42, 4, 0.56, {size: 28, bold: true, valign: 'middle'})
+    txt(s, 'Vidloom', 8.25, 2.42, 4, 0.56, {size: 28, bold: true, valign: 'middle'})
     const gains = [['AI 替代', '选品分析、脚本、模特、分镜、剪辑、字幕、投放分析'], ['人只做', '定目标、挑结果、做决定——审核收件箱里点「通过」'], ['沉淀在系统', '模板、模特身份包、品牌记忆，换人也不丢']]
     gains.forEach(([a, b], i) => {
       txt(s, a, 7.25, 3.4 + i * 0.95, 1.6, 0.4, {size: 16, bold: true, color: K.green})
@@ -190,7 +190,7 @@ async function build() {
 
   /* 5 advantages */
   {
-    const s = content('为什么选 TiktokCut', '六个核心优势', '全链路')
+    const s = content('为什么选 Vidloom', '六个核心优势', '全链路')
     const adv = [
       ['layers', '全链路，不是单点工具', '选品到复盘 8 个环节在一个系统里，数据和素材不用来回搬'],
       ['box', '以商品为中心', '一份商品档案贯穿所有视频，产品外观、卖点不走样'],
@@ -271,7 +271,7 @@ async function build() {
 
   /* compare */
   {
-    const s = content('对比', '传统做法 vs TiktokCut', '落地')
+    const s = content('对比', '传统做法 vs Vidloom', '落地')
     const rows = [
       ['人员配置', '编导、摄影、模特、剪辑、投手等多个岗位', '1–2 名运营 + AI'],
       ['新品上视频', '等模特档期、等拍摄排期', '上传产品图，当天出片'],
@@ -282,7 +282,7 @@ async function build() {
       ['经验沉淀', '在人脑里，人走经验走', '模板 + 品牌记忆，沉淀在系统'],
     ]
     const hdr = (t, c) => ({text: t, options: {bold: true, color: c, fill: {color: K.panel2}, fontSize: 15, valign: 'middle'}})
-    const data = [[hdr('', K.text), hdr('传统做法', K.red), hdr('TiktokCut', K.green)], ...rows.map(([a, b, c]) => [
+    const data = [[hdr('', K.text), hdr('传统做法', K.red), hdr('Vidloom', K.green)], ...rows.map(([a, b, c]) => [
       {text: a, options: {bold: true, color: K.text}}, {text: b, options: {color: K.muted}}, {text: c, options: {color: K.text, bold: true}},
     ])]
     s.addTable(data, {x: 0.6, y: 1.9, w: 12.13, colW: [2.2, 4.96, 4.97], rowH: 0.56, fontFace: FONT, fontSize: 14, fill: {color: K.panel}, border: {type: 'solid', color: K.line, pt: 0.75}, valign: 'middle', margin: [0, 0.15, 0, 0.15]})
@@ -292,7 +292,7 @@ async function build() {
 
   /* fit */
   {
-    const s = content('适用工厂', '这些工厂，最适合用 TiktokCut', '落地')
+    const s = content('适用工厂', '这些工厂，最适合用 Vidloom', '落地')
     const cats = [['tag', '饰品配饰'], ['user', '服装鞋包'], ['box', '家居日用'], ['monitor', '3C 数码配件'], ['sparkle', '美妆个护工具'], ['play', '母婴玩具'], ['shield', '宠物用品'], ['rocket', '运动户外']]
     for (const [i, [ic, t]] of cats.entries()) {
       const x = 0.6 + (i % 4) * 3.08, y = 1.95 + Math.floor(i / 4) * 1.6
@@ -330,7 +330,7 @@ async function build() {
   {
     const s = pres.addSlide({masterName: 'END', sectionTitle: '落地'})
     s.addImage({path: LOGO, x: W / 2 - 0.55, y: 1.2, w: 1.1, h: 1.1})
-    txt(s, [{text: '你负责把货做好，内容交给 ', options: {color: K.text}}, {text: 'TiktokCut', options: {color: K.green}}], 0.6, 2.7, 12.13, 0.9, {size: 40, bold: true, align: 'center', valign: 'middle'})
+    txt(s, [{text: '你负责把货做好，内容交给 ', options: {color: K.text}}, {text: 'Vidloom', options: {color: K.green}}], 0.6, 2.7, 12.13, 0.9, {size: 40, bold: true, align: 'center', valign: 'middle'})
     txt(s, '让每一家工厂，都拥有自己的爆款内容工厂', 0.6, 3.65, 12.13, 0.6, {size: 22, color: K.muted, align: 'center', valign: 'middle'})
     box(s, W / 2 - 1.6, 4.75, 3.2, 0.75, {fill: K.green, line: K.green, r: 0.15})
     txt(s, '预约演示 · 开通试用', W / 2 - 1.6, 4.75, 3.2, 0.75, {size: 20, bold: true, color: K.ink, align: 'center', valign: 'middle'})

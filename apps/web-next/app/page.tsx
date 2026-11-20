@@ -118,7 +118,7 @@ export default function HomePage() {
             批量变成你的带货视频
           </h1>
           <p className="max-w-[520px] text-[17px] leading-relaxed text-[var(--text-secondary)]">
-            TiktokCut 自动拆解爆款脚本、生成分镜与视频、合成成片。你只负责选品和挑片，剩下的交给 AI 流水线。
+            Vidloom 自动拆解爆款脚本、生成分镜与视频、合成成片。你只负责选品和挑片，剩下的交给 AI 流水线。
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/download" className="inline-flex h-12 items-center gap-2 rounded-xl bg-[var(--primary)] px-6 text-[15px] font-semibold text-white transition hover:bg-[var(--primary-hover)]">

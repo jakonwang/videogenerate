@@ -121,7 +121,7 @@ export async function runRelayCall(call: RelayCall): Promise<RelayResult> {
   try {
     if (!relayAllows(call.ns, call.method)) return { id: call.id, ok: false, error: '这个操作需要在电脑端完成' }
     const handler = handlers.get(relayChannel(call.ns as RelayNamespace, call.method))
-    if (!handler) return { id: call.id, ok: false, error: '电脑端版本不支持这个操作，请更新 TiktokCut' }
+    if (!handler) return { id: call.id, ok: false, error: '电脑端版本不支持这个操作，请更新 Vidloom' }
     const args = await materializeCloudFiles(Array.isArray(call.args) ? call.args : [])
     const result = await handler(fakeEvent, ...args)
     // Same shape the desktop page gets over IPC (structured clone ≈ JSON here).

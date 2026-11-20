@@ -75,7 +75,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
   <header class="vg-scope vg-titlebar">
     <router-link to="/" class="vg-titlebar__brand">
       <img :src="brandLogo" alt="" class="vg-titlebar__logo" />
-      <strong class="vg-titlebar__name">TiktokCut</strong>
+      <strong class="vg-titlebar__name">Vidloom</strong>
       <span class="vg-titlebar__divider" aria-hidden="true"></span>
       <span class="vg-titlebar__subtitle">智能视频生产工作台</span>
     </router-link>

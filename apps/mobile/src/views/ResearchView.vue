@@ -158,7 +158,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
   <template v-if="inWebShell">
     <PageHeader title="选品" :icon="ScanSearch" description="手机 App 按销量采集的抖音商品会同步到这里；挑中的一键加入商品库，再去复刻或做素材。" />
     <main class="vg-page rs" data-testid="web-research">
-      <div class="vg-notice vg-notice--accent"><Smartphone :size="14" /> 采集需要在手机上操作抖音：打开 TiktokCut 手机版 → 选品，输入关键词按销量采集，完成后结果自动出现在这里。</div>
+      <div class="vg-notice vg-notice--accent"><Smartphone :size="14" /> 采集需要在手机上操作抖音：打开 Vidloom 手机版 → 选品，输入关键词按销量采集，完成后结果自动出现在这里。</div>
       <div v-if="tasks.length" class="rs-body">
         <nav class="rs-tasks">
           <span class="rs-tasks__head">采集记录 <small>{{ tasks.length }}</small></span>
@@ -205,7 +205,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
       <div v-else class="vg-empty rs-empty">
         <span class="vg-empty__icon"><ScanSearch :size="20" /></span>
         <h3>还没有采集记录</h3>
-        <p>在 TiktokCut 手机版的「选品」里输入关键词开始第一次采集</p>
+        <p>在 Vidloom 手机版的「选品」里输入关键词开始第一次采集</p>
       </div>
     </main>
   </template>
@@ -247,7 +247,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
             <span class="icon" :class="{ 'is-done': research.accessibilityEnabled }"><Accessibility :size="20" /></span>
             <span class="m-row__main">
               <span class="m-row__title">开启无障碍服务</span>
-              <span class="m-row__sub">在「已下载的应用」里找到「TiktokCut 选品采集」并打开</span>
+              <span class="m-row__sub">在「已下载的应用」里找到「Vidloom 选品采集」并打开</span>
             </span>
             <span v-if="research.accessibilityEnabled" class="m-badge m-badge--green">已开启</span>
             <ChevronRight v-else :size="18" class="m-muted" />
@@ -278,7 +278,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
             <LoaderCircle v-if="starting" :size="18" class="m-spin" />
             {{ running ? '正在采集…' : '按销量采集' }}
           </button>
-          <p class="hint">采集时会自动打开抖音，请保持亮屏、不要操作手机，完成后自动回到 TiktokCut。</p>
+          <p class="hint">采集时会自动打开抖音，请保持亮屏、不要操作手机，完成后自动回到 Vidloom。</p>
         </div>
       </section>
 

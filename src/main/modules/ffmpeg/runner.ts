@@ -24,7 +24,7 @@ function buildFfmpegError(code: number | null, stderrTail: string[], stdoutTail:
     return new Error(
       [
         'FFmpeg 写入输出文件失败：磁盘空间不足。',
-        '请先清理系统磁盘或 TiktokCut 应用数据目录后重试。',
+        '请先清理系统磁盘或 Vidloom 应用数据目录后重试。',
         tail ? `--- ffmpeg tail ---\n${tail}` : '',
       ]
         .filter(Boolean)

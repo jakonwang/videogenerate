@@ -30,6 +30,6 @@ const EXT_BY_MIME: Record<string, string> = {
 }
 
 export function fileNameFor(label: string, mime: string | undefined) {
-  const base = (label || 'TiktokCut').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'TiktokCut'
+  const base = (label || 'Vidloom').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'Vidloom'
   return `${base}.${EXT_BY_MIME[String(mime || '').toLowerCase()] || (String(mime || '').startsWith('image/') ? 'jpg' : 'mp4')}`
 }

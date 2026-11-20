@@ -66,7 +66,7 @@ async function main() {
     const page = await fetch(session.url.replace(/http:\/\/[^/:]+/, 'http://127.0.0.1'))
     assert.equal(page.status, 200)
     const mobilePage = await page.text()
-    assert.match(mobilePage, /TiktokCut.*素材库/)
+    assert.match(mobilePage, /Vidloom.*素材库/)
     assert.match(mobilePage, /accept="image\/\*"/)
     assert.match(mobilePage, /accept="video\/\*,\.mp4,\.mov,\.webm,\.mkv"/)
 

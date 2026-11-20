@@ -2,8 +2,8 @@
 
 | 文件 | 说明 |
 |---|---|
-| `TiktokCut-工厂宣传片.mp4` | 1920×1080 · 约 3 分 13 秒，男声配音 + 字幕 + 背景音乐 |
-| `TiktokCut-工厂版产品介绍.pptx` | 24 页，每页带讲解备注（演讲者视图可见） |
+| `Vidloom-工厂宣传片.mp4` | 1920×1080 · 约 3 分 13 秒，男声配音 + 字幕 + 背景音乐 |
+| `Vidloom-工厂版产品介绍.pptx` | 24 页，每页带讲解备注（演讲者视图可见） |
 | `narration.json` | 旁白文案（改文案就改这里） |
 | `video/src/` | Remotion 画面：`Promo.tsx` 场景与文案，`mocks.tsx` 软件界面示意 |
 | `deck/build-deck.cjs` | PPT 生成脚本，配图来自 `deck/img/`（由视频工程导出） |

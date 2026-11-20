@@ -55,7 +55,7 @@ function open(module: MobileModule) {
   <template v-else>
   <header class="m-header home-header">
     <img :src="brandLogo" alt="" class="home-header__logo" />
-    <h1 class="m-header__title">TiktokCut</h1>
+    <h1 class="m-header__title">Vidloom</h1>
   </header>
 
   <main class="m-page">

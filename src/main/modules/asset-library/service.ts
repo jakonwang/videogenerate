@@ -528,7 +528,7 @@ class AssetLibraryService {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta charset="utf-8">
 <meta name="theme-color" content="#07151a">
-<title>TiktokCut · 素材库</title>
+<title>Vidloom · 素材库</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;background:#071116;color:#eef7f5}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#071116}body:before{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(145deg,rgba(22,188,164,.12),transparent 38%),linear-gradient(180deg,#071116,#0b171d 72%,#071116)}
@@ -538,7 +538,7 @@ class AssetLibraryService {
 input{display:none}.hint{display:flex;justify-content:space-between;gap:10px;margin:13px 2px 0;color:#78918e;font-size:11px}.status{min-height:23px;margin:14px 2px 0;color:#b9d7d1;font-size:12px}.status.ok{color:#62ddbe}.status.error{color:#ff9e9e}.files{display:grid;gap:8px;margin-top:13px}.file{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(149,205,195,.1);border-radius:9px;background:rgba(4,17,21,.42)}.file-icon{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:7px;background:rgba(82,217,193,.12);color:#52d9c1;font-size:11px;font-weight:800}.file-copy{min-width:0;flex:1}.file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.file-state{margin-top:3px;color:#78918e;font-size:10px}.file-state.ok{color:#62ddbe}.file-state.error{color:#ff9e9e}.footer{display:flex;align-items:center;gap:8px;margin-top:20px;color:#66807d;font-size:11px}.lock{width:14px;height:14px;border:1px solid #66807d;border-radius:50%;font-size:9px;text-align:center;line-height:13px}.expiry{margin-left:auto}.footer a{color:#8eaaa6;text-decoration:none}@media(max-width:380px){.page{padding:22px 15px 28px}h1{font-size:26px}.drop{min-height:195px}}
 </style></head>
 <body><main class="page">
-<header class="brand"><div class="brand-mark" aria-hidden="true"></div><div><div class="brand-name">TiktokCut</div><div class="brand-sub">智能视频生产工作台</div></div></header>
+<header class="brand"><div class="brand-mark" aria-hidden="true"></div><div><div class="brand-name">Vidloom</div><div class="brand-sub">智能视频生产工作台</div></div></header>
 <section class="hero"><div class="eyebrow"><i></i> MATERIAL LIBRARY</div><h1>把素材送到电脑</h1><p>选择图片或视频，它们会安全地进入这台电脑的素材库。</p></section>
 <section class="panel"><div class="drop"><div class="drop-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg></div><strong>选择图片或视频</strong><span>支持 JPG、PNG、WEBP、MP4、MOV 等格式<br>单个文件最大 100 MB</span><div class="pick-actions"><label class="pick-button" for="fi">选择图片</label><label class="pick-button" for="fv">选择视频</label></div></div><input id="fi" type="file" accept="image/*" multiple><input id="fv" type="file" accept="video/*,.mp4,.mov,.webm,.mkv" multiple><div class="hint"><span>可一次选择多个文件</span><span id="count">等待选择</span></div><div id="files" class="files"></div><p id="s" class="status" role="status">等待上传</p></section>
 <footer class="footer"><span class="lock">✓</span><span>仅在当前上传会话内传输</span><span class="expiry">链接即将失效</span></footer>

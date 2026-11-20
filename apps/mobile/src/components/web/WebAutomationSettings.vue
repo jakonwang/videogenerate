@@ -31,7 +31,7 @@ onMounted(() => void init())
   <div v-if="loading" class="was-wait"><LoaderCircle :size="18" class="vg-spin" /> 正在连接电脑…</div>
   <div v-else-if="!online || !section" class="vg-notice vg-notice--warning was-offline">
     <Monitor :size="15" />
-    <span>系统体检、每日简报和每周复盘的定时、飞书推送都在电脑上运行。打开电脑上的 TiktokCut（登录同一账号）后，这里可以直接查看和修改。网页的「AI 今日简报」和「数据复盘」不受影响。</span>
+    <span>系统体检、每日简报和每周复盘的定时、飞书推送都在电脑上运行。打开电脑上的 Vidloom（登录同一账号）后，这里可以直接查看和修改。网页的「AI 今日简报」和「数据复盘」不受影响。</span>
     <button type="button" class="vg-btn vg-btn--sm" @click="init"><RefreshCw :size="14" /> 重新检测</button>
   </div>
   <component :is="section" v-else data-testid="web-automation-settings" />

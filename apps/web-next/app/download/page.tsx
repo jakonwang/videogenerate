@@ -36,7 +36,7 @@ export default function DownloadPage() {
   return (
     <SiteShell>
       <section className="mx-auto grid w-full max-w-[960px] gap-10 px-4 py-16 sm:px-6 lg:py-20">
-        <SectionHeading center eyebrow="下载" title="下载 TiktokCut 客户端" desc="AI 视频生产需要本地合成与浏览器自动化，所以核心功能在 Windows 客户端里运行。" />
+        <SectionHeading center eyebrow="下载" title="下载 Vidloom 客户端" desc="AI 视频生产需要本地合成与浏览器自动化，所以核心功能在 Windows 客户端里运行。" />
 
         <div className="grid gap-6 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-8 text-center">
           <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">

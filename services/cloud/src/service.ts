@@ -357,7 +357,7 @@ export function createCloudService(deps: {
     const t = now()
     const orderNo = newOrderNo(t)
     const expireAt = t + config.orderExpireMs
-    const subject = `TiktokCut ${plan.name}`
+    const subject = `Vidloom ${plan.name}`
     let qrContent = `mock://pay/${orderNo}`
     if (input.channel === 'wechat') {
       qrContent = (await wechat.createNative({ orderNo, description: subject, amountFen: plan.amountFen, expireAt, notifyUrl: `${config.publicBaseUrl}/api/v1/pay/notify/wechat` })).codeUrl

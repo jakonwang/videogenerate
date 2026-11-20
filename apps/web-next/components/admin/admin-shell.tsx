@@ -117,7 +117,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <span className="admin-brand__mark">
             <Play size={13} fill="currentColor" />
           </span>
-          <span className="admin-brand__name">TiktokCut</span>
+          <span className="admin-brand__name">Vidloom</span>
           <span className="admin-brand__tag">管理后台</span>
         </Link>
         <nav className="admin-crumbs" aria-label="当前位置">

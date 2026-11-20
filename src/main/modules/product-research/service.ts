@@ -486,7 +486,7 @@ class ProductResearchService {
     let scheme = this.state.schemes.find((item) => item.id === MOBILE_SCHEME_ID)
     if (!scheme) {
       const ts = Date.now()
-      scheme = { id: MOBILE_SCHEME_ID, name: '手机采集', need: '在 TiktokCut 手机 App 上直接采集的抖音商品', market: '抖音', status: 'active', sopStage: 2, keywordCount: 0, resultCount: 0, candidateCount: 0, createdAt: ts, updatedAt: ts }
+      scheme = { id: MOBILE_SCHEME_ID, name: '手机采集', need: '在 Vidloom 手机 App 上直接采集的抖音商品', market: '抖音', status: 'active', sopStage: 2, keywordCount: 0, resultCount: 0, candidateCount: 0, createdAt: ts, updatedAt: ts }
       this.state.schemes.push(scheme)
     }
     const schemeState = (this.state.schemeStates[MOBILE_SCHEME_ID] ??= { keywords: [], candidateIds: [], productEdits: [], liveTestRecords: [] })

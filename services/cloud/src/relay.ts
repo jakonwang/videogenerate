@@ -44,7 +44,7 @@ export function createRelay() {
     if (!/^[a-zA-Z][a-zA-Z0-9]{0,63}$/.test(method)) throw badRequest('方法名不合法')
     if (!relayAllows(ns, method)) throw badRequest('这个操作需要在电脑端完成')
     const args = Array.isArray(body?.args) ? body.args : []
-    if (!online(userId)) throw new CloudError('DESKTOP_OFFLINE', '电脑端不在线：请打开电脑上的 TiktokCut 并登录同一账号', 503)
+    if (!online(userId)) throw new CloudError('DESKTOP_OFFLINE', '电脑端不在线：请打开电脑上的 Vidloom 并登录同一账号', 503)
     const entry = of(userId)
     if (entry.queue.length >= MAX_QUEUE) throw new CloudError('RATE_LIMITED', '电脑端忙，请稍后再试', 429)
     const relayCall: RelayCall = { id: randomUUID(), ns, method, args }

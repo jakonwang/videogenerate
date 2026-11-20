@@ -36,7 +36,7 @@ if (mode === 'qa') {
     console.log(file)
   }
 } else {
-  const out = path.join(promo, 'TiktokCut-工厂宣传片.mp4')
+  const out = path.join(promo, 'Vidloom-工厂宣传片.mp4')
   const composition = await selectComposition({serveUrl, id: 'FactoryPromo'})
   let last = -1
   await renderMedia({

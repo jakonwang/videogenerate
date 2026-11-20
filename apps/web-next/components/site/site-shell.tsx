@@ -63,7 +63,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center gap-6 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark size={32} />
-            <span className="text-[17px] font-semibold tracking-[-0.01em]">TiktokCut</span>
+            <span className="text-[17px] font-semibold tracking-[-0.01em]">Vidloom</span>
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -131,7 +131,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-[var(--text-muted)] sm:px-6">
           <div className="flex items-center gap-2.5">
             <BrandMark size={24} />
-            <span>© {new Date().getFullYear()} TiktokCut · AI 短视频批量生产</span>
+            <span>© {new Date().getFullYear()} Vidloom · AI 短视频批量生产</span>
           </div>
           <div className="flex flex-wrap gap-5">
             <Link href="/pricing" className="hover:text-[var(--text-main)]">价格</Link>

@@ -10,7 +10,7 @@ async function main() {
   const root = await mkdtemp(join(tmpdir(), 'vg-web-app-'))
   const dist = join(root, 'dist-web')
   await mkdir(join(dist, 'assets'), { recursive: true })
-  await writeFile(join(dist, 'index.html'), '<!doctype html><title>TiktokCut</title>')
+  await writeFile(join(dist, 'index.html'), '<!doctype html><title>Vidloom</title>')
   await writeFile(join(dist, 'assets', 'index-abc.js'), 'console.log(1)')
   await writeFile(join(dist, 'brand-logo.png'), 'png')
   await writeFile(join(root, 'secret.txt'), 'secret')
@@ -51,7 +51,7 @@ async function main() {
     assert.equal((await get('/app/assets/missing.js')).status, 404, 'missing hashed asset is a real 404')
 
     assert.equal((await get('/app/brand-logo.png')).headers['content-type'], 'image/png')
-    assert.match((await get('/app/some/deep/link')).body, /TiktokCut/, 'unknown paths fall back to the app shell')
+    assert.match((await get('/app/some/deep/link')).body, /Vidloom/, 'unknown paths fall back to the app shell')
     assert.equal((await get('/app/', 'HEAD')).body, '')
 
     for (const path of ['/app/../secret.txt', '/app/%2e%2e/secret.txt', '/app/..%2fsecret.txt', '/app/%2e%2e%5csecret.txt']) {
