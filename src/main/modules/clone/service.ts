@@ -3632,7 +3632,10 @@ function buildEffectiveVideoCompiledPrompt(input: {
     ? {
         ...input.shot,
         productType: 'earrings' as CloneProductType,
-        visualDescription: 'Extreme close-up of ear wearing the earring.',
+        // Keep what the reference shot shows (minus lines naming the old earring); the fixed text is only a fallback.
+        visualDescription:
+          sanitizeLegacyShotPromptText(String(input.shot.visualDescription || '').trim(), 'earrings') ||
+          'Extreme close-up of ear wearing the earring.',
         generationPrompt: sanitizeLegacyShotPromptText(String(input.shot.generationPrompt || '').trim(), 'earrings'),
         actionDescription: sanitizeLegacyShotPromptText(String(input.shot.actionDescription || '').trim(), 'earrings'),
         productFocus: 'Preserve shape, proportions, and structure. Avoid deformation or redesign.',

@@ -24,16 +24,15 @@ import {
   type ModelProfileOptionValue,
 } from '../../../shared/modelProfileOptions'
 import {
-  buildShotAntiGlowPromptBlock,
   cloneProductDisplayName,
   buildFailInsteadRuleText,
   buildFrameContinuityLockText,
   buildHumanPriorityRuleText,
-  buildJewelryLightEffectBanText,
   buildNoSpeakingInstruction,
   buildNoSubstituteRuleText,
   buildReferenceImageLockText,
   buildReferenceLockText,
+  buildReferenceLookText,
   buildShotScriptConstraintText,
   prependSilentCommercialGlobalRule,
   sanitizeGeneratedVideoPrompt,
@@ -1477,37 +1476,6 @@ function buildStoryboardFaceCropLockText(productType: CloneProductType, shot: Sh
   return 'FACE CROP LOCK: keep the human head out of frame whenever possible.'
 }
 
-const STORYBOARD_FRAME_TRANSFER_TEMPLATE = `
-Look at these two reference images and combine them in a natural everyday way.
-
-Image 1 is our base model and product reference (identity look reference).
-Image 2 is our daily environment reference (scene environment reference).
-
-I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.
-
-Strict Requirements:
-1. PRODUCT: Identify the product in Image 1. Keep its design, colors, and original material textures fully consistent with Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. No product redesign or restyling is allowed.
-
-2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
-Identify the model in Image 1. Keep the model's appearance clearly consistent with Image 1.
-- CLOTHING: Replicate the same clothing from Image 1, including its style, fabric texture, and color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
-- POSTURE: Keep the same presentation posture, skin tone, and the same faceless or cropped perspective on the specific body part as shown in Image 1.
-
-3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.
-
-4. TEXT AND LOGO REMOVAL:
-Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.
-
-Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.
-`.trim()
-
-const STORYBOARD_IMAGE_TEMPLATES: Record<StoryboardImageTemplateType, string> = {
-  general: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
-  jewelry: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
-  ecommerce_packaging: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
-  lifestyle_interaction: STORYBOARD_FRAME_TRANSFER_TEMPLATE,
-}
-
 function hasNoPersonStoryboardSignal(shot?: ShotSpec) {
   const haystack = [
     shot?.visualPrompt,
@@ -1550,30 +1518,33 @@ export function getDefaultStoryboardPromptTemplate(mode: StoryboardReferenceMode
 function buildStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, shot?: ShotSpec, productType?: CloneProductType) {
   // A user-managed template (scoped to this category, else to all categories) replaces the built-in one.
   const template = getActiveClonePromptTemplate(storyboardPromptKind(mode), productType) ?? getDefaultStoryboardPromptTemplate(mode)
-  return fillClonePromptTemplate(template, {
+  const filled = fillClonePromptTemplate(template, {
     humanSupportRule: hasNoPersonStoryboardSignal(shot) ? STORYBOARD_NO_HUMAN_RULE : STORYBOARD_HUMAN_SUPPORT_RULE,
     productName: cloneProductDisplayName(productType),
   }).trim()
+  // Appended after the (possibly user-edited) template so every template follows the analysed reference look.
+  const referenceLook = shot ? buildReferenceLookText(shot) : ''
+  return referenceLook ? `${filled}\n\nReference shot look (keep it): ${referenceLook}.` : filled
 }
 
 function composeStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, humanSupportRule: string) {
   const intro =
     mode === 'product_closeup'
       ? [
-        'Look at these two reference images and combine them in a natural everyday way.',
+        'Look at these two reference images and combine them faithfully.',
         '',
         'Image 1 is our product structure and presentation reference.',
-        'Image 2 is our daily environment reference.',
+        'Image 2 is the reference video frame: it defines the composition, scene, lighting and overall look.',
         '',
-        'I need you to place the product presentation from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.',
+        'I need you to place the product presentation from Image 1 into the scene of Image 2, so the result looks like a frame from the same video as Image 2.',
       ]
       : [
-        'Look at these two reference images and combine them in a natural everyday way.',
+        'Look at these two reference images and combine them faithfully.',
         '',
         'Image 1 is our base model and product reference (identity look reference).',
-        'Image 2 is our daily environment reference (scene environment reference).',
+        'Image 2 is the reference video frame: it defines the composition, scene, lighting and overall look.',
         '',
-        'I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.',
+        'I need you to place the model and product from Image 1 into the scene of Image 2, so the result looks like a frame from the same video as Image 2.',
       ]
   const fidelityBlock =
     mode === 'product_closeup'
@@ -1581,7 +1552,7 @@ function composeStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, h
         '2. PRESENTATION STRUCTURE:',
         'Keep the product fully consistent with Image 1, including its visible structure, material, color, finish, proportions, and defining details.',
         humanSupportRule,
-        '- SCENE INTEGRATION: Place that same product naturally into the daily environment, composition, and atmosphere of Image 2 so the final result feels like a real-life casual capture in that scene.',
+        '- SCENE INTEGRATION: Place that same product naturally into the environment, composition, and atmosphere of Image 2 so the final result reads as the same shot as Image 2.',
         '- BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2 to present the product naturally, such as hand placement or ear/neck/hand relation. Do not infer or recreate a specific person identity from Image 1.',
         '- CLOTHING: Only preserve clothing or accessory context when it is visible and necessary for the Image 2 scene composition. Ignore unrelated fashion details that do not help the product sit naturally in the scene.',
         '- POSTURE AND CROP: Follow the crop, framing tightness, and close-up storytelling intent needed to integrate the product into Image 2 while keeping the product itself visually identical to Image 1.',
@@ -1600,12 +1571,12 @@ function composeStoryboardFrameTransferTemplate(mode: StoryboardReferenceMode, h
     '',
     ...fidelityBlock,
     '',
-    '3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.',
+    '3. SCENE AND LIGHT MATCH: Replace the plain studio background of Image 1 with the background surface, setting, framing, light direction, contrast, color tone and depth of field of Image 2. Match the polish level of Image 2: if Image 2 is a casual home video, keep it casual; if Image 2 is a premium close-up with a dark or textured backdrop and directional light, keep that premium look.',
     '',
     '4. TEXT AND LOGO REMOVAL:',
     'Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.',
     '',
-    'Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.',
+    'Style: Photorealistic, matching the look of Image 2. Product materials render true to life: crisp metal edges, real stone facets and real specular highlights that sit on the material surface. No CGI or 3D-render look, no fantasy glow, no starburst or lens-flare effects. Single panel only, no sketches, no animation.',
   ].join('\n').trim()
 }
 

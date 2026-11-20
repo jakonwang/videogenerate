@@ -26,7 +26,8 @@ async function main() {
   assert.match(handheldPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Phone Case\./i)
   assert.match(handheldPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
   assert.match(handheldPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-  assert.match(handheldPrompt, /Implement Micro-handheld camera movement focusing on the hands.* with controlled handheld motion that still feels alive and product-first\./i)
+  assert.match(handheldPrompt, /Implement Macro sliding pan across the case edge, smooth and physically real/i)
+  assert.doesNotMatch(handheldPrompt, /Micro-handheld camera movement focusing on the hands/i)
   assert.match(handheldPrompt, /The hand turns the phone gently so the case back, edges, and camera cutout stay readable, with realistic micro-shadows\./i)
 
   const jewelryPrompt = buildFinalShotVideoPositivePrompt({
@@ -52,7 +53,7 @@ async function main() {
   assert.match(jewelryPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
   assert.match(jewelryPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
   assert.match(jewelryPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-  assert.match(jewelryPrompt, /Implement Subtle handheld close-up on the ear area.* with controlled handheld motion that still feels alive and product-first\./i)
+  assert.match(jewelryPrompt, /Implement Macro close-up with tilt, smooth and physically real/i)
   assert.match(jewelryPrompt, /The earring sways naturally under gravity with gentle realistic movement\./i)
 
   const accessoryPrompt = buildFinalShotVideoPositivePrompt({
@@ -78,9 +79,34 @@ async function main() {
   assert.match(accessoryPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Ring\./i)
   assert.match(accessoryPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
   assert.match(accessoryPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-  assert.match(accessoryPrompt, /Implement Subtle handheld sliding tilt across the fingers.* with controlled handheld motion that still feels alive and product-first\./i)
+  assert.match(accessoryPrompt, /Implement Macro sliding pan across fingers, smooth and physically real/i)
   assert.match(accessoryPrompt, /The accessory moves naturally and gently with realistic micro-shadows/i)
   assert.doesNotMatch(accessoryPrompt, /100% strict structural consistency|millimeter precision|tiny 3 degrees|natural physical inertia|natural ambient occlusion/i)
+
+  // No camera movement recorded for the shot: the category default fills in, and a placeholder motion is ignored.
+  const noMovementPrompt = buildFinalShotVideoPositivePrompt({
+    shot: {
+      id: 'shot_no_movement',
+      index: 3,
+      productType: 'earrings' as any,
+      scriptText: '',
+      generationPrompt: 'earring close-up',
+      visualDescription: 'earring on the ear lobe',
+      actionDescription: '',
+      cameraDescription: 'extreme close-up',
+      productFocus: '',
+      materialNeed: '',
+      motion: 'static',
+      framing: 'closeup',
+      shotType: 'model_demo' as any,
+      compiledPrompt: '',
+      sceneDescription: { lighting: 'hard side light with crisp metal highlights', background: 'dark velvet' },
+    } as any,
+    productIdentityText: 'exact same bound product only',
+    productMode: 'STRICT' as any,
+  })
+  assert.match(noMovementPrompt, /Implement Subtle handheld close-up on the ear area, smooth and physically real/i)
+  assert.match(noMovementPrompt, /- Reference Look: lighting: hard side light with crisp metal highlights; background: dark velvet\./i)
 
   console.log('clone shot video physical lighting lock template smoke test passed')
 }

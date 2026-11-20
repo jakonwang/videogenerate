@@ -231,19 +231,21 @@ function composePromptParagraphs(sections: Array<string | null | undefined>, max
   return sanitizeGeneratedVideoPrompt(compact, maxChars)
 }
 
-const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, crisp, high-definition (HD) 60fps video with a handheld smartphone shooting look, customized for a realistic social media product review. The overall dynamic movement must stay natural, organic, and everyday lifestyle-oriented, and it should still feel alive instead of like a static image. Absolutely PROHIBIT cinematic studio setups, heavy commercial color grading, and robotic PPT-style panning/zooming.
+const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A crisp, high-definition (HD) 60fps short-form product video that continues the provided base image as a real camera recording. Keep the look of the base image and the reference shot: the same lighting, background, color tone and polish level. The movement must feel alive and physically real instead of like a static image. Absolutely PROHIBIT robotic PPT-style panning/zooming and any CGI or 3D-render look.
 
 1. THE COMPOSITION CORE (Ref. Base Image):
 - Timeline Initiation: Seamlessly initiate the video timeline directly from the provided base image.
 - NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the {{productName}}.
 - STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image.
 
-2. REALISTIC LIFESTYLE LIGHT:
-- Ambient Light Shift: Keep natural, soft everyday ambient light matching the lifestyle environment in the background.
+2. LIGHT AND MATERIAL (Ref. Base Image):
+- Light Match: Keep the light direction, hardness, contrast and color temperature of the base image throughout the shot.
+{{referenceLookLine}}
+- Material Response: Metal, stones and glossy surfaces react to the light like real materials: crisp edge highlights and real facet sparkle that stay attached to the surface and move with the product.
 - Shadow Response: Keep realistic micro-shadows consistent with the scene and product placement.
 
 3. HANDHELD CAMERA MECHANICS:
-- Natural Motion: Implement {{cameraMovement}} with controlled handheld motion that still feels alive and product-first.
+- Camera Motion: Implement {{cameraMovement}}, smooth and physically real, keeping the product as the visual anchor.
 - Spatial Parallax: Keep subtle spatial parallax so the {{productName}} remains grounded in a believable 3D scene.
 
 4. BIOMETRIC INTERACTION & ABSOLUTE ANONYMITY:
@@ -253,7 +255,7 @@ const PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE = `Main Instruction: A natural, cris
 {{faceRuleLine}}
 - Silent Performance Lock: The model must remain completely silent. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, no open-mouth speaking expression, no speech-like lip shapes, and no presenter-style delivery. Keep lips closed or only minimally relaxed at all times. Every visible frame must read as fully silent, never mid-speech, never about to speak, and never finishing a spoken line.
 
-Visual Aesthetic: Casual everyday smartphone video, natural organic color tones, realistic skin textures, soft focused background, authentic lifestyle product showcase. No AI synthetic glossiness, no commercial render look. Single panel only.`
+Visual Aesthetic: Match the base image: same color grade, depth of field and polish level, realistic skin textures, true-to-life product materials. No fantasy glow, no starburst or lens-flare effects, no CGI look. Single panel only.`
 
 /** Built-in shot video template, shown in prompt management as the default version. */
 export const DEFAULT_SHOT_VIDEO_PROMPT_TEMPLATE = PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE
@@ -394,25 +396,62 @@ function buildReferenceSceneText(value: unknown) {
   return /[a-z]{3,}/i.test(text) ? text.slice(0, 260).trim() : ''
 }
 
-function buildVideoFaceRuleLine(input: { faceRule: VideoSlotProfile['faceRule']; modelPresentation: boolean; targetBodyPart: string; productName: string }) {
-  if (input.faceRule === 'follow_base_image' && input.modelPresentation) {
+/**
+ * The look of this reference shot as the analysis recorded it: lighting, background
+ * surface and overall style. Empty when the analysis did not record any of it.
+ */
+export function buildReferenceLookText(shot: { sceneDescription?: ShotSpec['sceneDescription'] }) {
+  const scene = shot.sceneDescription ?? {}
+  const clean = (value: unknown) =>
+    keepEnglishLikeText(stripSpeechCueText(value), '').replace(/\s+/g, ' ').replace(/^[\s.;,]+|[\s.;,]+$/g, '').trim().slice(0, 200)
+  return [
+    clean(scene.lighting) ? `lighting: ${clean(scene.lighting)}` : '',
+    clean(scene.background) ? `background: ${clean(scene.background)}` : '',
+    clean(scene.location) ? `setting: ${clean(scene.location)}` : '',
+    clean(scene.style) ? `look: ${clean(scene.style)}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ')
+}
+
+function buildVideoFaceRuleLine(input: {
+  faceRule: VideoSlotProfile['faceRule']
+  modelPresentation: boolean
+  /** The AI analysis itself classified the reference shot as a model presentation (not a legacy label). */
+  analysedModelPresentation?: boolean
+  targetBodyPart: string
+  productName: string
+}) {
+  // Categories that may show the face follow the base image on model shots. Cropped categories (jewelry,
+  // shoes) stay anonymous unless the analysis saw the reference shot itself present the model.
+  const followBaseImage = input.faceRule === 'follow_base_image' ? input.modelPresentation : Boolean(input.analysedModelPresentation)
+  if (followBaseImage) {
     return `- Face Framing: Follow the base image framing exactly and keep the ${input.productName} as the visual anchor around the ${input.targetBodyPart}. If the model's face is visible in the base image, keep the same person and a calm natural expression, and never reveal more of the face than the base image shows. Do not turn the shot into a face-centered portrait.`
   }
   return `- Absolute Anonymity: The camera angle remains tightly cropped on the ${input.targetBodyPart}, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity.`
 }
 
+const CAMERA_MOVEMENT_WORD =
+  /\b(camera|pan|pans|panning|tilt|tilts|zoom|zooms|push|pushes|push-in|pull|pulls|pull-back|track|tracks|tracking|dolly|slide|slides|glide|glides|orbit|orbits|move|moves|moving|movement|static|steady|handheld|follow|follows)\b/i
+
+/**
+ * One camera instruction from the reference lines: split into sentences, keep only the ones
+ * about camera movement (shot size and subject text are said elsewhere), and drop repeats.
+ */
 function composePhysicalLightingLockCameraMovement(primary: string, extraLines: string[]) {
-  const parts = [primary, ...extraLines]
+  const sentences = [primary, ...extraLines]
     .map((item) => keepEnglishLikeText(item, '').trim())
-    .map((item) => item.replace(/\.+$/g, '').trim())
+    .flatMap((item) => item.split(/(?<=[.!?])\s+|;\s*/))
+    .map((item) => item.replace(/[.\s]+$/g, '').trim())
     .filter(Boolean)
+  const movement = sentences.filter((item) => CAMERA_MOVEMENT_WORD.test(item))
   const deduped: string[] = []
-  for (const part of parts) {
+  for (const part of movement.length ? movement : sentences) {
     const lowered = part.toLowerCase()
     if (deduped.some((item) => item.toLowerCase() === lowered)) continue
     deduped.push(part)
   }
-  return deduped.join('; ')
+  return deduped.join('. ')
 }
 
 export const VIDEO_PROMPT_TEMPLATE = `
@@ -624,41 +663,6 @@ export function buildFailInsteadRuleText() {
   return 'If any forbidden condition is triggered, discard the generation instead of correcting it.'
 }
 
-export function buildJewelryLightEffectBanText(productType?: string) {
-  const normalizedType = String(productType || '').trim().toLowerCase()
-  if (!/earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(normalizedType)) {
-    return ''
-  }
-  return [
-    'ABSOLUTE JEWELRY LIGHT EFFECT BAN:',
-    'Jewelry must never become a light source.',
-    'Keep stones and metal passive, dim, non-emissive, and physically dull when needed.',
-    'No sparkle, no star glint, no lens flare, no bloom, no glowing white core, no flash hotspot, no detached bright spot, and no self-luminous shine.',
-    'No point-like sparkle, white-hot pixel cluster, rainbow flare, radial rays, magical shine, or luxury-ad jewelry effect.',
-    'If any highlight starts to look flashy, glowing, explosive, premium-VFX, or brighter than realistic skin specular, suppress it immediately.',
-    'Only allow weak, flat, surface-attached reflections. Prefer slightly darker, quieter metal and stone response over any dramatic shine.',
-    'If the jewelry appears self-luminous in any frame, treat that result as invalid and discard it.',
-  ].join(' ')
-}
-
-export function buildAntiGlowLightingEnvironmentText(productType?: string) {
-  const normalizedType = String(productType || '').trim().toLowerCase()
-  if (!/earrings?|ear jewelry|jewelry|jewellery|diamond|zircon|crystal|gem|gemstone|silver|gold|ring|necklace|bracelet/.test(normalizedType)) {
-    return ''
-  }
-  return [
-    'ANTI-GLOW LIGHTING ENVIRONMENT:',
-    'Use soft diffused lighting, matte lighting, studio flat lighting, low contrast lighting, and overcast lighting behavior.',
-    'Use diffuse soft source only, with flat studio diffusion and low contrast exposure.',
-    'No specular highlights, no hard key light, no point light reflections, and no glossy jewelry rendering.',
-    'Treat metal and stones as optically quiet materials with dimmer, flatter, non-emissive material response.',
-    'Remove specular edge pops and bright jewelry hotspots.',
-    'Prefer flat studio diffusion or overcast softness over realistic shiny reflections.',
-    'If reference lighting creates jewelry sparkle, override it with flatter, softer, dimmer lighting immediately.',
-    'Lighting control overrides reference lighting when anti-glow conflicts occur.',
-  ].join(' ')
-}
-
 function inferJewelryLikePromptContext(input: {
   productType?: string
   generationPrompt?: string
@@ -680,16 +684,6 @@ function inferJewelryLikePromptContext(input: {
   return isJewelryTarget(input.productType, haystack)
 }
 
-export function buildShotAntiGlowPromptBlock(input: {
-  productType?: string
-  generationPrompt?: string
-  visualDescription?: string
-  productIdentityText?: string
-  materialNeed?: string
-}) {
-  const inferredType = inferJewelryLikePromptContext(input) ? 'jewelry' : String(input.productType || '').trim()
-  return sanitizeGeneratedVideoPrompt(buildJewelryLightEffectBanText(inferredType), 520)
-}
 
 export function buildSpatialAnchorLockText(productType: string) {
   const base = [
@@ -1095,73 +1089,47 @@ export function buildTextSafetyInstruction() {
 export function buildGenerationPromptRestraintText() {
   return sanitizeGeneratedVideoPrompt(
     [
-      'Keep the generation prompt realistic and commercially usable.',
-      'Product appearance must stay natural, restrained, and physically believable.',
-      'Do not overdramatize the product with luxury-ad style exaggeration, fantasy polish, or glamorized rendering.',
-      'If the product includes diamond, zircon, crystal, gemstone, glossy metal, mirror, or reflective details, keep highlights subtle and camera-realistic only.',
-      'Allow only tiny low-intensity real specular edges that stay inside the material surface. Do not add exaggerated sparkle, over-flashing shine, glow, bloom, starburst highlights, magical glitter, lens flare, radial light rays, glowing white cores, rainbow flares, or visual-effect style product shine.',
-      'Do not make the product look self-luminous, overly glossy, overexposed, or artificially premium through effects.',
+      'Keep the product physically believable and true to its real materials.',
+      'Metal, stones, crystal and glossy surfaces show real highlights and real facet sparkle that stay on the material surface and follow the light of the scene.',
+      'Do not add fake visual effects: no starburst or star-shaped glints, no lens flare, no radial light rays, no rainbow flare, no glowing white core, no detached light orbs, and no self-luminous product.',
     ].join('\n'),
     700,
   )
 }
 
+/**
+ * Jewelry generation prompt cleanup. The words the analysis used for the reference
+ * (sparkling, high-polish...) are kept: they describe the premium look we want to clone.
+ * Only fake visual effects are ruled out.
+ */
 export function sanitizeJewelryGenerationPrompt(value: unknown, productType?: string) {
   const text = keepEnglishLikeText(value, '').trim()
   if (!text) return ''
   const normalizedType = String(productType || '').trim().toLowerCase()
   const looksJewelry = isJewelryTarget(normalizedType, text)
   if (!looksJewelry) return sanitizeGeneratedVideoPrompt(text, 700)
-  const replacements: Array<[RegExp, string]> = [
-    [/\bvisual impact\b/gi, 'refined product presence'],
-    [/\bsparkling stones?\b/gi, 'realistic stone surface detail'],
-    [/\bsparkling\b/gi, 'realistic material detail'],
-    [/\bhigh-polish\b/gi, 'natural'],
-    [/\bglittering\b/gi, 'realistic'],
-    [/\bdazzling\b/gi, 'refined'],
-    [/\bshimmering\b/gi, 'realistic'],
-    [/\bbrilliant shine\b/gi, 'subtle material detail'],
-    [/\bintense shine\b/gi, 'subtle material detail'],
-  ]
-  let next = text
-  for (const [pattern, replacement] of replacements) next = next.replace(pattern, replacement)
-  next = next
-    .replace(/\bhigh-polish silver texture\b/gi, 'natural silver texture')
-    .replace(/\bhigh-polish gold texture\b/gi, 'natural gold texture')
-    .replace(/\bsparkle(?:\s+effect)?\b/gi, 'realistic material detail')
-    .replace(/\s+/g, ' ')
-    .trim()
   const restraint = [
-    'Keep jewelry highlights tiny, low-intensity, realistic, and restrained.',
-    'Jewelry must not become a light source.',
-    'No star-shaped flare, no radial light rays, no lens flare, no glowing white core, no rainbow flare, no sparkle points, no bloom-heavy shine, no fantasy glow, and no luxury VFX polish.',
+    'Jewelry highlights and stone sparkle stay real: attached to the metal and stone surfaces and following the scene light.',
+    'No star-shaped flare, no radial light rays, no lens flare, no glowing white core, no rainbow flare, no fantasy glow, and the jewelry never becomes a light source.',
   ].join(' ')
-  return sanitizeGeneratedVideoPrompt([next, restraint].filter(Boolean).join('\n'), 700)
+  return sanitizeGeneratedVideoPrompt([text.replace(/\s+/g, ' '), restraint].filter(Boolean).join('\n'), 700)
 }
 
 export function buildVideoAntiSparkleNegativePrompt(base?: unknown, productMode: CloneProductMode = 'STRICT') {
+  // Only fake effects. Real highlights and real stone sparkle are part of the premium look and stay allowed.
   const hardVfxBan = [
-    'no sparkle',
-    'no starburst',
-    'no lens flare',
-    'no radial light rays',
-    'no light burst',
-    'no glowing white core',
-    'no rainbow flare',
-    'no bloom blob',
-    'no glitter VFX',
-    'no magical shine',
-    'no flash hotspot',
-    'no self-luminous product',
-    'no overexposed shine',
-    'no flashy visual effects',
-    'no strobe-like highlights',
-    'no explosive jewelry glint',
-    'no glowing gemstone',
-    'no bright white hotspot on jewelry',
-    'no detached highlight orb',
-    'no emissive reflection',
-    'no luxury ad shine effect',
+    'starburst',
+    'star-shaped glint',
+    'lens flare',
+    'radial light rays',
+    'rainbow flare',
+    'glowing white core',
+    'bloom blob',
+    'glitter VFX',
+    'magical shine',
+    'self-luminous product',
+    'glowing gemstone',
+    'detached highlight orb',
   ].join(', ')
   const identityBan =
     productMode === 'STRICT'
@@ -1302,7 +1270,7 @@ export function buildOptimizedVideoPrompt(input: {
     | 'shotType'
     | 'compiledPrompt'
   > &
-    Pick<ShotSpec, 'storyboardReferenceMode'>
+    Pick<ShotSpec, 'storyboardReferenceMode' | 'sceneDescription'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode
@@ -1329,7 +1297,7 @@ function buildVideoExecutionStackPrompt(input: {
     | 'shotType'
     | 'compiledPrompt'
   > &
-    Pick<ShotSpec, 'storyboardReferenceMode'>
+    Pick<ShotSpec, 'storyboardReferenceMode' | 'sceneDescription'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode
@@ -1341,21 +1309,28 @@ function buildVideoExecutionStackPrompt(input: {
     .join(' ')
   const slotProductType = resolveVideoSlotProductType({ productType: shot.productType, productText })
   const profile = VIDEO_SLOT_PROFILES[slotProductType]
+  // Only described movement counts. shot.motion is a placeholder (older projects even cycled it by shot
+  // index), so it must not override the category default.
   const extraCameraMovement = extractCameraMovementOnlySentenceList({
     scriptText: shot.scriptText,
     cameraDescription: shot.cameraDescription,
-    motion: shot.motion,
   })
   const referenceAction = buildReferenceActionText({ actionDescription: shot.actionDescription, scriptText: shot.scriptText })
   const referenceScene = buildReferenceSceneText(shot.visualDescription)
+  const referenceLook = buildReferenceLookText(shot)
+  const referenceLookLine = referenceLook ? `- Reference Look: ${referenceLook}.` : ''
   // A user-managed template (scoped to this category, else to all categories) replaces the built-in one.
   const template = getActiveClonePromptTemplate('shot_video', slotProductType) ?? PHYSICAL_LIGHTING_LOCK_VIDEO_TEMPLATE
-  const filled = fillClonePromptTemplate(template, {
+  const filledTemplate = fillClonePromptTemplate(template, {
     productName: profile.productName,
     targetBodyPart: profile.targetBodyPart,
     referenceAction,
     referenceScene,
-    cameraMovement: composePhysicalLightingLockCameraMovement(profile.cameraMovement, extraCameraMovement),
+    referenceLookLine,
+    // The reference shot decides how the camera moves; the category default only fills in when the analysis has none.
+    cameraMovement: extraCameraMovement.length
+      ? composePhysicalLightingLockCameraMovement(extraCameraMovement[0]!, extraCameraMovement.slice(1))
+      : profile.cameraMovement,
     referenceActionLine: referenceAction
       ? `- Reference Action: Reproduce this action from the reference shot at natural real-life speed, inside the base image framing: ${referenceAction}.`
       : '',
@@ -1366,10 +1341,14 @@ function buildVideoExecutionStackPrompt(input: {
     faceRuleLine: buildVideoFaceRuleLine({
       faceRule: profile.faceRule,
       modelPresentation: isModelPresentationVideoShot(shot),
+      analysedModelPresentation: String(shot.storyboardReferenceMode || '').trim().toLowerCase() === 'model_presentation',
       targetBodyPart: profile.targetBodyPart,
       productName: profile.productName,
     }),
   })
+  // A custom template without the look placeholder still gets the reference look.
+  const filled =
+    referenceLookLine && !template.includes('{{referenceLookLine}}') ? `${filledTemplate}\n${referenceLookLine}` : filledTemplate
   // Optional lines that resolved to nothing leave an empty line inside a list block; remove only those.
   return filled.replace(/(\n- [^\n]*|:)\n(?:[ \t]*\n)+(?=- )/g, '$1\n')
 }
@@ -1393,7 +1372,7 @@ export function buildFinalShotVideoPositivePrompt(input: {
     | 'shotType'
     | 'compiledPrompt'
   > &
-    Pick<ShotSpec, 'storyboardReferenceMode'>
+    Pick<ShotSpec, 'storyboardReferenceMode' | 'sceneDescription'>
   modelIdentityText?: string
   productIdentityText?: string
   productMode?: CloneProductMode

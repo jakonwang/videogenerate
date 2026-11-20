@@ -24,11 +24,12 @@ async function main() {
     productMode: 'STRICT' as any,
   })
 
-  assert.match(prompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
+  assert.match(prompt, /^Main Instruction: A crisp, high-definition \(HD\) 60fps short-form product video that continues the provided base image as a real camera recording\./i)
   assert.match(prompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
   assert.match(prompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
   assert.match(prompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-  assert.match(prompt, /Implement Subtle handheld close-up on the ear area.* with controlled handheld motion that still feels alive and product-first\./i)
+  assert.match(prompt, /- Camera Motion: Implement .+, smooth and physically real, keeping the product as the visual anchor\./i)
+  assert.doesNotMatch(prompt, /No AI synthetic glossiness|not luxury|Casual everyday smartphone video/i)
   assert.match(prompt, /The earring sways naturally under gravity with gentle realistic movement\./i)
   assert.match(prompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame or naturally turned away to maintain absolute privacy and anonymity\./i)
   assert.match(prompt, /The model must remain completely silent\. No talking, no speaking voice, no lip-sync, no mouth performance, no vocalization, no open-mouth speaking expression, no speech-like lip shapes, and no presenter-style delivery\. Keep lips closed or only minimally relaxed at all times\./i)

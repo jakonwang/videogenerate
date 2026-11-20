@@ -176,12 +176,14 @@ function buildScriptFramework(locale: CloneLocale): CloneScriptFramework {
   }
 }
 
-function buildVisualStyle(referenceAspectRatio: '9:16' | '16:9'): CloneVisualStyleProfile {
+/** The look of the reference video as the AI saw it; fixed defaults only when the analysis is missing. */
+function buildVisualStyle(referenceAspectRatio: '9:16' | '16:9', observed?: CloneBlueprint['globalScript']): CloneVisualStyleProfile {
+  const pick = (value: unknown, fallback: string) => String(value || '').trim() || fallback
   return {
-    scene: referenceAspectRatio === '9:16' ? 'social commerce vertical product scene' : 'commercial demonstration scene',
-    lighting: 'soft natural daylight with realistic contrast',
-    cameraStyle: 'smartphone-first framing',
-    movementStyle: 'short-form handheld micro movement',
+    scene: pick(observed?.environment, referenceAspectRatio === '9:16' ? 'social commerce vertical product scene' : 'commercial demonstration scene'),
+    lighting: pick([observed?.lighting, observed?.colorTone].filter(Boolean).join('; '), 'soft natural daylight with realistic contrast'),
+    cameraStyle: pick(observed?.shotScale, 'smartphone-first framing'),
+    movementStyle: pick(observed?.cameraMotion, 'short-form handheld micro movement'),
     realismStyle: referenceAspectRatio === '9:16' ? 'ugc' : 'studio',
   }
 }
@@ -194,16 +196,17 @@ function summarizeVideoStructure(locale: CloneLocale, shots: ShotSpec[], eligibl
   )
 }
 
-function inferMotion(durationSec: number, idx: number): ShotSpec['motion'] {
-  if (durationSec < 0.9) return 'fast_cut'
-  const arr: Array<NonNullable<ShotSpec['motion']>> = ['static', 'zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'shake']
-  return arr[idx % arr.length]
+/**
+ * Placeholder motion before the AI has looked at the frames. Only the cut length
+ * is known here, so never invent a push/pan: the AI camera description replaces it.
+ */
+function inferMotion(durationSec: number, _idx: number): ShotSpec['motion'] {
+  return durationSec < 0.9 ? 'fast_cut' : 'static'
 }
 
-function inferTransition(idx: number, total: number): ShotSpec['transitionOut'] {
-  if (idx === total - 1) return 'hardcut'
-  const arr: Array<NonNullable<ShotSpec['transitionOut']>> = ['hardcut', 'fade', 'flash', 'slide', 'zoom']
-  return arr[idx % arr.length]
+/** Short-form commerce videos are cut, not faded. Never invent a transition. */
+function inferTransition(_idx: number, _total: number): ShotSpec['transitionOut'] {
+  return 'hardcut'
 }
 
 function classifyShot(input: {
@@ -285,7 +288,9 @@ async function makeShotThumbnail(input: {
       '-frames:v',
       '1',
       '-vf',
-      'scale=320:-1',
+      'scale=720:-2',
+      '-q:v',
+      '3',
       input.outPath,
     ]
     const child = spawn(ffmpeg, args, { windowsHide: true })
@@ -536,7 +541,7 @@ export async function analyzeReferenceVideo(input: {
       first3SecShotCount: shots.filter((shot) => Number(shot.startSec || 0) < 3).length,
       hasFastCut: shots.some((shot) => shot.motion === 'fast_cut' || Number(shot.durationSec || 0) <= 0.9),
     },
-    visualStyle: buildVisualStyle(referenceAspectRatio),
+    visualStyle: buildVisualStyle(referenceAspectRatio, globalScript),
     globalScript,
     scriptAnalysisError: scriptAnalysisError || undefined,
     scriptFrame: {

@@ -24,34 +24,6 @@ import {
 import { buildRealisticPrompt } from '../src/main/modules/clone/providers.ts'
 import type { ModelIdentityPack, ShotSpec } from '../src/main/modules/clone/types.ts'
 
-const GENERAL_TEMPLATE = `
-Look at these two reference images and combine them in a natural everyday way.
-
-Image 1 is our base model and product reference (identity look reference).
-Image 2 is our daily environment reference (scene environment reference).
-
-I need you to place the model and product from Image 1 into the relaxed daily setting of Image 2, so it feels like a real person casually filmed this at home.
-
-Strict Requirements:
-1. PRODUCT: Identify the product in Image 1. Keep its design, colors, and original material textures fully consistent with Image 1. Do not let the environment or colors from Image 2 bleed into or contaminate the product. No product redesign or restyling is allowed.
-
-2. MODEL & CLOTHING FIDELITY (服装与角色绝对死锁):
-Identify the model in Image 1. Keep the model's appearance clearly consistent with Image 1.
-- CLOTHING: Replicate the same clothing from Image 1, including its style, fabric texture, and color scheme. Completely IGNORE the clothing styles, colors, or outfits worn by any person in Image 2. Do not let the fashion from Image 2 influence the final output.
-- POSTURE: Keep the same presentation posture, skin tone, and the same faceless or cropped perspective on the specific body part as shown in Image 1.
-
-3. SCENE INTEGRATION: Replace the plain studio background of Image 1 with the ordinary home setting, room layout, and natural daylight feeling of Image 2. The final image should feel like it was casually captured in a real Southeast Asian home, with believable available light, mild shadows, and a relaxed unpolished atmosphere instead of a polished studio or ad campaign look.
-
-4. TEXT AND LOGO REMOVAL:
-Completely ignore, erase, and remove any text, brand logos, watermarks, alphabets, or signages present in Image 2. Do not replicate any words or graphic logos from the background scene. Replace those areas with plain, natural background textures that match the nearby surfaces in Image 2.
-
-Style: Natural UGC lifestyle photography with a casual smartphone-shot feel. Southeast Asian daily home environment, bright natural daylight, authentic ambient atmosphere. Real and believable like everyday user-made content, with clear details but not luxury, glossy, or overproduced. Single panel only, no sketches, no animation.
-`.trim()
-
-const JEWELRY_TEMPLATE = GENERAL_TEMPLATE
-const PACKAGING_TEMPLATE = GENERAL_TEMPLATE
-const INTERACTION_TEMPLATE = GENERAL_TEMPLATE
-
 const modelPack: ModelIdentityPack = {
   id: 'model-pack-1',
   createdAt: Date.now(),
@@ -569,7 +541,9 @@ assert.match(interactionPrompt, /2\. PRESENTATION STRUCTURE:/i)
 assert.doesNotMatch(interactionPrompt, /Identify the model in Image 1/i)
 assert.match(generalPrompt, /2\. PRESENTATION STRUCTURE:/i)
 assert.match(generalPrompt, /Keep the product fully consistent with Image 1/i)
-assert.match(generalPrompt, /Place that same product naturally into the daily environment, composition, and atmosphere of Image 2/i)
+assert.match(generalPrompt, /Place that same product naturally into the environment, composition, and atmosphere of Image 2/i)
+assert.match(generalPrompt, /SCENE AND LIGHT MATCH:/i)
+assert.doesNotMatch(generalPrompt, /Southeast Asian home|not luxury, glossy/i)
 assert.match(generalPrompt, /BODY CONTEXT: If human context is needed, preserve only the minimum local body-part relation required by Image 2/i)
 assert.match(generalPrompt, /POSTURE AND CROP: Follow the crop, framing tightness, and close-up storytelling intent needed to integrate the product into Image 2/i)
 assert.doesNotMatch(generalPrompt, /Identify how the product is presented in Image 1/i)
@@ -689,11 +663,11 @@ assert.doesNotMatch(packagingPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME
 assert.doesNotMatch(interactionPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
 assert.doesNotMatch(generalPrompt, /REFERENCE ROLE MAP|ENGINEERING LOCKS|FRAME CONTINUITY LOCK|Compiled product-control layer/i)
 
-assert.match(videoPrompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
+assert.match(videoPrompt, /^Main Instruction: A crisp, high-definition \(HD\) 60fps short-form product video/i)
 assert.match(videoPrompt, /NO INFERENCE RULE: Do not infer, reconstruct, redesign, or generate unseen parts of the Earring\./i)
 assert.match(videoPrompt, /STRUCTURE LOCK: Preserve the exact visible structure, silhouette, proportions, connection points, and orientation from the reference image\./i)
 assert.match(videoPrompt, /Keep realistic micro-shadows consistent with the scene and product placement\./i)
-assert.match(videoPrompt, /Implement Subtle handheld close-up on the ear area.*with highly controlled subtle handheld movement to simulate natural smartphone filming in real life\./i)
+assert.match(videoPrompt, /- Camera Motion: Implement .+, smooth and physically real, keeping the product as the visual anchor\./i)
 assert.match(videoPrompt, /The camera angle remains tightly cropped on the Ear lobe, keeping the model's eyes, nose, and lips completely out of the frame/i)
 assert.match(videoPrompt, /Silent Performance Lock: The model must remain completely silent\./i)
 assert.match(videoPrompt, /Keep lips closed or only minimally relaxed at all times\./i)
@@ -701,7 +675,7 @@ assert.doesNotMatch(videoPrompt, /100% strict structural consistency|millimeter 
 assert.match(earringNegative, /no exaggerated sparkle effect|no fantasy glow/i)
 assert.match(earringNegative, /no standing upright earring|no floating earring|no unsupported rigid earring pose/i)
 assert.match(earringNegative, /discard the generation instead of correcting it/i)
-assert.match(zoomOutVideoPrompt, /^Main Instruction: A natural, crisp, high-definition \(HD\) 60fps video with a handheld smartphone shooting look/i)
+assert.match(zoomOutVideoPrompt, /^Main Instruction: A crisp, high-definition \(HD\) 60fps short-form product video/i)
 assert.match(zoomOutVideoPrompt, /HANDHELD CAMERA MECHANICS/i)
 assert.doesNotMatch(zoomOutVideoPrompt, /Replace only the person identity and product identity\./i)
 assert.match(spatialAnchorText, /SPATIAL ANCHOR LOCK/i)

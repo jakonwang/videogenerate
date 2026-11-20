@@ -25,11 +25,11 @@ async function main() {
 
   assert.match(
     prompt,
-    /The overall dynamic movement must stay natural, organic, and everyday lifestyle-oriented, and it should still feel alive instead of like a static image\./i,
+    /The movement must feel alive and physically real instead of like a static image\./i,
   )
   assert.match(
     prompt,
-    /Natural Motion: Implement .* with controlled handheld motion that still feels alive and product-first\./i,
+    /Camera Motion: Implement .*, smooth and physically real, keeping the product as the visual anchor\./i,
   )
 
   const referenceLock = buildReferenceLock({

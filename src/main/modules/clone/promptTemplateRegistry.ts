@@ -27,6 +27,7 @@ export const CLONE_PROMPT_PLACEHOLDERS: Record<ClonePromptKind, readonly string[
     'referenceScene',
     'referenceActionLine',
     'referenceSceneLine',
+    'referenceLookLine',
     'specificMicroAction',
     'faceRuleLine',
   ],

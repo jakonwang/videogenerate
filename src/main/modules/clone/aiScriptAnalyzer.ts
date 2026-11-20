@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { cleanAiText, extractJsonObjectText, extractModelMessageContent, parseModelJsonPayload } from './aiResponse'
 import { generateChatCompletion, type ChatImageInput } from './unifiedChat'
-import { buildGenerationPromptRestraintText, buildSilentCommercialGlobalRule, sanitizeJewelryGenerationPrompt } from './prompt'
+import { buildGenerationPromptRestraintText, sanitizeJewelryGenerationPrompt } from './prompt'
 import type { CloneGlobalScript, CloneLocale, ModelCredentials, ScriptRole, ShotSpec } from './types'
 import { inferStoryboardReferenceDecision } from './storyboardReference'
 import { normalizeCloneProductType } from './productCategory'
@@ -524,7 +524,12 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
     )
     const visualDescription = cleanAsciiEnglishText(raw.visualDescription ?? raw.visual_description, '')
     const actionDescription = cleanAsciiEnglishText(raw.actionDescription ?? raw.action, '')
-    const cameraDescription = cleanAsciiEnglishText(raw.cameraDescription ?? raw.camera?.shot_type ?? raw.camera?.movement ?? raw.camera?.angle, '')
+    // Keep shot size, movement and angle together: taking only the first one dropped the camera movement.
+    const cameraDescription = cleanAsciiEnglishText(
+      raw.cameraDescription ??
+        joinEnglishSegments([raw.camera?.shot_type, raw.camera?.movement, raw.camera?.angle].map((part) => cleanAsciiEnglishText(part, ''))),
+      '',
+    )
     const productFocus = cleanAsciiEnglishText(raw.productFocus ?? raw.product_display?.selling_point ?? raw.product_display?.focus_point, '')
     const sceneLocation = cleanAsciiEnglishText(raw.sceneDescription?.location ?? raw.scene?.location, '')
     const sceneBackground = cleanAsciiEnglishText(raw.sceneDescription?.background ?? raw.scene?.background, '')
@@ -606,13 +611,23 @@ function normalizeResult(parsed: any, input: AnalyzeInput): ScriptAnalysisResult
 }
 
 /**
+ * Field-level observation rules. Appended by code after the (possibly user-edited) guidance,
+ * so a custom template still records camera movement, lighting and material the same way.
+ */
+const OBSERVATION_FIELD_RULES = [
+  'camera.shot_type is the shot size, camera.movement is how the camera actually moves between the start, mid and end frames (static, push-in, pull-back, pan, tilt, orbit, handheld follow), and camera.angle is the viewing angle. Compare the three frames of the shot to decide the movement.',
+  'scene.lighting must describe the light as seen: direction (side, back, top, front), hardness (hard directional or soft diffused), key-to-shadow contrast, color temperature, and how the product reacts to it (crisp metal highlights, stone sparkle, matte, glossy).',
+  'scene.background must describe the background surface and material (for example dark velvet, marble, satin fabric, mirror, skin, bedroom, desk) and its color. scene.style must name the overall look (for example premium macro jewelry close-up, bright UGC home video, studio packshot).',
+  'global_analysis.lighting, global_analysis.color_tone, global_analysis.environment, global_analysis.shot_scale and global_analysis.camera_motion summarize the dominant look of the whole video in the same terms.',
+]
+
+/**
  * Built-in analysis guidance, shown in prompt management as the default version.
  * The JSON output contract and the shot timeline are appended by code and are
  * not part of the editable template, so an edited template cannot break parsing.
  */
 export function getDefaultScriptAnalysisPromptTemplate() {
   return [
-    buildSilentCommercialGlobalRule(),
     'You are a strict reference-video forensic analyst for storyboard reconstruction.',
     'Output language: English.',
     'Target market: {{targetMarket}}. Product category: {{productCategory}}.',
@@ -639,7 +654,9 @@ function buildInstruction(input: AnalyzeInput) {
   const timeline = input.shots
     .map(
       (shot) =>
-        `${shot.id}: ${Number(shot.startSec || 0).toFixed(2)}-${Number(shot.endSec ?? 0).toFixed(2)}s, role=${shot.role || 'unknown'}, motion=${shot.cameraMovement || shot.motion || 'static'}, hint=${shot.visualPrompt || ''}`,
+        // Only the measured cut times. Role/motion/hint used to be guessed from the shot's position and
+        // steered the model away from what the frames actually show.
+        `${shot.id}: ${Number(shot.startSec || 0).toFixed(2)}-${Number(shot.endSec ?? 0).toFixed(2)}s`,
     )
     .join('\n')
 
@@ -651,6 +668,7 @@ function buildInstruction(input: AnalyzeInput) {
   )
   return [
     guidance,
+    ...OBSERVATION_FIELD_RULES,
     'Return ONLY valid JSON. No markdown. No explanation outside JSON.',
     'Use script_role values only from: hook,pain_point,solution,show,detail,proof,offer,cta,transition,unknown.',
     'Prefer omission over hallucination. Factual alignment to the reference video is the top priority.',
