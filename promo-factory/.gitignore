@@ -1,0 +1,6 @@
+# generated outputs - rebuild with scripts/factory-promo (see README)
+*.mp4
+*.pptx
+build/
+deck/img/
+video/public/soundtrack.mp3
