@@ -67,7 +67,7 @@ export function PlanCards({ compact = false }: { compact?: boolean }) {
             key={plan.code}
             className={cn(
               'relative flex flex-col gap-5 rounded-2xl border p-6',
-              featured ? 'border-[var(--primary-border)] bg-[var(--bg-panel)] shadow-[0_24px_60px_rgba(109,93,255,0.18)]' : 'border-[var(--border-base)] bg-[var(--bg-panel)]',
+              featured ? 'border-[var(--primary-border)] bg-[var(--bg-panel)] shadow-[0_24px_60px_rgba(20,184,166,0.18)]' : 'border-[var(--border-base)] bg-[var(--bg-panel)]',
             )}
           >
             {featured ? (
