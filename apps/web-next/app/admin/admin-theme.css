@@ -93,10 +93,7 @@
   background: var(--theme-root); border-bottom: 1px solid var(--theme-border); min-width: 0;
 }
 .admin-brand { display: inline-flex; align-items: center; gap: 10px; width: calc(var(--admin-sidebar-w) - 16px); flex-shrink: 0; color: var(--theme-text); text-decoration: none; }
-.admin-brand__mark {
-  width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--theme-accent); color: var(--theme-on-accent);
-}
+.admin-brand__mark { width: 26px; height: 26px; flex-shrink: 0; object-fit: contain; }
 .admin-brand__name { font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
 .admin-brand__tag { font-size: 11px; font-weight: 600; color: var(--theme-text-muted); padding-left: 10px; border-left: 1px solid var(--theme-border); }
 .admin-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--theme-text-muted); }

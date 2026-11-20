@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { LoaderCircle, Play, ShieldCheck } from 'lucide-react'
+import { LoaderCircle, ShieldCheck } from 'lucide-react'
 
 import { AdminThemeToggle } from '@/components/admin/admin-theme'
 import { AdminField } from '@/components/admin/admin-ui'
@@ -62,9 +62,8 @@ export default function AdminLoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--theme-root)]">
       <header className="flex h-12 items-center gap-2.5 border-b border-[var(--theme-border)] px-4">
-        <span className="admin-brand__mark">
-          <Play size={13} fill="currentColor" />
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand-logo.png" alt="" className="admin-brand__mark" draggable={false} />
         <span className="admin-brand__name">Vidloom</span>
         <span className="admin-brand__tag">管理后台</span>
         <div className="ml-auto">

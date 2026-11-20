@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Download, Menu, Play, UserRound, X } from 'lucide-react'
+import { Download, Menu, UserRound, X } from 'lucide-react'
 
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useCloudUser } from '@/lib/cloud-user'
@@ -18,12 +18,8 @@ const NAV = [
 
 export function BrandMark({ size = 36 }: { size?: number }) {
   return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-[10px] bg-[var(--primary)] text-white shadow-[0_8px_24px_rgba(109,93,255,0.35)]"
-      style={{ width: size, height: size }}
-    >
-      <Play className="ml-[2px]" style={{ width: size * 0.45, height: size * 0.45 }} fill="currentColor" />
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element -- tiny static logo, no optimisation needed
+    <img src="/brand-logo.png" alt="Vidloom" width={size} height={size} className="shrink-0 select-none" style={{ width: size, height: size }} draggable={false} />
   )
 }
 

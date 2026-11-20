@@ -21,7 +21,7 @@ const FEATURE_LABELS: Record<string, string> = {
 }
 
 /** 页面上以表单形式编辑的配置项 */
-const TEXT_KEYS = ['client.announcement', 'support.contact', 'client.minVersion', 'client.downloadUrl', 'client.latestVersion', 'client.releaseNotes'] as const
+const TEXT_KEYS = ['client.announcement', 'support.contact', 'client.minVersion', 'client.downloadUrl', 'client.latestVersion', 'client.releaseNotes', 'mobile.androidDownloadUrl', 'mobile.androidVersion'] as const
 const FLAGS_KEY = 'client.featureFlags'
 const MANAGED_KEYS = new Set<string>([...TEXT_KEYS, FLAGS_KEY])
 
@@ -42,6 +42,8 @@ function toDraft(entries: CloudConfigEntry[]): Draft {
     'client.downloadUrl': get('client.downloadUrl'),
     'client.latestVersion': get('client.latestVersion'),
     'client.releaseNotes': get('client.releaseNotes'),
+    'mobile.androidDownloadUrl': get('mobile.androidDownloadUrl'),
+    'mobile.androidVersion': get('mobile.androidVersion'),
     flags,
   }
 }
@@ -145,6 +147,14 @@ export default function AdminConfigPage() {
                 <AdminField label="更新说明">
                   <textarea className="vg-textarea w-full" rows={3} value={draft['client.releaseNotes']} onChange={(e) => set('client.releaseNotes', e.target.value)} />
                 </AdminField>
+                <div className="grid grid-cols-[2fr_1fr] gap-3">
+                  <AdminField label="安卓 App 下载地址" hint="APK 安装包链接，官网下载页会显示按钮和二维码">
+                    <Input value={draft['mobile.androidDownloadUrl']} placeholder="https://" onChange={(e) => set('mobile.androidDownloadUrl', e.target.value)} />
+                  </AdminField>
+                  <AdminField label="安卓 App 版本" hint="官网下载页展示">
+                    <Input value={draft['mobile.androidVersion']} placeholder="1.0.0" onChange={(e) => set('mobile.androidVersion', e.target.value)} />
+                  </AdminField>
+                </div>
               </div>
             </AdminPanel>
           </div>

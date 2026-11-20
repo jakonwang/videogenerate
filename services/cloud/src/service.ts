@@ -82,6 +82,8 @@ export const DEFAULT_CONFIG: Array<{ key: string; value: unknown; scope: 'public
   { key: 'client.downloadUrl', value: '', scope: 'public', description: 'Windows 客户端安装包下载地址（官网下载页使用）' },
   { key: 'client.latestVersion', value: '', scope: 'public', description: '官网展示的最新版本号，例如 5.0.129' },
   { key: 'client.releaseNotes', value: '', scope: 'public', description: '官网下载页展示的更新说明' },
+  { key: 'mobile.androidDownloadUrl', value: '', scope: 'public', description: '安卓手机 App 安装包（APK）下载地址（官网下载页使用）' },
+  { key: 'mobile.androidVersion', value: '', scope: 'public', description: '官网展示的安卓 App 版本号' },
 ]
 
 export function createCloudService(deps: {

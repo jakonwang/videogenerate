@@ -13,7 +13,6 @@ import {
   LogOut,
   Megaphone,
   Package,
-  Play,
   ReceiptText,
   SlidersHorizontal,
   Users,
@@ -114,9 +113,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="admin-shell">
       <header className="admin-topbar">
         <Link href="/admin" className="admin-brand">
-          <span className="admin-brand__mark">
-            <Play size={13} fill="currentColor" />
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand-logo.png" alt="" className="admin-brand__mark" draggable={false} />
           <span className="admin-brand__name">Vidloom</span>
           <span className="admin-brand__tag">管理后台</span>
         </Link>
