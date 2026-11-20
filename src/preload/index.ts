@@ -1412,8 +1412,9 @@ const api = {
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates'),
     quitAndInstall: () => ipcRenderer.invoke('updater:quitAndInstall'),
-    onUpdateDownloaded: (cb: (payload: { version: string }) => void) => {
-      const handler = (_: unknown, payload: { version: string }) => cb(payload)
+    /** manual = 这个平台不能自动安装（未签名的 Mac 版），要去 downloadUrl 手动下载 */
+    onUpdateDownloaded: (cb: (payload: { version: string; manual?: boolean; downloadUrl?: string }) => void) => {
+      const handler = (_: unknown, payload: { version: string; manual?: boolean; downloadUrl?: string }) => cb(payload)
       ipcRenderer.on('updater:update-downloaded', handler)
       return () => {
         ipcRenderer.off('updater:update-downloaded', handler)

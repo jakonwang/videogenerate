@@ -5,6 +5,8 @@ import UiButton from './UiButton.vue'
 const props = defineProps<{
   open: boolean
   version: string
+  /** 有值 = 不能自动安装（未签名的 Mac 版），按钮改成打开下载页 */
+  downloadUrl?: string
 }>()
 
 const emit = defineEmits<{
@@ -16,6 +18,10 @@ const { t } = useI18n()
 
 async function onRestart() {
   emit('restart')
+  if (props.downloadUrl) {
+    await window.api.openExternal(props.downloadUrl).catch(() => undefined)
+    return
+  }
   try {
     await window.api.updater.quitAndInstall()
   } catch {
@@ -38,12 +44,12 @@ async function onRestart() {
         class="update-ready-panel"
         @click.stop
       >
-        <h2 class="update-ready-title">{{ t('update.title') }}</h2>
-        <p class="update-ready-body">{{ t('update.body') }}</p>
+        <h2 class="update-ready-title">{{ downloadUrl ? t('update.manualTitle') : t('update.title') }}</h2>
+        <p class="update-ready-body">{{ downloadUrl ? t('update.manualBody') : t('update.body') }}</p>
         <p v-if="version" class="update-ready-version">v{{ version }}</p>
         <div class="update-ready-actions">
           <UiButton class="w-full sm:w-auto sm:min-w-[140px]" variant="accent" @click="onRestart">
-            {{ t('update.restartNow') }}
+            {{ downloadUrl ? t('update.download') : t('update.restartNow') }}
           </UiButton>
           <UiButton class="w-full sm:w-auto sm:min-w-[140px]" variant="ghost" @click="emit('dismiss')">
             {{ t('update.later') }}

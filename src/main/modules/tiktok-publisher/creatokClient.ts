@@ -15,11 +15,14 @@ export type ProductListOptions = {
 }
 function defaultPath() {
   if (process.env.CREATOK_CLI_PATH) return process.env.CREATOK_CLI_PATH
+  const isMac = process.platform === 'darwin'
+  const binary = isMac ? 'creatok' : 'creatok.exe'
+  const devDir = isMac ? 'mac' : 'win'
   try {
-    if (app?.isPackaged) return join(process.resourcesPath, 'creatok', 'creatok.exe')
-    return join(app?.getAppPath?.() || process.cwd(), 'tmp', 'creatok-cli', 'win', 'package', 'bin', 'creatok.exe')
+    if (app?.isPackaged) return join(process.resourcesPath, 'creatok', binary)
+    return join(app?.getAppPath?.() || process.cwd(), 'tmp', 'creatok-cli', devDir, 'package', 'bin', binary)
   } catch {
-    return join(process.cwd(), 'tmp', 'creatok-cli', 'win', 'package', 'bin', 'creatok.exe')
+    return join(process.cwd(), 'tmp', 'creatok-cli', devDir, 'package', 'bin', binary)
   }
 }
 export const runCreatokCli: Runner = (args, apiKey) => new Promise((resolve, reject) => {

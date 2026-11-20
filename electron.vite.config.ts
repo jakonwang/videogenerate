@@ -24,6 +24,7 @@ export default defineConfig(({ command }) => {
       __VG_LICENSE_MODE__: JSON.stringify(licenseMode),
       __VG_CLOUD_API_BASE__: JSON.stringify(cloudApiBase),
       __VG_UPDATE_BASE_URL__: JSON.stringify(updateBaseUrl),
+      __VG_MAC_SIGNED__: JSON.stringify((process.env.VG_MAC_SIGNED || '').trim()),
     },
     build: {
       rollupOptions: {

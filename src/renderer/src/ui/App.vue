@@ -10,6 +10,7 @@ const appSettings = useAppSettingsStore()
 const route = useRoute()
 const updateModalOpen = ref(false)
 const updateVersion = ref('')
+const updateDownloadUrl = ref('')
 const showDesignInspectorOverlay = computed(() => import.meta.env.DEV && !route.path.includes('/clone'))
 
 let offUpdaterDownloaded: (() => void) | null = null
@@ -22,6 +23,7 @@ onMounted(async () => {
 
   offUpdaterDownloaded = window.api.updater.onUpdateDownloaded((p) => {
     updateVersion.value = p?.version ?? ''
+    updateDownloadUrl.value = p?.manual ? p.downloadUrl ?? '' : ''
     updateModalOpen.value = true
   })
 })
@@ -38,6 +40,7 @@ onUnmounted(() => {
     <UpdateReadyModal
       :open="updateModalOpen"
       :version="updateVersion"
+      :download-url="updateDownloadUrl"
       @dismiss="updateModalOpen = false"
       @restart="updateModalOpen = false"
     />

@@ -1,0 +1,88 @@
+# 在 GitHub 的 Mac 云电脑上打包 Klipmill 桌面端（Mac 版没法在 Windows 上打：原生模块和 .dmg 都要在 macOS 上生成）。
+# 手动触发：GitHub → Actions → mac-build → Run workflow；或在本机 gh workflow run mac-build.yml。
+# 产物（.dmg / .zip / latest-mac.yml）作为 artifact 保存 14 天，再上传到服务器的 /updates/ 目录。
+# 暂未签名（没有苹果开发者账号）：用 ad-hoc 签名，用户第一次打开要在「系统设置 → 隐私与安全性」点「仍要打开」；
+# 自动更新只提示新版本、跳官网下载页。有了开发者证书后在这里加签名 + 公证，并设 VG_MAC_SIGNED=1。
+name: mac-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_api_base:
+        description: 云端地址（写进安装包）
+        default: https://www.klipmill.com
+        required: true
+      update_base_url:
+        description: 更新文件地址
+        default: https://www.klipmill.com/updates
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      VG_CLOUD_API_BASE: ${{ inputs.cloud_api_base }}
+      VG_UPDATE_BASE_URL: ${{ inputs.update_base_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 按 Electron 重新编译原生模块
+        run: npx electron-rebuild -f -w better-sqlite3 --arch ${{ matrix.arch }}
+
+      # TikTok 发布用的 creatok 命令行只有 Apple 芯片版本；Intel 版留空目录，发布功能会提示未安装。
+      - name: 准备 creatok 命令行
+        run: |
+          mkdir -p tmp/creatok-cli/mac/package/bin
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            cd tmp/creatok-cli/mac
+            npm pack @creatok/cli-darwin-arm64@0.13.0 --silent
+            tar -xzf creatok-cli-darwin-arm64-0.13.0.tgz
+            chmod +x package/bin/creatok
+            ls -la package/bin
+          fi
+
+      - name: 构建
+        run: npm run build
+
+      - name: 打包 .dmg / .zip
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+
+      - name: 检查产物
+        run: |
+          ls -la release
+          APP="release/mac$([ "${{ matrix.arch }}" = "arm64" ] && echo -arm64)/Klipmill.app"
+          test -d "$APP"
+          file "$APP/Contents/MacOS/Klipmill"
+          find "$APP/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release" -name '*.node' -exec file {} \;
+          codesign -dv "$APP" 2>&1 | head -5 || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klipmill-mac-${{ matrix.arch }}
+          retention-days: 14
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml

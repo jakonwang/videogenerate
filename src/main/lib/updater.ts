@@ -12,6 +12,21 @@ function resolveUpdateBaseUrl(): string {
   return (builtIn || DEFAULT_GENERIC_URL).trim().replace(/\/+$/, '')
 }
 
+/**
+ * macOS 的自动安装（Squirrel.Mac）要求程序有苹果开发者签名。没签名时只检查新版本，
+ * 提示用户去官网下载页手动安装；有签名后把 VG_MAC_SIGNED=1 写进打包环境即可恢复自动更新。
+ */
+declare const __VG_MAC_SIGNED__: string | undefined
+function isManualUpdatePlatform(): boolean {
+  if (process.platform !== 'darwin') return false
+  return !(typeof __VG_MAC_SIGNED__ !== 'undefined' && __VG_MAC_SIGNED__ === '1')
+}
+
+/** 官网下载页：更新地址 https://<域名>/updates → https://<域名>/download */
+function manualDownloadUrl(): string {
+  return resolveUpdateBaseUrl().replace(/\/updates$/, '') + '/download'
+}
+
 /** 只有打包后的程序、且打包时配置了真实的更新地址，才启用自动更新 */
 function isUpdaterConfigured(): boolean {
   if (!app.isPackaged) return false
@@ -23,6 +38,7 @@ export function registerUpdaterIpc(getWindow: () => BrowserWindow | null) {
   getMainWindow = getWindow
 
   ipcMain.handle('updater:quitAndInstall', async () => {
+    if (isManualUpdatePlatform()) return { ok: false, reason: 'manual_platform' as const }
     autoUpdater.quitAndInstall(false, true)
     return { ok: true }
   })
@@ -56,14 +72,25 @@ export function setupAutoUpdater(getWindow: () => BrowserWindow | null) {
 
   const url = resolveUpdateBaseUrl()
   autoUpdater.setFeedURL({ provider: 'generic', url })
-  autoUpdater.autoDownload = true
+  const manual = isManualUpdatePlatform()
+  autoUpdater.autoDownload = !manual
   autoUpdater.autoInstallOnAppQuit = false
 
-  autoUpdater.on('update-downloaded', (info) => {
-    getMainWindow()?.webContents.send('updater:update-downloaded', {
-      version: info.version,
+  if (manual) {
+    autoUpdater.on('update-available', (info) => {
+      getMainWindow()?.webContents.send('updater:update-downloaded', {
+        version: info.version,
+        manual: true,
+        downloadUrl: manualDownloadUrl(),
+      })
     })
-  })
+  } else {
+    autoUpdater.on('update-downloaded', (info) => {
+      getMainWindow()?.webContents.send('updater:update-downloaded', {
+        version: info.version,
+      })
+    })
+  }
 
   autoUpdater.on('error', (error) => {
     console.warn('[updater]', error?.message ?? error)

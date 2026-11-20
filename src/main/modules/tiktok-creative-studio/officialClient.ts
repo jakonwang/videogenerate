@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import type { TiktokCookie } from './accounts'
@@ -25,6 +26,12 @@ function findBrowserExecutable(playwrightExecutablePath: string) {
     process.env.PROGRAMFILES,
     process.env['PROGRAMFILES(X86)'],
   ].filter((value): value is string => Boolean(value))
+  const macApps = process.platform === 'darwin'
+    ? ['/Applications', join(homedir(), 'Applications')].flatMap((dir) => [
+        join(dir, 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome'),
+        join(dir, 'Microsoft Edge.app', 'Contents', 'MacOS', 'Microsoft Edge'),
+      ])
+    : []
   const candidates = [
     configuredPath,
     playwrightExecutablePath,
@@ -32,6 +39,7 @@ function findBrowserExecutable(playwrightExecutablePath: string) {
       join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
       join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
     ]),
+    ...macApps,
   ]
   return candidates.find((candidate) => candidate && existsSync(candidate))
 }

@@ -4,7 +4,7 @@
   "description": "批量短视频生成工作台（Electron + Vue3）",
   "author": "VideoGenerate",
   "private": true,
-  "version": "5.0.136",
+  "version": "5.0.137",
   "main": "out/main/index.js",
   "scripts": {
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
@@ -18,7 +18,7 @@
     "cloud:keygen": "tsx services/cloud/scripts/keygen.ts",
     "cloud:remotion-browser": "tsx services/cloud/scripts/remotion-browser.ts",
     "cloud:create-admin": "tsx services/cloud/scripts/create-admin.ts",
-    "build": "electron-vite build && node scripts/copy-font-resources.mjs",
+    "build": "electron-vite build && node scripts/copy-font-resources.mjs && node scripts/check-worker-bundles.mjs",
     "build:web-next": "cd apps/web-next && next build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:web-next": "tsc --noEmit -p apps/web-next/tsconfig.json",
@@ -229,7 +229,6 @@
       "!node_modules/better-sqlite3/deps/**/*",
       "!node_modules/better-sqlite3/src/**/*",
       "!node_modules/better-sqlite3/test/**/*",
-      "!node_modules/ffprobe-static/bin/darwin/**/*",
       "!node_modules/ffprobe-static/bin/linux/**/*",
       "!node_modules/ffprobe-static/bin/win32/ia32/**/*"
     ],
@@ -238,21 +237,24 @@
       {
         "from": "resources/icon-brand-green.png",
         "to": "icon-brand.png"
-      },
-      {
-        "from": "tmp/creatok-cli/win/package/bin/creatok.exe",
-        "to": "creatok/creatok.exe"
       }
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/build/Release/*.node",
       "node_modules/sharp/**",
-      "node_modules/@img/sharp-win32-x64/**",
+      "node_modules/@img/**",
       "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/bin/win32/x64/**"
+      "node_modules/ffprobe-static/bin/win32/x64/**",
+      "node_modules/ffprobe-static/bin/darwin/**"
     ],
     "win": {
       "icon": "resources/icon-brand-green.png",
+      "extraResources": [
+        {
+          "from": "tmp/creatok-cli/win/package/bin/creatok.exe",
+          "to": "creatok/creatok.exe"
+        }
+      ],
       "target": [
         {
           "target": "nsis",
@@ -272,6 +274,34 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true
+    },
+    "mac": {
+      "icon": "resources/icon-brand-green.png",
+      "category": "public.app-category.video",
+      "target": [
+        {
+          "target": "dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extraResources": [
+        {
+          "from": "tmp/creatok-cli/mac/package/bin",
+          "to": "creatok",
+          "filter": [
+            "creatok"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
     "publish": {
       "provider": "generic",

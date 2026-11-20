@@ -393,6 +393,12 @@ function revealMainWindow() {
   mainWindow.focus()
 }
 
+// macOS：关窗后程序留在托盘 / Dock，点 Dock 图标要能把窗口找回来
+app.on('activate', () => {
+  pendingWindowReveal = true
+  revealMainWindow()
+})
+
 app.on('second-instance', () => {
   // The first instance may still be initializing its BrowserWindow when the
   // second launch arrives. Defer the reveal instead of dropping the request.

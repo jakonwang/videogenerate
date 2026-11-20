@@ -2,13 +2,13 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Download, LogIn, MonitorDown, ShieldCheck, Smartphone } from 'lucide-react'
+import { Apple, Download, LogIn, MonitorDown, ShieldCheck, Smartphone } from 'lucide-react'
 import QRCode from 'qrcode'
 
 import { SectionHeading, SiteShell } from '@/components/site/site-shell'
 import { userClient } from '@/lib/cloud-user'
 
-type ReleaseInfo = { url: string; version: string; notes: string; support: string; androidUrl: string; androidVersion: string }
+type ReleaseInfo = { url: string; version: string; notes: string; support: string; androidUrl: string; androidVersion: string; macArm64: string; macX64: string }
 
 /** 只接受 http(s) 链接，防止配置里出现 javascript: 之类的地址 */
 const httpUrl = (value: unknown) => (/^https?:\/\//i.test(String(value ?? '')) ? String(value) : '')
@@ -33,9 +33,11 @@ export default function DownloadPage() {
           support: String(values['support.contact'] ?? ''),
           androidUrl: httpUrl(values['mobile.androidDownloadUrl']),
           androidVersion: String(values['mobile.androidVersion'] ?? ''),
+          macArm64: httpUrl(values['mac.downloadUrlArm64']),
+          macX64: httpUrl(values['mac.downloadUrlX64']),
         }),
       )
-      .catch(() => setRelease({ url: '', version: '', notes: '', support: '', androidUrl: '', androidVersion: '' }))
+      .catch(() => setRelease({ url: '', version: '', notes: '', support: '', androidUrl: '', androidVersion: '', macArm64: '', macX64: '' }))
   }, [])
 
   // 手机扫码直接下载安卓安装包
@@ -83,6 +85,45 @@ export default function DownloadPage() {
           <p className="flex items-center justify-center gap-1.5 text-xs text-[var(--text-muted)]">
             <ShieldCheck className="h-3.5 w-3.5" /> 请只从本页下载，安装时如遇系统提示请选择「仍要运行」
           </p>
+        </div>
+
+        <div className="grid gap-6 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-8 text-center" data-testid="download-mac">
+          <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
+            <Apple className="h-7 w-7" />
+          </span>
+          <div className="grid gap-1">
+            <h2 className="text-xl font-semibold">Mac 版</h2>
+            <p className="text-sm text-[var(--text-muted)]">
+              macOS 11 及以上{release?.version ? ` · 最新版本 ${release.version}` : ''}
+            </p>
+          </div>
+          {release === null ? (
+            <div className="mx-auto h-12 w-56 animate-pulse rounded-xl bg-[var(--bg-panel-soft)]" />
+          ) : release.macArm64 || release.macX64 ? (
+            <div className="grid justify-items-center gap-3">
+              <div className="flex flex-wrap justify-center gap-3">
+                {release.macArm64 ? (
+                  <a href={release.macArm64} rel="noopener" className="inline-flex h-12 items-center gap-2 rounded-xl bg-[var(--primary)] px-6 font-semibold text-white transition hover:bg-[var(--primary-hover)]">
+                    <Download className="h-4 w-4" /> Apple 芯片（M1 / M2 / M3 / M4）
+                  </a>
+                ) : null}
+                {release.macX64 ? (
+                  <a href={release.macX64} rel="noopener" className="inline-flex h-12 items-center gap-2 rounded-xl border border-[var(--primary)] px-6 font-semibold text-[var(--primary)] transition hover:bg-[var(--primary-soft)]">
+                    <Download className="h-4 w-4" /> Intel 芯片
+                  </a>
+                ) : null}
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">不知道是哪种芯片：点屏幕左上角苹果图标 →「关于本机」，看「芯片」一栏</p>
+              <div className="mx-auto max-w-xl rounded-xl bg-[var(--bg-panel-soft)] p-4 text-left text-sm leading-relaxed text-[var(--text-secondary)]">
+                <p className="font-medium text-[var(--text-main)]">第一次打开提示「无法验证开发者」？</p>
+                <p className="mt-1">打开 .dmg，把 Klipmill 拖进「应用程序」。第一次打开如被拦下，到「系统设置 → 隐私与安全性」，在下方点「仍要打开」即可，之后不会再提示。新版本需要在这里重新下载安装。</p>
+              </div>
+            </div>
+          ) : (
+            <p className="mx-auto max-w-md text-sm text-[var(--text-secondary)]">
+              Mac 版即将上线{release.support ? `，如需提前获取请联系客服：${release.support}` : '，请联系客服获取。'}
+            </p>
+          )}
         </div>
 
         <div className="grid gap-6 rounded-2xl border border-[var(--border-base)] bg-[var(--bg-panel)] p-8 text-center" data-testid="download-android">

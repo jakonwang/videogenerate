@@ -91,8 +91,15 @@
       "growthStages": "Xem giai doan tang truong",
       "growthStagesHint": "Xem phan bo tu khoi dong den bi chan",
       "productFilters": "Loc san pham",
-      "productFiltersHint": "Loc theo chien dich, trang thai, phan bo va chi so"
-      ,"actionFilters":"Loc thao tac phe duyet","actionFiltersHint":"Loc theo chien dich, loai thao tac, rui ro va sap xep","backtest":"Xem kiem thu lich su","backtestHint":"{count} lan de xac minh chien luoc","auditFilters":"Loc lich su thao tac","auditFiltersHint":"Loc theo chien dich, trang thai va thao tac","capabilities":"Xem quyen nen tang","capabilitiesHint":"{enabled} / {total} kha nang san sang"
+      "productFiltersHint": "Loc theo chien dich, trang thai, phan bo va chi so",
+      "actionFilters": "Loc thao tac phe duyet",
+      "actionFiltersHint": "Loc theo chien dich, loai thao tac, rui ro va sap xep",
+      "backtest": "Xem kiem thu lich su",
+      "backtestHint": "{count} lan de xac minh chien luoc",
+      "auditFilters": "Loc lich su thao tac",
+      "auditFiltersHint": "Loc theo chien dich, trang thai va thao tac",
+      "capabilities": "Xem quyen nen tang",
+      "capabilitiesHint": "{enabled} / {total} kha nang san sang"
     }
   },
   "gmvMaxSimpleNav": {
@@ -1736,8 +1743,14 @@
     }
   },
   "productWatermark": {
-    "hero": { "description": "Cat anh san pham hang loat va ap dung watermark thuong hieu trong suot co the tai su dung." },
-    "sections": { "template": "Mau watermark", "images": "Anh san pham", "export": "Xu ly va xuat" },
+    "hero": {
+      "description": "Cat anh san pham hang loat va ap dung watermark thuong hieu trong suot co the tai su dung."
+    },
+    "sections": {
+      "template": "Mau watermark",
+      "images": "Anh san pham",
+      "export": "Xu ly va xuat"
+    },
     "labels": {
       "savedTemplates": "Da luu {count} mau",
       "chooseSaved": "Chon mau da luu",
@@ -1761,7 +1774,11 @@
       "succeeded": "Thanh cong {count}",
       "failed": "That bai {count}"
     },
-    "placeholders": { "template": "Chon mau", "templateName": "Ten mau", "outputFolder": "Chua chon thu muc" },
+    "placeholders": {
+      "template": "Chon mau",
+      "templateName": "Ten mau",
+      "outputFolder": "Chua chon thu muc"
+    },
     "actions": {
       "back": "Quay lai plugin",
       "rename": "Doi ten",
@@ -1779,9 +1796,18 @@
       "processing": "Dang xu ly...",
       "retryFailed": "Xu ly lai anh loi"
     },
-    "empty": { "images": "Chua them anh san pham" },
-    "pickers": { "template": "Chon mau watermark trong suot", "images": "Chon anh san pham", "output": "Chon thu muc xuat" },
-    "prompts": { "rename": "Ten mau", "delete": "Xoa mau nay?" },
+    "empty": {
+      "images": "Chua them anh san pham"
+    },
+    "pickers": {
+      "template": "Chon mau watermark trong suot",
+      "images": "Chon anh san pham",
+      "output": "Chon thu muc xuat"
+    },
+    "prompts": {
+      "rename": "Ten mau",
+      "delete": "Xoa mau nay?"
+    },
     "errors": {
       "templateFormat": "Mau phai la PNG hoac WebP.",
       "templateNameAndFile": "Hay chon anh mau va nhap ten.",
@@ -1790,7 +1816,10 @@
       "selectImages": "Hay them anh san pham truoc.",
       "selectOutput": "Hay chon thu muc xuat truoc."
     },
-    "messages": { "templateSaved": "Da luu mau.", "processed": "Hoan tat: thanh cong {success}, that bai {failed}." }
+    "messages": {
+      "templateSaved": "Da luu mau.",
+      "processed": "Hoan tat: thanh cong {success}, that bai {failed}."
+    }
   },
   "livePhoto": {
     "hero": {
@@ -2073,7 +2102,10 @@
       "running": "Dang chay",
       "review": "Can kiem tra"
     },
-    "runMode": { "auto": "Tu dong", "manual": "Thu cong" },
+    "runMode": {
+      "auto": "Tu dong",
+      "manual": "Thu cong"
+    },
     "actions": {
       "exporting": "Dang xuat...",
       "batchExport": "Xuat hang loat",
@@ -2093,7 +2125,10 @@
       "exportable": "Co the xuat",
       "subtitleReady": "Co the them phu de"
     },
-    "sort": { "newest": "Moi nhat", "oldest": "Cu nhat" },
+    "sort": {
+      "newest": "Moi nhat",
+      "oldest": "Cu nhat"
+    },
     "columns": {
       "preview": "Xem truoc",
       "task": "Tac vu",
@@ -2109,10 +2144,32 @@
       "wait": "Vui long cho...",
       "desc": "Chon Tao tac vu o goc tren ben phai de tao du an dau tien."
     },
-    "pagination": { "summary": "Tong {count}, dang hien {start}-{end}" }
+    "pagination": {
+      "summary": "Tong {count}, dang hien {start}-{end}"
+    }
   },
   "modelLibrary": {
-    "spec": { "total": "Tong so nguoi mau", "ready": "San sang", "generating": "Dang tao", "failed": "That bai", "profile": "Ho so hinh anh", "gender": "Gioi tinh", "age": "Do tuoi", "market": "Thi truong", "skin": "Mau da", "hair": "Kieu toc", "outfit": "Trang phuc", "mood": "Khi chat", "scene": "Boi canh", "gallery": "Tu lieu da goc", "images": "{count} anh", "copyId": "Sao chep ID", "meta": "Thong tin ban ghi", "selectHint": "Chon mot nguoi mau de xem chi tiet", "updated": "Cap nhat {time}" },
+    "spec": {
+      "total": "Tong so nguoi mau",
+      "ready": "San sang",
+      "generating": "Dang tao",
+      "failed": "That bai",
+      "profile": "Ho so hinh anh",
+      "gender": "Gioi tinh",
+      "age": "Do tuoi",
+      "market": "Thi truong",
+      "skin": "Mau da",
+      "hair": "Kieu toc",
+      "outfit": "Trang phuc",
+      "mood": "Khi chat",
+      "scene": "Boi canh",
+      "gallery": "Tu lieu da goc",
+      "images": "{count} anh",
+      "copyId": "Sao chep ID",
+      "meta": "Thong tin ban ghi",
+      "selectHint": "Chon mot nguoi mau de xem chi tiet",
+      "updated": "Cap nhat {time}"
+    },
     "title": "Thu vien nguoi mau",
     "desc": "Quan ly nguoi mau AI, loc ngoai hinh va boi canh, sau do gan vao du an sao chep.",
     "import": "Nhap nguoi mau",
@@ -2135,7 +2192,10 @@
     "modelProvider": "Mo hinh tao",
     "defaultName": "Nguoi mau AI {index}",
     "defaultDescription": "Nguoi mau nay chua co mo ta.",
-    "tabs": { "all": "Tat ca nguoi mau", "ready": "San sang" },
+    "tabs": {
+      "all": "Tat ca nguoi mau",
+      "ready": "San sang"
+    },
     "filters": {
       "allStatuses": "Tat ca trang thai",
       "allAges": "Tat ca do tuoi",
@@ -2309,7 +2369,10 @@
       "done": "Hoan thanh",
       "failed": "Bat thuong"
     },
-    "dna": { "done": "DNA da tao", "pending": "DNA dang cho" },
+    "dna": {
+      "done": "DNA da tao",
+      "pending": "DNA dang cho"
+    },
     "stats": {
       "total": "Tong san pham",
       "allProducts": "Tat ca san pham",
@@ -3049,7 +3112,10 @@
       "warnings": "{count} canh bao",
       "empty": "Khong co lan chay phu hop bo loc"
     },
-    "plan": { "title": "Ke hoach thuc thi", "version": "Phien ban {version}" },
+    "plan": {
+      "title": "Ke hoach thuc thi",
+      "version": "Phien ban {version}"
+    },
     "timeline": {
       "title": "Dong su kien",
       "subtitle": "Lich su co the khoi phuc",
@@ -3619,11 +3685,114 @@
     }
   },
   "gmvMaxV2": {
-    "navigation": { "overview": "Tong quan", "operations": "Van hanh", "products": "San pham", "campaigns": "Chien dich", "creatives": "Noi dung", "profit": "Loi nhuan", "decisions": "Quyet dinh AI", "pending": "Can xu ly", "strategies": "Chien luoc tu dong", "growth": "Tang truong", "audit": "Kiem toan", "settings": "Cai dat", "help": "Tro giup" },
-    "overview": { "gmv": "GMV", "spend": "Chi phi", "actualRoi": "ROI thuc te", "estimatedProfit": "Loi nhuan uoc tinh", "completeDataHint": "Dua tren ngay phan phoi day du", "completeRows": "dong du lieu day du", "profitBoundaryHint": "Danh gia cung nguong loi nhuan", "estimatedHint": "Uoc tinh mo hinh, khong dam bao doanh thu", "risk": "Rui ro kinh doanh", "riskHint": "Chi phi rui ro {spend}", "opportunity": "Co hoi mo rong", "opportunityHint": "Xep hang bang bang chung quy tac", "today": "Lam truoc hom nay", "totalHint": "Tong cong {total} de xuat", "topActions": "Uu tien hom nay", "topActionsHint": "Xep hang theo tac dong, trang thai, do moi va phe duyet" },
-    "action": { "impact": "Tac dong loi nhuan rong du kien", "unavailable": "Chua the uoc tinh", "category": { "high_risk": "Rui ro cao", "high_opportunity": "Co hoi cao", "optimization": "De xuat toi uu", "observing": "Dang quan sat" }, "categoryHint": { "high_risk": "Uu tien loi nhuan va an toan thuc thi", "high_opportunity": "De xuat co bang chung mo rong", "optimization": "Cai thien hieu qua va on dinh", "observing": "Cho ket qua ngay phan phoi day du" }, "status": { "needs_action": "Can xu ly", "pending_approval": "Cho phe duyet", "failed": "Thuc thi that bai", "blocked": "Bi chan ghi", "observing": "Quan sat ba ngay", "completed": "Da hoan tat" } },
-    "strategy": { "profit": "Bao ve loi nhuan", "profitHint": "Bao ve ROI hoa von va nguong loi nhuan", "budget": "Bao ve ngan sach", "budgetHint": "Gioi han tang ngan sach va chi phi bat thuong", "roi": "Bao ve ROI", "roiHint": "Gioi han moi thay doi va khoa quan sat", "data": "Bao ve du lieu", "dataHint": "Chan du lieu thieu, cu va khong day du", "permission": "Quyen thuc thi", "permissionHint": "Moi thay doi nen tang van can phe duyet" },
-    "audit": { "execution": "Lich su thuc thi", "results": "Danh gia ket qua", "exceptions": "Bat thuong", "before": "Truoc", "after": "Sau", "improved": "Hieu qua", "stable": "On dinh", "invalid": "Khong hieu qua", "noResults": "Chua co ket qua", "noExceptions": "Khong co bat thuong" },
-    "settings": { "subtitle": "Quan ly ket noi, du lieu, chi phi, chien luoc, quyen, thong bao va an toan.", "connection": "Ket noi TikTok", "sync": "Dong bo du lieu", "cost": "Chi phi va loi nhuan", "strategy": "ROI va chien luoc", "permissions": "Quyen nen tang", "notifications": "Thong bao", "emergency": "Dung khan cap", "configured": "Da cau hinh", "notConfigured": "Can cau hinh", "open": "Mo cai dat", "syncNow": "Dong bo ngay", "staleItems": "muc can du lieu moi", "emergencyHint": "Ghi nen tang dang hoat dong va co the dung ngay", "costHint": "Quan ly chi phi san pham, mac dinh cua hang va nguong loi nhuan", "strategyHint": "Quan ly quy tac bao ve ROI, ngan sach va du lieu", "permissionHint": "{enabled} / {total} kha nang kha dung" }
+    "navigation": {
+      "overview": "Tong quan",
+      "operations": "Van hanh",
+      "products": "San pham",
+      "campaigns": "Chien dich",
+      "creatives": "Noi dung",
+      "profit": "Loi nhuan",
+      "decisions": "Quyet dinh AI",
+      "pending": "Can xu ly",
+      "strategies": "Chien luoc tu dong",
+      "growth": "Tang truong",
+      "audit": "Kiem toan",
+      "settings": "Cai dat",
+      "help": "Tro giup"
+    },
+    "overview": {
+      "gmv": "GMV",
+      "spend": "Chi phi",
+      "actualRoi": "ROI thuc te",
+      "estimatedProfit": "Loi nhuan uoc tinh",
+      "completeDataHint": "Dua tren ngay phan phoi day du",
+      "completeRows": "dong du lieu day du",
+      "profitBoundaryHint": "Danh gia cung nguong loi nhuan",
+      "estimatedHint": "Uoc tinh mo hinh, khong dam bao doanh thu",
+      "risk": "Rui ro kinh doanh",
+      "riskHint": "Chi phi rui ro {spend}",
+      "opportunity": "Co hoi mo rong",
+      "opportunityHint": "Xep hang bang bang chung quy tac",
+      "today": "Lam truoc hom nay",
+      "totalHint": "Tong cong {total} de xuat",
+      "topActions": "Uu tien hom nay",
+      "topActionsHint": "Xep hang theo tac dong, trang thai, do moi va phe duyet"
+    },
+    "action": {
+      "impact": "Tac dong loi nhuan rong du kien",
+      "unavailable": "Chua the uoc tinh",
+      "category": {
+        "high_risk": "Rui ro cao",
+        "high_opportunity": "Co hoi cao",
+        "optimization": "De xuat toi uu",
+        "observing": "Dang quan sat"
+      },
+      "categoryHint": {
+        "high_risk": "Uu tien loi nhuan va an toan thuc thi",
+        "high_opportunity": "De xuat co bang chung mo rong",
+        "optimization": "Cai thien hieu qua va on dinh",
+        "observing": "Cho ket qua ngay phan phoi day du"
+      },
+      "status": {
+        "needs_action": "Can xu ly",
+        "pending_approval": "Cho phe duyet",
+        "failed": "Thuc thi that bai",
+        "blocked": "Bi chan ghi",
+        "observing": "Quan sat ba ngay",
+        "completed": "Da hoan tat"
+      }
+    },
+    "strategy": {
+      "profit": "Bao ve loi nhuan",
+      "profitHint": "Bao ve ROI hoa von va nguong loi nhuan",
+      "budget": "Bao ve ngan sach",
+      "budgetHint": "Gioi han tang ngan sach va chi phi bat thuong",
+      "roi": "Bao ve ROI",
+      "roiHint": "Gioi han moi thay doi va khoa quan sat",
+      "data": "Bao ve du lieu",
+      "dataHint": "Chan du lieu thieu, cu va khong day du",
+      "permission": "Quyen thuc thi",
+      "permissionHint": "Moi thay doi nen tang van can phe duyet"
+    },
+    "audit": {
+      "execution": "Lich su thuc thi",
+      "results": "Danh gia ket qua",
+      "exceptions": "Bat thuong",
+      "before": "Truoc",
+      "after": "Sau",
+      "improved": "Hieu qua",
+      "stable": "On dinh",
+      "invalid": "Khong hieu qua",
+      "noResults": "Chua co ket qua",
+      "noExceptions": "Khong co bat thuong"
+    },
+    "settings": {
+      "subtitle": "Quan ly ket noi, du lieu, chi phi, chien luoc, quyen, thong bao va an toan.",
+      "connection": "Ket noi TikTok",
+      "sync": "Dong bo du lieu",
+      "cost": "Chi phi va loi nhuan",
+      "strategy": "ROI va chien luoc",
+      "permissions": "Quyen nen tang",
+      "notifications": "Thong bao",
+      "emergency": "Dung khan cap",
+      "configured": "Da cau hinh",
+      "notConfigured": "Can cau hinh",
+      "open": "Mo cai dat",
+      "syncNow": "Dong bo ngay",
+      "staleItems": "muc can du lieu moi",
+      "emergencyHint": "Ghi nen tang dang hoat dong va co the dung ngay",
+      "costHint": "Quan ly chi phi san pham, mac dinh cua hang va nguong loi nhuan",
+      "strategyHint": "Quan ly quy tac bao ve ROI, ngan sach va du lieu",
+      "permissionHint": "{enabled} / {total} kha nang kha dung"
+    }
+  },
+  "update": {
+    "title": "Bản cập nhật đã sẵn sàng",
+    "body": "Phiên bản mới đã được tải xong. Khởi động lại để sử dụng.",
+    "restartNow": "Khởi động lại ngay",
+    "later": "Để sau",
+    "manualTitle": "Có phiên bản mới",
+    "manualBody": "Trên Mac cần cài thủ công: tải phiên bản mới rồi kéo vào Applications để thay bản cũ.",
+    "download": "Tải xuống"
   }
 }

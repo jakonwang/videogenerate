@@ -5245,5 +5245,14 @@
       "lists": "Always run / stop lists",
       "history": "All suggestions"
     }
+  },
+  "update": {
+    "title": "Update ready",
+    "body": "The new version has been downloaded. Restart to start using it.",
+    "restartNow": "Restart now",
+    "later": "Later",
+    "manualTitle": "New version available",
+    "manualBody": "On Mac the update is installed by hand: download the new version and drag it into Applications to replace the old one.",
+    "download": "Download"
   }
 }
