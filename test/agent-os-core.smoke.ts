@@ -150,6 +150,23 @@ async function main() {
     })
     assert.equal(conversationalDecisionCalls, 2)
     assert.equal(conversationalDecision?.action, 'reply')
+
+    // Everyday wording is a real production request (it used to answer "assistant unavailable").
+    const variantRequest = '商品「A-264」的素材「7699314466432896264」出单表现最好，请参考它的结构再做一批变体。'
+    assert.equal(brain.hasExplicitBusinessExecution(variantRequest), true)
+    assert.equal(brain.hasExplicitBusinessExecution('给这个商品出几条视频'), true)
+    assert.equal(brain.hasExplicitBusinessExecution('What was the project code I mentioned?'), false)
+    // When the model still plans a job after being asked to reconsider, show the plan for approval.
+    let insistedCalls = 0
+    brain.setAgentBrainTestDependencies({
+      generateChatCompletion: (async () => {
+        insistedCalls += 1
+        return { content: JSON.stringify({ action: 'workflow', summary: 'Make variants.', intents: ['Intent.LivePhotoCreate'] }) }
+      }) as any,
+    })
+    const insisted = await brain.decideAgentTurn({ request: 'Please sort this out for me', employee, messages: [], attachments: [], context: {}, artifacts: [] })
+    assert.equal(insistedCalls, 2)
+    assert.equal(insisted?.action, 'workflow')
     assert.equal(conversationalDecision?.action === 'reply' ? conversationalDecision.response : '', 'The project code is Polaris.')
 
     brain.setAgentBrainTestDependencies({
@@ -207,6 +224,26 @@ async function main() {
     assert.equal(unavailableReply.mode, 'direct')
     assert.equal(unavailableReply.message.responseCode, 'assistant_unavailable')
     assert.equal((await agentOsService.getConversation(unavailableConversation.id)).runs.length, 0)
+
+    // Model overloaded: say so, and don't guess a plan from keywords even for a clear production request.
+    brain.setAgentBrainTestDependencies({
+      generateChatCompletion: (async () => {
+        throw new Error('AI 服务现在太忙（模型 gemini-3.1-pro，HTTP 429），已自动重试 2 次仍未成功，请过一两分钟再试。')
+      }) as any,
+    })
+    const busyConversation = await agentOsService.createConversation()
+    const busyReply = await agentOsService.sendMessage({
+      conversationId: busyConversation.id,
+      content: '商品「A-264」的素材出单表现最好，请参考它的结构再做一批变体。',
+    })
+    assert.equal(busyReply.mode, 'direct')
+    assert.equal(busyReply.message.responseCode, 'assistant_busy')
+    assert.equal((await agentOsService.getConversation(busyConversation.id)).runs.length, 0)
+    brain.setAgentBrainTestDependencies({
+      generateChatCompletion: (async () => {
+        throw new Error('Decision brain disabled for fallback tests')
+      }) as any,
+    })
 
     const artifactQuery = await agentOsService.sendMessage({
       conversationId: directConversation.id,

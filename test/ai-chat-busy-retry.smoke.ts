@@ -61,6 +61,28 @@ async function main() {
   await assert.rejects(generateChatCompletion({ credentials, prompt: 'hi' }), /AI 请求失败（模型 gpt-4\.1，HTTP 401）：invalid api key/)
   assert.equal(calls.length, 1, 'no retry for non-busy errors')
   console.log('✓ non-busy errors are not retried')
+
+  // 后台「脚本分析 / 对话」选了 GRS.AI：对话走 GRS 和后台设的模型，不再去调 VectorEngine
+  const grsCredentials = {
+    ...(credentials as object),
+    chatProviderPrimary: 'grsai',
+    grsaiApiKey: 'grs-key',
+    grsaiHost: 'https://proxy.example/api/v1/ai-proxy/grsai/',
+    grsaiAnalysisModel: 'gpt-5.6-sol',
+  } as never
+  const grsCalls: Array<{ url: string; model: string; auth: string }> = []
+  let grsN = 0
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    grsCalls.push({ url, model: JSON.parse(String(init.body)).model, auth: String((init.headers as Record<string, string>).Authorization) })
+    grsN += 1
+    return grsN === 1 ? reply(429, BUSY) : reply(200, OK)
+  }) as typeof fetch
+  const grsResult = await generateChatCompletion({ credentials: grsCredentials, system: 'sys', prompt: 'hi' })
+  assert.match(grsResult.content, /Sáng lấp lánh/)
+  assert.equal(grsResult.model, 'gpt-5.6-sol')
+  assert.deepEqual(grsCalls.map((call) => call.url), ['https://proxy.example/api/v1/ai-proxy/grsai/v1/chat/completions', 'https://proxy.example/api/v1/ai-proxy/grsai/v1/chat/completions'])
+  assert.ok(grsCalls.every((call) => call.model === 'gpt-5.6-sol' && call.auth === 'Bearer grs-key'), 'uses the admin model and GRS key, retries while busy')
+  console.log('✓ chat follows the admin GRS.AI model')
   console.log('ai chat busy retry smoke test passed')
 }
 

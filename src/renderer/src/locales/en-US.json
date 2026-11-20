@@ -4356,6 +4356,7 @@
       "capabilities": "I can inspect products, prepare materials, create videos and Live Photos, generate subtitles, publish approved videos, and retrieve existing results.",
       "thanks": "You are welcome. Send the next objective when you are ready.",
       "assistant_unavailable": "The intelligent assistant is temporarily unavailable. I did not create a workflow from this conversational request. Please try again.",
+      "assistant_busy": "The AI model is busy right now (its queue is full). Nothing was created. Please send the same request again in a minute or two.",
       "artifact_results": "I found {count} recent Live Photo videos. Open any result below.",
       "artifact_empty": "I could not find a completed Live Photo video on this device.",
       "existing_results": "I found {count} existing results in this conversation.",

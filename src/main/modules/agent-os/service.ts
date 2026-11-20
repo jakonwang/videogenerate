@@ -1018,6 +1018,8 @@ export const agentOsService = {
     let preferredSummary: string | undefined
     let modelDecision: Awaited<ReturnType<typeof decideAgentTurn>> = null
     let decisionBrainUnavailable = false
+    /** The AI model is overloaded (HTTP 429 etc.): say so instead of guessing a plan from keywords. */
+    let decisionBrainBusy = false
     const forcedIntents = Array.isArray(input.plan?.intents)
       ? input.plan!.intents.filter((intent) => employee.allowedIntents.includes(intent))
       : []
@@ -1051,6 +1053,7 @@ export const agentOsService = {
         )
       } catch (error) {
         decisionBrainUnavailable = true
+        decisionBrainBusy = /AI 服务现在太忙|HTTP (429|502|503|504|529)|saturated|overloaded|too many requests/i.test(String((error as Error)?.message || error))
         console.warn('[agent-os] decision brain unavailable, using deterministic routing', cleanText((error as Error)?.message || error))
       }
     }
@@ -1061,9 +1064,11 @@ export const agentOsService = {
     }
     const routedRequest = resolvedClarification ? workflowPrompt : prompt
     const fallbackRoute = routeAgentMessage({ content: routedRequest, attachments, context: mergedContext })
-    const safeFallbackRoute = decisionBrainUnavailable && fallbackRoute.kind === 'workflow' && !hasExplicitBusinessExecution(routedRequest)
-      ? { kind: 'direct' as const, responseCode: 'assistant_unavailable' as const }
-      : fallbackRoute
+    const safeFallbackRoute = decisionBrainBusy
+      ? { kind: 'direct' as const, responseCode: 'assistant_busy' as const }
+      : decisionBrainUnavailable && fallbackRoute.kind === 'workflow' && !hasExplicitBusinessExecution(routedRequest)
+        ? { kind: 'direct' as const, responseCode: 'assistant_unavailable' as const }
+        : fallbackRoute
     const route = forcedIntents.length
       ? { kind: 'workflow' as const }
       : modelDecision?.action === 'reply'
@@ -1094,6 +1099,7 @@ export const agentOsService = {
         capabilities: 'I can inspect products, prepare materials, manage model identities and production templates, create videos and Live Photos, generate subtitles, publish approved videos, and retrieve existing results.',
         thanks: 'You are welcome. Send the next objective when you are ready.',
         assistant_unavailable: 'The intelligent assistant is temporarily unavailable. I did not create a workflow from this conversational request. Please try again.',
+        assistant_busy: 'The AI model is busy right now (its queue is full). Nothing was created. Please send the same request again in a minute or two.',
         artifact_results: `I found ${artifacts.length} recent Live Photo videos. Open any result below.`,
         artifact_empty: 'I could not find a completed Live Photo video on this device.',
         existing_results: `I found ${artifacts.length} existing results in this conversation.`,

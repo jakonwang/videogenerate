@@ -1,7 +1,7 @@
 import type { AgentAttachment } from './types'
 
 export type AgentMessageRoute =
-  | { kind: 'direct'; responseCode: 'greeting' | 'capabilities' | 'thanks' | 'assistant_unavailable' }
+  | { kind: 'direct'; responseCode: 'greeting' | 'capabilities' | 'thanks' | 'assistant_unavailable' | 'assistant_busy' }
   | { kind: 'artifact_query'; artifactType: 'live_photo_video' }
   | { kind: 'clarification'; responseCode: 'output_directory' | 'publish_account' | 'source_video' | 'source_artifact' }
   | { kind: 'workflow' }

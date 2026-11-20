@@ -3077,6 +3077,7 @@
       "capabilities": "Toi co the kiem tra san pham, chuan bi tai nguyen, tao video va Live Photo, tao phu de, dang video da duyet va tim ket qua hien co.",
       "thanks": "Khong co gi. Hay gui muc tieu tiep theo khi ban san sang.",
       "assistant_unavailable": "Tro ly thong minh tam thoi khong kha dung. Toi khong tao quy trinh tu yeu cau hoi thoai nay. Vui long thu lai.",
+      "assistant_busy": "Mo hinh AI dang qua tai (hang doi da day). Chua tao tac vu nao. Vui long gui lai yeu cau sau mot hai phut.",
       "artifact_results": "Toi da tim thay {count} video Live Photo gan day. Ban co the mo ket qua ben duoi.",
       "artifact_empty": "Khong tim thay video Live Photo da hoan thanh tren thiet bi nay.",
       "existing_results": "Toi da tim thay {count} ket qua trong phien nay.",

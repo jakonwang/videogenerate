@@ -116,7 +116,8 @@ function cleanContext(value: unknown) {
 
 export function hasExplicitBusinessExecution(request: string) {
   const value = cleanText(request).toLowerCase()
-  const action = /(create|generate|prepare|publish|export|inspect|organize|clone|subtitle|handle|process|execute|retry|delete|remove|bind|unbind|mark|pause|resume|revert|work on|\u521b\u5efa|\u751f\u6210|\u5236\u4f5c|\u51c6\u5907|\u53d1\u5e03|\u5bfc\u51fa|\u68c0\u67e5|\u67e5\u770b|\u6574\u7406|\u590d\u523b|\u5b57\u5e55|\u5904\u7406|\u6267\u884c|\u91cd\u8bd5|\u5220\u9664|\u7ed1\u5b9a|\u89e3\u7ed1|\u6807\u8bb0|\u6682\u505c|\u6062\u590d)/i.test(value)
+  // Everyday verbs count too (做一批 / 出几条 / 剪 / 拍 / 改 / 变体): missing them sent real requests to "assistant unavailable".
+  const action = /(create|generate|prepare|publish|export|inspect|organize|clone|subtitle|handle|process|execute|retry|delete|remove|bind|unbind|mark|pause|resume|revert|work on|make|produce|remake|redo|variant|variation|做|出一|出几|出片|剪|拍|改|换|变体|仿|照着|批量|\u521b\u5efa|\u751f\u6210|\u5236\u4f5c|\u51c6\u5907|\u53d1\u5e03|\u5bfc\u51fa|\u68c0\u67e5|\u67e5\u770b|\u6574\u7406|\u590d\u523b|\u5b57\u5e55|\u5904\u7406|\u6267\u884c|\u91cd\u8bd5|\u5220\u9664|\u7ed1\u5b9a|\u89e3\u7ed1|\u6807\u8bb0|\u6682\u505c|\u6062\u590d)/i.test(value)
   const businessObject = /(product|material|video|live photo|subtitle|artifact|result|account|\u5546\u54c1|\u4ea7\u54c1|\u7d20\u6750|\u89c6\u9891|\u52a8\u6001\u7167\u7247|\u5b9e\u51b5\u7167\u7247|\u5b57\u5e55|\u4ea7\u7269|\u7ed3\u679c|\u8d26\u53f7|\u8d44\u6599)/i.test(value)
   return action && businessObject
 }
@@ -252,7 +253,9 @@ export async function decideAgentTurn(input: {
     timeoutMs: retryTimeoutMs,
   })
   const corrected = normalizeDecision(extractJsonObject(retry.content), allowedIntents)
+  // Asked twice and still a job: trust it. A workflow is only a plan the user approves before anything
+  // runs, so this is safer than answering "assistant unavailable" to a real production request.
+  if (corrected?.action === 'workflow') return corrected
   if (!corrected) throw new Error('Corrected agent decision is invalid')
-  if (corrected?.action === 'workflow') throw new Error('Agent decision remained invalid after correction')
   return corrected
 }

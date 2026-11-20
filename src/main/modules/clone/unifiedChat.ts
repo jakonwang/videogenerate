@@ -92,6 +92,86 @@ function parseChatContent(endpointStyle: string, text: string) {
   return cleanAiText(extractModelMessageContent(text))
 }
 
+const GRS_LABEL = 'GRS.AI'
+
+/** POST once, retrying while the upstream is busy (429 / 5xx / "saturated"). */
+async function postChatWithBusyRetry(input: { url: string; headers: Record<string, string>; body: unknown; timeoutMs?: number; label: string }) {
+  const timeoutMs = Math.max(0, Number(input.timeoutMs || 0))
+  let res!: Response
+  let text = ''
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = timeoutMs ? new AbortController() : undefined
+    const timer = controller
+      ? setTimeout(() => controller.abort(new Error(`${input.label} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
+      : undefined
+    try {
+      res = await fetch(input.url, { method: 'POST', headers: input.headers, body: JSON.stringify(input.body), signal: controller?.signal })
+      text = await res.text()
+    } catch (error) {
+      if (controller?.signal.aborted) throw new Error(`${input.label} chat request timed out after ${timeoutMs}ms`)
+      throw error
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+    if (res.ok || !isUpstreamBusy(res.status, text) || attempt >= busyRetryDelaysMs.length) break
+    const retryAfterSec = Number(res.headers?.get?.('retry-after') || 0)
+    await new Promise((resolve) => setTimeout(resolve, retryAfterSec > 0 ? Math.min(10_000, retryAfterSec * 1000) : busyRetryDelaysMs[attempt]))
+  }
+  return { res, text }
+}
+
+async function generateGrsChatCompletion(input: {
+  credentials: ModelCredentials
+  system?: string
+  prompt: string
+  images: ChatImageInput[]
+  model?: string
+  timeoutMs?: number
+}) {
+  const host = String(input.credentials.grsaiHost || 'https://grsaiapi.com').trim().replace(/\/+$/, '') || 'https://grsaiapi.com'
+  const model = String(input.model || input.credentials.grsaiAnalysisModel || 'gemini-3.1-pro').trim() || 'gemini-3.1-pro'
+  const { res, text } = await postChatWithBusyRetry({
+    url: `${host}/v1/chat/completions`,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${String(input.credentials.grsaiApiKey || '').trim()}` },
+    body: {
+      model,
+      stream: false,
+      messages: [
+        ...(input.system ? [{ role: 'system', content: input.system }] : []),
+        {
+          role: 'user',
+          content: input.images.length
+            ? [
+                { type: 'text', text: input.prompt },
+                ...input.images.flatMap((image) => [
+                  ...(image.label ? [{ type: 'text', text: image.label }] : []),
+                  { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+                ]),
+              ]
+            : input.prompt,
+        },
+      ],
+    },
+    timeoutMs: input.timeoutMs,
+    label: GRS_LABEL,
+  })
+  if (!res.ok) {
+    if (isUpstreamBusy(res.status, text)) {
+      throw new Error(`AI 服务现在太忙（模型 ${model}，HTTP ${res.status}），已自动重试 ${busyRetryDelaysMs.length} 次仍未成功，请过一两分钟再试。上游说明：${upstreamErrorMessage(text)}`)
+    }
+    throw new Error(`${GRS_LABEL} AI 请求失败（模型 ${model}，HTTP ${res.status}）：${upstreamErrorMessage(text)}`)
+  }
+  return {
+    provider: 'grsai' as const,
+    model,
+    endpointStyle: 'openai_chat',
+    baseUrl: host,
+    content: parseChatContent('openai_chat', text),
+    raw: text,
+    imageCount: input.images.length,
+  }
+}
+
 export type ChatImageInput = {
   /** Short caption sent right before the image, e.g. "shot_1 start frame". */
   label?: string
@@ -109,6 +189,11 @@ export async function generateChatCompletion(input: {
   timeoutMs?: number
 }) {
   const images = (input.images ?? []).filter((item) => item && item.base64 && item.mimeType)
+  // 后台「脚本分析 / 对话」选了 GRS.AI：走 GRS 和后台设的模型（例如 gpt-5.6-sol）。
+  // 以前这里只认 VectorEngine，AI 制片人等功能会无视后台设置去调 gemini-3.1-pro。
+  if (input.credentials.chatProviderPrimary === 'grsai' && String(input.credentials.grsaiApiKey || '').trim()) {
+    return generateGrsChatCompletion({ ...input, images })
+  }
   const cfg = resolveApifoxHubCredentials(input.credentials, 'chat')!
   const root = baseUrl(input.credentials)
   const key = apiKey(input.credentials)
