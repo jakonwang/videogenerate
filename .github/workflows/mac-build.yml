@@ -57,8 +57,8 @@ jobs:
           mkdir -p tmp/creatok-cli/mac/package/bin
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             cd tmp/creatok-cli/mac
-            npm pack @creatok/cli-darwin-arm64@0.13.0 --silent
-            tar -xzf creatok-cli-darwin-arm64-0.13.0.tgz
+            npm pack @creatok/cli-darwin-arm64@1.2.16 --silent
+            tar -xzf creatok-cli-darwin-arm64-1.2.16.tgz
             chmod +x package/bin/creatok
             ls -la package/bin
           fi
