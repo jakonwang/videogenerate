@@ -1,6 +1,6 @@
 import { contentIndex } from './contentIndex'
 import { getHealthReport } from './healthCheck'
-import { productSpine } from './productSpine'
+import { createSpineReads, productSpine } from './productSpine'
 import { reviewInbox } from './reviewInbox'
 import { brandMemoryStore, reviewStore } from './stores'
 import { productsRepo } from '../products/repo'
@@ -49,7 +49,17 @@ function addTo(totals: AdsTotals, row: { cost: unknown; grossRevenue: unknown; o
   totals.orders += num(row.orders)
 }
 
+/**
+ * Most sources are synchronous SQLite reads on the main process. Running them back to back froze
+ * the whole app for about a second whenever the home page opened; yielding between them lets
+ * clicks, window moves and other IPC through.
+ */
+function yieldToEventLoop() {
+  return new Promise<void>((resolve) => setImmediate(resolve))
+}
+
 async function safely<T>(read: () => T | Promise<T>, fallback: T): Promise<T> {
+  await yieldToEventLoop()
   try {
     return await read()
   } catch {
@@ -139,8 +149,9 @@ async function readProductsInput(items: ReportItem[], rangeDays: number, now: nu
     .filter((product) => (product.tiktokProductIds || []).length > 0)
     .slice(0, MAX_PRODUCTS)
   const rows: OverviewProductInput[] = []
+  const reads = createSpineReads()
   for (const product of products) {
-    const spine = await safely(() => productSpine.build(product.id, now), null)
+    const spine = await safely(() => productSpine.build(product.id, now, reads), null)
     if (!spine) continue
     rows.push({
       productId: product.id,
@@ -161,13 +172,11 @@ export async function buildBusinessOverview(rangeDays = 7, now = Date.now()): Pr
     brandMemoryStore.read(),
     safely(() => reviewInbox.counts(), { pending: 0 } as { pending: number }),
   ])
-  const [ads, creators, inventory, products, health] = await Promise.all([
-    safely(() => readAdsInput(days, now), null),
-    safely(() => readCreatorsInput(now), null),
-    safely(() => readInventoryInput(now), null),
-    safely(() => readProductsInput(items, days, now), []),
-    safely(async () => (await getHealthReport(30 * 60_000)).items, []),
-  ])
+  const ads = await safely(() => readAdsInput(days, now), null)
+  const creators = await safely(() => readCreatorsInput(now), null)
+  const inventory = await safely(() => readInventoryInput(now), null)
+  const products = await safely(() => readProductsInput(items, days, now), [])
+  const health = await safely(async () => (await getHealthReport(30 * 60_000)).items, [])
   return computeOverview({
     rangeDays: days,
     now,
@@ -183,4 +192,30 @@ export async function buildBusinessOverview(rangeDays = 7, now = Date.now()): Pr
     products,
     health,
   })
+}
+
+/** How long a built overview is reused. Ads and creator syncs land in their own stores, so a short
+ * expiry keeps the numbers fresh; content changes clear it straight away (invalidateBusinessOverview). */
+const OVERVIEW_TTL_MS = 60_000
+const overviewCache = new Map<number, { at: number; report: Promise<OverviewReport> }>()
+
+/**
+ * The overview for the home page and the daily brief. Calls that arrive together (the home page
+ * asks for the overview and the brief at the same time) share one build, and reopening the page
+ * within a minute reuses it instead of reading every store again.
+ */
+export function getBusinessOverview(rangeDays = 7): Promise<OverviewReport> {
+  const now = Date.now()
+  const cached = overviewCache.get(rangeDays)
+  if (cached && now - cached.at < OVERVIEW_TTL_MS) return cached.report
+  const report = buildBusinessOverview(rangeDays, now)
+  overviewCache.set(rangeDays, { at: now, report })
+  report.catch(() => {
+    if (overviewCache.get(rangeDays)?.report === report) overviewCache.delete(rangeDays)
+  })
+  return report
+}
+
+export function invalidateBusinessOverview() {
+  overviewCache.clear()
 }

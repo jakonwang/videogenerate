@@ -9,7 +9,7 @@ import { briefStore } from './stores'
 import type { Brief, BriefItem } from './types'
 import { BRIEF_SUMMARY_SYSTEM, dailyBriefItems, dailyHeadline, dayKey, weekKey, weeklyBrief } from '../../../shared/contentReports'
 import { overviewMetricsLine, withBusinessSignals, type OverviewReport } from '../../../shared/overviewReport'
-import { buildBusinessOverview } from './overview'
+import { getBusinessOverview } from './overview'
 
 async function dailyItems(): Promise<{ items: BriefItem[]; metrics: string }> {
   const [counts, all, health, overview] = await Promise.all([
@@ -17,7 +17,7 @@ async function dailyItems(): Promise<{ items: BriefItem[]; metrics: string }> {
     contentIndex.listAll(),
     getHealthReport(30 * 60_000),
     // The brief must still go out if a business source is broken.
-    buildBusinessOverview(7).catch(() => null as OverviewReport | null),
+    getBusinessOverview(7).catch(() => null as OverviewReport | null),
   ])
   const content = dailyBriefItems({ pendingReviews: counts.pending, items: all, health: health.items }) as BriefItem[]
   return { items: withBusinessSignals(content, overview) as BriefItem[], metrics: overviewMetricsLine(overview) }

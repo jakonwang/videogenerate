@@ -129,9 +129,42 @@ export async function readPublishTasks(): Promise<PublishTaskLike[]> {
   }
 }
 
-async function inferredIdsFromPublishing(productId: string) {
+/**
+ * The whole-store reads one spine needs. Building spines for many products at once (the home
+ * overview) shares one set, so each store is read once instead of once per product.
+ */
+export type SpineReads = {
+  publishTasks: () => Promise<PublishTaskLike[]>
+  samples: () => ReturnType<typeof creatorHubRepo.listSamples>
+  videos: () => ReturnType<typeof creatorHubRepo.listVideos>
+  channelProducts: () => Promise<ChannelProduct[]>
+}
+
+function once<T>(read: () => T): () => T {
+  let done = false
+  let value: T
+  return () => {
+    if (!done) {
+      value = read()
+      done = true
+    }
+    return value
+  }
+}
+
+export function createSpineReads(): SpineReads {
+  const reads: SpineReads = {
+    publishTasks: once(() => listPublishTasks()),
+    samples: once(() => safely(() => creatorHubRepo.listSamples(), [])),
+    videos: once(() => safely(() => creatorHubRepo.listVideos(), [])),
+    channelProducts: once(() => listChannelProducts(reads)),
+  }
+  return reads
+}
+
+async function inferredIdsFromPublishing(productId: string, reads: SpineReads) {
   try {
-    const tasks = await listPublishTasks()
+    const tasks = await reads.publishTasks()
     return uniqueIds(tasks.filter((task) => text(task.localProductId) === productId).map((task) => task.productId))
   } catch {
     return []
@@ -237,9 +270,9 @@ export function buildSignals(input: { tiktokProductIds: string[]; hasChannelData
   return signals
 }
 
-function readCreators(ids: Set<string>): SpineCreators | null {
-  const samples = safely(() => creatorHubRepo.listSamples(), []).filter((item) => ids.has(text(item.productId)))
-  const videos = safely(() => creatorHubRepo.listVideos(), []).filter((item) => (item.productIds || []).some((id) => ids.has(text(id))))
+function readCreators(ids: Set<string>, reads: SpineReads): SpineCreators | null {
+  const samples = reads.samples().filter((item) => ids.has(text(item.productId)))
+  const videos = reads.videos().filter((item) => (item.productIds || []).some((id) => ids.has(text(id))))
   if (!samples.length && !videos.length) return null
   const liveSamples = samples.filter((item) => item.stage !== 'cancelled')
   return {
@@ -259,7 +292,7 @@ function readCreators(ids: Set<string>): SpineCreators | null {
 }
 
 /** Every TikTok Shop product the app already knows about, for the binding picker. */
-async function listChannelProducts(): Promise<ChannelProduct[]> {
+async function listChannelProducts(reads: SpineReads = createSpineReads()): Promise<ChannelProduct[]> {
   const byId = new Map<string, ChannelProduct>()
   const add = (id: unknown, title: unknown, source: ChannelProduct['sources'][number], imageUrl?: unknown) => {
     const key = text(id)
@@ -271,10 +304,10 @@ async function listChannelProducts(): Promise<ChannelProduct[]> {
     byId.set(key, entry)
   }
   for (const item of safely(() => gmvMaxRepo.listProductCosts(), [])) add(item.productId, item.productName, 'ads', item.imageUrl)
-  for (const item of safely(() => creatorHubRepo.listSamples(), [])) add(item.productId, item.productTitle, 'creators', item.skuImage)
+  for (const item of reads.samples()) add(item.productId, item.productTitle, 'creators', item.skuImage)
   for (const item of safely(() => creatorHubRepo.listCosts(), [])) add(item.productId, item.productTitle, 'creators')
   try {
-    for (const task of await listPublishTasks()) add(task.productId, task.productTitle, 'publish')
+    for (const task of await reads.publishTasks()) add(task.productId, task.productTitle, 'publish')
   } catch {
     // Publishing is optional.
   }
@@ -282,19 +315,20 @@ async function listChannelProducts(): Promise<ChannelProduct[]> {
 }
 
 export const productSpine = {
-  listChannelProducts,
+  listChannelProducts: () => listChannelProducts(),
 
-  async build(productId: string, now = Date.now()): Promise<ProductSpine> {
+  /** `reads` lets a caller building many spines share the store reads (see createSpineReads). */
+  async build(productId: string, now = Date.now(), reads: SpineReads = createSpineReads()): Promise<ProductSpine> {
     const product = (await productsRepo.list()).find((item) => item.id === productId)
     const boundIds = uniqueIds(product?.tiktokProductIds || [])
-    const inferredIds = (await inferredIdsFromPublishing(productId)).filter((id) => !boundIds.includes(id))
+    const inferredIds = (await inferredIdsFromPublishing(productId, reads)).filter((id) => !boundIds.includes(id))
     const tiktokProductIds = [...boundIds, ...inferredIds]
-    const channelProducts = await listChannelProducts()
+    const channelProducts = await reads.channelProducts()
     const idSet = new Set(tiktokProductIds)
     const ads = tiktokProductIds.length
       ? summarizeAds(safely(() => gmvMaxRepo.listCreativeDailyForProducts(tiktokProductIds, dayKey(SPINE_ADS_WINDOW_DAYS - 1, now), dayKey(0, now)), []), now)
       : null
-    const creators = tiktokProductIds.length ? readCreators(idSet) : null
+    const creators = tiktokProductIds.length ? readCreators(idSet, reads) : null
     return {
       boundIds,
       inferredIds,

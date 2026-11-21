@@ -8,7 +8,7 @@ import { briefs } from './briefs'
 import { contentIndex } from './contentIndex'
 import { runHealthCheck, getHealthReport } from './healthCheck'
 import { buildInsights } from './insights'
-import { buildBusinessOverview } from './overview'
+import { getBusinessOverview, invalidateBusinessOverview } from './overview'
 import { contentPerformance } from './performance'
 import { DEFAULT_FEISHU_SETTINGS, buildBriefCard, normalizeFeishuSettings, pushBriefToFeishu, sendFeishuMessage, type FeishuPushSettings } from './feishuPush'
 import { productSpine, readPublishTasks } from './productSpine'
@@ -84,6 +84,7 @@ function notify(title: string, body: string) {
 
 async function emitChange(kind: string) {
   contentIndex.invalidate()
+  invalidateBusinessOverview()
   const counts = await reviewInbox.counts().catch(() => undefined)
   for (const listener of listeners) listener({ kind, counts })
 }
@@ -255,7 +256,7 @@ export const contentHubService = {
     return await buildInsights(rangeDays)
   },
   async overview(rangeDays = 7) {
-    return await buildBusinessOverview(rangeDays)
+    return await getBusinessOverview(rangeDays)
   },
   async latestBriefs() {
     const settings = await readSettings()
