@@ -115,6 +115,7 @@
     "test:content-hub": "tsx test/content-hub.smoke.ts",
     "test:business-overview": "tsx test/business-overview.smoke.ts",
     "test:creative-video-download": "tsx test/creative-video-download.smoke.ts",
+    "test:clone-auto-model-pick": "tsx test/clone-auto-model-pick.smoke.ts",
     "test:clone-variant-from-winner": "tsx test/clone-variant-from-winner.smoke.ts",
     "test:product-spine": "tsx test/product-spine.smoke.ts",
     "test:product-spine:e2e": "node test/product-spine.e2e.cjs",

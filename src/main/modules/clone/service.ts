@@ -444,6 +444,33 @@ function resolveAutoRunModelIdentityId(project: CloneProject): string {
   )
 }
 
+/**
+ * A model for an auto run that was started without one (AI 制片人, 下载复刻). The same product keeps
+ * the model its earlier videos used; otherwise the model used most recently; otherwise the newest
+ * finished model in the library.
+ */
+export function pickAutoRunModelIdentity(
+  project: Pick<CloneProject, 'id' | 'productId' | 'boundProductSnapshot'>,
+  library: ModelIdentityLibraryItem[],
+  projects: Array<Pick<CloneProject, 'id' | 'updatedAt' | 'productId' | 'boundProductSnapshot' | 'selectedModelIdentityId' | 'selectedModelIdentitySnapshot'>>,
+): ModelIdentityLibraryItem | null {
+  const usable = library.filter((item) => item.status === 'done' && (item.imagePaths ?? []).some((path) => String(path || '').trim()))
+  if (!usable.length) return null
+  const byId = new Map(usable.map((item) => [item.id, item]))
+  const productId = String(project.productId || project.boundProductSnapshot?.id || '').trim()
+  const used = projects
+    .filter((item) => item.id !== project.id)
+    .map((item) => ({
+      productId: String(item.productId || item.boundProductSnapshot?.id || '').trim(),
+      model: byId.get(String(item.selectedModelIdentitySnapshot?.id || item.selectedModelIdentityId || '').trim()),
+      at: Number(item.updatedAt || 0),
+    }))
+    .filter((item) => item.model)
+    .sort((a, b) => b.at - a.at)
+  const sameProduct = productId ? used.find((item) => item.productId === productId) : undefined
+  return sameProduct?.model || used[0]?.model || [...usable].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0]
+}
+
 function isBackgroundAutoRunRecoverable(project: CloneProject) {
   if (project.runMode !== 'auto') return false
   if (!String(project.referenceVideoPath || '').trim()) return false
@@ -10077,6 +10104,13 @@ export const cloneService = {
         cloneProjectId: project.id,
         identityId: input.selectedModelIdentityId,
       })
+    }
+    // Started without a model (AI 制片人): pick one now, before the identity grid is drawn for it.
+    if (input.autoBindModelPack && !resolveAutoRunModelIdentityId(project)) {
+      const picked = pickAutoRunModelIdentity(project, await cloneRepo.listModelIdentityLibrary(), await cloneRepo.listProjects())
+      if (!picked) throw new Error('模特库里还没有可用的模特，请先到「模特库」生成一个模特，再回来继续')
+      await syncProjectSelectedIdentity(project, picked.id)
+      project = await cloneRepo.upsertProject(project)
     }
     if (!String(project.referenceVideoPath || '').trim()) throw new Error('请先绑定参考视频')
     if (!project.baseBlueprint?.shots?.length) {
