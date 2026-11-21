@@ -6191,25 +6191,29 @@ onBeforeUnmount(() => {
         aria-modal="true"
         aria-labelledby="publisher-confirm-title"
       >
-        <div class="publisher-confirm-modal__glow"></div>
-        <div class="publisher-confirm-modal__icon">
-          <Send class="h-5 w-5" />
-        </div>
-        <div class="publisher-confirm-modal__content">
-          <div class="publisher-confirm-modal__eyebrow">PUBLISH REVIEW</div>
-          <h3 id="publisher-confirm-title">确认提交发布？</h3>
-          <p>即将提交 <strong>{{ publisherConfirmCount }}</strong> 个视频。提交后，已接受的任务会从待发布列表中移除。</p>
-          <div class="publisher-confirm-modal__notice">
-            <Clock3 class="h-4 w-4" />
-            <span>排期任务也会立即标记为已发布，实际发布时间以 TikTok 设置为准。</span>
+        <header class="publisher-confirm-modal__header">
+          <div class="publisher-confirm-modal__icon">
+            <Send class="h-5 w-5" />
           </div>
+          <div>
+            <h3 id="publisher-confirm-title">确认提交发布？</h3>
+            <p>提交后，已接受的任务会从待发布列表中移除。</p>
+          </div>
+        </header>
+        <div class="publisher-confirm-modal__summary">
+          <span>本次提交</span>
+          <strong>{{ publisherConfirmCount }}<small>个视频</small></strong>
         </div>
-        <div class="publisher-confirm-modal__actions">
+        <div class="publisher-confirm-modal__notice">
+          <Clock3 class="h-4 w-4" />
+          <span>排期任务也会立即标记为已发布，实际发布时间以 TikTok 设置为准。</span>
+        </div>
+        <footer class="publisher-confirm-modal__actions">
           <button type="button" @click="cancelPublisherConfirm">返回检查</button>
           <button type="button" class="primary" @click="confirmPublisherSubmit">
             <Send class="h-4 w-4" />确认提交
           </button>
-        </div>
+        </footer>
       </div>
     </div>
     <div
@@ -12017,124 +12021,120 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 121;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   padding: 24px;
-  background: color-mix(in srgb, var(--theme-input) 76%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--theme-root) 76%, transparent);
+  backdrop-filter: blur(9px);
+  color: var(--theme-text);
 }
 .publisher-confirm-modal__panel {
-  position: relative;
-  width: min(480px, 100%);
-  overflow: hidden;
-  padding: 26px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 32%, transparent);
-  border-radius: 20px;
-  background: linear-gradient(145deg, var(--theme-tone-blue) 0%, var(--theme-panel) 72%);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(91, 231, 211, 0.07);
+  width: min(440px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  background: var(--theme-panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
 }
-.publisher-confirm-modal__glow {
-  position: absolute;
-  top: -90px;
-  right: -50px;
-  width: 210px;
-  height: 180px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
-  filter: blur(34px);
-  pointer-events: none;
+.publisher-confirm-modal__header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
 }
 .publisher-confirm-modal__icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 18px;
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 36%, transparent);
-  border-radius: 14px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 28%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--theme-accent-soft);
   color: var(--theme-accent);
 }
-.publisher-confirm-modal__content {
-  position: relative;
-}
-.publisher-confirm-modal__eyebrow {
-  margin-bottom: 7px;
-  color: var(--theme-accent);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-}
-.publisher-confirm-modal__content h3 {
+.publisher-confirm-modal__header h3 {
   margin: 0;
   color: var(--theme-text);
-  font-size: 21px;
-  font-weight: 750;
+  font-size: 18px;
+  font-weight: 700;
 }
-.publisher-confirm-modal__content p {
-  margin: 10px 0 16px;
+.publisher-confirm-modal__header p {
+  margin: 4px 0 0;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.publisher-confirm-modal__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-panel-soft);
   color: var(--theme-text-secondary);
   font-size: 13px;
-  line-height: 1.65;
 }
-.publisher-confirm-modal__content p strong {
+.publisher-confirm-modal__summary strong {
   color: var(--theme-accent);
-  font-size: 16px;
+  font-size: 24px;
+  font-weight: 750;
+  line-height: 1;
+}
+.publisher-confirm-modal__summary small {
+  margin-left: 4px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 .publisher-confirm-modal__notice {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 11px 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--theme-panel) 56%, transparent);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
+  gap: 8px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 .publisher-confirm-modal__notice svg {
   flex: 0 0 auto;
-  margin-top: 1px;
-  color: var(--theme-accent);
+  margin-top: 2px;
+  color: var(--theme-text-muted);
 }
 .publisher-confirm-modal__actions {
-  position: relative;
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
-  margin-top: 24px;
+  margin-top: 4px;
 }
 .publisher-confirm-modal__actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  flex: 1;
-  height: 40px;
+  min-width: 104px;
+  height: 38px;
+  padding: 0 16px;
   border: 1px solid var(--theme-border-control);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--theme-tone-blue) 86%, transparent);
-  color: var(--theme-tone-blue);
-  font-size: 12px;
-  font-weight: 700;
-  transition: 0.18s ease;
+  border-radius: 10px;
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .publisher-confirm-modal__actions button:hover {
-  border-color: color-mix(in srgb, var(--theme-accent) 60%, transparent);
-  background: color-mix(in srgb, var(--theme-tone-blue) 96%, transparent);
+  background: var(--theme-control-hover);
+  color: var(--theme-text);
 }
 .publisher-confirm-modal__actions button.primary {
-  border-color: color-mix(in srgb, var(--theme-accent) 72%, transparent);
-  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
-  color: var(--theme-text);
-  box-shadow: 0 8px 22px rgba(24, 166, 151, 0.24);
+  border-color: var(--theme-accent);
+  background: var(--theme-accent);
+  color: var(--theme-on-accent);
 }
 .publisher-confirm-modal__actions button.primary:hover {
-  background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--theme-accent) 88%, var(--theme-text));
+  color: var(--theme-on-accent);
 }
 .publisher-delete-modal__panel {
   width: min(420px, 100%);

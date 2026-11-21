@@ -25,7 +25,30 @@ function defaultPath() {
     return join(process.cwd(), 'tmp', 'creatok-cli', devDir, 'package', 'bin', binary)
   }
 }
-export const runCreatokCli: Runner = (args, apiKey) => new Promise((resolve, reject) => {
+/** CLI 1.x often leaves error.message empty and puts the reason on the job or in field-level issues. */
+export function creatokFailureMessage(parsed: any, error: any = parsed?.error || {}): string {
+  const job = parsed?.data?.job || parsed?.job || error?.data?.job || {}
+  const issues = [...(Array.isArray(error?.issues) ? error.issues : []), ...(Array.isArray(error?.data?.issues) ? error.data.issues : [])]
+  const issueText = issues
+    .map((issue: any) => {
+      const path = issue?.path || issue?.field || issue?.suggested_path
+      const text = issue?.message || issue?.reason || issue?.code
+      return text ? (path ? `${path}: ${text}` : String(text)) : ''
+    })
+    .filter(Boolean)
+    .join('; ')
+  const main = [
+    error?.message,
+    job.fail_reason, job.failure_reason, job.error_message, job.error?.message, job.message,
+    typeof error === 'string' ? error : '',
+    parsed?.message,
+  ].find((value) => typeof value === 'string' && value.trim())
+  const reason = error?.reason || job.reason
+  const text = [main, issueText].filter(Boolean).join(' — ') || (reason ? String(reason) : '')
+  return text.trim()
+}
+
+export const runCreatokCli: Runner =(args, apiKey) => new Promise((resolve, reject) => {
   const binary = defaultPath()
   if (!existsSync(binary)) return reject(new Error('Creatok CLI is not installed'))
   const child = spawn(binary, args, { env: { ...process.env, CREATOK_API_KEY: apiKey, CREATOK_SKIP_SKILLS_INSTALL: '1', CREATOK_LOG_DIR: join(process.cwd(), 'tmp', 'creatok-cli', 'logs') }, windowsHide: true })
@@ -47,8 +70,21 @@ export const runCreatokCli: Runner = (args, apiKey) => new Promise((resolve, rej
       return resolve(JSON.parse(JSON.stringify(parsed)))
     }
     const error = parsed?.error && typeof parsed.error === 'object' ? parsed.error : {}
-    const message = error.message || stderr.trim() || (parsed?.message ? String(parsed.message) : '') || `Creatok request failed (exit ${code ?? 'unknown'})`
-    reject(Object.assign(new Error(message), { metadata: error }))
+    const message = creatokFailureMessage(parsed, error) || stderr.trim() || `Creatok request failed (exit ${code ?? 'unknown'})`
+    const job = parsed?.data?.job || parsed?.job || {}
+    if (!message.startsWith('Creatok request failed')) console.warn('[creatok] command failed', { command: args.slice(0, 3).join(' '), code, message })
+    else console.warn('[creatok] command failed without a message', { command: args.slice(0, 3).join(' '), code, output: lines[lines.length - 1]?.slice(0, 2000) })
+    reject(Object.assign(new Error(message), {
+      metadata: {
+        ...error,
+        message,
+        request_id: error.request_id || parsed?.request_id,
+        reason: error.reason || job.reason,
+        stage: error.stage || job.stage,
+        result_unknown: error.result_unknown ?? job.result_unknown,
+        job_id: job.job_id || job.id || parsed?.data?.job_id,
+      },
+    }))
   })
 })
 
