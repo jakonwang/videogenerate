@@ -19,4 +19,21 @@ assert.equal(
 
 assert.equal(buildProductLinkTitle({ productTitle: 'https://example.com/item' }), '')
 
+// Never cut mid-word: "…đính đá" cut to "…đính đ" was rejected by TikTok as offensive.
+assert.equal(
+  buildProductLinkTitle({ productTitle: '#45 Khuyên tai vòng bướm đính đá phong cách ins lạnh lùng cá tính cho nữ A-264' }),
+  'Khuyên tai vòng bướm đính đá',
+)
+assert.equal(
+  buildProductLinkTitle({ productTitle: 'Dây chuyền nữ họa tiết cành hoa lúa tua rua, thiết kế độc đáo' }),
+  'Dây chuyền nữ họa tiết cành',
+)
+// No lone trailing letter.
+assert.equal(buildProductLinkTitle({ productTitle: 'Bông tai bạc nữ kiểu mới cho A B 264 xinh' }), 'Bông tai bạc nữ kiểu mới cho')
+// A title that is only a code keeps it.
+assert.equal(buildProductLinkTitle({ productTitle: '#45' }), '45')
+for (const title of ['#45 Khuyên tai vòng bướm đính đá phong cách', 'Dây chuyền nữ họa tiết cành hoa lúa tua rua']) {
+  assert.ok(Array.from(buildProductLinkTitle({ productTitle: title })).length <= 30)
+}
+
 console.log('tiktok publisher product link title smoke test passed')
