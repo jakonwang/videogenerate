@@ -1,4 +1,5 @@
 {
+  "uploadOnSubmit": "本地图片，提交生成时会自动上传并换成公网链接",
   "createTitle": "选择运行方式",
   "autoDesc": "AI 依次完成全部 6 个步骤，适合批量出片",
   "manualDesc": "每一步确认后再继续，适合精细调整",
@@ -157,5 +158,27 @@
     "advancedLabel": "逐步调整",
     "advancedHint": "这里可以逐个步骤查看和修改；日常使用返回简洁模式即可。",
     "backToSimple": "返回简洁模式"
+  },
+  "video": {
+    "progress": "已完成 {done}/{total} 个镜头",
+    "running": "{n} 个生成中",
+    "failed": "{n} 个失败",
+    "waiting": "{n} 个待生成",
+    "allDone": "全部镜头已生成，可以进入成片合成。",
+    "runningHint": "云端正在生成，完成后会自动回写，离开本页也不影响。",
+    "idleHint": "点击右上角开始生成剩余镜头。",
+    "failedHint": "有镜头失败，可以一键重新生成失败项。",
+    "overlayRunning": "云端生成中",
+    "overlayWaiting": "等待生成",
+    "overlayFailed": "生成失败",
+    "prevShot": "上一个镜头",
+    "nextShot": "下一个镜头",
+    "retryThis": "重新生成这个镜头",
+    "details": "技术详情",
+    "jumpTo": "查看镜头 {n}",
+    "longTake": "长镜头 {n}/{total}",
+    "longTakeHint": "和相邻镜头一起生成为一段连续长镜头，衔接处不会跳",
+    "relay": "首尾衔接",
+    "relayHint": "这个镜头的结尾画面就是下一个镜头的开头，拼接处连贯"
   }
 }

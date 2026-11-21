@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { SYNC_COLLECTIONS, type SyncCloneProject, type SyncCloneShotState, type SyncGeneration, type SyncJobState } from '@shared/cloud/sync'
-import { buildCloneFramePrompt, buildCloneShotVideoPrompt, type CloneAnalysis, type CloneAnalysisShot } from '@shared/cloud/clone'
+import { buildCloneFramePrompt, buildCloneShotVideoPrompt, type CloneAnalysis, type CloneAnalysisShot, type CloneComposeClip } from '@shared/cloud/clone'
+import { buildLongTakeMemberships, buildLongTakePrompt, planLongTakeGroups } from '@shared/cloud/cloneContinuity'
 import type { AiGenerationJob } from '@shared/cloud/ai'
 import { cloud } from './session'
 import { deleteRecord, getRecord, listRecords, newId, saveRecord, syncState } from './sync'
@@ -102,33 +103,97 @@ export async function generateFrames(id: string, project: SyncCloneProject, shot
   await save(id, { ...project, shots })
 }
 
-/** 生成分镜视频：以分镜图为首帧，按原片这一镜的动作和运镜动起来 */
+/**
+ * 衔接计划：原片里连着拍的相邻镜头（拆解时标了 continuousWithNext）合成一段长镜头一起生成；
+ * 每段视频的结尾画面用下一段开头的分镜图，拼起来不跳。跳过的、没分镜图的镜头前后算剪切。
+ */
+function planContinuity(project: SyncCloneProject) {
+  const shots = usableShots(project).filter((shot) => !project.shots[shot.id]?.skip && project.shots[shot.id]?.frameFileId)
+  const continuous = (shot: CloneAnalysisShot, index: number) => {
+    const next = shots[index + 1]
+    return Boolean(shot.continuousWithNext && next && next.index === shot.index + 1)
+  }
+  const groups = planLongTakeGroups(shots.map((shot, index) => ({ id: shot.id, durationSec: shot.durationSec, continuousWithNext: continuous(shot, index) })))
+  const memberships = buildLongTakeMemberships(groups, Object.fromEntries(shots.map((shot) => [shot.id, shot.durationSec])))
+  const byId = new Map(shots.map((shot) => [shot.id, shot]))
+  return groups.map((ids, groupIndex) => {
+    const members = ids.map((shotId) => byId.get(shotId)!)
+    const tail = members[members.length - 1]!
+    const nextGroup = groups[groupIndex + 1]
+    const relayTo = nextGroup && continuous(tail, shots.indexOf(tail)) ? nextGroup[0] : undefined
+    return { ids, members, memberships, relayTo }
+  })
+}
+
+/** 生成分镜视频：以分镜图为首帧，按原片这一镜的动作和运镜动起来；连着拍的镜头一起生成、首尾衔接 */
 export async function generateShotVideos(id: string, project: SyncCloneProject, shotIds: string[]) {
   const shots = { ...project.shots }
-  for (const shot of usableShots(project).filter((item) => shotIds.includes(item.id))) {
-    const state = shots[shot.id]
-    if (!state?.frameFileId) continue
+  for (const group of planContinuity(project)) {
+    // Asking for any shot of a long take regenerates the whole take, so its parts stay continuous.
+    if (!group.ids.some((shotId) => shotIds.includes(shotId))) continue
+    const leader = group.members[0]!
+    const leaderState = shots[leader.id]
+    if (!leaderState?.frameFileId) continue
+    const isTake = group.ids.length > 1
+    const groupDurationSec = group.members.reduce((sum, shot) => sum + shot.durationSec, 0)
+    const basePrompt = buildCloneShotVideoPrompt({ ...leader, durationSec: isTake ? groupDurationSec : leader.durationSec })
+    const prompt = isTake
+      ? buildLongTakePrompt(
+          basePrompt,
+          group.members.map((shot) => ({
+            offsetSec: group.memberships[shot.id]?.offsetSec ?? 0,
+            durationSec: shot.durationSec,
+            text: [shot.action, shot.camera].filter(Boolean).join('. '),
+          })),
+        )
+      : basePrompt
+    const endImageFileId = group.relayTo ? shots[group.relayTo]?.frameFileId : undefined
     const { job } = await cloud.ai.createJob({
       kind: 'video',
-      prompt: buildCloneShotVideoPrompt(shot),
-      imageFileIds: [state.frameFileId],
+      prompt,
+      imageFileIds: [leaderState.frameFileId],
+      ...(endImageFileId ? { endImageFileId } : {}),
       aspectRatio: project.analysis?.aspectRatio ?? '9:16',
-      durationSec: Math.max(4, Math.min(10, Math.ceil(shot.durationSec))),
+      durationSec: Math.max(4, Math.min(10, Math.ceil(isTake ? groupDurationSec : leader.durationSec))),
       purpose: 'clone-shot',
     })
-    shots[shot.id] = { ...state, videoJobId: job.id, videoStatus: job.status, videoFileId: undefined, videoError: undefined }
+    for (const shot of group.members) {
+      const membership = group.memberships[shot.id]
+      shots[shot.id] = {
+        ...shots[shot.id],
+        videoJobId: job.id,
+        videoStatus: job.status,
+        videoFileId: undefined,
+        videoError: undefined,
+        take: isTake && membership
+          ? { leaderShotId: leader.id, jobId: job.id, offsetSec: membership.offsetSec, durationSec: membership.durationSec, groupDurationSec: membership.groupDurationSec }
+          : undefined,
+        relayToShotId: shot.id === group.ids[group.ids.length - 1] && endImageFileId ? group.relayTo : undefined,
+      }
+    }
   }
   await save(id, { ...project, shots })
 }
 
-/** 合成成片：按原片顺序和每镜时长拼接；没有视频的镜头用分镜图（或原片参考帧）做静帧 */
+/** 合成成片：按原片顺序和每镜时长拼接；没有视频的镜头用分镜图（或原片参考帧）做静帧；长镜头只取本镜那一截 */
 export async function compose(id: string, project: SyncCloneProject) {
-  const clips = usableShots(project)
-    .filter((shot) => !project.shots[shot.id]?.skip)
-    .map((shot) => {
-      const state = project.shots[shot.id] ?? {}
-      return { fileId: state.videoFileId || state.frameFileId || shot.frameFileId!, durationSec: shot.durationSec }
-    })
+  const used = usableShots(project).filter((shot) => !project.shots[shot.id]?.skip)
+  const clips = used.map((shot, index) => {
+    const state = project.shots[shot.id] ?? {}
+    const next = used[index + 1]
+    const nextState = next ? project.shots[next.id] ?? {} : undefined
+    const hasVideo = Boolean(state.videoFileId)
+    const take = hasVideo && state.take && state.take.jobId === state.videoJobId ? state.take : undefined
+    const sameTake = Boolean(take && nextState?.take && nextState.videoFileId && nextState.take.jobId === take.jobId)
+    const relayed = Boolean(hasVideo && next && state.relayToShotId === next.id && nextState?.videoFileId)
+    const joinNext: CloneComposeClip['joinNext'] = sameTake || relayed ? 'locked' : next && shot.continuousWithNext && next.index === shot.index + 1 ? 'continuous' : undefined
+    return {
+      fileId: state.videoFileId || state.frameFileId || shot.frameFileId!,
+      durationSec: shot.durationSec,
+      ...(take ? { take: { offsetSec: take.offsetSec, durationSec: take.durationSec, groupDurationSec: take.groupDurationSec } } : {}),
+      ...(joinNext ? { joinNext } : {}),
+    }
+  })
   if (!clips.length) throw new Error('没有可合成的镜头')
   const { job } = await cloud.ai.createJob({ kind: 'compose', clips, aspectRatio: project.analysis?.aspectRatio ?? '9:16', purpose: 'clone-compose' })
   await save(id, { ...project, composeJobId: job.id, composeStatus: job.status, composeError: undefined, finalFileId: undefined })

@@ -28,6 +28,7 @@
     "preflight:production": "node scripts/deploy-preflight.mjs production",
     "guard:encoding": "node scripts/encoding-guard.mjs",
     "test:clone-project-workspace": "tsx test/clone-project-workspace.smoke.ts",
+    "test:clone-shot-continuity": "tsx test/clone-shot-continuity.smoke.ts",
     "test:clone-repo-migration": "tsx test/clone-repo-migration.smoke.ts",
     "test:clone-repo-sqlite-source-of-truth": "tsx test/clone-repo-sqlite-source-of-truth.smoke.ts",
     "test:clone-platform-settings-architecture": "tsx test/clone-platform-settings-architecture.smoke.ts",

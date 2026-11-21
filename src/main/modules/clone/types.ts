@@ -143,6 +143,14 @@ export type ShotSpec = {
   motion?: ViralShotMotion
   transitionIn?: ViralTransition
   transitionOut?: ViralTransition
+  /** Whether this shot runs straight into the next one in the reference (no real cut). See continuity.ts. */
+  continuityWithNext?: 'continuous' | 'cut'
+  /** Set when this shot is generated together with its neighbours as one long take. */
+  longTake?: import('./continuity').LongTakeMembership
+  /** The part of a shared long-take task this shot cuts out (set when the task is submitted). */
+  longTakeWindow?: import('./continuity').LongTakeWindow
+  /** The shot whose start frame was used as this clip's end frame, so the two join without a jump. */
+  continuityRelayToShotId?: string
   replaceMode?: ViralReplaceMode
   requiredAssetType?: RequiredAssetType
   uploadedAssetPath?: string
@@ -1052,6 +1060,8 @@ export type ReplicaSession = {
 }
 
 export type CloneProject = {
+  /** Continuity plan cache; recomputed when the shot list changes. See continuity.ts. */
+  continuityPlan?: { signature: string; computedAt: number; groups: string[][] }
   id: string
   createdAt: number
   updatedAt: number

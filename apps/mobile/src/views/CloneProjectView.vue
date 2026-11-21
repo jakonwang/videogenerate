@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, ArrowLeft, Boxes, Clapperboard, Download, Film, Image as ImageIcon, LoaderCircle, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
+import { AlertTriangle, ArrowLeft, Boxes, Clapperboard, Download, Film, Image as ImageIcon, LoaderCircle, Play, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
 import { fileBlob } from '@/lib/files'
 import { downloadBlob } from '@/lib/platform'
 import { SYNC_COLLECTIONS, type SyncCloneProject, type SyncJobState } from '@shared/cloud/sync'
@@ -38,23 +38,53 @@ async function load() {
 }
 watch(() => syncState.version, load, { immediate: true })
 
-function poll() {
+/*
+ * 轮询云端任务：离开页面后不再继续（之前在途的请求回来后会再排一次，导致一直在后台轮询）；
+ * 网络出错时逐步放慢（4s → 最多 30s），App 切到后台时跳过本轮。
+ */
+let disposed = false
+let pollFailures = 0
+function poll(delay = 4000) {
+  if (disposed) return
   if (timer) clearTimeout(timer)
   timer = setTimeout(async () => {
     timer = null
-    const still = await refreshProject(id).catch(() => true)
-    if (still) poll()
-  }, 4000)
+    if (disposed) return
+    if (document.hidden) return poll(delay)
+    let still = true
+    try {
+      still = await refreshProject(id)
+      pollFailures = 0
+    } catch {
+      pollFailures += 1
+    }
+    if (still) poll(Math.min(30000, 4000 * 2 ** Math.min(pollFailures, 3)))
+  }, delay)
 }
 onMounted(() => {
-  void refreshProject(id).then((still) => still && poll())
+  void refreshProject(id)
+    .then((still) => still && poll())
+    .catch(() => poll())
 })
-onBeforeUnmount(() => timer && clearTimeout(timer))
+onBeforeUnmount(() => {
+  disposed = true
+  if (timer) clearTimeout(timer)
+  timer = null
+})
+
+/* 同一时间只播放一个分镜视频：每镜都自动播放时，十几个视频同时解码会把手机 WebView 撑崩 */
+const playingShot = ref('')
+function togglePlay(shotId: string) {
+  playingShot.value = playingShot.value === shotId ? '' : shotId
+}
 
 const shots = computed(() => (project.value ? usableShots(project.value) : []))
 const skipped = computed(() => (project.value?.analysis?.shots.length ?? 0) - shots.value.length)
 const framesDone = computed(() => shots.value.filter((shot) => project.value?.shots[shot.id]?.frameFileId).length)
 const videosDone = computed(() => shots.value.filter((shot) => project.value?.shots[shot.id]?.videoFileId).length)
+const videosRunning = computed(() => shots.value.filter((shot) => running(project.value?.shots[shot.id]?.videoStatus)).length)
+const videosFailed = computed(() => shots.value.filter((shot) => project.value?.shots[shot.id]?.videoStatus === 'failed').length)
+const videoPercent = computed(() => (shots.value.length ? Math.round((videosDone.value / shots.value.length) * 100) : 0))
 const step = computed(() => {
   const p = project.value
   if (!p || p.analyzeStatus !== 'succeeded') return 1
@@ -228,6 +258,16 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
 
       <!-- 03 分镜图 / 04 分镜视频 -->
       <section v-else-if="viewStep === 3 || viewStep === 4" class="cps-shots">
+        <div v-if="viewStep === 4 && shots.length" class="vprog">
+          <div class="vprog__head">
+            <strong>已完成 {{ videosDone }}/{{ shots.length }} 个镜头</strong>
+            <span v-if="videosRunning" class="vprog__tag is-run"><LoaderCircle :size="11" class="vg-spin" /> {{ videosRunning }} 个生成中</span>
+            <span v-if="videosFailed" class="vprog__tag is-err">{{ videosFailed }} 个失败</span>
+            <span class="vprog__pct">{{ videoPercent }}%</span>
+          </div>
+          <div class="vprog__track"><i :style="{ width: `${videoPercent}%` }" /></div>
+          <small v-if="videosRunning">云端正在生成，完成后会自动回写，关掉网页也会继续。</small>
+        </div>
         <div class="cps-shots__bar">
           <span class="vg-muted">{{ viewStep === 3 ? `分镜图 ${framesDone}/${shots.length}` : `分镜视频 ${videosDone}/${shots.length}` }}</span>
           <span v-if="!project.productImageFileId" class="vg-pill vg-pill--amber">先在「选择商品」里选商品，才能生成分镜图</span>
@@ -237,15 +277,16 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
             <div class="cp-shot__media">
               <div class="cp-shot__ref"><CloudImage :file-id="shot.frameFileId" /><small>原片</small></div>
               <div class="cp-shot__out">
-                <CloudVideo v-if="viewStep === 4 && project.shots[shot.id]?.videoFileId" :file-id="project.shots[shot.id]?.videoFileId" autoplay />
+                <CloudVideo v-if="viewStep === 4 && playingShot === shot.id && project.shots[shot.id]?.videoFileId" :file-id="project.shots[shot.id]?.videoFileId" autoplay controls />
                 <CloudImage v-else-if="project.shots[shot.id]?.frameFileId" :file-id="project.shots[shot.id]?.frameFileId" />
                 <span v-else class="cp-shot__empty">
                   <LoaderCircle v-if="running(project.shots[shot.id]?.frameStatus)" :size="16" class="vg-spin" />
                   <AlertTriangle v-else-if="project.shots[shot.id]?.frameStatus === 'failed'" :size="16" />
                   <ImageIcon v-else :size="16" />
                 </span>
+                <button v-if="viewStep === 4 && project.shots[shot.id]?.videoFileId && playingShot !== shot.id" type="button" class="cp-shot__play" aria-label="播放" @click="togglePlay(shot.id)"><Play :size="16" /></button>
                 <span v-if="running(project.shots[shot.id]?.videoStatus)" class="cp-shot__badge"><LoaderCircle :size="11" class="vg-spin" /> 视频生成中</span>
-                <span v-else-if="project.shots[shot.id]?.videoFileId" class="cp-shot__badge is-ok"><Film :size="11" /> 视频</span>
+                <span v-else-if="project.shots[shot.id]?.videoFileId && playingShot !== shot.id" class="cp-shot__badge is-ok"><Film :size="11" /> 视频</span>
               </div>
             </div>
             <div class="cp-shot__info">
@@ -358,21 +399,32 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
           </button>
         </div>
         <p v-if="!project.productImageFileId" class="m-muted small note">先在上一步选商品，才能生成分镜图</p>
+        <div v-if="videosDone || videosRunning || videosFailed" class="vprog vprog--m">
+          <div class="vprog__head">
+            <strong>视频 {{ videosDone }}/{{ shots.length }}</strong>
+            <span v-if="videosRunning" class="vprog__tag is-run"><LoaderCircle :size="11" class="m-spin" /> {{ videosRunning }} 个生成中</span>
+            <span v-if="videosFailed" class="vprog__tag is-err">{{ videosFailed }} 个失败</span>
+            <span class="vprog__pct">{{ videoPercent }}%</span>
+          </div>
+          <div class="vprog__track"><i :style="{ width: `${videoPercent}%` }" /></div>
+          <small v-if="videosRunning">云端正在生成，完成后自动更新，可以先去做别的。</small>
+        </div>
 
         <div class="shot-list">
           <div v-for="shot in shots" :key="shot.id" class="shot m-card" :class="{ 'is-skip': project.shots[shot.id]?.skip }">
             <div class="shot__media">
               <div class="shot__ref"><CloudImage :file-id="shot.frameFileId" /><small>原片</small></div>
               <div class="shot__out">
-                <CloudVideo v-if="project.shots[shot.id]?.videoFileId" :file-id="project.shots[shot.id]?.videoFileId" autoplay />
+                <CloudVideo v-if="playingShot === shot.id && project.shots[shot.id]?.videoFileId" :file-id="project.shots[shot.id]?.videoFileId" autoplay controls />
                 <CloudImage v-else-if="project.shots[shot.id]?.frameFileId" :file-id="project.shots[shot.id]?.frameFileId" />
                 <span v-else class="shot__empty">
                   <LoaderCircle v-if="running(project.shots[shot.id]?.frameStatus)" :size="18" class="m-spin" />
                   <AlertTriangle v-else-if="project.shots[shot.id]?.frameStatus === 'failed'" :size="18" />
                   <ImageIcon v-else :size="18" />
                 </span>
+                <button v-if="project.shots[shot.id]?.videoFileId && playingShot !== shot.id" type="button" class="shot__play" aria-label="播放" @click="togglePlay(shot.id)"><Play :size="18" /></button>
                 <span v-if="running(project.shots[shot.id]?.videoStatus)" class="shot__badge"><LoaderCircle :size="12" class="m-spin" /> 视频生成中</span>
-                <span v-else-if="project.shots[shot.id]?.videoFileId" class="shot__badge is-ok"><Film :size="12" /> 视频</span>
+                <span v-else-if="project.shots[shot.id]?.videoFileId && playingShot !== shot.id" class="shot__badge is-ok"><Film :size="12" /> 视频</span>
               </div>
             </div>
             <div class="shot__info">
@@ -483,6 +535,19 @@ const framedIds = () => shots.value.filter((shot) => project.value?.shots[shot.i
 @media (max-width: 1100px) { .cps-analyze, .cps-final, .cps-sources { grid-template-columns: minmax(0, 1fr); } }
 
 .small { font-size: 12px; }
+/* 分镜视频进度（网页 + 手机） */
+.vprog { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--theme-border); border-radius: 12px; background: linear-gradient(120deg, color-mix(in srgb, var(--vg-accent, var(--m-accent)) 9%, var(--theme-panel)), var(--theme-panel) 60%); }
+.vprog--m { margin-top: 12px; }
+.vprog__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 13px; }
+.vprog__pct { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vprog__tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--theme-text-muted) 14%, transparent); color: var(--theme-text-secondary); }
+.vprog__tag.is-run { background: color-mix(in srgb, var(--vg-blue, #3b82f6) 15%, transparent); color: var(--vg-blue, #3b82f6); }
+.vprog__tag.is-err { background: color-mix(in srgb, var(--vg-red, #ef4444) 15%, transparent); color: var(--vg-red, #ef4444); }
+.vprog__track { height: 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--theme-text-muted) 18%, transparent); }
+.vprog__track i { display: block; height: 100%; border-radius: inherit; background: var(--vg-accent, var(--m-accent)); transition: width .4s ease; }
+.vprog small { font-size: 11.5px; color: var(--theme-text-muted); }
+.shot__play, .cp-shot__play { position: absolute; inset: 0; display: grid; place-items: center; padding: 0; border: 0; background: rgb(0 0 0 / .22); color: #fff; cursor: pointer; }
+.shot__play svg, .cp-shot__play svg { padding: 8px; box-sizing: content-box; border-radius: 50%; background: rgb(0 0 0 / .5); fill: currentColor; }
 .note { margin: 10px 2px 0; line-height: 1.6; }
 .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; }
 .steps li { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--theme-text-muted); font-size: 11px; font-weight: 600; }

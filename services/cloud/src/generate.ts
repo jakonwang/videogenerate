@@ -297,19 +297,28 @@ export function createGenerationService(deps: {
         const first = refs[0]
         if (!first) throw badRequest('图生视频需要一张商品图')
         const imageUrl = await publicUrl(credentials, row.user_id, first.fileId, first.path)
+        // Optional end frame (复刻: the next shot's frame, so the two clips join without a jump).
+        let lastImageUrl: string | undefined
+        if (input.endImageFileId) {
+          const endFile = deps.files.read(row.user_id, input.endImageFileId)
+          const endPath = join(workDir, `end${EXT_BY_MIME[endFile.mime] || '.jpg'}`)
+          await writeFile(endPath, endFile.body)
+          lastImageUrl = await publicUrl(credentials, row.user_id, input.endImageFileId, endPath)
+        }
         if (credentials.videoProviderPrimary === 'grsai') {
-          const task = await providers.createGrsVideoTask({ credentials, prompt, negativePrompt: input.negativePrompt, firstFrameUrl: imageUrl })
+          const task = await providers.createGrsVideoTask({ credentials, prompt, negativePrompt: input.negativePrompt, firstFrameUrl: imageUrl, ...(lastImageUrl ? { lastFrameUrl: lastImageUrl } : {}) })
           const outputUrl = task.directUrl || (await providers.waitGrsResult(credentials, task.taskId, 15 * 60 * 1000)).outputUrl
           outputPath = join(workDir, 'output.mp4')
           await writeFile(outputPath, await providers.download(outputUrl))
         } else {
           const result = await providers.generateVideo({
             credentials,
-            capability: 'video_image_to_video',
+            capability: lastImageUrl ? 'video_start_end_to_video' : 'video_image_to_video',
             prompt,
             negativePrompt: input.negativePrompt,
             outDir: workDir,
             image: imageUrl,
+            ...(lastImageUrl ? { lastImage: lastImageUrl } : {}),
             durationSec: input.durationSec,
             aspectRatio: input.aspectRatio === '16:9' ? '16:9' : '9:16',
           })
@@ -362,18 +371,33 @@ export function createGenerationService(deps: {
     if (prompt.length > AI_MAX_PROMPT_CHARS) throw badRequest('提示词过长')
     const imageFileIds = Array.isArray(body.imageFileIds) ? body.imageFileIds.map(String).slice(0, AI_MAX_IMAGES) : []
     if (kind === 'video' && !imageFileIds.length) throw badRequest('图生视频需要一张商品图')
+    const endImageFileId = kind === 'video' && body.endImageFileId ? String(body.endImageFileId) : undefined
     const needsVideo = kind === 'analyze-video' || kind === 'watermark' || kind === 'subtitle' || kind === 'slice' || kind === 'frames' || kind === 'live-analyze' || kind === 'live-export'
     const videoFileId = needsVideo ? String(body.videoFileId || '') : undefined
     if (needsVideo && !videoFileId) throw badRequest('缺少视频')
     if (kind === 'parse-link' && !String(body.url || '').trim()) throw badRequest('缺少分享链接')
     const clips = (kind === 'compose' || kind === 'mix') && Array.isArray(body.clips)
-      ? body.clips.slice(0, 30).map((clip) => ({ fileId: String(clip?.fileId || ''), durationSec: Number(clip?.durationSec) || 3, ...(Number.isFinite(Number(clip?.startSec)) ? { startSec: Math.max(0, Number(clip.startSec)) } : {}) }))
+      ? body.clips.slice(0, 30).map((clip) => ({
+          fileId: String(clip?.fileId || ''),
+          durationSec: Number(clip?.durationSec) || 3,
+          ...(Number.isFinite(Number(clip?.startSec)) ? { startSec: Math.max(0, Number(clip.startSec)) } : {}),
+          ...(kind === 'compose' && clip?.take && Number(clip.take.groupDurationSec) > 0
+            ? {
+                take: {
+                  offsetSec: Math.max(0, Number(clip.take.offsetSec) || 0),
+                  durationSec: Math.max(0.1, Number(clip.take.durationSec) || 0.1),
+                  groupDurationSec: Math.max(0.1, Number(clip.take.groupDurationSec)),
+                },
+              }
+            : {}),
+          ...(kind === 'compose' && (clip?.joinNext === 'locked' || clip?.joinNext === 'continuous') ? { joinNext: clip.joinNext } : {}),
+        }))
       : undefined
     if ((kind === 'compose' || kind === 'mix') && !clips?.length) throw badRequest('没有可合成的片段')
     const options = body.options && typeof body.options === 'object' ? body.options : undefined
     for (const extra of [options?.logoFileId, options?.bgmFileId]) if (extra) deps.files.read(userId, String(extra))
     // Validate ownership up front so a bad id fails now rather than minutes later.
-    for (const fileId of [...imageFileIds, ...(videoFileId ? [videoFileId] : []), ...(clips ?? []).map((clip) => clip.fileId)]) deps.files.read(userId, fileId)
+    for (const fileId of [...imageFileIds, ...(endImageFileId ? [endImageFileId] : []), ...(videoFileId ? [videoFileId] : []), ...(clips ?? []).map((clip) => clip.fileId)]) deps.files.read(userId, fileId)
     assertConfigured(kind)
     if (usesAi(kind)) deps.quota.assert(userId)
     if (FFMPEG_KINDS.has(kind) && deps.ffmpegPerDay) {
@@ -395,6 +419,7 @@ export function createGenerationService(deps: {
       url: kind === 'parse-link' ? String(body.url).slice(0, 2000) : undefined,
       negativePrompt: String(body.negativePrompt || '').trim().slice(0, 2000) || undefined,
       imageFileIds,
+      endImageFileId,
       aspectRatio: body.aspectRatio === '16:9' || body.aspectRatio === '9:16' || body.aspectRatio === '1:1' ? body.aspectRatio : undefined,
       durationSec: Math.max(4, Math.min(10, Math.round(Number(body.durationSec) || 8))),
       purpose: String(body.purpose || kind).replace(/[^a-z0-9-]/gi, '').slice(0, 40) || kind,

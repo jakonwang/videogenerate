@@ -23,6 +23,8 @@ export type CloneAnalysisShot = {
   frameFileId?: string
   /** 录屏、教学等不适合复刻的镜头 */
   eligible: boolean
+  /** 原片里这一镜和下一镜是连着拍的（没有真正的剪切），生成时要衔接上。见 cloneContinuity.ts */
+  continuousWithNext?: boolean
 }
 
 export type CloneAnalysis = {
@@ -50,7 +52,17 @@ export const CLONE_SHOT_ROLE_LABELS: Record<string, string> = {
 }
 
 /** 合成成片时的一段素材 */
-export type CloneComposeClip = { fileId: string; durationSec: number }
+export type CloneComposeClip = {
+  fileId: string
+  durationSec: number
+  /** 这段视频是几个镜头共用的一段长镜头：只取属于本镜头的那一截 */
+  take?: { offsetSec: number; durationSec: number; groupDurationSec: number }
+  /**
+   * 和下一段怎么接：locked = 生成时已经首尾对齐（同一段长镜头，或本段结尾就是下一段开头），直接硬切；
+   * continuous = 原片是连着的但没能对齐，用短淡化过渡；不填 = 原片本来就是剪切。
+   */
+  joinNext?: 'locked' | 'continuous'
+}
 
 /**
  * 分镜图：图 1 是原片这一镜的参考帧，图 2 是自己的商品（可选图 3 是模特）。

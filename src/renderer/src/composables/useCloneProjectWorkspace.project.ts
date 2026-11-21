@@ -1,3 +1,4 @@
+import { toRaw } from 'vue'
 import type { CloneProjectLike, UseCloneProjectWorkspaceOptions } from './useCloneProjectWorkspace.shared'
 import { extractProjectProductRefs } from './useCloneProjectWorkspace.shared'
 
@@ -97,12 +98,27 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     }
   }
 
+  // Bumped on every apply so a slow background fetch can tell that newer data landed meanwhile.
+  let applyVersion = 0
+
+  // Polling re-fetches the project every few seconds; when nothing changed, swapping in the new
+  // object would still re-render the whole studio. Compare the raw data and keep the old object.
+  const sameProjectData = (currentProject: TProject | null, next: TProject) => {
+    if (!currentProject?.id || currentProject.id !== next.id) return false
+    try {
+      return JSON.stringify(toRaw(currentProject)) === JSON.stringify(toRaw(next))
+    } catch {
+      return false
+    }
+  }
+
   const applyProject = (next: TProject | null, mode: 'patch' | 'replace' = 'patch') => {
+    applyVersion += 1
     const currentProject = options.current.value
     if (!next) {
       options.current.value = null
     } else if (mode === 'replace') {
-      options.current.value = next
+      if (!sameProjectData(currentProject, next)) options.current.value = next
     } else if (currentProject?.id && currentProject.id === next.id) {
       patchObjectInPlace(currentProject as Record<string, unknown>, next as Record<string, unknown>)
       options.current.value = currentProject
@@ -115,7 +131,10 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
       options.referenceVideoPath.value = ''
     }
     const nextRefs = extractProjectProductRefs(next)
-    options.productRefs.value = nextRefs
+    const prevRefs = options.productRefs.value
+    if (!Array.isArray(prevRefs) || prevRefs.length !== nextRefs.length || prevRefs.some((item, index) => item !== nextRefs[index])) {
+      options.productRefs.value = nextRefs
+    }
     if (Array.isArray(options.productRefsDraft.value)) {
       const same =
         options.productRefsDraft.value.length === nextRefs.length &&
@@ -203,7 +222,9 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     }
   }
 
-  const loadProject = async (projectId: string, options2: { updateStageLog?: boolean } = {}) => {
+  const loadProject = async (projectId: string, options2: { updateStageLog?: boolean; background?: boolean } = {}) => {
+    const startedVersion = applyVersion
+    const startedProjectId = String(options.current.value?.id || '').trim()
     const resolved = await options.getWorkspaceClient?.(projectId)
     const [projectRes, runtimeRes] = resolved
       ? await Promise.all([
@@ -215,6 +236,11 @@ export function useCloneProjectWorkspaceProject<TProject extends CloneProjectLik
     if (next && runtimeRes?.pipeline && options.applyPipelineStatus) {
       next = options.applyPipelineStatus(next, runtimeRes)
     }
+    const activeProjectId = String(options.current.value?.id || '').trim()
+    // The user moved to another task while this was loading: never swap the old task back in.
+    if (activeProjectId && activeProjectId !== projectId && activeProjectId !== startedProjectId) return
+    // A background poll that lost the race to a newer apply (a user action, a sync) is stale.
+    if (options2.background && applyVersion !== startedVersion) return
     if (!next?.id) {
       throw new Error('复刻任务不存在或已删除')
     }

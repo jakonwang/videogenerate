@@ -1,4 +1,5 @@
 {
+  "uploadOnSubmit": "Local image — uploaded and swapped for a public URL when you submit",
   "createTitle": "Choose how it runs",
   "autoDesc": "AI completes all 6 steps in order. Best for batch output.",
   "manualDesc": "Confirm each step before continuing. Best for fine-tuning.",
@@ -157,5 +158,27 @@
     "advancedLabel": "Step by step",
     "advancedHint": "Review and change each step here. For everyday use, go back to simple mode.",
     "backToSimple": "Back to simple mode"
+  },
+  "video": {
+    "progress": "{done}/{total} shots done",
+    "running": "{n} generating",
+    "failed": "{n} failed",
+    "waiting": "{n} waiting",
+    "allDone": "All shots are ready. Continue to the final video.",
+    "runningHint": "Generating in the cloud. Results come back on their own, even if you leave this page.",
+    "idleHint": "Use the button at the top right to generate the remaining shots.",
+    "failedHint": "Some shots failed. You can regenerate all failed shots at once.",
+    "overlayRunning": "Generating in the cloud",
+    "overlayWaiting": "Waiting to generate",
+    "overlayFailed": "Generation failed",
+    "prevShot": "Previous shot",
+    "nextShot": "Next shot",
+    "retryThis": "Regenerate this shot",
+    "details": "Technical details",
+    "jumpTo": "View shot {n}",
+    "longTake": "Long take {n}/{total}",
+    "longTakeHint": "Generated together with its neighbours as one continuous take, so the joins do not jump",
+    "relay": "Joined",
+    "relayHint": "This clip ends on the next shot's first frame, so the join is seamless"
   }
 }

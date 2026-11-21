@@ -40,6 +40,19 @@ import { generateThumbnailJpg } from '../media/thumbnail'
 import { createBatchTasks } from '../tasks/createBatchTasks'
 import { taskQueue } from '../tasks/queue'
 import { probeMedia } from '../ffmpeg/probe'
+import {
+  LONG_TAKE_PART_SUFFIX,
+  buildLongTakeMemberships,
+  buildLongTakePrompt,
+  classifyBoundary,
+  cutVideoPart,
+  longTakePartWindow,
+  measureFrameSimilarity,
+  planLongTakeGroups,
+  snapRequestedVideoDurationSec,
+  type ContinuityBoundary,
+  type LongTakeWindow,
+} from './continuity'
 import { createBatchSubtitleJob, runBatchSubtitleJob } from '../web-platform/batchSubtitle'
 import { webPlatformRepo } from '../web-platform/repo'
 import { renderViralCloneBatch } from './renderViralCloneBatch'
@@ -7657,7 +7670,15 @@ async function saveSegmentDone(input: {
   localPath: string
   remoteStatus?: string
   remoteRaw?: unknown
+  longTakeWindow?: LongTakeWindow
 }) {
+  // A long-take task is shared by several shots: each keeps only its own part of the clip.
+  const currentShot = projectBlueprintShots(input.project).find((item) => item.id === input.shot.id) || input.shot
+  const savedTaskId = sanitizeVideoTaskId(input.taskId)
+  const longTakeWindow =
+    input.longTakeWindow ||
+    (currentShot.longTakeWindow && savedTaskId && currentShot.longTakeWindow.taskId === savedTaskId ? currentShot.longTakeWindow : undefined)
+  input = { ...input, localPath: await resolveLongTakePartPath({ shot: currentShot, localPath: input.localPath, window: longTakeWindow }) }
   const quality = await qualityCheckShot({
     shot: {
       ...input.shot,
@@ -9049,6 +9070,169 @@ function humanizeModelPackError(error: unknown, credentials?: Partial<ModelCrede
   return message
 }
 
+/* ---------------- continuity (see continuity.ts) ---------------- */
+
+function continuityRenderableShots(project: CloneProject) {
+  return projectBlueprintShots(project)
+    .slice()
+    .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+    .filter((shot) => Boolean(resolveStoryboardFrameSource(shot)))
+}
+
+function continuityNextShot(project: CloneProject, shotId: string) {
+  const shots = continuityRenderableShots(project)
+  const index = shots.findIndex((item) => item.id === shotId)
+  return index >= 0 ? shots[index + 1] : undefined
+}
+
+/**
+ * Work out which shot boundaries were continuous in the reference video and which shots share one
+ * long-take generation. Cached on the project; recomputed only when the shot list changes.
+ * Returns true when the project was changed (caller persists it).
+ */
+async function ensureProjectContinuityPlan(project: CloneProject) {
+  const shots = continuityRenderableShots(project)
+  const signature = shots
+    .map((shot) => `${shot.id}:${shot.index}:${Number(shot.durationSec || 0).toFixed(2)}:${shot.referenceFramePaths?.start || ''}:${shot.referenceFramePaths?.end || ''}`)
+    .join('|')
+  if (project.continuityPlan?.signature === signature) return false
+  const boundaries: Record<string, ContinuityBoundary> = {}
+  for (let i = 0; i < shots.length; i++) {
+    const shot = shots[i]!
+    const next = shots[i + 1]
+    if (!next || Number(next.index) !== Number(shot.index) + 1) {
+      boundaries[shot.id] = 'cut'
+      continue
+    }
+    const similarity = await measureFrameSimilarity(
+      shot.referenceFramePaths?.end || shot.referenceFramePaths?.mid,
+      next.referenceFramePaths?.start || next.referenceFramePaths?.mid,
+    )
+    boundaries[shot.id] = classifyBoundary(similarity)
+  }
+  const groups = planLongTakeGroups(
+    shots.map((shot) => ({ id: shot.id, durationSec: Number(shot.durationSec || 0), continuousWithNext: boundaries[shot.id] === 'continuous' })),
+  )
+  const memberships = buildLongTakeMemberships(
+    groups,
+    Object.fromEntries(shots.map((shot) => [shot.id, Number(shot.durationSec || 0)])),
+  )
+  for (const shot of shots) {
+    replaceProjectShot(project, shot.id, {
+      continuityWithNext: boundaries[shot.id],
+      longTake: memberships[shot.id],
+    })
+  }
+  project.continuityPlan = { signature, computedAt: now(), groups }
+  console.log('[clone-debug] continuity-plan', { projectId: project.id, boundaries, groups })
+  return true
+}
+
+function longTakeMemberText(shot: ShotSpec) {
+  return String(shot.generationPrompt || shot.visualPrompt || shot.scriptText || shot.cameraDescription || '').trim()
+}
+
+/**
+ * Point the other shots of a long take at the leader's remote task. Each of them then polls and
+ * downloads that task through the normal per-shot flow and cuts its own part in saveSegmentDone.
+ */
+function attachLongTakeMembersToTask(input: {
+  project: CloneProject
+  leader: ShotSpec
+  taskId: string
+  created: { provider?: string; model?: string; endpointStyle?: string; baseUrl?: string; requestCapability?: CloneShotVideoOutput['requestCapability']; raw?: unknown }
+  submissionFingerprint?: string
+  submitStartedAt: number
+  relayToShotId?: string
+  /** Attach only these shots (default: the whole take). */
+  onlyShotIds?: string[]
+}) {
+  const membership = input.leader.longTake
+  const shotIds = membership?.shotIds?.length ? membership.shotIds : [input.leader.id]
+  const tailShotId = shotIds[shotIds.length - 1]
+  for (const shotId of shotIds) {
+    if (input.onlyShotIds && !input.onlyShotIds.includes(shotId)) continue
+    const member = projectBlueprintShots(input.project).find((item) => item.id === shotId)
+    if (!member) continue
+    const memberWindow = member.longTake
+    const patch: Partial<ShotSpec> = {
+      continuityRelayToShotId: shotId === tailShotId ? input.relayToShotId : undefined,
+      longTakeWindow:
+        memberWindow && shotIds.length > 1
+          ? {
+              taskId: input.taskId,
+              leaderShotId: input.leader.id,
+              offsetSec: memberWindow.offsetSec,
+              durationSec: memberWindow.durationSec,
+              groupDurationSec: memberWindow.groupDurationSec,
+            }
+          : undefined,
+    }
+    if (shotId === input.leader.id) {
+      replaceProjectShot(input.project, shotId, patch)
+      continue
+    }
+    const previous = resolveShotVideoOutput(input.project, member)
+    replaceProjectShot(input.project, shotId, {
+      ...patch,
+      status: 'generating',
+      error: '',
+      generatedClipPath: undefined,
+      generatedProvider: input.created.provider,
+      generatedModel: input.created.model,
+      generatedTaskId: input.taskId,
+    })
+    const refreshed = projectBlueprintShots(input.project).find((item) => item.id === shotId) || member
+    syncSegmentVideoOutput(input.project, refreshed, {
+      previousTaskIds: Array.from(
+        new Set([...(previous.previousTaskIds ?? []), previous.taskId].filter((value): value is string => Boolean(String(value || '').trim()) && value !== input.taskId)),
+      ),
+      status: 'remote_running',
+      provider: input.created.provider,
+      model: input.created.model,
+      endpointStyle: input.created.endpointStyle,
+      baseUrl: input.created.baseUrl,
+      requestCapability: input.created.requestCapability,
+      taskId: input.taskId,
+      videoPath: undefined,
+      localPath: undefined,
+      videoUrl: undefined,
+      remoteStatus: 'created',
+      remoteRaw: input.created.raw,
+      error: undefined,
+      submissionFingerprint: input.submissionFingerprint,
+      submissionStartedAt: input.submitStartedAt,
+      submissionLockedUntil: input.submitStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
+      sourceEvent: 'segment_submit_succeeded',
+    })
+  }
+}
+
+/** Cut this shot's part out of a downloaded long-take clip. Returns the path to use for the shot. */
+async function resolveLongTakePartPath(input: { shot: ShotSpec; localPath: string; window?: LongTakeWindow }) {
+  const localPath = String(input.localPath || '').trim()
+  if (!input.window || !localPath || localPath.endsWith(LONG_TAKE_PART_SUFFIX)) return localPath
+  try {
+    const meta = await probeMedia(localPath)
+    const clipDurationSec = Number(meta.durationSec || 0)
+    if (!(clipDurationSec > 0)) return localPath
+    const part = longTakePartWindow(input.window, clipDurationSec)
+    const out = join(dirname(localPath), `${input.shot.id}${LONG_TAKE_PART_SUFFIX}`)
+    await cutVideoPart({ src: localPath, out, startSec: part.startSec, durationSec: part.durationSec })
+    // Keep the full take out of the managed clip name, so local-file reuse can never pick the whole take for one shot.
+    if (basename(localPath) === 'generated_clip.mp4') {
+      await rm(join(dirname(localPath), 'longtake-source.mp4'), { force: true }).catch(() => undefined)
+      await copyFile(localPath, join(dirname(localPath), 'longtake-source.mp4')).catch(() => undefined)
+      await rm(localPath, { force: true }).catch(() => undefined)
+    }
+    console.log('[clone-debug] long-take-part-cut', { shotId: input.shot.id, taskId: input.window.taskId, clipDurationSec, ...part, out })
+    return out
+  } catch (error) {
+    console.warn('[clone-debug] long-take-part-cut-failed', { shotId: input.shot.id, message: String((error as Error)?.message ?? error) })
+    return localPath
+  }
+}
+
 async function ensureAi666SegmentVideoTask(input: {
   project: CloneProject
   shot: ShotSpec
@@ -9056,7 +9240,7 @@ async function ensureAi666SegmentVideoTask(input: {
   lastFramePath?: string
   mode: CloneQualityMode
   forceRegenerate?: boolean
-}) {
+}): Promise<CloneProject> {
   const key = shotVideoCreateKey(input.project.id, input.shot.id)
   const inFlight = shotVideoCreateInFlight.get(key)
   if (inFlight) {
@@ -9066,13 +9250,84 @@ async function ensureAi666SegmentVideoTask(input: {
     })
     return await inFlight
   }
-  const task = (async () => {
+  const task: Promise<CloneProject> = (async (): Promise<CloneProject> => {
     const creds = await cloneRepo.getCredentials()
+    const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
+    ensureCloneFlowState(latestProject)
+    if (await ensureProjectContinuityPlan(latestProject)) await cloneRepo.upsertProject(latestProject)
+    const plannedShot = projectBlueprintShots(latestProject).find((item) => item.id === input.shot.id) || input.shot
+    const membership = plannedShot.longTake && plannedShot.longTake.shotIds.length > 1 ? plannedShot.longTake : undefined
+
+    // Part of a long take led by another shot: share (or start) the leader's task instead of submitting its own.
+    if (membership && membership.leaderShotId !== plannedShot.id) {
+      const leader = projectBlueprintShots(latestProject).find((item) => item.id === membership.leaderShotId)
+      if (leader) {
+        const leaderOutput = resolveShotVideoOutput(latestProject, leader)
+        const leaderTaskId = resolveEffectiveVideoTaskId(leaderOutput.taskId, leader.generatedTaskId)
+        const leaderTaskIsCurrent = Boolean(leaderTaskId) && leader.longTakeWindow?.taskId === leaderTaskId
+        const leaderJustSubmitted = Number(leaderOutput.submissionStartedAt || 0) > now() - 90_000
+        if (leaderTaskIsCurrent && (!input.forceRegenerate || leaderJustSubmitted)) {
+          const tailShot = projectBlueprintShots(latestProject).find((item) => item.id === membership.shotIds[membership.shotIds.length - 1])
+          attachLongTakeMembersToTask({
+            project: latestProject,
+            leader,
+            taskId: leaderTaskId,
+            created: {
+              provider: leaderOutput.provider,
+              model: leaderOutput.model,
+              endpointStyle: leaderOutput.endpointStyle,
+              baseUrl: leaderOutput.baseUrl,
+              requestCapability: leaderOutput.requestCapability,
+            },
+            submissionFingerprint: leaderOutput.submissionFingerprint,
+            submitStartedAt: now(),
+            relayToShotId: tailShot?.continuityRelayToShotId,
+            onlyShotIds: [plannedShot.id],
+          })
+          const saved = await cloneRepo.upsertProject(latestProject)
+          scheduleRemoteStoryboardVideoReconcile(saved.id, 0)
+          return saved
+        }
+        const leaderFrame = resolveStoryboardFrameSource(leader)
+        if (leaderFrame) {
+          console.log('[clone-debug] long-take:route-to-leader', { projectId: latestProject.id, shotId: plannedShot.id, leaderShotId: leader.id })
+          return await ensureAi666SegmentVideoTask({
+            project: latestProject,
+            shot: leader,
+            firstFramePath: leaderFrame,
+            mode: input.mode,
+            forceRegenerate: input.forceRegenerate,
+          })
+        }
+      }
+    }
+
+    // Relay: end this clip on the next piece's start frame when the reference ran straight through.
+    const groupShotIds = membership?.shotIds ?? [plannedShot.id]
+    const tailShotId = groupShotIds[groupShotIds.length - 1]!
+    const tailShot = projectBlueprintShots(latestProject).find((item) => item.id === tailShotId)
+    const hasExplicitEndFrame = Boolean(input.lastFramePath) && input.lastFramePath !== input.firstFramePath
+    let relayToShotId: string | undefined
+    if (!hasExplicitEndFrame && tailShot?.continuityWithNext === 'continuous') {
+      const next = continuityNextShot(latestProject, tailShotId)
+      const nextFrame = next ? resolveStoryboardFrameSource(next) : ''
+      if (next && nextFrame && nextFrame !== input.firstFramePath) {
+        input = { ...input, lastFramePath: nextFrame }
+        relayToShotId = next.id
+      }
+    }
+    const videoProviderName = String(resolveApifoxHubCredentials(creds, 'video')?.videoProvider || '')
+    const continuityTargetSec = membership
+      ? membership.groupDurationSec
+      : relayToShotId
+        ? Number(plannedShot.durationSec || 0)
+        : 0
+    const requestedDurationSec = continuityTargetSec > 0 ? snapRequestedVideoDurationSec(videoProviderName, continuityTargetSec) : undefined
+
     const capability = input.lastFramePath ? 'video_start_end_to_video' : 'video_image_to_video'
     const provider = 'apifox_hub'
     const model = videoProviderModel(creds)
     const endpointStyle = resolveApifoxHubCredentials(creds, 'video')?.videoEndpointStyle
-    const latestProject = (await cloneRepo.getProject(input.project.id)) || input.project
     const submissionFingerprint = computeShotVideoSubmissionFingerprint({
       project: latestProject,
       shot: input.shot,
@@ -9234,13 +9489,26 @@ async function ensureAi666SegmentVideoTask(input: {
     // Same category resolution as the prompt preview: the shot's own type, else the bound product.
     const submitProductType = resolveShotPromptProductType(latestProject, latestShot)
     const submitShot = { ...latestShot, productType: submitProductType }
-    const finalApifoxPrompt = buildFinalShotVideoPositivePrompt({
+    const shotApifoxPrompt = buildFinalShotVideoPositivePrompt({
       shot: submitShot,
       productIdentityText: String(latestShot.productIdentityText || latestShot.materialNeed || '').trim(),
       productMode: detectProductMode(submitProductType),
       composeOptimizationPatch: getProjectComposeOptimizationPatch(latestProject),
       composeBodyUpgradePlan: getProjectComposeBodyUpgradePlan(latestProject),
     })
+    const finalApifoxPrompt = membership
+      ? buildLongTakePrompt(
+          shotApifoxPrompt,
+          membership.shotIds.map((shotId) => {
+            const member = projectBlueprintShots(latestProject).find((item) => item.id === shotId)
+            return {
+              offsetSec: member?.longTake?.offsetSec ?? 0,
+              durationSec: member?.longTake?.durationSec ?? Number(member?.durationSec || 0),
+              text: member ? longTakeMemberText(member) : '',
+            }
+          }),
+        )
+      : shotApifoxPrompt
     const finalApifoxNegativePrompt = buildVideoNegativePrompt(
       submitShot,
       String(latestShot.compiledNegativePrompt || '').trim(),
@@ -9290,6 +9558,7 @@ async function ensureAi666SegmentVideoTask(input: {
         image: uploadedOrderedReferenceImages[0],
         lastImage: uploadedLastFrameImage,
         referenceImages: [],
+        durationSec: requestedDurationSec,
         aspectRatio: requestedAspectRatio,
         xibapiSize: requestedVideoSize,
       })
@@ -9336,6 +9605,41 @@ async function ensureAi666SegmentVideoTask(input: {
         submissionLockedUntil: undefined,
         sourceEvent: 'segment_submit_direct_output_received',
       })
+      if (membership) {
+        // Provider returned the long take directly: give every member a copy and let each cut its part.
+        const directTaskId = `direct-${submitStartedAt}`
+        attachLongTakeMembersToTask({
+          project: latestProject,
+          leader: latestShot,
+          taskId: directTaskId,
+          created,
+          submitStartedAt,
+          relayToShotId,
+        })
+        for (const shotId of membership.shotIds) {
+          const member = projectBlueprintShots(latestProject).find((item) => item.id === shotId)
+          if (!member?.longTakeWindow) continue
+          const memberDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', shotId)
+          await mkdir(memberDir, { recursive: true })
+          const memberPath = join(memberDir, 'generated_clip.mp4')
+          if (memberPath !== outPath) await copyFile(outPath, memberPath)
+          await saveSegmentDone({
+            project: latestProject,
+            shot: member,
+            provider: created.provider,
+            model: created.model,
+            endpointStyle: created.endpointStyle,
+            baseUrl: created.baseUrl,
+            requestCapability: created.requestCapability,
+            videoUrl: created.directOutputUrl,
+            localPath: memberPath,
+            remoteStatus: 'succeeded',
+            longTakeWindow: member.longTakeWindow,
+          })
+        }
+        return (await cloneRepo.getProject(latestProject.id)) || latestProject
+      }
+      replaceProjectShot(latestProject, latestShot.id, { continuityRelayToShotId: relayToShotId, longTakeWindow: undefined })
       return await saveSegmentDone({
         project: latestProject,
         shot: latestShot,
@@ -9448,6 +9752,23 @@ async function ensureAi666SegmentVideoTask(input: {
       submissionStartedAt: submitStartedAt,
       submissionLockedUntil: submitStartedAt + SHOT_VIDEO_SUBMISSION_LOCK_MS,
       sourceEvent: 'segment_submit_succeeded',
+    })
+    attachLongTakeMembersToTask({
+      project: latestProject,
+      leader: projectBlueprintShots(latestProject).find((item) => item.id === latestShot.id) || latestShot,
+      taskId: created.taskId,
+      created,
+      submissionFingerprint,
+      submitStartedAt,
+      relayToShotId,
+    })
+    console.log('[clone-debug] continuity-submit', {
+      projectId: latestProject.id,
+      shotId: latestShot.id,
+      longTakeShotIds: membership?.shotIds,
+      relayToShotId,
+      requestedDurationSec,
+      taskId: created.taskId,
     })
     const savedProject = await cloneRepo.upsertProject(latestProject)
     scheduleRemoteStoryboardVideoReconcile(savedProject.id, 0)
@@ -10560,6 +10881,7 @@ export const cloneService = {
     const initialGenerationQueue = (project.generationQueue ||= {} as any)
     initialGenerationQueue.lastShotVideoSummary = initialShotVideoSummary.queueSummary as any
     initialGenerationQueue.lastShotVideoFailureBreakdown = initialShotVideoSummary.failureBreakdown as any
+    await ensureProjectContinuityPlan(project)
     await cloneRepo.upsertProject(project)
     const results = await mapWithConcurrency(shots, videoConcurrency, async (baseShot) => {
       console.log('[clone-debug] storyboard-video-batch:shot-start', {
@@ -10767,6 +11089,11 @@ export const cloneService = {
           status: 'timeout' as const,
           reason: `${videoPollingTimeoutMessage(videoProviderLabel(await cloneRepo.getCredentials()))} taskId=${existingBeforeCreate.taskId}`,
         }
+      }
+      const longTake = shot.longTake && shot.longTake.shotIds.length > 1 ? shot.longTake : undefined
+      if (longTake && longTake.leaderShotId !== shot.id && videoProviderChain(await cloneRepo.getCredentials())[0] === 'apifox_hub') {
+        // Generated as part of the leader's long take; the leader's submission hands this shot the shared task.
+        return { shotId: shot.id, index: Number(shot.index ?? 0), status: 'skipped' as const }
       }
       try {
       const creds = await cloneRepo.getCredentials()

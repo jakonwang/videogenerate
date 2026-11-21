@@ -283,6 +283,10 @@ export type SyncCloneShotState = {
   videoError?: string
   /** 不放进成片 */
   skip?: boolean
+  /** 和相邻镜头一起生成的长镜头：本镜头在那段视频里的位置（videoJobId 相同的镜头共用一段视频） */
+  take?: { leaderShotId: string; jobId: string; offsetSec: number; durationSec: number; groupDurationSec: number }
+  /** 这段视频的结尾画面用的是这个镜头的分镜图（首尾衔接） */
+  relayToShotId?: string
 }
 
 /** 手机端复刻项目：对标视频 → 拆解 → 分镜图 → 分镜视频 → 成片 */

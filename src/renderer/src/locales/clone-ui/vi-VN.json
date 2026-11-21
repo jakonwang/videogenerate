@@ -1,4 +1,5 @@
 {
+  "uploadOnSubmit": "Ảnh cục bộ — sẽ tự tải lên và thay bằng liên kết công khai khi gửi",
   "createTitle": "Chọn cách chạy",
   "autoDesc": "AI tự hoàn thành cả 6 bước. Phù hợp xuất video hàng loạt.",
   "manualDesc": "Xác nhận từng bước trước khi tiếp tục. Phù hợp tinh chỉnh.",
@@ -157,5 +158,27 @@
     "advancedLabel": "Chỉnh từng bước",
     "advancedHint": "Xem và sửa từng bước tại đây. Dùng hằng ngày thì quay lại chế độ đơn giản.",
     "backToSimple": "Về chế độ đơn giản"
+  },
+  "video": {
+    "progress": "Đã xong {done}/{total} cảnh",
+    "running": "{n} đang tạo",
+    "failed": "{n} lỗi",
+    "waiting": "{n} đang chờ",
+    "allDone": "Tất cả cảnh đã sẵn sàng. Tiếp tục ghép video hoàn chỉnh.",
+    "runningHint": "Đang tạo trên đám mây. Kết quả sẽ tự cập nhật, kể cả khi bạn rời trang này.",
+    "idleHint": "Nhấn nút ở góc trên bên phải để tạo các cảnh còn lại.",
+    "failedHint": "Một số cảnh bị lỗi. Bạn có thể tạo lại tất cả cảnh lỗi cùng lúc.",
+    "overlayRunning": "Đang tạo trên đám mây",
+    "overlayWaiting": "Đang chờ tạo",
+    "overlayFailed": "Tạo thất bại",
+    "prevShot": "Cảnh trước",
+    "nextShot": "Cảnh sau",
+    "retryThis": "Tạo lại cảnh này",
+    "details": "Chi tiết kỹ thuật",
+    "jumpTo": "Xem cảnh {n}",
+    "longTake": "Cảnh dài {n}/{total}",
+    "longTakeHint": "Được tạo cùng các cảnh liền kề thành một cảnh quay liên tục, chỗ nối không bị giật",
+    "relay": "Nối liền",
+    "relayHint": "Cảnh này kết thúc đúng ở khung hình đầu của cảnh sau, chỗ nối mượt mà"
   }
 }

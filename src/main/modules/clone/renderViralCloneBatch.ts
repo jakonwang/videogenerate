@@ -3,8 +3,9 @@ import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { getFfmpegExecutable, getFfprobeExecutable } from '../../lib/binariesPath'
 import type { ShotSpec } from './types'
+import { detectFreezeEdges, measureClipColor, resolveColorMatchFilters, resolveRetimeFactor } from './continuity'
 
-type FinalComposeClipMode = 'reference_trim' | 'smart_middle_tail' | 'full_generated_clip'
+type FinalComposeClipMode = 'reference_trim' | 'smart_middle_tail' | 'full_generated_clip' | 'continuity_full'
 type FinalComposeDurationPolicy = 'script_first_micro_adjust'
 
 type ClipWindow = {
@@ -1697,14 +1698,24 @@ async function normalizeClip(input: {
   out: string
   clipStartSec?: number
   highlightSuppressionPreset?: HighlightSuppressionPreset
+  /** setpts factor (>1 slows down) so continuity clips fill their shot length. */
+  speedFactor?: number
+  /** Extra filter appended after normalizing, e.g. colour matching. */
+  extraFilter?: string
 }) {
+  const speed = Number(input.speedFactor || 1)
+  const filters = [
+    speed > 0 && speed !== 1 ? `setpts=PTS*${speed}` : '',
+    buildNormalizeVideoFilter(input.highlightSuppressionPreset || 'none'),
+    String(input.extraFilter || '').trim(),
+  ].filter(Boolean)
   await run([
     '-y',
     '-ss',
     `${Math.max(0, Number(input.clipStartSec || 0))}`,
     '-i', input.src,
     '-t', `${Math.max(0.5, input.durationSec)}`,
-    '-vf', buildNormalizeVideoFilter(input.highlightSuppressionPreset || 'none'),
+    '-vf', filters.join(','),
     '-an',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-shortest',
     input.out,
@@ -1787,6 +1798,28 @@ async function concatWithRhythmTransitions(input: {
   })
 }
 
+/**
+ * Whether two neighbouring clips were generated to join exactly: parts of the same long-take task,
+ * or the first clip was given the second one's start frame as its end frame.
+ */
+function isContinuityLockedBoundary(a?: ShotSpec, b?: ShotSpec) {
+  if (!a || !b) return false
+  const wa = a.longTakeWindow
+  const wb = b.longTakeWindow
+  const fromTask = (shot: ShotSpec, taskId: string) =>
+    taskId.startsWith('direct-') || String(shot.generatedTaskId || '').trim() === taskId
+  if (wa && wb && wa.taskId === wb.taskId && fromTask(a, wa.taskId) && fromTask(b, wb.taskId)) return true
+  return Boolean(a.continuityRelayToShotId) && a.continuityRelayToShotId === b.id
+}
+
+/** Joins that line up get a hard cut; reference-continuous joins that could not be locked get a soft fade. */
+function resolveContinuityTransition(shot: ShotSpec, nextShot: ShotSpec | undefined, fallback: RhythmTransitionPlan): RhythmTransitionPlan {
+  if (!nextShot) return fallback
+  if (isContinuityLockedBoundary(shot, nextShot)) return { ...fallback, transition: 'hardcut', durationSec: 0 }
+  if (shot.continuityWithNext === 'continuous') return { ...fallback, transition: 'fade', durationSec: 0.25 }
+  return fallback
+}
+
 export async function renderViralCloneBatch(input: {
   projectId: string
   shots: ShotSpec[]
@@ -1865,6 +1898,18 @@ export async function renderViralCloneBatch(input: {
           composeDiagnostics?: ComposeDiagnosticSnapshot
         }> = []
         const allowMockSources = Boolean(input.allowMockSources)
+        type ClipPlan = {
+          shot: ShotSpec
+          src: string
+          out: string
+          clipWindow: ClipWindow
+          outputDurationSec: number
+          speedFactor: number
+          highlightSuppression: HighlightSuppressionDecision
+          composeDiagnostics: ComposeDiagnosticSnapshot
+        }
+        const renderableShots = input.shots.filter((shot) => Boolean(shot.uploadedAssetPath || shot.generatedClipPath))
+        const plans: ClipPlan[] = []
         for (const shot of input.shots) {
           if (!allowMockSources && (shot.isMock || shot.generatedSource === 'mock' || shot.generatedSource === 'local')) {
             throw new Error(`shot ${shot.index + 1} is mock/local and cannot be rendered`)
@@ -1874,54 +1919,99 @@ export async function renderViralCloneBatch(input: {
           const out = join(jobDir, `${shot.id}.mp4`)
           const highlightSuppression = shouldSuppressHighlights(shot)
           const sourceDurationSec = await probeDurationSec(src)
-          const previousShot = normalized.length > 0 ? input.shots[normalized.length - 1] : undefined
-          const previousPreviousShot = normalized.length > 1 ? input.shots[normalized.length - 2] : undefined
+          const previousShot = plans.length > 0 ? input.shots[plans.length - 1] : undefined
+          const previousPreviousShot = plans.length > 1 ? input.shots[plans.length - 2] : undefined
           const composeDiagnostics = buildComposeDiagnosticSnapshot({
             shot,
             previousShot,
-            shotIndex: normalized.length,
+            shotIndex: plans.length,
             totalShots: input.shots.length,
           })
-          const clipWindow = pickClipWindow({
-            mode: FINAL_COMPOSE_CLIP_MODE,
-            sourceDurationSec,
-            targetDurationSec: Number(shot.durationSec || 1.5),
-            shot,
-            previousShot,
-            previousPreviousShot,
-            nextShot: input.shots[normalized.length],
-            shotIndex: normalized.length,
-            totalShots: input.shots.length,
-          })
-          await normalizeClip({
-            src,
-            durationSec: clipWindow.clipDurationSec,
-            clipStartSec: clipWindow.clipStartSec,
-            out,
-            highlightSuppressionPreset: highlightSuppression.preset,
-          })
-          normalized.push(out)
-          transitions.push(
-            getTransitionPlan({
+          const renderIndex = renderableShots.indexOf(shot)
+          const lockedIn = isContinuityLockedBoundary(renderableShots[renderIndex - 1], shot)
+          const lockedOut = isContinuityLockedBoundary(shot, renderableShots[renderIndex + 1])
+          const targetDurationSec = Number(shot.durationSec || 1.5)
+          // Models often hold the first / last frame for a moment; at a join that reads as a stall.
+          const freeze = shot.generatedClipPath && !shot.uploadedAssetPath
+            ? await detectFreezeEdges(src, sourceDurationSec)
+            : { headSec: 0, tailSec: 0 }
+          let clipWindow: ClipWindow
+          let speedFactor = 1
+          let outputDurationSec: number
+          if (lockedIn || lockedOut) {
+            // Clip was generated to start / end exactly where its neighbours do: keep it whole and
+            // retime it to the shot length instead of cutting a window out of it.
+            const usedSec = Math.max(0.3, sourceDurationSec - freeze.headSec - freeze.tailSec)
+            speedFactor = resolveRetimeFactor(usedSec, targetDurationSec)
+            clipWindow = {
+              sourceDurationSec: round3(sourceDurationSec),
+              clipStartSec: round3(freeze.headSec),
+              clipDurationSec: round3(usedSec),
+              mode: 'continuity_full',
+            }
+            outputDurationSec = round3(Math.min(targetDurationSec, usedSec * speedFactor))
+          } else {
+            clipWindow = pickClipWindow({
+              mode: FINAL_COMPOSE_CLIP_MODE,
+              sourceDurationSec,
+              targetDurationSec,
               shot,
-              nextShot: input.shots[normalized.length],
               previousShot,
-              shotIndex: normalized.length - 1,
+              previousPreviousShot,
+              nextShot: input.shots[plans.length],
+              shotIndex: plans.length,
               totalShots: input.shots.length,
-            }),
+            })
+            const usableEndSec = sourceDurationSec - freeze.tailSec
+            if (freeze.headSec > clipWindow.clipStartSec && freeze.headSec + clipWindow.clipDurationSec <= usableEndSec + 0.01) {
+              clipWindow = { ...clipWindow, clipStartSec: round3(freeze.headSec) }
+            }
+            outputDurationSec = clipWindow.clipDurationSec
+          }
+          plans.push({ shot, src, out, clipWindow, outputDurationSec, speedFactor, highlightSuppression, composeDiagnostics })
+        }
+        // Pull brightness / saturation of every clip toward the median so cuts do not flicker.
+        const colorFilters = resolveColorMatchFilters(
+          await Promise.all(plans.map((plan) => measureClipColor(plan.src, plan.clipWindow.clipStartSec, plan.clipWindow.clipDurationSec))),
+        )
+        for (let k = 0; k < plans.length; k++) {
+          const plan = plans[k]!
+          const { shot, clipWindow, highlightSuppression } = plan
+          await normalizeClip({
+            src: plan.src,
+            durationSec: plan.outputDurationSec,
+            clipStartSec: clipWindow.clipStartSec,
+            out: plan.out,
+            highlightSuppressionPreset: highlightSuppression.preset,
+            speedFactor: plan.speedFactor,
+            extraFilter: colorFilters[k],
+          })
+          normalized.push(plan.out)
+          transitions.push(
+            resolveContinuityTransition(
+              shot,
+              plans[k + 1]?.shot,
+              getTransitionPlan({
+                shot,
+                nextShot: input.shots[normalized.length],
+                previousShot: k > 0 ? input.shots[k - 1] : undefined,
+                shotIndex: normalized.length - 1,
+                totalShots: input.shots.length,
+              }),
+            ),
           )
           shotSourceReport.push({
             shotId: shot.id,
-            sourcePath: src,
+            sourcePath: plan.src,
             source: shot.generatedClipPath ? 'ai' : shot.uploadedAssetPath ? 'upload' : 'none',
             sourceDurationSec: clipWindow.sourceDurationSec,
             clipStartSec: clipWindow.clipStartSec,
-            clipDurationSec: clipWindow.clipDurationSec,
+            clipDurationSec: plan.outputDurationSec,
             clipMode: clipWindow.mode,
             highlightSuppressionEnabled: highlightSuppression.enabled,
             highlightSuppressionPreset: highlightSuppression.preset,
             highlightSuppressionReasons: highlightSuppression.reasons,
-            composeDiagnostics,
+            composeDiagnostics: plan.composeDiagnostics,
           })
         }
         const rawOut = join(jobDir, 'joined.mp4')

@@ -17,7 +17,7 @@ import { resolveCloneWorkspaceClient } from '@/lib/cloneWorkspaceClient'
 import { hasStoredWebToken, webApiClient } from '@/lib/webApiClient'
 import { useCloneTopbarStore } from '@/stores/cloneTopbar'
 import { storeToRefs } from 'pinia'
-import { AlertTriangle, ArrowRight, Check, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
+import { AlertTriangle, ArrowRight, Check, ChevronLeft, ChevronRight, Clapperboard, Copy, Download, Eye, FileText, Film, FolderOpen, Hand, Image as ImageIcon, Info, Lightbulb, Link2, LoaderCircle, Lock, LockOpen, Maximize2, Package, Play, RefreshCw, RotateCw, Save, Search, Send, SlidersHorizontal, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-vue-next'
 
 const { t: tr } = useI18n()
 const route = useRoute()
@@ -242,6 +242,7 @@ type IdentityGridPromptPreview = {
 type PromptParamRow = {
   key: string
   value: string
+  uploadPaths?: string[]
 }
 
 type PromptPreviewStat = {
@@ -1296,6 +1297,65 @@ const pendingShotCount = computed(
       (item) => !hasReadyShotOutputVideo(item) && !(item.status === 'failed_terminal' || Boolean(item.error)),
     ).length,
 )
+type ShotVideoRowTone = 'ok' | 'err' | 'run' | 'idle'
+type ShotVideoRowView = { title: string; detail: string; tone: ShotVideoRowTone; summary: string; motion: string; index: number; continuity: string; continuityHint: string }
+
+// How this shot joins its neighbours (main process: continuity.ts): one long take, or end frame = next start frame.
+function shotContinuityLabel(shotId: string) {
+  const shot = blueprintShotMap.value[shotId] as (BlueprintShot & { longTake?: { shotIds?: string[] }; continuityRelayToShotId?: string }) | undefined
+  const takeIds = Array.isArray(shot?.longTake?.shotIds) ? shot!.longTake!.shotIds! : []
+  if (takeIds.length > 1) {
+    return {
+      label: tr('cloneUi.video.longTake', { n: takeIds.indexOf(shotId) + 1, total: takeIds.length }),
+      hint: tr('cloneUi.video.longTakeHint'),
+    }
+  }
+  if (shot?.continuityRelayToShotId) return { label: tr('cloneUi.video.relay'), hint: tr('cloneUi.video.relayHint') }
+  return { label: '', hint: '' }
+}
+// Everything a row of the shot video table shows, worked out once per project update instead of
+// several times per row on every render.
+const shotVideoRowViews = computed<Record<string, ShotVideoRowView>>(() => {
+  const views: Record<string, ShotVideoRowView> = {}
+  shotVideoOutputs.value.forEach((item, index) => {
+    const state = describeShotSyncState(item)
+    const tone: ShotVideoRowTone =
+      state.tone === 'success' ? 'ok' : state.tone === 'danger' ? 'err' : state.tone === 'warning' ? 'run' : 'idle'
+    views[item.shotId] = {
+      title: state.title,
+      detail: state.detail,
+      tone,
+      summary: shotScriptSummary(item.shotId),
+      motion: shotReferenceLabel(storyBeatMap.value[item.shotId]),
+      index,
+      continuity: shotContinuityLabel(item.shotId).label,
+      continuityHint: shotContinuityLabel(item.shotId).hint,
+    }
+  })
+  return views
+})
+const shotVideoProgress = computed(() => {
+  const total = shotVideoOutputs.value.length
+  let done = 0
+  let running = 0
+  let failed = 0
+  for (const item of shotVideoOutputs.value) {
+    const tone = shotVideoRowViews.value[item.shotId]?.tone
+    if (tone === 'ok') done += 1
+    else if (tone === 'err') failed += 1
+    else if (tone === 'run') running += 1
+  }
+  const waiting = Math.max(0, total - done - running - failed)
+  return { total, done, running, failed, waiting, percent: total ? Math.round((done / total) * 100) : 0 }
+})
+const shotVideoProgressHint = computed(() => {
+  const progress = shotVideoProgress.value
+  if (progress.total && progress.done === progress.total) return tr('cloneUi.video.allDone')
+  if (progress.running) return tr('cloneUi.video.runningHint')
+  if (progress.failed) return tr('cloneUi.video.failedHint')
+  return tr('cloneUi.video.idleHint')
+})
+const selectedShotView = computed(() => (selectedShotOutput.value ? shotVideoRowViews.value[selectedShotOutput.value.shotId] || null : null))
 const autoVideoPendingCount = computed(() => {
   const summary = lastShotVideoSummary.value
   if (summary) {
@@ -2310,6 +2370,25 @@ function isUploadOnSubmitPlaceholder(value?: string) {
   return String(value || '').trim().startsWith('UPLOAD_ON_SUBMIT::')
 }
 
+const UPLOAD_ON_SUBMIT_PATTERN = /UPLOAD_ON_SUBMIT::([^\s"',\]}]+)/g
+
+// The video request preview uses `UPLOAD_ON_SUBMIT::<file name>` for frames that are only
+// uploaded on submit. Map those back to the local frame files so the preview shows and copies
+// something usable instead of the raw token.
+function shotVideoLocalFramePaths(preview?: ShotVideoPromptPreview | null) {
+  return [preview?.localFirstFramePath, preview?.localLastFramePath].map((item) => String(item || '').trim()).filter(Boolean)
+}
+
+// Works on the JSON text, so the substituted path is JSON-escaped (Windows backslashes).
+function shotVideoPayloadText(preview?: ShotVideoPromptPreview | null) {
+  const raw = safeText(preview?.requestPayloadPreview || preview?.requestJson, '')
+  const localPaths = shotVideoLocalFramePaths(preview)
+  return raw.replace(UPLOAD_ON_SUBMIT_PATTERN, (token, name: string) => {
+    const match = localPaths.find((item) => item.split(/[\\/]/).pop() === name)
+    return match ? JSON.stringify(match).slice(1, -1) : token
+  })
+}
+
 function resolveShotVideoReferencePaths(preview?: ShotVideoPromptPreview | null) {
   const rawValues = promptJsonUrls(preview?.requestPayloadPreview || preview?.requestJson)
   const values: string[] = []
@@ -2347,7 +2426,7 @@ async function downloadMediaFile(path: string) {
 
 async function copyAllShotVideoPrompts() {
   if (!shotVideoPromptPreview.value) return
-  const parts = [`Video Request Payload:\n${safeText(shotVideoPromptPreview.value.requestPayloadPreview || shotVideoPromptPreview.value.requestJson, '--')}`]
+  const parts = [`Video Request Payload:\n${shotVideoPayloadText(shotVideoPromptPreview.value) || '--'}`]
   await copyPromptText(parts.join('\n\n'), tr('autoUi.k_3fb911525325'))
 }
 
@@ -2491,9 +2570,21 @@ const shotImageDisplayRefs = computed(() => {
 })
 const safeShotImageDisplayRefs = computed(() => Array.isArray(shotImageDisplayRefs.value) ? shotImageDisplayRefs.value : [])
 const shotImageRequestParamRows = computed(() => promptParamRowsFromJson(shotImagePromptPreview.value?.requestJsonStart))
-const shotVideoRequestParamRows = computed(() =>
-  promptParamRowsFromJson(shotVideoPromptPreview.value?.requestPayloadPreview || shotVideoPromptPreview.value?.requestJson),
-)
+const shotVideoRequestParamRows = computed(() => {
+  const preview = shotVideoPromptPreview.value
+  const raw = safeText(preview?.requestPayloadPreview || preview?.requestJson, '')
+  const localPaths = shotVideoLocalFramePaths(preview)
+  const placeholderKeys = new Set(
+    promptParamRowsFromJson(raw)
+      .filter((row) => row.value.includes('UPLOAD_ON_SUBMIT::'))
+      .map((row) => row.key),
+  )
+  return promptParamRowsFromJson(shotVideoPayloadText(preview)).map((row) => {
+    if (!placeholderKeys.has(row.key)) return row
+    const uploadPaths = localPaths.filter((item) => row.value.includes(item) || row.value.includes(JSON.stringify(item).slice(1, -1)))
+    return uploadPaths.length ? { ...row, uploadPaths } : row
+  })
+})
 const identityGridRequestParamRows = computed(() =>
   promptParamRowsFromJson(identityGridPromptPreview.value?.requestJson || current.value?.projectIdentityGridPromptPreview?.requestJson),
 )
@@ -3548,6 +3639,7 @@ let refreshTick = 0
 let autoVideoSubmitSignature = ''
 let autoVideoDownloadRecoverySignature = ''
 let autoRemoteSyncInFlight = false
+let projectPollInFlight = false
 let autoRemoteSyncLastAt = 0
 let autoStoryboardQuerySignature = ''
 let autoStoryboardRetrySignature = ''
@@ -3825,10 +3917,21 @@ onMounted(async () => {
           autoRemoteSyncInFlight = false
         })
       }
-      if (visibleStageKey.value === 'video' || hasRemotePendingShotSync.value || autoVideoPendingCount.value > 0 || refreshTick % 10 === 0) {
-        void loadProject(current.value.id, { updateStageLog: false })
-      } else {
-        void refreshRuntimeProject()
+      // One poll at a time: on a slow network (web) the next tick must not stack another request,
+      // and the auto sync above already fetches the project when it ran this tick.
+      if (!projectPollInFlight && !autoRemoteSyncInFlight) {
+        projectPollInFlight = true
+        const pollJob =
+          visibleStageKey.value === 'video' || hasRemotePendingShotSync.value || autoVideoPendingCount.value > 0 || refreshTick % 10 === 0
+            ? loadProject(current.value.id, { updateStageLog: false, background: true })
+            : refreshRuntimeProject()
+        void pollJob
+          .catch((error: any) => {
+            pushRuntimeLog(`[clone-debug] project-poll-failed ${safeText(error?.message ?? error, 'unknown error')}`, 'error')
+          })
+          .finally(() => {
+            projectPollInFlight = false
+          })
       }
     }
   }, 6000)
@@ -4523,13 +4626,39 @@ onUnmounted(() => {
             <span class="cw-head__no">05</span>
             <div class="cw-head__text">
               <h2>{{ tr('cloneView.videoStage.title') }}</h2>
-              <p>{{ videoStageDescription }}</p>
+              <p :title="videoStageDescription">{{ shotVideoProgressHint }}</p>
             </div>
             <div class="cw-head__actions">
-              <button class="vg-btn" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}</button>
-              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateShotVideos"><Clapperboard :size="15" />{{ tr('cloneView.videoStage.primaryAction') }}</button>
+              <button class="vg-btn" type="button" :disabled="loading" @click="selectStage('compose')">{{ tr('autoUi.k_15d0c050b154') }}<ArrowRight :size="14" /></button>
+              <button class="vg-btn vg-btn--primary" type="button" :disabled="loading || !current?.id" @click="generateShotVideos"><LoaderCircle v-if="loading" :size="15" class="vg-spin" /><Clapperboard v-else :size="15" />{{ tr('cloneView.videoStage.primaryAction') }}</button>
             </div>
           </header>
+
+          <section v-if="shotVideoOutputs.length" class="cw-vprog" :class="{ 'is-done': shotVideoProgress.total && shotVideoProgress.done === shotVideoProgress.total }">
+            <div class="cw-vprog__ring" :style="{ '--p': `${shotVideoProgress.percent}%` }">
+              <strong>{{ shotVideoProgress.percent }}<small>%</small></strong>
+            </div>
+            <div class="cw-vprog__body">
+              <div class="cw-vprog__line">
+                <strong>{{ tr('cloneUi.video.progress', { done: shotVideoProgress.done, total: shotVideoProgress.total }) }}</strong>
+                <span v-if="shotVideoProgress.running" class="cw-state cw-state--run"><i />{{ tr('cloneUi.video.running', { n: shotVideoProgress.running }) }}</span>
+                <span v-if="shotVideoProgress.failed" class="cw-state cw-state--err"><i />{{ tr('cloneUi.video.failed', { n: shotVideoProgress.failed }) }}</span>
+                <span v-if="shotVideoProgress.waiting" class="cw-state"><i />{{ tr('cloneUi.video.waiting', { n: shotVideoProgress.waiting }) }}</span>
+              </div>
+              <div class="cw-vprog__track" role="list">
+                <button
+                  v-for="item in shotVideoOutputs"
+                  :key="`seg-${item.shotId}`"
+                  type="button"
+                  role="listitem"
+                  class="cw-vprog__seg"
+                  :class="[`is-${shotVideoRowViews[item.shotId]?.tone || 'idle'}`, { 'is-active': selectedShotOutput?.shotId === item.shotId }]"
+                  :title="`${tr('cloneUi.video.jumpTo', { n: (shotVideoRowViews[item.shotId]?.index ?? 0) + 1 })} · ${shotVideoRowViews[item.shotId]?.title || ''}`"
+                  @click="selectedShotId = item.shotId"
+                />
+              </div>
+            </div>
+          </section>
 
           <div class="cw-settings">
             <div class="cw-settings__copy">
@@ -4563,14 +4692,13 @@ onUnmounted(() => {
                 </div>
                 <span class="cw-toolbar__spacer" />
                 <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || regeneratingFailedShotVideos || !failedShotOutputs.length" @click="regenerateFailedShotVideos"><RotateCw :size="13" />{{ failedShotActionText }}</button>
-                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos"><Search :size="13" />{{ tr('autoUi.k_cc874aad6450') }}</button>
-                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus"><RefreshCw :size="13" />{{ tr('autoUi.k_b89f115ab421') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !hasRemotePendingShotSync" @click="syncPendingShotVideos()"><Search :size="13" />{{ tr('autoUi.k_cc874aad6450') }}</button>
+                <button class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click="refreshRemoteStatus()"><RefreshCw :size="13" :class="{ 'vg-spin': loading }" />{{ tr('autoUi.k_b89f115ab421') }}</button>
               </div>
-              <div class="cw-statline">
-                <span>{{ tr('cloneView.videoStage.stats.ordered') }}</span>
-                <span>{{ tr('cloneView.videoStage.stats.failedPending') }} <b>{{ failedShotOutputs.length }}</b></span>
-                <span>{{ tr('autoUi.k_e4baf28f5192') }}<b>{{ continueQueryableShotCount }}</b></span>
-                <span>{{ tr('autoUi.k_366462f4d6fb') }}<b>{{ missingTaskIdShotCount }}</b></span>
+              <div v-if="failedShotOutputs.length || continueQueryableShotCount || missingTaskIdShotCount || Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0 || Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0" class="cw-statline">
+                <span v-if="failedShotOutputs.length">{{ tr('cloneView.videoStage.stats.failedPending') }} <b>{{ failedShotOutputs.length }}</b></span>
+                <span v-if="continueQueryableShotCount">{{ tr('autoUi.k_e4baf28f5192') }}<b>{{ continueQueryableShotCount }}</b></span>
+                <span v-if="missingTaskIdShotCount">{{ tr('autoUi.k_366462f4d6fb') }}<b>{{ missingTaskIdShotCount }}</b></span>
                 <span v-if="Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) > 0">{{ tr('autoUi.k_76a00d6e4987') }}<b>{{ Number(lastShotVideoFailureBreakdown?.remoteTimeout || 0) }}</b></span>
                 <span v-if="Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) > 0">{{ tr('autoUi.k_b0578cac28c2') }}<b>{{ Number(lastShotVideoFailureBreakdown?.downloadFailed || 0) }}</b></span>
               </div>
@@ -4588,9 +4716,9 @@ onUnmounted(() => {
                 <div
                   v-for="item in filteredShotOutputs"
                   :key="item.shotId"
-                  v-memo="[item.shotId, item.status, item.videoPath, item.error, item.remoteStatus, item.retryCount, selectedShotOutput?.shotId === item.shotId, regeneratingShotVideoIds.includes(item.shotId), forceDownloadingShotVideoIds.includes(item.shotId), loading]"
+                  v-memo="[item.shotId, item.status, item.videoPath, item.videoUrl, item.taskId, item.error, item.remoteStatus, item.retryCount, item.durationSec, shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt, shotVideoRowViews[item.shotId]?.title, shotVideoRowViews[item.shotId]?.detail, shotVideoRowViews[item.shotId]?.tone, shotVideoRowViews[item.shotId]?.summary, shotVideoRowViews[item.shotId]?.motion, shotVideoRowViews[item.shotId]?.continuity, selectedShotOutput?.shotId === item.shotId, regeneratingShotVideoIds.includes(item.shotId), forceDownloadingShotVideoIds.includes(item.shotId), shotVideoPromptPreviewLoading, loading]"
                   class="cw-row"
-                  :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId, 'is-failed': item.status === 'failed_retryable' || item.status === 'failed_terminal' || Boolean(item.error) }"
+                  :class="{ 'is-active': selectedShotOutput?.shotId === item.shotId, 'is-failed': shotVideoRowViews[item.shotId]?.tone === 'err', 'is-working': shotVideoRowViews[item.shotId]?.tone === 'run' }"
                   role="button"
                   tabindex="0"
                   @click="selectedShotId = item.shotId"
@@ -4598,20 +4726,22 @@ onUnmounted(() => {
                   @keydown.space.prevent="selectedShotId = item.shotId"
                 >
                   <span class="cw-index"><b>{{ String((shotVideoOutputIndexMap[item.shotId] ?? 0) + 1).padStart(2, '0') }}</b><small>{{ tr('autoUi.k_21468aa05330', { p0: (shotVideoOutputIndexMap[item.shotId] ?? 0) + 1 }) }}</small></span>
-                  <span class="cw-frame__thumb cw-frame__thumb--sm">
-                    <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))" />
+                  <span class="cw-frame__thumb cw-frame__thumb--sm cw-vthumb" :class="`is-${shotVideoRowViews[item.shotId]?.tone || 'idle'}`">
+                    <img v-if="shotFrameMap[item.shotId]?.imagePath" :src="previewImage(shotFrameMap[item.shotId]?.imagePath, shotFrameMap[item.shotId]?.updatedAt)" :alt="safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8'))" loading="lazy" decoding="async" />
                     <span v-else class="cw-frame__empty">{{ tr('cloneView.videoStage.noFrame') }}</span>
-                    <span v-if="item.videoPath" class="cw-frame__play"><Play :size="12" /></span>
+                    <span v-if="shotVideoRowViews[item.shotId]?.tone === 'run'" class="cw-vthumb__veil"><LoaderCircle :size="16" class="vg-spin" /></span>
+                    <span v-else-if="shotVideoRowViews[item.shotId]?.tone === 'err'" class="cw-vthumb__veil is-err"><AlertTriangle :size="15" /></span>
+                    <span v-else-if="item.videoPath" class="cw-frame__play"><Play :size="12" /></span>
                   </span>
                   <span class="cw-frame__copy">
-                    <strong :title="shotScriptSummary(item.shotId)">{{ shotScriptSummary(item.shotId) }}</strong>
-                    <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}</small>
+                    <strong :title="shotVideoRowViews[item.shotId]?.summary">{{ shotVideoRowViews[item.shotId]?.summary }}</strong>
+                    <small>{{ safeText(shotLabel(item.shotId), tr('autoUi.k_fcad7fe371b8')) }}<em v-if="shotVideoRowViews[item.shotId]?.continuity" class="cw-vlink" :title="shotVideoRowViews[item.shotId]?.continuityHint"><Link2 :size="11" />{{ shotVideoRowViews[item.shotId]?.continuity }}</em></small>
                   </span>
                   <span class="cw-cell cw-num">{{ formatDuration(item.durationSec) }}</span>
-                  <span class="cw-cell">{{ shotReferenceLabel(storyBeats.find((beat) => beat.id === item.shotId)) }}</span>
+                  <span class="cw-cell">{{ shotVideoRowViews[item.shotId]?.motion }}</span>
                   <span class="cw-shotstate">
-                    <span class="cw-state" :class="`cw-state--${describeShotSyncState(item).tone === 'success' ? 'ok' : describeShotSyncState(item).tone === 'danger' ? 'err' : describeShotSyncState(item).tone === 'warning' ? 'run' : 'idle'}`"><i />{{ describeShotSyncState(item).title }}</span>
-                    <small>{{ describeShotSyncState(item).detail }}<template v-if="typeof item.retryCount === 'number'"> · {{ shotRetryStatusText(item) }}</template></small>
+                    <span class="cw-state" :class="`cw-state--${shotVideoRowViews[item.shotId]?.tone || 'idle'}`"><i />{{ shotVideoRowViews[item.shotId]?.title }}</span>
+                    <small :title="shotVideoRowViews[item.shotId]?.detail">{{ shotVideoRowViews[item.shotId]?.detail }}<template v-if="typeof item.retryCount === 'number'"> · {{ shotRetryStatusText(item) }}</template></small>
                   </span>
                   <span class="cw-actions">
                     <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="tr('autoUi.k_de61aa8e1cbc')" @click.stop="selectedShotId = item.shotId"><Eye :size="14" /></button>
@@ -4619,7 +4749,7 @@ onUnmounted(() => {
                     <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="!current?.id || regeneratingShotVideoIds.includes(item.shotId)" :title="regeneratingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_7038c8e1829a') : tr('autoUi.k_2e19057052a3')" @click.stop="regenerateShotClip(item.shotId)"><LoaderCircle v-if="regeneratingShotVideoIds.includes(item.shotId)" :size="14" class="vg-spin" /><RotateCw v-else :size="14" /></button>
                     <button v-if="canForceDownloadShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="forceDownloadingShotVideoIds.includes(item.shotId)" @click.stop="forceDownloadShotVideoResult(item.shotId)">{{ forceDownloadingShotVideoIds.includes(item.shotId) ? tr('autoUi.k_8185f33c5e78') : tr('autoUi.k_ef3781caac2d') }}</button>
                     <button v-if="canContinueSyncShot(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading" @click.stop="syncFailedShotVideo(item.shotId)">{{ tr('autoUi.k_59588f0c7deb') }}</button>
-                    <button v-else-if="canRepairShotTaskId(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click.stop="refreshRemoteStatus">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
+                    <button v-else-if="canRepairShotTaskId(item)" class="vg-btn vg-btn--sm" type="button" :disabled="loading || !current?.id" @click.stop="refreshRemoteStatus()">{{ tr('autoUi.k_c669d0d0cdfc') }}</button>
                   </span>
                 </div>
               </div>
@@ -4630,32 +4760,57 @@ onUnmounted(() => {
                 <header class="cw-card__head">
                   <h3>{{ tr('cloneView.videoStage.previewTitle') }}</h3>
                   <span v-if="selectedShotOutput" class="cw-card__hint">{{ `${tr('cloneView.videoStage.columns.shot')} ${String((selectedShotIndex >= 0 ? selectedShotIndex : 0) + 1).padStart(2, '0')}` }} · {{ formatDuration(selectedShotOutput?.durationSec) }}</span>
+                  <span v-if="shotVideoOutputs.length > 1" class="cw-vnav">
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="selectedShotIndex <= 0" :title="tr('cloneUi.video.prevShot')" @click="selectAdjacentShot(-1)"><ChevronLeft :size="14" /></button>
+                    <button class="vg-icon-btn vg-icon-btn--sm" type="button" :disabled="selectedShotIndex >= shotVideoOutputs.length - 1" :title="tr('cloneUi.video.nextShot')" @click="selectAdjacentShot(1)"><ChevronRight :size="14" /></button>
+                  </span>
                 </header>
-                <div class="cw-player cw-player--portrait">
-                  <video v-if="selectedShotOutput?.videoPath" :src="mediaUrl(selectedShotOutput.videoPath)" controls preload="metadata"></video>
+                <div class="cw-player cw-player--portrait cw-vscreen">
+                  <video
+                    v-if="selectedShotOutput?.videoPath"
+                    :key="selectedShotOutput.videoPath"
+                    :src="mediaUrl(selectedShotOutput.videoPath)"
+                    :poster="selectedShotFrame?.imagePath ? previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt) : undefined"
+                    controls
+                    playsinline
+                    preload="metadata"
+                  ></video>
+                  <template v-else-if="selectedShotFrame?.imagePath">
+                    <img class="cw-vscreen__poster" :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)" :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))" />
+                    <span class="cw-vscreen__veil" :class="`is-${selectedShotView?.tone || 'idle'}`">
+                      <LoaderCircle v-if="selectedShotView?.tone === 'run'" :size="26" class="vg-spin" />
+                      <AlertTriangle v-else-if="selectedShotView?.tone === 'err'" :size="24" />
+                      <Clapperboard v-else :size="24" />
+                      <strong>{{ selectedShotView?.tone === 'run' ? tr('cloneUi.video.overlayRunning') : selectedShotView?.tone === 'err' ? tr('cloneUi.video.overlayFailed') : tr('cloneUi.video.overlayWaiting') }}</strong>
+                      <small v-if="selectedShotView?.tone === 'run'">{{ tr('cloneUi.video.runningHint') }}</small>
+                      <button v-if="selectedShotView?.tone === 'err' && selectedShotOutput" class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!current?.id || regeneratingShotVideoIds.includes(selectedShotOutput.shotId)" @click="regenerateShotClip(selectedShotOutput.shotId)"><RotateCw :size="13" />{{ tr('cloneUi.video.retryThis') }}</button>
+                    </span>
+                  </template>
                   <span v-else class="cw-canvas__empty"><Clapperboard :size="24" /><strong>{{ tr('cloneView.videoStage.emptyPreviewTitle') }}</strong><small>{{ tr('cloneView.videoStage.emptyPreviewDescription') }}</small></span>
                 </div>
                 <div class="cw-field">
                   <span>{{ tr('cloneView.videoStage.currentShot') }}</span>
                   <strong>{{ safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('cloneView.videoStage.notSelected')) }}</strong>
-                  <small>{{ shotScriptSummary(selectedShotOutput?.shotId) }}</small>
+                  <small>{{ selectedShotView?.summary || shotScriptSummary(selectedShotOutput?.shotId) }}</small>
                 </div>
                 <div class="cw-field">
                   <span>{{ tr('cloneView.videoStage.scriptTitle') }}</span>
                   <strong>{{ safeText(selectedStoryBeat?.purpose, tr('cloneView.videoStage.noScript')) }}</strong>
                   <small>{{ tr('cloneView.videoStage.motionLabel') }}：{{ shotReferenceLabel(selectedStoryBeat) }} · {{ tr('cloneView.videoStage.productRoleLabel') }}：{{ localizeShotField(selectedStoryBeat?.productRole) }}</small>
                 </div>
-                <div v-if="selectedShotFrame?.imagePath" class="cw-field">
-                  <span>{{ tr('cloneView.videoStage.referenceFrame') }}</span>
-                  <span class="cw-frame__thumb cw-frame__thumb--wide"><img :src="previewImage(selectedShotFrame.imagePath, selectedShotFrame.updatedAt)" :alt="safeText(shotLabel(selectedShotOutput?.shotId || ''), tr('autoUi.k_5f35462af301'))" /></span>
+                <div v-if="selectedShotView" class="cw-vstatus">
+                  <span class="cw-state" :class="`cw-state--${selectedShotView.tone}`"><i />{{ selectedShotView.title }}</span>
+                  <small :title="selectedShotView.detail">{{ selectedShotView.detail }}</small>
                 </div>
-                <dl class="cw-kv">
-                  <div><dt>{{ tr('cloneView.videoStage.columns.status') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).title : '--' }}</dd></div>
-                  <div><dt>{{ tr('autoUi.k_68e297c888ef') }}</dt><dd>{{ selectedShotOutput ? describeShotSyncState(selectedShotOutput).detail : '--' }}</dd></div>
-                  <div><dt>{{ tr('autoUi.k_9d2c439d0b11') }}</dt><dd>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</dd></div>
-                  <div><dt>{{ tr('cloneView.videoStage.modelLabel') }}</dt><dd>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</dd></div>
-                  <div><dt>{{ tr('cloneView.videoStage.taskIdLabel') }}</dt><dd class="cw-mono">{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</dd></div>
-                </dl>
+                <details class="cw-vdetails">
+                  <summary>{{ tr('cloneUi.video.details') }}</summary>
+                  <dl class="cw-kv">
+                    <div><dt>{{ tr('autoUi.k_9d2c439d0b11') }}</dt><dd>{{ configuredVideoProvider }} / {{ configuredVideoModel }}</dd></div>
+                    <div><dt>{{ tr('cloneView.videoStage.modelLabel') }}</dt><dd>{{ safeText(selectedShotOutput?.provider, '--') }} / {{ safeText(selectedShotOutput?.model, '--') }}</dd></div>
+                    <div><dt>{{ tr('cloneView.videoStage.taskIdLabel') }}</dt><dd class="cw-mono" :title="safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '')">{{ safeText(selectedShotOutput ? effectiveShotTaskId(selectedShotOutput.shotId) : '', '--') }}</dd></div>
+                  </dl>
+                  <p class="cw-vdetails__note">{{ videoStageDescription }}</p>
+                </details>
                 <div v-if="selectedShotVideoErrorText" class="cw-alert">
                   <strong><AlertTriangle :size="14" />{{ tr('autoUi.k_ce8a92e25f09') }} · {{ selectedShotVideoErrorTitle }}</strong>
                   <p>{{ selectedShotVideoErrorText }}</p>
@@ -5103,7 +5258,7 @@ onUnmounted(() => {
           <div class="prompt-preview-block">
             <div class="prompt-preview-block__head">
               <strong>Video Request Params</strong>
-              <button class="ghost-button small" type="button" @click="copyPromptText(safeText(shotVideoPromptPreview.requestPayloadPreview || shotVideoPromptPreview.requestJson, ''), tr('autoUi.k_368cd625a419'))">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
+              <button class="ghost-button small" type="button" @click="copyPromptText(shotVideoPayloadText(shotVideoPromptPreview), tr('autoUi.k_368cd625a419'))">{{ tr('autoUi.k_55f59bc2f0c3') }}</button>
             </div>
             <div v-if="shotVideoRequestParamRows.length" class="prompt-param-table">
               <div class="prompt-param-table__head">
@@ -5113,7 +5268,16 @@ onUnmounted(() => {
               </div>
               <div v-for="row in shotVideoRequestParamRows" :key="`video-${row.key}`" class="prompt-param-table__row">
                 <strong>{{ row.key }}</strong>
-                <pre>{{ row.value }}</pre>
+                <div v-if="row.uploadPaths?.length" class="prompt-param-upload">
+                  <a v-for="path in row.uploadPaths" :key="path" :href="mediaUrl(path)" target="_blank" rel="noreferrer" class="prompt-param-upload__thumb">
+                    <img :src="previewImage(path)" alt="upload-on-submit" />
+                  </a>
+                  <div class="prompt-param-upload__copy">
+                    <pre>{{ row.value }}</pre>
+                    <span>{{ tr('cloneUi.uploadOnSubmit') }}</span>
+                  </div>
+                </div>
+                <pre v-else>{{ row.value }}</pre>
                 <button class="ghost-button tiny" type="button" @click="copyPromptText(row.value, tr('autoUi.k_b2a92ec67b81', { p0: row.key }))">{{ tr('autoUi.k_4edd1d00875d') }}</button>
               </div>
             </div>
@@ -6766,6 +6930,33 @@ onUnmounted(() => {
   color: var(--theme-text);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.prompt-param-upload {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.prompt-param-upload__thumb img {
+  display: block;
+  width: 48px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--theme-border);
+}
+
+.prompt-param-upload__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.prompt-param-upload__copy span {
+  color: var(--theme-text-secondary);
+  font-size: 12px;
 }
 
 .prompt-reference-card__actions {

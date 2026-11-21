@@ -26,6 +26,8 @@ export type AiGenerationRequest = {
   negativePrompt?: string
   /** 参考图 / 首帧（已上传到云端的 fileId）；图生视频必填 */
   imageFileIds?: string[]
+  /** video：尾帧（视频结尾要落到这张图上，复刻用来和下一镜衔接） */
+  endImageFileId?: string
   aspectRatio?: '1:1' | '9:16' | '16:9'
   /** 视频时长（秒） */
   durationSec?: number
@@ -35,7 +37,16 @@ export type AiGenerationRequest = {
   /** analyze-video：脚本语言，如 zh-CN / vi-VN / en-US */
   locale?: string
   /** compose：按顺序拼接的片段（视频或图片）；mix：素材池（durationSec 不用） */
-  clips?: Array<{ fileId: string; durationSec: number; /** mix（按方案）：镜头在原视频里的起点 */ startSec?: number }>
+  clips?: Array<{
+    fileId: string
+    durationSec: number
+    /** mix（按方案）：镜头在原视频里的起点 */
+    startSec?: number
+    /** compose：几个镜头共用的长镜头里本镜头的位置（见 CloneComposeClip） */
+    take?: { offsetSec: number; durationSec: number; groupDurationSec: number }
+    /** compose：和下一段怎么接（见 CloneComposeClip） */
+    joinNext?: 'locked' | 'continuous'
+  }>
   /** 视频工具的参数（水印文字、切片时长、混剪条数等） */
   options?: import('./videoTools').VideoJobOptions
   /** parse-link：分享链接 */
