@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { BadgeCheck, ChevronDown, ChevronUp, Link2, Unlink, Wand2 } from 'lucide-vue-next'
+import { BadgeCheck, ChevronDown, ChevronUp, Download, Link2, Loader2, Unlink, Wand2 } from 'lucide-vue-next'
 
 type Verdict = 'winner' | 'average' | 'weak' | 'unproven'
 export type ContentPerformance = { creativeId: string; creativeName: string; method: 'auto' | 'manual'; confidence?: number; spend: number; revenue: number; orders: number; roi: number; verdict: Verdict }
@@ -15,8 +15,9 @@ export type ProductPerformance = {
   unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number }>
 }
 
-const props = defineProps<{ items: PerformanceItem[]; performance: ProductPerformance; focusCreativeId?: string }>()
-const emit = defineEmits<{ (event: 'make-variant', item: PerformanceItem): void; (event: 'changed'): void; (event: 'linked-for-variant', ref: string): void }>()
+type Cloning = { creativeId: string; name: string; state: 'downloading' | 'failed'; error?: string }
+const props = defineProps<{ items: PerformanceItem[]; performance: ProductPerformance; cloning?: Cloning | null }>()
+const emit = defineEmits<{ (event: 'make-variant', item: PerformanceItem): void; (event: 'changed'): void; (event: 'clone-creative', creative: { creativeId: string; name: string }): void }>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -56,17 +57,16 @@ async function run(key: string, action: () => Promise<unknown>) {
 function link(creative: { creativeId: string; name: string }) {
   const target = picks[creative.creativeId]
   if (!target) return
-  const forVariant = creative.creativeId === props.focusCreativeId
-  void run(creative.creativeId, async () => {
-    await window.api.contentHub.linkContentPerformance({ ref: target, creativeId: creative.creativeId, creativeName: creative.name })
-    if (forVariant) emit('linked-for-variant', target)
-  })
+  void run(creative.creativeId, () => window.api.contentHub.linkContentPerformance({ ref: target, creativeId: creative.creativeId, creativeName: creative.name }))
 }
 
-/** 「机会」里点了做变体、但这条投放素材还没关联成片：把它那一行亮出来，提示先关联 */
-const focusCreative = computed(() => creatives.value.find((item) => item.creativeId === props.focusCreativeId))
+/** 商品卡流量（product-card:…）不是视频，没法下载复刻 */
+const isVideoCreative = (creativeId: string) => /^\d{8,25}$/.test(creativeId)
+
+/** 正在下载原视频复刻的那条（从「机会」点做变体也会走这里）：亮出它那一行 */
+const cloningId = computed(() => props.cloning?.creativeId || '')
 const root = ref<HTMLElement>()
-watch(() => props.focusCreativeId, async (creativeId) => {
+watch(cloningId, async (creativeId) => {
   if (!creativeId) return
   const index = creatives.value.findIndex((item) => item.creativeId === creativeId)
   if (index >= COLLAPSED_COUNT) expanded.value = true
@@ -127,7 +127,7 @@ function unlink(item: PerformanceItem) {
         <h4>{{ t('ai.perf.unlinkedTitle') }} <small>{{ creatives.length }}</small></h4>
         <span v-if="!linkable.length" class="vg-muted pp__subhint">{{ t('ai.perf.noLinkableHint') }}</span>
       </div>
-      <p v-if="focusCreative" class="pp__focus" data-testid="product-performance-link-first"><Wand2 :size="14" /> {{ t('ai.perf.linkFirst', { name: focusCreative.name }) }}</p>
+      <p class="vg-muted pp__note">{{ t('ai.perf.cloneHint') }}</p>
       <div class="vg-table-wrap">
         <table class="vg-table vg-table--compact pp__creatives">
           <thead>
@@ -138,10 +138,11 @@ function unlink(item: PerformanceItem) {
               <th class="pp__num">{{ t('ai.perf.col.orders') }}</th>
               <th class="pp__num">ROI</th>
               <th v-if="linkable.length" class="pp__linkcol">{{ t('ai.perf.col.linkTo') }}</th>
+              <th class="pp__linkcol"></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="creative in visibleCreatives" :key="creative.creativeId" :class="{ 'pp__row--focus': creative.creativeId === focusCreativeId }" :data-testid="`product-performance-creative-${creative.creativeId}`">
+            <tr v-for="creative in visibleCreatives" :key="creative.creativeId" :class="{ 'pp__row--focus': creative.creativeId === cloningId }" :data-testid="`product-performance-creative-${creative.creativeId}`">
               <td><span class="pp__creative-name vg-ellipsis" :title="creative.name">{{ creative.name }}</span></td>
               <td class="pp__num">{{ number(creative.spend) }}</td>
               <td class="pp__num">{{ number(creative.revenue) }}</td>
@@ -156,6 +157,20 @@ function unlink(item: PerformanceItem) {
                   <button type="button" class="vg-btn vg-btn--xs vg-btn--soft" :disabled="!picks[creative.creativeId] || busy === creative.creativeId" @click="link(creative)"><Link2 :size="13" /> {{ t('ai.perf.link') }}</button>
                 </div>
               </td>
+              <td class="pp__linkcol">
+                <button
+                  v-if="isVideoCreative(creative.creativeId)"
+                  type="button"
+                  class="vg-btn vg-btn--xs vg-btn--soft"
+                  :disabled="cloning?.state === 'downloading'"
+                  :title="t('ai.perf.cloneTitle')"
+                  :data-testid="`product-performance-clone-${creative.creativeId}`"
+                  @click="emit('clone-creative', { creativeId: creative.creativeId, name: creative.name })"
+                >
+                  <component :is="cloning?.state === 'downloading' && cloning.creativeId === creative.creativeId ? Loader2 : Download" :size="13" :class="{ 'pp__spin': cloning?.state === 'downloading' && cloning.creativeId === creative.creativeId }" />
+                  {{ t('ai.perf.cloneCreative') }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -165,6 +180,10 @@ function unlink(item: PerformanceItem) {
         {{ expanded ? t('ai.perf.collapse') : t('ai.perf.showAll', { count: creatives.length }) }}
       </button>
     </template>
+    <p v-if="cloning" class="pp__focus" :class="{ 'pp__focus--error': cloning.state === 'failed' }" data-testid="product-performance-cloning">
+      <component :is="cloning.state === 'downloading' ? Loader2 : Wand2" :size="14" :class="{ 'pp__spin': cloning.state === 'downloading' }" />
+      {{ cloning.state === 'downloading' ? t('ai.perf.cloneDownloading', { name: cloning.name }) : t('ai.perf.cloneFailed', { name: cloning.name, error: cloning.error || '' }) }}
+    </p>
     <p v-if="error" class="pp__error">{{ error }}</p>
   </section>
 </template>
@@ -174,6 +193,10 @@ function unlink(item: PerformanceItem) {
 .pp__focus { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--vg-accent-line, var(--vg-accent)); border-radius: 8px; background: var(--vg-accent-soft); color: var(--theme-text); font-size: 12.5px; }
 .pp__focus svg { flex-shrink: 0; color: var(--vg-accent); }
 .pp__row--focus td { background: var(--vg-accent-soft); }
+.pp__focus--error { border-color: var(--vg-danger, #d14343); }
+.pp__focus--error svg { color: var(--vg-danger, #d14343); }
+.pp__spin { animation: pp-spin 1s linear infinite; }
+@keyframes pp-spin { to { transform: rotate(360deg); } }
 .pp__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pp__title { display: block; max-width: 320px; padding: 0; border: 0; background: transparent; color: var(--theme-text); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
 .pp__title:hover { color: var(--vg-accent); }

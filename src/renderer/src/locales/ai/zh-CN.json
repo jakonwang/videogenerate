@@ -456,7 +456,13 @@
     "noLinkableHint": "还没有已完成的成片可以关联，做好成片后再回来手动关联。",
     "showAll": "展开全部 {count} 条",
     "collapse": "收起",
-    "linkFirst": "投放素材「{name}」还没关联到成片。在下面这一行选出它对应的成片并点「关联」，就会接着按那条成片的结构做变体。"
+    "cloneCreative": "下载复刻",
+    "cloneTitle": "用视频解析下载接口下载这条投放视频（达人视频也可以），再按它复刻变体",
+    "cloneHint": "达人视频或不是在软件里做的视频，点「下载复刻」：自动下载原视频，再按它复刻一批变体。",
+    "cloneDownloading": "正在下载投放素材「{name}」的原视频…",
+    "cloneFailed": "投放素材「{name}」的原视频下载失败：{error}",
+    "clonePlanPrompt": "商品「{product}」的投放素材「{name}」（{author}）出单最好。我已下载它的原视频（附件），请照着它的结构复刻 {count} 条同款变体，换成这个商品。",
+    "clonePlanSummary": "复刻投放素材「{name}」{count} 条 → 审核"
   },
   "brand": {
     "title": "品牌记忆",

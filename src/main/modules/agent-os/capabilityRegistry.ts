@@ -9,7 +9,7 @@ import { livePhotoService } from '../live-photo/service'
 import { productImageMaterialsService } from '../product-image-materials/service'
 import { productsRepo } from '../products/repo'
 import { webPlatformService } from '../web-platform/service'
-import { videoParserDownloadService } from '../video-parser-download/service'
+import { videoParserDownloadService, waitForVideoParserItem } from '../video-parser-download/service'
 import { tiktokListingService } from '../tiktok-listing/service'
 import { tiktokCreativeStudioService } from '../tiktok-creative-studio/service'
 import { splitVideoToSegmentFiles } from '../media/segmentSplit'
@@ -62,6 +62,7 @@ const intentCapabilities: Record<AgentIntentType, AgentCapabilityId> = {
 
 type AgentCapabilityDependencies = {
   importShareUrls: typeof videoParserDownloadService.importShareUrls
+  waitForSourceVideo: typeof waitForVideoParserItem
   getLivePhoto: typeof livePhotoService.get
   retryLivePhoto: typeof livePhotoService.retry
   pauseLivePhoto: typeof livePhotoService.pauseAutoFlow
@@ -130,6 +131,7 @@ type AgentCapabilityDependencies = {
 
 const defaultCapabilityDependencies: AgentCapabilityDependencies = {
   importShareUrls: (input) => videoParserDownloadService.importShareUrls(input),
+  waitForSourceVideo: (input) => waitForVideoParserItem(input),
   getLivePhoto: (id) => livePhotoService.get(id),
   retryLivePhoto: (input) => livePhotoService.retry(input),
   pauseLivePhoto: (input) => livePhotoService.pauseAutoFlow(input),
@@ -1592,7 +1594,14 @@ const sourceVideoImportBinding: AgentCapabilityBinding = {
   execute: async (input, context) => {
     const shareUrls = Array.from(new Set(strings(input.shareUrls)))
     if (!shareUrls.length) return failed('missing_share_url', 'Add at least one supported sharing link.')
-    const result = await capabilityDependencies.importShareUrls({ userId: 'desktop-local', shareUrls })
+    const imported = await capabilityDependencies.importShareUrls({ userId: 'desktop-local', shareUrls })
+    // Import returns at once with "downloading" records; the next step (cloning) needs the file.
+    const settled = await Promise.all(imported.items.map((item) => capabilityDependencies.waitForSourceVideo({ userId: 'desktop-local', item })))
+    const failedDownloads = settled.filter((item) => item.status === 'failed')
+    const result = {
+      items: settled.filter((item) => item.status !== 'failed'),
+      errors: [...imported.errors, ...failedDownloads.map((item) => ({ shareUrl: item.shareUrl, message: item.error || 'download failed' }))],
+    }
     const artifactIds = result.items.map((item) => context.registerArtifact({
       kind: 'source_video',
       name: text(item.title) || basename(text(item.localVideoPath)) || `Source video ${item.videoId}`,

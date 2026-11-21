@@ -456,7 +456,13 @@
     "noLinkableHint": "No finished video to link yet. Come back once a video is ready.",
     "showAll": "Show all {count}",
     "collapse": "Show less",
-    "linkFirst": "Ad creative \"{name}\" is not linked to a video yet. Pick its video in the row below and click Link; the variants will then follow that video."
+    "cloneCreative": "Download & clone",
+    "cloneTitle": "Download this ad video (creator posts too) with the video download interface, then clone variants from it",
+    "cloneHint": "For creator videos or videos not made in this app, click Download & clone: the original video is downloaded and cloned into variants.",
+    "cloneDownloading": "Downloading the original video of ad creative \"{name}\"…",
+    "cloneFailed": "Could not download the original video of ad creative \"{name}\": {error}",
+    "clonePlanPrompt": "For product \"{product}\", ad creative \"{name}\" ({author}) sells best. I downloaded its original video (attached). Clone {count} variants that follow its structure, with this product.",
+    "clonePlanSummary": "Clone ad creative \"{name}\" ×{count} → review"
   },
   "brand": {
     "title": "Brand memory",

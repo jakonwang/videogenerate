@@ -6,6 +6,7 @@ import { agentOsService } from '../agent-os/service'
 import { importProductFromLink } from '../agent-os/contentHubCapabilities'
 import { briefs } from './briefs'
 import { contentIndex } from './contentIndex'
+import { downloadCreativeVideo } from './creativeVideo'
 import { runHealthCheck, getHealthReport } from './healthCheck'
 import { buildInsights } from './insights'
 import { getBusinessOverview, invalidateBusinessOverview } from './overview'
@@ -200,6 +201,10 @@ export const contentHubService = {
     const result = await contentPerformance.unlink(ref)
     await emitChange('performance')
     return result
+  },
+  /** The TikTok video behind an ad creative (often a creator post), downloaded for cloning. */
+  async downloadCreativeVideo(creativeId: string) {
+    return await downloadCreativeVideo({ creativeId })
   },
   async linkProductChannels(input: { productId: string; tiktokProductIds: string[] }) {
     const tiktokProductIds = await productSpine.link(input)

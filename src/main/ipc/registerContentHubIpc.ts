@@ -12,6 +12,7 @@ export function registerContentHubIpc(ipcMain: IpcMain, getWindow: () => Browser
 
   ipcMain.handle('contentHub:linkContentPerformance', async (_event, payload) => await contentHubService.linkContentPerformance(payload))
   ipcMain.handle('contentHub:unlinkContentPerformance', async (_event, ref: string) => await contentHubService.unlinkContentPerformance(ref))
+  ipcMain.handle('contentHub:downloadCreativeVideo', async (_event, creativeId: string) => await contentHubService.downloadCreativeVideo(creativeId))
 
   ipcMain.handle('contentHub:listReviews', async (_event, payload) => await contentHubService.listReviews(payload))
   ipcMain.handle('contentHub:reviewCounts', async () => await contentHubService.reviewCounts())

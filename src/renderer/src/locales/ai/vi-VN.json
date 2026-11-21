@@ -456,7 +456,13 @@
     "noLinkableHint": "Chưa có video hoàn thành để liên kết. Quay lại khi video đã sẵn sàng.",
     "showAll": "Hiện tất cả {count}",
     "collapse": "Thu gọn",
-    "linkFirst": "Nội dung quảng cáo \"{name}\" chưa liên kết với video. Chọn video tương ứng ở dòng bên dưới và bấm Liên kết, sau đó biến thể sẽ theo cấu trúc video đó."
+    "cloneCreative": "Tải & làm lại",
+    "cloneTitle": "Tải video quảng cáo này (kể cả video của nhà sáng tạo) bằng giao diện tải video, rồi làm biến thể theo nó",
+    "cloneHint": "Với video của nhà sáng tạo hoặc video không làm trong phần mềm, bấm Tải & làm lại: video gốc được tải về và làm thành các biến thể.",
+    "cloneDownloading": "Đang tải video gốc của nội dung quảng cáo \"{name}\"…",
+    "cloneFailed": "Không tải được video gốc của nội dung quảng cáo \"{name}\": {error}",
+    "clonePlanPrompt": "Với sản phẩm \"{product}\", nội dung quảng cáo \"{name}\" ({author}) bán tốt nhất. Tôi đã tải video gốc (đính kèm). Hãy làm {count} biến thể theo cấu trúc của nó, dùng sản phẩm này.",
+    "clonePlanSummary": "Làm lại nội dung quảng cáo \"{name}\" ×{count} → duyệt"
   },
   "brand": {
     "title": "Bộ nhớ thương hiệu",

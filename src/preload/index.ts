@@ -1307,6 +1307,9 @@ const api = {
     linkProductChannels: (payload: { productId: string; tiktokProductIds: string[] }) => ipcRenderer.invoke('contentHub:linkProductChannels', payload) as Promise<{ tiktokProductIds: string[] }>,
     linkContentPerformance: (payload: { ref: string; creativeId: string; creativeName?: string }) => ipcRenderer.invoke('contentHub:linkContentPerformance', payload),
     unlinkContentPerformance: (ref: string) => ipcRenderer.invoke('contentHub:unlinkContentPerformance', ref) as Promise<{ ok: boolean }>,
+    /** Download an ad creative's TikTok video with the video download interface, for cloning. */
+    downloadCreativeVideo: (creativeId: string) =>
+      ipcRenderer.invoke('contentHub:downloadCreativeVideo', creativeId) as Promise<{ creativeId: string; shareUrl: string; creatorHandle?: string; status: 'completed' | 'processing' | 'failed'; localVideoPath?: string; thumbnailPath?: string; title?: string; author?: string; error?: string }>,
     listReviews: (payload?: { decision?: string; line?: string; productId?: string }) => ipcRenderer.invoke('contentHub:listReviews', payload),
     reviewCounts: () => ipcRenderer.invoke('contentHub:reviewCounts'),
     decideReview: (payload: { ref: string; decision: 'approved' | 'redo' | 'discarded'; reason?: string; note?: string }) => ipcRenderer.invoke('contentHub:decideReview', payload),

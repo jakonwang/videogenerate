@@ -246,6 +246,23 @@ async function startDownload(userId: string, shareText: string, existing?: Video
   return saved
 }
 
+/**
+ * 等这条下载做完（导入接口马上返回「下载中」）。同一个视频以前下过时，占位记录会被删掉、换成旧记录，
+ * 所以按 videoId 再找一次。超时就返回最新的记录（仍是「下载中」）。
+ */
+export async function waitForVideoParserItem(input: { userId: string; item: VideoParserDownloadItem; videoId?: string; timeoutMs?: number; pollMs?: number }) {
+  const deadline = Date.now() + (input.timeoutMs ?? 180_000)
+  let latest = input.item
+  for (;;) {
+    const videoId = [latest.videoId, input.videoId].find((id) => id && !id.startsWith('pending:'))
+    const current = (await videoParserDownloadRepo.getItem(input.userId, latest.id))
+      ?? (videoId ? await videoParserDownloadRepo.getItemByVideoId(input.userId, videoId) : null)
+    if (current) latest = current
+    if (latest.status !== 'processing' || Date.now() >= deadline) return latest
+    await new Promise((resolve) => setTimeout(resolve, input.pollMs ?? 1000))
+  }
+}
+
 /** 测试用：等后台队列清空 */
 export async function waitForVideoParserQueue() {
   while (active > 0 || queue.length) await new Promise((resolve) => setTimeout(resolve, 20))
