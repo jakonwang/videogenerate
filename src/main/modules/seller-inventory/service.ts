@@ -25,7 +25,7 @@ import {
   type SiSyncStage,
 } from '../../../shared/sellerInventory'
 import { openSellerCenter, SellerSession } from './browser'
-import { parseCompassPage, parseOrderPage, parseProductPage, parseProductSkus, parseSellerId, parseSettlementPage, parseShopHealth, parseShopStats, shopStatsBody, toPlatformSku } from './parser'
+import { parseCompassPage, parseOrderPage, parseProductPage, parseProductSkus, parseSellerId, parseSettlementPage, parseShopHealth, parseShopStatsMulti, shopStatsBodyMulti, toPlatformSku } from './parser'
 import { buildProfitDays, learnFeeRate, profitTotals, type GmvStoreOption, type ShopAdLink, type ShopProfit } from '../../../shared/shopProfit'
 import { gmvAds } from './gmvAds'
 import { analyzeShop, type MorningReport, type ReportSettings, type ShopAnalysis } from '../../../shared/shopAnalysis'
@@ -40,8 +40,46 @@ const COMPASS_PAGE_SIZE = 100
 const MAX_ORDER_PAGES = 800
 const MAX_COMPASS_DAYS_PER_SYNC = 120
 /** Recent orders are re-read on every sync so later cancellations are picked up. */
-const ORDER_REFRESH_DAYS = 7
-const API_DELAY_MS = 350
+const ORDER_REFRESH_DAYS = 3
+const API_DELAY_MS = 150
+/** Seller-center calls run this many at a time per shop (measured: 8 in parallel take about as long as 1). */
+const CONCURRENCY = 4
+/** Days of shop stats per request: the stats API takes several query conditions at once. */
+const SHOP_DAYS_PER_REQUEST = 30
+
+/** Timeouts, network errors and server errors are retried (twice, with a short pause); a login problem is not. */
+function withRetries<T extends Pick<SellerSession, 'open' | 'api' | 'close'>>(session: T): T {
+  const transient = (error: unknown) => /SELLER_API_HTTP_(0|-1|429|5\d\d)|SELLER_API_BAD_JSON/.test(String((error as Error)?.message || error))
+  return {
+    ...session,
+    open: session.open.bind(session),
+    close: session.close.bind(session),
+    api: async (input: Parameters<SellerSession['api']>[0]) => {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          return await session.api(input)
+        } catch (error) {
+          if (attempt >= 2 || !transient(error)) throw error
+          await deps.delay(1000 * (attempt + 1))
+        }
+      }
+    },
+  }
+}
+
+/** Runs `task` over `items`, `limit` at a time, keeping the input order of results. */
+async function pool<T, R>(items: T[], limit: number, task: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await task(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
 
 type ShopRecord = { id: string; name: string; region: string; loginState: string; timezone?: string; shopId?: string }
 
@@ -163,37 +201,38 @@ async function syncAccount(session: Pick<SellerSession, 'open' | 'api'>, shop: S
 async function syncProducts(session: Pick<SellerSession, 'api'>, shop: ShopRecord, state: SiShopState, report: (detail: string) => void) {
   const now = deps.now()
   const rows = new Map<string, ReturnType<typeof toPlatformSku> & object>()
-  let productCount = 0
-  for (let page = 1; page <= 400; page += 1) {
-    const json = await session.api({
+  const fetchPage = async (page: number) => parseProductPage(await session.api({
+    method: 'GET',
+    path: '/api/v1/product/local/products/list',
+    query: { ...sellerQuery(state, shop), profile: '1', tab_id: '1', page_number: String(page), page_size: String(PRODUCT_PAGE_SIZE), sku_number: '1', product_sort_fields: '3', product_sort_types: '0' },
+  }))
+  const first = await fetchPage(1)
+  const pageCount = Math.min(400, Math.max(1, Math.ceil(first.total / PRODUCT_PAGE_SIZE)))
+  const rest = await pool(Array.from({ length: pageCount - 1 }, (_, index) => index + 2), CONCURRENCY, async (page) => {
+    const parsed = await fetchPage(page)
+    report(`${Math.min(first.total, page * PRODUCT_PAGE_SIZE)}/${first.total}`)
+    return parsed
+  })
+  const products = [first, ...rest].flatMap((page) => page.products)
+  report(`${products.length}/${first.total}`)
+  // Products with more SKUs than the list shows are expanded, a few at a time.
+  const expanded = await pool(products, CONCURRENCY, async ({ product, skus, totalSkuCount }) => {
+    if (totalSkuCount <= skus.length) return skus
+    return parseProductSkus(await session.api({
       method: 'GET',
-      path: '/api/v1/product/local/products/list',
-      query: { ...sellerQuery(state, shop), profile: '1', tab_id: '1', page_number: String(page), page_size: String(PRODUCT_PAGE_SIZE), sku_number: '1', product_sort_fields: '3', product_sort_types: '0' },
-    })
-    const parsed = parseProductPage(json)
-    for (const { product, skus, totalSkuCount } of parsed.products) {
-      productCount += 1
-      let fullSkus = skus
-      if (totalSkuCount > skus.length) {
-        await deps.delay(API_DELAY_MS)
-        fullSkus = parseProductSkus(await session.api({
-          method: 'GET',
-          path: '/api/v1/product/local/product/skus/list',
-          query: { ...sellerQuery(state, shop), product_id: String(product.product_id), tab_id: '1', is_online_version: 'true', need_dt_warehouse: 'false', sku_fetch_condition: '2' },
-        }))
-      }
-      for (const sku of fullSkus) {
-        const row = toPlatformSku(shop.id, product, sku, now)
-        if (row) rows.set(row.id, row)
-      }
+      path: '/api/v1/product/local/product/skus/list',
+      query: { ...sellerQuery(state, shop), product_id: String(product.product_id), tab_id: '1', is_online_version: 'true', need_dt_warehouse: 'false', sku_fetch_condition: '2' },
+    }))
+  })
+  products.forEach(({ product }, index) => {
+    for (const sku of expanded[index]) {
+      const row = toPlatformSku(shop.id, product, sku, now)
+      if (row) rows.set(row.id, row)
     }
-    report(`${productCount}/${parsed.total}`)
-    if (!parsed.products.length || page * PRODUCT_PAGE_SIZE >= parsed.total) break
-    await deps.delay(API_DELAY_MS)
-  }
+  })
   repo.upsertPlatformSkus([...rows.values()])
   repo.prunePlatformSkus(shop.id, new Set(rows.keys()))
-  state.productCount = productCount
+  state.productCount = products.length
   state.skuCount = rows.size
 }
 
@@ -205,23 +244,26 @@ async function syncOrders(session: Pick<SellerSession, 'api'>, shop: ShopRecord,
   const lastCovered = state.ordersSyncedTo ? zonedDate(state.ordersSyncedTo, timeZone) : undefined
   const from = lastCovered ? shiftDate(lastCovered, -ORDER_REFRESH_DAYS) : initialFrom
   const fromMs = dayStartMs(from, timeZone)
-  let cursor = ''
   let lines = 0
   const startedAt = deps.now()
-  for (let page = 0; page < MAX_ORDER_PAGES; page += 1) {
-    const json = await session.api({
-      method: 'POST',
-      path: '/api/fulfillment/order/list',
-      query: sellerQuery(state, shop),
-      body: { search_condition: { condition_list: {} }, offset: 0, count: ORDER_PAGE_SIZE, sort_info: '6', search_cursor: cursor, pagination_type: 1 },
-    })
-    const parsed = parseOrderPage(json, shop.id, timeZone)
-    const kept = parsed.lines.filter((line) => line.createdAt >= fromMs)
-    repo.upsertOrderLines(kept)
-    lines += kept.length
+  const fetchPage = async (page: number) => parseOrderPage(await session.api({
+    method: 'POST',
+    path: '/api/fulfillment/order/list',
+    query: sellerQuery(state, shop),
+    // Newest first; offset paging lets several pages load at once.
+    body: { search_condition: { condition_list: {} }, offset: page * ORDER_PAGE_SIZE, count: ORDER_PAGE_SIZE, sort_info: '6', search_cursor: '', pagination_type: 0 },
+  }), shop.id, timeZone)
+  for (let page = 0; page < MAX_ORDER_PAGES; page += CONCURRENCY) {
+    const batch = await pool(Array.from({ length: CONCURRENCY }, (_, index) => page + index), CONCURRENCY, fetchPage)
+    let done = false
+    for (const parsed of batch) {
+      const kept = parsed.lines.filter((line) => line.createdAt >= fromMs)
+      repo.upsertOrderLines(kept)
+      lines += kept.length
+      if (!parsed.orderCount || parsed.orderCount < ORDER_PAGE_SIZE || (parsed.oldestCreatedAt !== undefined && parsed.oldestCreatedAt < fromMs)) done = true
+    }
     report(`${lines}`)
-    if (!parsed.orderCount || !parsed.hasMore || !parsed.nextCursor || (parsed.oldestCreatedAt !== undefined && parsed.oldestCreatedAt < fromMs)) break
-    cursor = parsed.nextCursor
+    if (done) break
     await deps.delay(API_DELAY_MS)
   }
   // Coverage is continuous from the first synced day: later syncs always overlap the previous one.
@@ -243,7 +285,7 @@ async function syncCompass(session: Pick<SellerSession, 'api'>, shop: ShopRecord
     return !at || zonedDate(at, timeZone) < shiftDate(date, 2)
   }).reverse().slice(0, MAX_COMPASS_DAYS_PER_SYNC)
   let done = 0
-  for (const date of missing) {
+  await pool(missing, CONCURRENCY, async (date) => {
     const rows = []
     for (let page = 0; page < 50; page += 1) {
       const json = await session.api({
@@ -257,13 +299,11 @@ async function syncCompass(session: Pick<SellerSession, 'api'>, shop: ShopRecord
       const pageRows = parseCompassPage(json, shop.id, date)
       rows.push(...pageRows)
       if (pageRows.length < COMPASS_PAGE_SIZE) break
-      await deps.delay(API_DELAY_MS)
     }
     repo.replaceCompassDay(shop.id, date, rows, deps.now())
     done += 1
     report(`${done}/${missing.length}`)
-    await deps.delay(API_DELAY_MS)
-  }
+  })
 }
 
 /** Shop KPIs per day from Data Compass. Today and yesterday are real time and are re-read on every sync. */
@@ -280,54 +320,49 @@ async function syncShopDaily(session: Pick<SellerSession, 'api'>, shop: ShopReco
     const at = fetched.get(date)
     return !at || zonedDate(at, timeZone) < shiftDate(date, 2)
   }).reverse()
+  const chunks: string[][] = []
+  for (let index = 0; index < dates.length; index += SHOP_DAYS_PER_REQUEST) chunks.push(dates.slice(index, index + SHOP_DAYS_PER_REQUEST))
   let done = 0
-  const batch: SiShopDay[] = []
-  for (const date of dates) {
+  await pool(chunks, CONCURRENCY, async (chunk) => {
     const json = await session.api({
       method: 'POST',
       path: '/api/v2/insights/seller/unified/query/us_overview_stats',
       query: { ...sellerQuery(state, shop), use_content_type_definition: '1' },
       headers: { 'x-tt-oec-region': shop.region.toUpperCase() },
-      body: shopStatsBody(date, readyDate, offsetMinutes),
+      body: shopStatsBodyMulti(chunk, readyDate, offsetMinutes),
     })
-    const day = parseShopStats(json, shop.id, date, deps.now())
-    if (day) batch.push(day)
-    done += 1
-    if (batch.length >= 10) repo.upsertShopDays(batch.splice(0))
+    const days = parseShopStatsMulti(json, shop.id, chunk, deps.now())
+    if (days.length) repo.upsertShopDays(days)
+    done += chunk.length
     report(`${done}/${dates.length}`)
-    await deps.delay(API_DELAY_MS)
-  }
-  if (batch.length) repo.upsertShopDays(batch)
+  })
 }
 
 const REGION_CURRENCY: Record<string, string> = { VN: 'VND', TH: 'THB', MY: 'MYR', PH: 'PHP', ID: 'IDR', SG: 'SGD', US: 'USD', GB: 'GBP' }
 const SETTLEMENT_PAGE = 200
 const MAX_PENDING_PAGES = 30
-const MAX_SETTLED_PAGES = 15
+const MAX_SETTLED_PAGES = 12
 
 /** Settlements: every pending record (they change), and settled ones until we reach what we already have. */
 async function syncFinance(session: Pick<SellerSession, 'api'>, shop: ShopRecord, state: SiShopState, report: (detail: string) => void) {
   const timeZone = tzOf(shop)
   const base = { ...sellerQuery(state, shop), no_need_sku_record: 'true', pagination_type: '1', terminal_type: '1', statement_version: '0', need_total_amount: 'false', size: String(SETTLEMENT_PAGE) }
-  const pending = []
-  for (let page = 0; page < MAX_PENDING_PAGES; page += 1) {
-    const json = await session.api({ method: 'GET', path: '/api/v1/pay/statement/order/list', query: { ...base, from: String(page * SETTLEMENT_PAGE), page_type: '10', settlement_status: '1' } })
-    const parsed = parseSettlementPage(json, shop.id, 'pending', timeZone)
-    pending.push(...parsed.records)
-    report(`${pending.length}`)
-    if (parsed.count < SETTLEMENT_PAGE) break
-    await deps.delay(API_DELAY_MS)
-  }
+  const fetchPending = async (page: number) => parseSettlementPage(await session.api({ method: 'GET', path: '/api/v1/pay/statement/order/list', query: { ...base, from: String(page * SETTLEMENT_PAGE), page_type: '10', settlement_status: '1' } }), shop.id, 'pending', timeZone)
+  const first = await fetchPending(0)
+  const pageCount = Math.min(MAX_PENDING_PAGES, Math.max(1, Math.ceil((first.total || first.count) / SETTLEMENT_PAGE)))
+  const rest = await pool(Array.from({ length: pageCount - 1 }, (_, index) => index + 1), CONCURRENCY, fetchPending)
+  const pending = [first, ...rest].flatMap((page) => page.records)
+  report(`${pending.length}`)
   repo.replacePendingSettlements(shop.id, pending)
-  for (let page = 0; page < MAX_SETTLED_PAGES; page += 1) {
-    const json = await session.api({ method: 'GET', path: '/api/v1/pay/statement/order/list', query: { ...base, from: String(page * SETTLEMENT_PAGE), page_type: '6', settlement_status: '2' } })
-    const parsed = parseSettlementPage(json, shop.id, 'settled', timeZone)
-    const known = repo.knownSettlementIds(parsed.records.map((record) => record.id))
-    repo.upsertSettled(parsed.records)
-    report(`${pending.length} + ${(page + 1) * SETTLEMENT_PAGE}`)
-    // Newest first: once a page is mostly known, everything older was synced before.
-    if (parsed.count < SETTLEMENT_PAGE || known.size >= parsed.records.length * 0.9) break
-    await deps.delay(API_DELAY_MS)
+  // Settled, newest first, a batch of pages at a time; stop once a batch is mostly records we already have.
+  const fetchSettled = async (page: number) => parseSettlementPage(await session.api({ method: 'GET', path: '/api/v1/pay/statement/order/list', query: { ...base, from: String(page * SETTLEMENT_PAGE), page_type: '6', settlement_status: '2' } }), shop.id, 'settled', timeZone)
+  for (let page = 0; page < MAX_SETTLED_PAGES; page += CONCURRENCY) {
+    const batch = await pool(Array.from({ length: Math.min(CONCURRENCY, MAX_SETTLED_PAGES - page) }, (_, index) => page + index), CONCURRENCY, fetchSettled)
+    const records = batch.flatMap((parsed) => parsed.records)
+    const known = repo.knownSettlementIds(records.map((record) => record.id))
+    repo.upsertSettled(records)
+    report(`${pending.length} + ${Math.min(MAX_SETTLED_PAGES, page + CONCURRENCY) * SETTLEMENT_PAGE}`)
+    if (batch.some((parsed) => parsed.count < SETTLEMENT_PAGE) || known.size >= records.length * 0.9) break
   }
 }
 
@@ -693,12 +728,10 @@ export const sellerInventoryService = {
     return [...progress.values()].some((item) => item.status === 'running')
   },
 
-  /** Syncs one shop, or every shop one after another. Returns once all of them have finished. */
+  /** Syncs one shop, or every shop side by side (each in its own window). Returns once all have finished. */
   async sync(input?: { shopKey?: string; stages?: SiSyncStage[] }) {
     const shops = input?.shopKey ? [requireShop(input.shopKey)] : deps.listShops()
-    const results: SiSyncProgress[] = []
-    for (const shop of shops) results.push(await this.syncShop(shop.id, input?.stages))
-    return results
+    return await Promise.all(shops.map((shop) => this.syncShop(shop.id, input?.stages)))
   },
 
   async syncShop(shopKey: string, stages: SiSyncStage[] = ['account', 'products', 'orders', 'compass', 'health', 'finance', 'shopDaily']): Promise<SiSyncProgress> {
@@ -708,14 +741,24 @@ export const sellerInventoryService = {
     progress.set(shopKey, job)
     const settings = repo.getSettings()
     const state = repo.getShopState(shopKey)
-    const session = deps.createSession({ shopKey, region: shop.region })
+    const session = withRetries(deps.createSession({ shopKey, region: shop.region }))
     const report = (stage: SiSyncStage) => (detail: string) => { job.stage = stage; job.detail = detail }
     try {
+      // Shop numbers first (店铺 fills in within a minute), then products, orders and history.
       job.stage = 'account'
-      await session.open('/product/manage')
+      await session.open('/compass/data-overview')
       if (stages.includes('account') || !state.sellerId) await syncAccount(session, shop, state)
+      if (stages.includes('shopDaily')) {
+        job.stage = 'shopDaily'
+        await syncShopDaily(session, shop, state, settings, report('shopDaily'))
+      }
+      if (stages.includes('health')) {
+        job.stage = 'health'
+        await syncHealth(session, shop, state)
+      }
       if (stages.includes('products')) {
         job.stage = 'products'
+        await session.open('/product/manage')
         await syncProducts(session, shop, state, report('products'))
         repo.saveShopState(state)
       }
@@ -730,18 +773,10 @@ export const sellerInventoryService = {
         await session.open('/compass/product-analysis')
         await syncCompass(session, shop, state, settings, report('compass'))
       }
-      if (stages.includes('health')) {
-        job.stage = 'health'
-        await syncHealth(session, shop, state)
-      }
+      // Settlements are the slowest and only feed profit, so they come last.
       if (stages.includes('finance')) {
         job.stage = 'finance'
         await syncFinance(session, shop, state, report('finance'))
-      }
-      if (stages.includes('shopDaily')) {
-        job.stage = 'shopDaily'
-        if (!stages.includes('compass')) await session.open('/compass/product-analysis')
-        await syncShopDaily(session, shop, state, settings, report('shopDaily'))
       }
       state.lastSyncAt = deps.now()
       state.lastSyncError = undefined

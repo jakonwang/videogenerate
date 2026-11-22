@@ -87,6 +87,7 @@ async function testServiceSync() {
   sellerInventoryRepo.close()
   const calls: string[] = []
   const loginMarks: string[] = []
+  let statsRequests = 0
   const delivered: string[] = []
   const orderPages = [
     // Newest first, like the seller center sorts them.
@@ -111,8 +112,9 @@ async function testServiceSync() {
         ] } }
         if (input.path.endsWith('product/skus/list')) return { code: 0, data: { 0: { id: 's2', seller_sku: '', quantities: [{ available_quantity: 3 }] }, 1: { id: 's3', seller_sku: 'B-7-L', quantities: [{ available_quantity: 1 }] } } }
         if (input.path.endsWith('fulfillment/order/list')) {
-          const body = input.body as { search_cursor: string }
-          return { code: 0, data: orderPages[body.search_cursor ? 1 : 0] }
+          const body = input.body as { offset: number; pagination_type: number }
+          assert.equal(body.pagination_type, 0, 'offset paging, so pages can load in parallel')
+          return { code: 0, data: orderPages[body.offset / 100] || { main_orders: [] } }
         }
         if (input.path.endsWith('sku/list')) {
           const body = input.body as { request: { time_descriptor: { start: string; end: string } } }
@@ -132,12 +134,15 @@ async function testServiceSync() {
         if (input.path.endsWith('violation/overview/get')) return { code: 0, data: { violation_score: 0, violation_points_v2: [] } }
         if (input.path.endsWith('us_overview_stats')) {
           const body = input.body as { query_condition: Array<{ query_time: { start: string; end: string; timezone_offset: number } }> }
-          const time = body.query_condition[0].query_time
-          assert.equal(time.start, time.end, 'one shop day per request')
-          assert.equal(time.timezone_offset, 420)
-          const n = Number(time.start.slice(-2))
+          statsRequests += 1
+          assert.ok(body.query_condition.length > 1 && body.query_condition.length <= 30, 'many days per request')
           const money = (value: number) => JSON.stringify({ amount: String(value), value: String(value) })
-          return { code: 0, data: [{ intervals: [{ rows: [{ values: { 4024: money(n * 1000), 4031: String(n), 4035: String(n), 4022: String(n), 6070: String(n * 10), 4029: money(n * 100), 4037: money(n * 800), 4033: money(n * 100), 4042: money(n * 100), 4043: money(0), 4045: money(n * 800), 4046: money(0) } }] }] }] }
+          return { code: 0, data: body.query_condition.map(({ query_time: time }) => {
+            assert.equal(time.start, time.end, 'one day per condition')
+            assert.equal(time.timezone_offset, 420)
+            const n = Number(time.start.slice(-2))
+            return { intervals: [{ start_date: time.start, rows: [{ values: { 4024: money(n * 1000), 4031: String(n), 4035: String(n), 4022: String(n), 6070: String(n * 10), 4029: money(n * 100), 4037: money(n * 800), 4033: money(n * 100), 4042: money(n * 100), 4043: money(0), 4045: money(n * 800), 4046: money(0) } }] }] }
+          }) }
         }
         throw new Error(`unexpected ${input.path}`)
       },
@@ -148,7 +153,8 @@ async function testServiceSync() {
   assert.equal(result.status, 'done', result.error)
   assert.deepEqual(loginMarks, ['shopA:valid'], 'a successful sync confirms the shared login')
   assert.ok(calls.includes('open /order') && calls.includes('open /compass/product-analysis'))
-  assert.equal(calls.filter((call) => call.endsWith('fulfillment/order/list')).length, 2, 'order paging stops once orders are older than the window')
+  assert.equal(calls.filter((call) => call.endsWith('fulfillment/order/list')).length, 4, 'one parallel batch of order pages, then it stops')
+  assert.equal(statsRequests, 3, '90 shop days in 3 requests')
   const state = sellerInventoryRepo.getShopState('shopA')
   const shopDays = sellerInventoryRepo.listShopDays('shopA', '2026-01-01', TODAY)
   assert.equal(shopDays.length, SI_DEFAULT_SETTINGS.historyDays, 'one shop day per history day, today included')

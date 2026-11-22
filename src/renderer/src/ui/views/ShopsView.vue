@@ -20,11 +20,16 @@ const loading = ref(false)
 const errorText = ref('')
 let timer: ReturnType<typeof setInterval> | null = null
 const reportOpen = ref(false)
+let pollCount = 0
+/** Shops sync side by side, so every running shop gets its own status. */
+const runningText = computed(() => progress.value
+  .filter((item) => item.status === 'running')
+  .map((item) => `${overview.value?.cards.find((card) => card.shop.shopKey === item.shopKey)?.shop.name || ''} ${t(`sellerInv.stage.${item.stage || 'account'}`, { detail: item.detail || '' })}`.trim())
+  .join(' · '))
 
 const api = window.api.sellerInventory
 const region = computed(() => overview.value?.cards[0]?.shop.region)
 const syncing = computed(() => progress.value.some((item) => item.status === 'running'))
-const running = computed(() => progress.value.find((item) => item.status === 'running'))
 
 function money(value: number | undefined, compact = true) {
   return fmtMoney(value, locale.value, region.value, compact)
@@ -63,7 +68,12 @@ async function load() {
 async function poll() {
   const was = syncing.value
   progress.value = await api.getProgress().catch(() => progress.value)
-  if (syncing.value) return
+  if (syncing.value) {
+    // Shop numbers are synced first: refresh the cards while the rest is still loading.
+    pollCount += 1
+    if (pollCount % 3 === 0) void load()
+    return
+  }
   if (timer) clearInterval(timer)
   timer = null
   if (was) await load()
@@ -100,7 +110,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
         <p>{{ t('shops.hubSubtitle') }}</p>
       </div>
       <div class="vg-page-head__actions">
-        <span v-if="syncing" class="vg-muted shops-view__sync"><LoaderCircle :size="14" class="vg-spin" />{{ running ? t(`sellerInv.stage.${running.stage || 'account'}`, { detail: running.detail || '' }) : '' }}</span>
+        <span v-if="syncing" class="vg-muted shops-view__sync"><LoaderCircle :size="14" class="vg-spin" />{{ runningText }}</span>
         <button type="button" class="vg-btn" :disabled="!overview?.cards.length" data-testid="shops-report" @click="reportOpen = true"><Bell :size="15" />{{ t('shops.report.button') }}</button>
         <button type="button" class="vg-btn vg-btn--primary" :disabled="syncing || !overview?.cards.length" data-testid="shops-sync" @click="syncAll"><RefreshCcw :size="15" :class="{ 'vg-spin': syncing }" />{{ t('shops.syncAll') }}</button>
       </div>

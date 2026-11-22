@@ -320,3 +320,22 @@ export function parseSettlementPage(json: unknown, shopKey: string, status: SiSe
   }
   return { records, count: rows.length, total: num(data.total_record) }
 }
+
+/** Several days in one request: one query condition per day, answered in the same order. */
+export function shopStatsBodyMulti(dates: string[], readyDate: string, timezoneOffsetMinutes: number) {
+  return { query_condition: dates.map((date) => shopStatsBody(date, readyDate, timezoneOffsetMinutes).query_condition[0]) }
+}
+
+export function parseShopStatsMulti(json: unknown, shopKey: string, dates: string[], fetchedAt: number): SiShopDay[] {
+  const data = assertOk(json, 'shop stats') as unknown
+  const results = Array.isArray(data) ? data : []
+  const days: SiShopDay[] = []
+  dates.forEach((date, index) => {
+    const result = results[index] as Json | undefined
+    // Each answer carries its own date range; trust it over the position when present.
+    const answered = text(result?.intervals?.[0]?.start_date)
+    const day = parseShopStats({ code: 0, data: [result] }, shopKey, answered && /^\d{4}-\d{2}-\d{2}$/.test(answered) ? answered : date, fetchedAt)
+    if (day) days.push(day)
+  })
+  return days
+}

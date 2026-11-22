@@ -126,7 +126,7 @@ export const SI_DEFAULT_SETTINGS: SiSettings = {
   safetyDays: 7,
   coverDays: 30,
   historyDays: 90,
-  orderWindowDays: 14,
+  orderWindowDays: 3,
 }
 
 export type SiShopState = {
