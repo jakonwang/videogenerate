@@ -113,7 +113,12 @@
       "returns": "待处理退货",
       "negativeReviews": "差评",
       "outOfStock": "已售罄 SKU"
-    }
+    },
+    "othersPass": "其余 {n} 项指标均达标",
+    "showAll": "查看全部",
+    "hide": "收起",
+    "indicators": "服务指标",
+    "todoTitle": "待办"
   },
   "report": {
     "button": "早报",
@@ -170,10 +175,27 @@
     "unitCost": "进货单价",
     "costPlaceholder": "每件成本",
     "moreInSales": "在「销售与库存」里填写更多",
-    "note": "平台费率按这个店最近 45 天的结算算；退款、补贴等以实际结算为准。"
+    "note": "平台费率按这个店最近 45 天的结算算；退款、补贴等以实际结算为准。",
+    "emptyTitle": "暂时算不出利润",
+    "emptyDesc": "利润要先知道平台扣了多少钱，这需要这个店至少 20 笔已结算的订单。同步后会自动算出来；新店通常要等 1–2 周才有足够结算。",
+    "subtitle": "按下单日估算",
+    "result": "预估利润",
+    "setup": "设置"
   },
   "syncDone": "同步完成，数据已更新",
   "dismiss": "知道了",
   "syncingShop": "正在同步…",
-  "unchanged": "持平"
+  "unchanged": "持平",
+  "findings": {
+    "problems": "需要处理",
+    "chances": "增长机会",
+    "more": "还有 {n} 条",
+    "less": "收起"
+  },
+  "issues": "{n} 项需要关注",
+  "allClear": "运行正常",
+  "kpiTitle": "经营指标",
+  "periodLabel": "近 {n} 天 · 对比上一周期",
+  "calendarLess": "少",
+  "calendarMore": "多"
 }

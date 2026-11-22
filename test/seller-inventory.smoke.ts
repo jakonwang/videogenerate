@@ -186,6 +186,7 @@ async function testServiceSync() {
   gmvDb.prepare('INSERT INTO gmv_bindings VALUES (?, ?, ?, ?)').run('b1', 'c', 1, JSON.stringify({ storeId: 'S1', storeName: 'Shop A', advertiserId: 'ad1', advertiserName: 'AD', currency: 'VND' }))
   for (const [id, campaign, date, cost] of [['m1', 'c1', TODAY, 1000], ['m2', 'c2', TODAY, 500], ['m3', 'c1', '2026-11-21', 300]] as const) gmvDb.prepare('INSERT INTO gmv_metrics VALUES (?, ?, ?, ?, ?)').run(id, campaign, date, 1, JSON.stringify({ storeId: 'S1', cost: String(cost) }))
   gmvDb.close()
+  gmvAds.close() // GMV Max was just set up: look for its database again now
   const profit = sellerInventoryService.getShopProfit({ shopKey: 'shopA', days: 7 })
   assert.equal(profit.feeRate, 0.3)
   assert.equal(profit.adLink?.storeId, 'S1', 'the GMV Max store with the seller id is linked automatically')

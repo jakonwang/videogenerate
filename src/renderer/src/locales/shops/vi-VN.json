@@ -113,7 +113,12 @@
       "returns": "Trả hàng chờ xử lý",
       "negativeReviews": "Đánh giá tiêu cực",
       "outOfStock": "SKU hết hàng"
-    }
+    },
+    "othersPass": "{n} chỉ số còn lại đều đạt",
+    "showAll": "Xem tất cả",
+    "hide": "Thu gọn",
+    "indicators": "Chỉ số dịch vụ",
+    "todoTitle": "Việc cần làm"
   },
   "report": {
     "button": "Báo cáo sáng",
@@ -170,10 +175,27 @@
     "unitCost": "Giá nhập",
     "costPlaceholder": "Giá vốn mỗi cái",
     "moreInSales": "Nhập thêm trong Bán hàng & Tồn kho",
-    "note": "Tỷ lệ phí lấy từ quyết toán 45 ngày gần nhất của cửa hàng; hoàn tiền và trợ giá theo quyết toán thực tế."
+    "note": "Tỷ lệ phí lấy từ quyết toán 45 ngày gần nhất của cửa hàng; hoàn tiền và trợ giá theo quyết toán thực tế.",
+    "emptyTitle": "Chưa tính được lợi nhuận",
+    "emptyDesc": "Cần biết phí sàn trước, việc này cần ít nhất 20 đơn đã quyết toán của shop. Sau khi đồng bộ sẽ tự tính; shop mới thường cần 1–2 tuần.",
+    "subtitle": "ước tính theo ngày đặt hàng",
+    "result": "Lợi nhuận ước tính",
+    "setup": "Thiết lập"
   },
   "syncDone": "Đồng bộ xong, dữ liệu đã cập nhật",
   "dismiss": "Đã hiểu",
   "syncingShop": "Đang đồng bộ…",
-  "unchanged": "Không đổi"
+  "unchanged": "Không đổi",
+  "findings": {
+    "problems": "Cần xử lý",
+    "chances": "Cơ hội tăng trưởng",
+    "more": "Còn {n} mục",
+    "less": "Thu gọn"
+  },
+  "issues": "{n} mục cần chú ý",
+  "allClear": "Mọi thứ ổn",
+  "kpiTitle": "Chỉ số kinh doanh",
+  "periodLabel": "{n} ngày gần đây · so với kỳ trước",
+  "calendarLess": "Ít",
+  "calendarMore": "Nhiều"
 }

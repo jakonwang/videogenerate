@@ -368,6 +368,10 @@ async function syncShopDaily(session: Pick<SellerSession, 'api'>, shop: ShopReco
   })
 }
 
+const CURRENCY_SYMBOL: Record<string, string> = { VN: '₫', TH: '฿', MY: 'RM', PH: '₱', ID: 'Rp', SG: 'S$', US: '$', GB: '£' }
+function currencySymbol(region: string) {
+  return CURRENCY_SYMBOL[String(region || '').toUpperCase()] || ''
+}
 const REGION_CURRENCY: Record<string, string> = { VN: 'VND', TH: 'THB', MY: 'MYR', PH: 'PHP', ID: 'IDR', SG: 'SGD', US: 'USD', GB: 'GBP' }
 const SETTLEMENT_PAGE = 200
 const MAX_PENDING_PAGES = 30
@@ -516,7 +520,7 @@ export const sellerInventoryService = {
         const stock = shopDashboard.kpi
         const health = repo.getShopHealth(record.id)
         const profit = this.profitSignal(record.id)
-        const analysis = analyzeShop({ shopKey: record.id, today: shopToday, days, skus: shopDashboard.items, health, profit })
+        const analysis = analyzeShop({ shopKey: record.id, today: shopToday, days, skus: shopDashboard.items, health, profit, currency: currencySymbol(record.region) })
         const alerts: ShopCard['alerts'] = []
         if (record.loginState === 'expired' || String(shop.state.lastSyncError || '').includes('LOGIN')) alerts.push({ kind: 'login' })
         else if (shop.state.lastSyncError) alerts.push({ kind: 'syncFailed' })
@@ -584,7 +588,7 @@ export const sellerInventoryService = {
         topSkus: [...dashboard.items].sort((a, b) => b.amount7 - a.amount7).slice(0, 15),
         outOfStock: dashboard.kpi.outCount,
         reorder: dashboard.kpi.reorderCount,
-        analysis: analyzeShop({ shopKey: record.id, today, days: recent, skus: dashboard.items, health }),
+        analysis: analyzeShop({ shopKey: record.id, today, days: recent, skus: dashboard.items, health, profit: this.profitSignal(record.id), currency: currencySymbol(record.region) }),
         health,
       }
     })
@@ -595,7 +599,7 @@ export const sellerInventoryService = {
       const record = requireShop(shopKey)
       const today = zonedDate(deps.now(), tzOf(record))
       const dashboard = this.getDashboard({ shopKey, days: 30 })
-      return analyzeShop({ shopKey, today, days: repo.listShopDays(shopKey, shiftDate(today, -15), today), skus: dashboard.items, health: repo.getShopHealth(shopKey), profit: this.profitSignal(shopKey) })
+      return analyzeShop({ shopKey, today, days: repo.listShopDays(shopKey, shiftDate(today, -15), today), skus: dashboard.items, health: repo.getShopHealth(shopKey), profit: this.profitSignal(shopKey), currency: currencySymbol(record.region) })
     })
   },
 

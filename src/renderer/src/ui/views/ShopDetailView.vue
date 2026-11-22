@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDownRight, ArrowUpRight, ChevronLeft, ExternalLink, ImageIcon, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronLeft, ExternalLink, ImageIcon, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
 import { dateRange, shiftDate, type ShopMetricKey, type ShopReport, type SiShopDay, type SiSyncStage } from '../../../../shared/sellerInventory'
 import { freshnessText, friendlyStageError, friendlySyncError } from '../../../../shared/sellerSyncText'
 import { useSyncWatcher } from './shops/useSyncWatcher'
@@ -28,7 +28,8 @@ const now = ref(Date.now())
 const clock = setInterval(() => { now.value = Date.now() }, 30_000)
 
 const KPIS: ShopMetricKey[] = ['gmv', 'orders', 'itemsSold', 'buyers', 'visitors', 'conversion', 'aov', 'impressions']
-const TREND: ShopMetricKey[] = ['gmv', 'orders', 'visitors', 'conversion', 'aov']
+const TODAY: ShopMetricKey[] = ['gmv', 'orders', 'visitors', 'conversion']
+const todayItems = TODAY.map((key) => ({ key }))
 
 const region = computed(() => report.value?.shop.region)
 const { progress, started, markLoaded } = useSyncWatcher({
@@ -95,14 +96,30 @@ const channels = computed(() => {
 /** Calendar: one column per week (Mon–Sun), darker = more GMV. */
 const calendar = computed(() => {
   const dates = allDates.value
-  if (!dates.length) return { weeks: [] as Array<Array<{ date: string; gmv: number; inRange: boolean } | null>>, max: 1 }
+  if (!dates.length) return { weeks: [] as Array<Array<{ date: string; gmv: number; inRange: boolean } | null>>, max: 1, min: 0 }
   const first = new Date(`${dates[0]}T00:00:00Z`).getUTCDay()
   const offset = (first + 6) % 7
   const cells: Array<{ date: string; gmv: number; inRange: boolean } | null> = Array.from({ length: offset }, () => null)
   for (const date of dates) cells.push({ date, gmv: value(byDate.value.get(date), 'gmv'), inRange: true })
   const weeks = []
   for (let index = 0; index < cells.length; index += 7) weeks.push(cells.slice(index, index + 7))
-  return { weeks, max: Math.max(1, ...cells.map((cell) => cell?.gmv || 0)) }
+  const values = cells.filter((cell) => cell && cell.gmv > 0).map((cell) => cell!.gmv)
+  const max = Math.max(1, ...values)
+  const min = values.length ? Math.min(...values) : 0
+  return { weeks, max, min }
+})
+
+/** Lowest day pale, best day strongest; a day with no sales stays empty. */
+function shade(gmv: number) {
+  if (!gmv) return 0
+  const span = calendar.value.max - calendar.value.min
+  return Math.round(10 + (span > 0 ? (gmv - calendar.value.min) / span : 1) * 50)
+}
+
+/** Mon … Sun in the user's language. 2024-01-01 was a Monday. */
+const weekdayNames = computed(() => {
+  const format = new Intl.DateTimeFormat(locale.value, { weekday: 'short', timeZone: 'UTC' })
+  return Array.from({ length: 7 }, (_, index) => format.format(new Date(Date.UTC(2024, 0, 1 + index))))
 })
 
 const tableRows = computed(() => [...allDates.value].reverse().map((date) => ({ date, day: byDate.value.get(date) })))
@@ -151,58 +168,64 @@ onBeforeUnmount(() => clearInterval(clock))
     </header>
 
     <div v-if="running" class="vg-notice vg-notice--accent"><LoaderCircle :size="15" class="vg-spin" /><span>{{ t(`sellerInv.stage.${running.stage || 'account'}`, { detail: running.detail || '' }) }}</span></div>
-    <div v-if="doneText" class="vg-notice vg-notice--accent"><span>{{ doneText }}</span></div>
-    <div v-if="errorText" class="vg-notice vg-notice--danger"><span>{{ errorText }}</span></div>
-    <div v-if="report?.shop.state.lastSyncError && !syncing" class="vg-notice vg-notice--warning" data-testid="shop-detail-sync-error">
-      <span>{{ friendlySyncError(report.shop.state.lastSyncError, locale) }}</span>
-      <button v-if="String(report.shop.state.lastSyncError).includes('LOGIN')" type="button" class="vg-btn vg-btn--sm" @click="router.push({ path: '/shops', query: { tab: 'accounts' } })">{{ t('shops.updateCookie') }}</button>
+    <div v-if="doneText" class="vg-notice vg-notice--accent"><CheckCircle2 :size="15" /><span>{{ doneText }}</span></div>
+    <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="15" /><span>{{ errorText }}</span></div>
+    <div v-if="!syncing && (report?.shop.state.lastSyncError || stageProblems.length)" class="vg-notice vg-notice--warning shop-detail__status" data-testid="shop-detail-sync-error">
+      <AlertTriangle :size="15" />
+      <ul>
+        <li v-if="report?.shop.state.lastSyncError">{{ friendlySyncError(report.shop.state.lastSyncError, locale) }}</li>
+        <li v-for="(problem, index) in stageProblems" :key="index">{{ problem }}</li>
+      </ul>
+      <button v-if="String(report?.shop.state.lastSyncError || '').includes('LOGIN')" type="button" class="vg-btn vg-btn--sm" @click="router.push({ path: '/shops', query: { tab: 'accounts' } })">{{ t('shops.updateCookie') }}</button>
       <button v-else type="button" class="vg-btn vg-btn--sm" @click="sync">{{ t('sellerInv.syncAgain') }}</button>
     </div>
-    <div v-for="(problem, index) in syncing ? [] : stageProblems" :key="index" class="vg-notice vg-notice--warning"><span>{{ problem }}</span></div>
 
     <template v-if="report">
       <section class="vg-card shop-detail__today" data-testid="shop-today">
-        <span class="shop-detail__today-title">{{ t('shops.todaySoFar') }}</span>
-        <div><span>{{ t('shops.metric.gmv') }}</span><strong>{{ fmt('gmv', todayRow?.gmv) }}</strong><small class="vg-muted">{{ t('shops.vsYesterday', { value: fmt('gmv', yesterdayRow?.gmv, true) }) }}</small></div>
-        <div><span>{{ t('shops.metric.orders') }}</span><strong>{{ fmt('orders', todayRow?.orders) }}</strong><small class="vg-muted">{{ t('shops.vsYesterday', { value: fmt('orders', yesterdayRow?.orders) }) }}</small></div>
-        <div><span>{{ t('shops.metric.visitors') }}</span><strong>{{ fmt('visitors', todayRow?.visitors) }}</strong><small class="vg-muted">{{ t('shops.vsYesterday', { value: fmt('visitors', yesterdayRow?.visitors) }) }}</small></div>
-        <div><span>{{ t('shops.metric.conversion') }}</span><strong>{{ fmt('conversion', todayRow?.conversion) }}</strong><small class="vg-muted">{{ t('shops.vsYesterday', { value: fmt('conversion', yesterdayRow?.conversion) }) }}</small></div>
+        <div class="shop-detail__today-title"><span class="shop-detail__live"></span>{{ t('shops.todaySoFar') }}</div>
+        <div class="shop-detail__today-grid">
+          <div v-for="item in todayItems" :key="item.key" class="shop-detail__today-item">
+            <span>{{ t(`shops.metric.${item.key}`) }}</span>
+            <strong>{{ fmt(item.key, todayRow?.[item.key]) }}</strong>
+            <small>{{ t('shops.vsYesterday', { value: fmt(item.key, yesterdayRow?.[item.key], true) }) }}</small>
+          </div>
+        </div>
       </section>
 
       <div class="shop-detail__two">
         <section class="vg-card shop-detail__analysis" data-testid="shop-analysis">
-          <h2 class="vg-section-title">{{ t('shops.analysisTitle') }}</h2>
-          <p class="vg-muted shop-detail__hint">{{ t('shops.analysisHint') }}</p>
-          <ShopFindings :findings="report.analysis.findings" :limit="12" />
+          <header class="shop-detail__card-title">
+            <h2 class="vg-section-title">{{ t('shops.analysisTitle') }}</h2>
+            <p class="shop-detail__hint">{{ t('shops.analysisHint') }}</p>
+          </header>
+          <ShopFindings :findings="report.analysis.findings" grouped :per-group="5" />
         </section>
         <ShopHealthCard :health="report.health" @open="(path) => api.openSellerCenter(shopKey, path)" />
       </div>
 
-      <section class="shop-detail__kpis" data-testid="shop-kpis">
-        <button v-for="key in KPIS" :key="key" type="button" class="vg-stat shop-kpi" :class="{ 'is-active': metric === key }" @click="TREND.includes(key) && (metric = key)">
-          <span class="vg-stat__body">
-            <span class="vg-stat__label">{{ t(`shops.metric.${key}`) }}</span>
-            <span class="vg-stat__value">{{ fmt(key, report.totals[key], true) }}</span>
+      <section class="vg-card shop-detail__perf">
+        <header class="shop-detail__card-head">
+          <div class="shop-detail__card-title">
+            <h2 class="vg-section-title">{{ t('shops.kpiTitle') }}</h2>
+            <p class="shop-detail__hint">{{ t('shops.periodLabel', { n: days }) }}</p>
+          </div>
+          <p class="shop-detail__legend"><span class="legend-line"></span>{{ t('shops.legendCurrent') }} <span class="legend-line legend-line--prev"></span>{{ t('shops.legendPrevious') }}</p>
+        </header>
+        <div class="shop-detail__kpis" data-testid="shop-kpis">
+          <button v-for="key in KPIS" :key="key" type="button" class="shop-kpi" :class="{ 'is-active': metric === key }" @click="metric = key">
+            <span class="shop-kpi__label">{{ t(`shops.metric.${key}`) }}</span>
+            <strong class="shop-kpi__value">{{ fmt(key, report.totals[key], true) }}</strong>
             <small v-if="change(report.totals[key], report.previousTotals[key]) !== undefined" class="shop-kpi__chg" :class="direction(report.totals[key], report.previousTotals[key])">
               <ArrowUpRight v-if="direction(report.totals[key], report.previousTotals[key]) === 'up'" :size="11" /><ArrowDownRight v-else-if="direction(report.totals[key], report.previousTotals[key]) === 'down'" :size="11" />
-              {{ direction(report.totals[key], report.previousTotals[key]) === 'flat' ? t('shops.unchanged') : fmtChange(change(report.totals[key], report.previousTotals[key])) }} {{ t('shops.vsPrevPeriod') }}
+              {{ direction(report.totals[key], report.previousTotals[key]) === 'flat' ? t('shops.unchanged') : fmtChange(change(report.totals[key], report.previousTotals[key])) }}
             </small>
-          </span>
-        </button>
+            <small v-else class="shop-kpi__chg flat">—</small>
+          </button>
+        </div>
+        <ShopTrendChart :points="trendPoints" :previous="trendPrevious" :format="(v: number) => fmt(metric, v)" />
       </section>
 
       <ShopProfitCard :shop-key="shopKey" :days="days" :region="region" />
-
-      <section class="vg-card shop-detail__trend">
-        <div class="shop-detail__card-head">
-          <h2 class="vg-section-title">{{ t('shops.trend') }}</h2>
-          <div class="vg-seg vg-seg--sm">
-            <button v-for="key in TREND" :key="key" type="button" class="vg-seg__btn" :class="{ 'is-active': metric === key }" @click="metric = key">{{ t(`shops.metric.${key}`) }}</button>
-          </div>
-        </div>
-        <ShopTrendChart :points="trendPoints" :previous="trendPrevious" :format="(v: number) => fmt(metric, v)" />
-        <p class="vg-muted shop-detail__legend"><span class="legend-line"></span>{{ t('shops.legendCurrent') }} <span class="legend-line legend-line--prev"></span>{{ t('shops.legendPrevious') }}</p>
-      </section>
 
       <div class="shop-detail__two">
         <section class="vg-card" data-testid="shop-funnel">
@@ -228,21 +251,35 @@ onBeforeUnmount(() => clearInterval(clock))
         </section>
       </div>
 
-      <section class="vg-card" data-testid="shop-calendar">
-        <h2 class="vg-section-title">{{ t('shops.calendar') }}</h2>
+      <section class="vg-card shop-detail__calendar" data-testid="shop-calendar">
+        <header class="shop-detail__card-head">
+          <h2 class="vg-section-title">{{ t('shops.calendar') }}</h2>
+          <span class="calendar-scale">{{ t('shops.calendarLess') }}<i v-for="step in [10, 22, 35, 48, 60]" :key="step" :style="{ background: `color-mix(in srgb, var(--vg-accent) ${step}%, transparent)` }"></i>{{ t('shops.calendarMore') }}</span>
+        </header>
         <div class="calendar">
-          <div v-for="(week, wi) in calendar.weeks" :key="wi" class="calendar__week">
-            <span v-for="(cell, ci) in week" :key="ci" class="calendar__cell" :class="{ empty: !cell }" :style="cell ? { background: `color-mix(in srgb, var(--vg-accent) ${Math.round(8 + (cell.gmv / calendar.max) * 82)}%, transparent)` } : {}" :title="cell ? `${cell.date}  ${fmt('gmv', cell.gmv)}` : ''">
-              <small v-if="cell">{{ cell.date.slice(8) }}</small>
+          <span v-for="name in weekdayNames" :key="name" class="calendar__weekday">{{ name }}</span>
+          <template v-for="(week, wi) in calendar.weeks" :key="wi">
+            <span
+              v-for="(cell, ci) in week"
+              :key="`${wi}-${ci}`"
+              class="calendar__cell"
+              :class="{ empty: !cell, 'is-today': cell?.date === report.today }"
+              :style="cell ? { background: `color-mix(in srgb, var(--vg-accent) ${shade(cell.gmv)}%, transparent)` } : {}"
+              :title="cell ? `${cell.date}  ${fmt('gmv', cell.gmv)}` : ''"
+            >
+              <template v-if="cell">
+                <small>{{ Number(cell.date.slice(8)) === 1 ? cell.date.slice(5).replace('-', '/') : Number(cell.date.slice(8)) }}</small>
+                <b v-if="cell.gmv">{{ fmt('gmv', cell.gmv, true) }}</b>
+              </template>
             </span>
-          </div>
+          </template>
         </div>
       </section>
 
       <section class="vg-card vg-card--flush" data-testid="shop-skus">
         <div class="vg-card__head shop-detail__card-head">
           <h2 class="vg-card__title">{{ t('shops.topSkus') }}</h2>
-          <span class="vg-muted shop-detail__small">{{ t('shops.stockSummary', { out: report.outOfStock, reorder: report.reorder }) }}</span>
+          <span class="shop-detail__small">{{ t('shops.stockSummary', { out: report.outOfStock, reorder: report.reorder }) }}</span>
           <button type="button" class="vg-btn vg-btn--sm" @click="router.push('/plugins/seller-inventory')">{{ t('shops.openSales') }}</button>
         </div>
         <div class="vg-table-wrap shop-detail__table">
@@ -255,15 +292,15 @@ onBeforeUnmount(() => clearInterval(clock))
                   <div class="sku-cell">
                     <span class="vg-thumb vg-thumb--sm sku-cell__thumb"><img v-if="item.image" :src="item.image" alt="" loading="lazy" /><ImageIcon v-else :size="13" /></span>
                     <span class="sku-cell__text"><strong>{{ item.mapped ? item.key : t('sellerInv.table.unmappedBadge') }}</strong><small class="vg-muted vg-ellipsis">{{ item.name }}</small></span>
-                    <span v-if="item.tag !== 'none'" class="vg-pill" :class="{ 'vg-pill--solid-red': item.tag === 'hot', 'vg-pill--green': item.tag === 'rising', 'vg-pill--amber': item.tag === 'declining', 'vg-pill--violet': item.tag === 'slow' }">{{ t(`sellerInv.tag.${item.tag}`) }}</span>
+                    <span v-if="item.tag !== 'none'" class="sku-tag" :class="`sku-tag--${item.tag}`">{{ t(`sellerInv.tag.${item.tag}`) }}</span>
                   </div>
                 </td>
                 <td class="num">{{ fmtNumber(item.unitsToday, locale) }}</td>
                 <td class="num"><strong>{{ fmtNumber(item.units7, locale) }}</strong></td>
-                <td class="num">{{ item.growth7 === undefined ? 'NEW' : fmtChange(item.growth7) }}</td>
+                <td class="num" :class="item.growth7 === undefined ? 'sku-new' : item.growth7 > 0 ? 'sku-up' : item.growth7 < 0 ? 'sku-down' : ''">{{ item.growth7 === undefined ? 'NEW' : fmtChange(item.growth7) }}</td>
                 <td class="num">{{ fmtMoney(item.amount7, locale, region) }}</td>
                 <td class="num">{{ fmtNumber(item.stock, locale) }}</td>
-                <td><span v-if="item.risk !== 'unknown'" class="vg-pill" :class="{ 'vg-pill--red': item.risk === 'out' || item.risk === 'urgent', 'vg-pill--amber': item.risk === 'reorder', 'vg-pill--green': item.risk === 'healthy', 'vg-pill--violet': item.risk === 'overstock' }">{{ t(`sellerInv.risk.${item.risk}`) }}</span></td>
+                <td><span v-if="item.risk !== 'unknown'" class="sku-risk" :class="`sku-risk--${item.risk}`"><i></i>{{ t(`sellerInv.risk.${item.risk}`) }}</span></td>
               </tr>
             </tbody>
           </table>
@@ -295,43 +332,73 @@ onBeforeUnmount(() => clearInterval(clock))
 </template>
 
 <style scoped>
-.shop-detail { display: flex; flex-direction: column; gap: 14px; }
+.shop-detail { display: flex; flex-direction: column; gap: 16px; }
 .shop-detail .num, .vg-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shop-detail__today { display: grid; grid-template-columns: auto repeat(4, 1fr); align-items: center; gap: 16px; }
-.shop-detail__today-title { font-weight: 700; font-size: 13px; }
-.shop-detail__today > div { display: flex; flex-direction: column; gap: 2px; }
-.shop-detail__today span { font-size: 12px; color: var(--theme-text-muted); }
-.shop-detail__today strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-.shop-detail__today small { font-size: 11px; }
-.shop-detail__kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-.shop-kpi { text-align: left; font: inherit; color: inherit; cursor: pointer; }
-.shop-kpi.is-active { border-color: var(--vg-accent); }
-.shop-kpi__chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; margin-top: 2px; }
+.shop-detail__status { align-items: flex-start; }
+.shop-detail__status ul { flex: 1; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.shop-detail__stale { color: var(--vg-amber); font-weight: 600; }
+
+.shop-detail__today { display: flex; flex-direction: column; gap: 12px; }
+.shop-detail__today-title { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--theme-text-muted); }
+.shop-detail__live { width: 7px; height: 7px; border-radius: 50%; background: var(--vg-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vg-accent) 22%, transparent); }
+.shop-detail__today-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.shop-detail__today-item { display: flex; flex-direction: column; gap: 3px; padding: 0 20px; border-left: 1px solid var(--theme-divider); min-width: 0; }
+.shop-detail__today-item:first-child { padding-left: 0; border-left: 0; }
+.shop-detail__today-item span { font-size: 12px; color: var(--theme-text-muted); }
+.shop-detail__today-item strong { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-detail__today-item:first-child strong { font-size: 28px; }
+.shop-detail__today-item small { font-size: 11.5px; color: var(--theme-text-muted); }
+
+.shop-detail__card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.shop-detail__card-title { display: flex; flex-direction: column; gap: 3px; }
+.shop-detail__hint { margin: 0; font-size: 12px; color: var(--theme-text-muted); line-height: 1.5; }
+
+.shop-detail__perf { display: flex; flex-direction: column; gap: 14px; }
+.shop-detail__kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--theme-border); border-radius: 10px; overflow: hidden; }
+.shop-kpi { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 0; border-left: 1px solid var(--theme-divider); border-top: 1px solid var(--theme-divider); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; transition: background .15s; }
+.shop-kpi:nth-child(4n + 1) { border-left: 0; }
+.shop-kpi:nth-child(-n + 4) { border-top: 0; }
+.shop-kpi:hover { background: var(--theme-panel-soft); }
+.shop-kpi.is-active { background: color-mix(in srgb, var(--vg-accent) 9%, transparent); }
+.shop-kpi.is-active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--vg-accent); }
+.shop-kpi__label { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; }
+.shop-kpi.is-active .shop-kpi__label { color: var(--vg-accent); }
+.shop-kpi__value { font-size: 20px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-kpi__chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .shop-kpi__chg.up { color: var(--vg-green, #16a34a); }
 .shop-kpi__chg.down { color: var(--vg-red); }
-.shop-kpi__chg.flat { color: var(--theme-text-muted); }
-.shop-detail__card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.shop-detail__trend { display: flex; flex-direction: column; gap: 8px; }
-.shop-detail__legend { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 0; }
+.shop-kpi__chg.flat { color: var(--theme-text-muted); font-weight: 500; }
+.shop-detail__legend { display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin: 0; color: var(--theme-text-muted); }
 .legend-line { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--vg-accent); }
 .legend-line--prev { border-top: 2px dashed var(--theme-text-muted); margin-left: 10px; }
-.shop-detail__two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.shop-detail__two > section { display: flex; flex-direction: column; gap: 12px; }
-.funnel-step, .channel { display: flex; flex-direction: column; gap: 4px; }
-.funnel-step__label, .channel__head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
-.funnel-step__label span, .channel__head > span:first-child { flex: 1; }
-.funnel-step__bar, .channel__bar { height: 8px; border-radius: 4px; background: var(--theme-panel-soft); overflow: hidden; }
-.funnel-step__bar span, .channel__bar span { display: block; height: 100%; border-radius: 4px; background: var(--vg-accent); }
-.funnel-step small, .channel small { font-size: 11px; }
-.calendar { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
-.calendar__week { display: grid; grid-template-rows: repeat(7, 26px); gap: 4px; }
-.calendar__cell { width: 26px; border-radius: 5px; display: flex; align-items: flex-end; justify-content: flex-end; padding: 2px 3px; border: 1px solid var(--theme-border); }
-.calendar__cell.empty { border-color: transparent; }
-.calendar__cell small { font-size: 9px; color: var(--theme-text); opacity: 0.75; }
-.shop-detail__analysis { display: flex; flex-direction: column; gap: 10px; }
-/* Content starts at the top; the card is as tall as the health card next to it. */
-.shop-detail__analysis { justify-content: flex-start; }
-.shop-detail__hint { margin: -4px 0 0; font-size: 12px; }
+
+.shop-detail__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.shop-detail__two > section { display: flex; flex-direction: column; gap: 14px; }
+.shop-detail__analysis { gap: 14px; }
+
+.funnel-step, .channel { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--theme-divider); }
+.funnel-step:first-of-type, .channel:first-of-type { border-top: 0; padding-top: 0; }
+.funnel-step__label, .channel__head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.funnel-step__label span, .channel__head > span:first-child { flex: 1; color: var(--theme-text-secondary); }
+.funnel-step__label strong, .channel__head strong { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.channel__head .vg-muted { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.funnel-step__bar, .channel__bar { height: 6px; border-radius: 3px; background: var(--theme-panel-soft); overflow: hidden; }
+.funnel-step__bar span, .channel__bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, color-mix(in srgb, var(--vg-accent) 65%, transparent), var(--vg-accent)); }
+.funnel-step small, .channel small { font-size: 11.5px; color: var(--theme-text-muted); }
+
+.shop-detail__calendar { display: flex; flex-direction: column; gap: 12px; }
+.calendar-scale { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--theme-text-muted); }
+.calendar-scale i { width: 12px; height: 12px; border-radius: 3px; }
+.calendar-scale i:first-of-type { margin-left: 4px; }
+.calendar-scale i:last-of-type { margin-right: 4px; }
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calendar__weekday { padding: 0 6px 2px; font-size: 11px; color: var(--theme-text-muted); }
+.calendar__cell { position: relative; display: flex; flex-direction: column; justify-content: space-between; height: 46px; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--theme-divider); min-width: 0; }
+.calendar__cell.empty { border-color: transparent; background: transparent; }
+.calendar__cell.is-today { border-color: var(--vg-accent); }
+.calendar__cell small { font-size: 10.5px; color: var(--theme-text); opacity: .7; }
+.calendar__cell b { align-self: flex-end; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--theme-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.calendar__cell:not(.empty):hover { outline: 1px solid var(--vg-accent); }
 .shop-detail__table { border: 0; border-radius: 0; max-height: 420px; }
 .shop-detail__small { font-size: 12px; flex: 1; }
 .sku-cell { display: flex; align-items: center; gap: 8px; min-width: 220px; max-width: 360px; }
@@ -339,9 +406,29 @@ onBeforeUnmount(() => clearInterval(clock))
 .sku-cell__thumb img { width: 100%; height: 100%; object-fit: cover; }
 .sku-cell__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .is-muted td { color: var(--theme-text-muted); }
-.shop-detail__stale { color: var(--vg-amber); font-weight: 600; }
+.shop-detail__small { color: var(--theme-text-muted); }
+.sku-tag { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; font-size: 10.5px; font-weight: 600; line-height: 15px; opacity: .9; }
+.sku-tag--hot { color: var(--vg-red); }
+.sku-tag--rising { color: var(--vg-green, #16a34a); }
+.sku-tag--declining { color: var(--vg-amber); }
+.sku-tag--slow { color: var(--theme-text-muted); }
+.sku-up { color: var(--vg-green, #16a34a); }
+.sku-down { color: var(--vg-red); }
+.sku-new { color: var(--vg-accent); font-size: 11px; font-weight: 700; }
+.sku-risk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; color: var(--theme-text-secondary); }
+.sku-risk i { width: 6px; height: 6px; border-radius: 50%; background: var(--theme-text-muted); }
+.sku-risk--out i, .sku-risk--urgent i { background: var(--vg-red); }
+.sku-risk--out, .sku-risk--urgent { color: var(--theme-text); font-weight: 600; }
+.sku-risk--reorder i { background: var(--vg-amber); }
+.sku-risk--healthy i { background: var(--vg-green, #16a34a); }
+.sku-risk--overstock i { background: #8b5cf6; }
 @media (max-width: 960px) {
   .shop-detail__two { grid-template-columns: 1fr; }
-  .shop-detail__today { grid-template-columns: repeat(2, 1fr); }
+  .shop-detail__today-grid { grid-template-columns: repeat(2, 1fr); row-gap: 14px; }
+  .shop-detail__today-item:nth-child(3) { padding-left: 0; border-left: 0; }
+  .shop-detail__kpis { grid-template-columns: repeat(2, 1fr); }
+  .shop-kpi:nth-child(4n + 1) { border-left: 1px solid var(--theme-divider); }
+  .shop-kpi:nth-child(2n + 1) { border-left: 0; }
+  .shop-kpi:nth-child(3), .shop-kpi:nth-child(4) { border-top: 1px solid var(--theme-divider); }
 }
 </style>

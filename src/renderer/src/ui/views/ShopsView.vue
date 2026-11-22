@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, CheckCircle2, ChevronRight, Clock, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, CheckCircle2, ChevronRight, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
 import type { ShopCard, ShopsOverview, SiSyncProgress, SiSyncStage } from '../../../../shared/sellerInventory'
 import ShopAccountsPanel from './shops/ShopAccountsPanel.vue'
-import ShopFindings from './shops/ShopFindings.vue'
+import { findingText } from '../../../../shared/shopReportText'
 import ShopReportDialog from './shops/ShopReportDialog.vue'
 import { change, fmtChange, fmtMoney, fmtNumber, fmtPercent } from './shops/shopFormat'
 import { useSyncWatcher } from './shops/useSyncWatcher'
@@ -68,6 +68,36 @@ function alertText(alert: ShopCard['alerts'][number]) {
   if (alert.kind === 'health') return t('shops.alert.health', { n: alert.value })
   if (alert.kind === 'urgentShip') return t('shops.alert.urgentShip', { n: alert.value })
   return t(`shops.alert.${alert.kind}`)
+}
+
+/** up / down / flat, where a change that rounds to 0.0% counts as flat. */
+function trend(current: number, previous: number) {
+  const value = change(current, previous)
+  if (value === undefined || Math.abs(value) < 0.0005) return 'flat'
+  return value > 0 ? 'up' : 'down'
+}
+
+/** Everything that needs a look, most serious first; the card shows the first and a +N for the rest. */
+function issues(card: ShopCard) {
+  const list = visibleAlerts(card).map((alert) => ({
+    tone: alertTone(alert) === 'vg-pill--red' ? 'danger' : 'warn',
+    text: alertText(alert),
+    title: alert.kind === 'syncFailed' ? friendlySyncError(card.shop.state.lastSyncError, locale.value) : '',
+  }))
+  for (const [stage, error] of Object.entries(card.shop.state.stageErrors || {})) {
+    if (isSyncing(card.shop.shopKey)) break
+    list.push({ tone: 'warn', text: friendlyStageError(stage as SiSyncStage, error, locale.value, true), title: friendlyStageError(stage as SiSyncStage, error, locale.value) })
+  }
+  return list.sort((a, b) => Number(b.tone === 'danger') - Number(a.tone === 'danger'))
+}
+
+const LINE = String.fromCharCode(10)
+
+/** Footer lines: problems first, then the top analysis finding, or a single "all good". */
+function notes(card: ShopCard) {
+  const list: Array<{ tone: string; text: string; title: string }> = issues(card)
+  if (card.topFinding && card.topFinding.level !== 'ok') list.push({ tone: card.topFinding.level === 'growth' ? 'ok' : card.topFinding.level === 'error' ? 'danger' : 'warn', text: findingText(card.topFinding, locale.value), title: '' })
+  return list.length ? list : [{ tone: 'ok', text: t('shops.allClear'), title: '' }]
 }
 
 function visibleAlerts(card: ShopCard) {
@@ -146,34 +176,54 @@ onBeforeUnmount(() => clearInterval(clock))
       </section>
 
       <template v-else-if="overview">
-        <section class="vg-stats shops-view__totals" data-testid="shops-totals">
-          <div class="vg-stat"><span class="vg-stat__body"><span class="vg-stat__label">{{ t('shops.total.todayGmv') }}</span><span class="vg-stat__value">{{ money(overview.total.todayGmv, false) }}</span><small class="vg-muted">{{ t('shops.vsYesterday', { value: money(overview.total.yesterdayGmv) }) }}</small></span></div>
-          <div class="vg-stat"><span class="vg-stat__body"><span class="vg-stat__label">{{ t('shops.total.todayOrders') }}</span><span class="vg-stat__value">{{ fmtNumber(overview.total.todayOrders, locale) }}</span></span></div>
-          <div class="vg-stat"><span class="vg-stat__body"><span class="vg-stat__label">{{ t('shops.total.todayVisitors') }}</span><span class="vg-stat__value">{{ fmtNumber(overview.total.todayVisitors, locale) }}</span></span></div>
-          <div class="vg-stat"><span class="vg-stat__body"><span class="vg-stat__label">{{ t('shops.total.gmv7') }}</span><span class="vg-stat__value">{{ money(overview.total.gmv7, false) }}</span><small class="vg-muted">{{ t('shops.vsPrev7', { value: fmtChange(change(overview.total.gmv7, overview.total.gmvPrev7)) || '—' }) }}</small></span></div>
+        <section class="vg-card shops-sum" data-testid="shops-totals">
+          <div class="shops-sum__item shops-sum__item--lead">
+            <span class="shops-sum__label">{{ t('shops.total.todayGmv') }}</span>
+            <strong class="shops-sum__value">{{ money(overview.total.todayGmv, false) }}</strong>
+            <small>{{ t('shops.vsYesterday', { value: money(overview.total.yesterdayGmv) }) }}</small>
+          </div>
+          <div class="shops-sum__item">
+            <span class="shops-sum__label">{{ t('shops.total.todayOrders') }}</span>
+            <strong class="shops-sum__value">{{ fmtNumber(overview.total.todayOrders, locale) }}</strong>
+          </div>
+          <div class="shops-sum__item">
+            <span class="shops-sum__label">{{ t('shops.total.todayVisitors') }}</span>
+            <strong class="shops-sum__value">{{ fmtNumber(overview.total.todayVisitors, locale) }}</strong>
+          </div>
+          <div class="shops-sum__item">
+            <span class="shops-sum__label">{{ t('shops.total.gmv7') }}</span>
+            <strong class="shops-sum__value">{{ money(overview.total.gmv7, false) }}</strong>
+            <small v-if="change(overview.total.gmv7, overview.total.gmvPrev7) !== undefined" class="shops-chg" :class="trend(overview.total.gmv7, overview.total.gmvPrev7)">
+              <ArrowUpRight v-if="trend(overview.total.gmv7, overview.total.gmvPrev7) === 'up'" :size="12" /><ArrowDownRight v-else-if="trend(overview.total.gmv7, overview.total.gmvPrev7) === 'down'" :size="12" />{{ fmtChange(change(overview.total.gmv7, overview.total.gmvPrev7)) }} <span>{{ t('shops.vsPrevPeriod') }}</span>
+            </small>
+          </div>
         </section>
 
         <section class="shops-view__grid">
-          <button v-for="card in overview.cards" :key="card.shop.shopKey" type="button" class="vg-card vg-card--interactive shop-biz" :data-testid="`shop-biz-${card.shop.shopKey}`" @click="router.push(`/shops/${encodeURIComponent(card.shop.shopKey)}`)">
+          <button v-for="card in overview.cards" :key="card.shop.shopKey" type="button" class="vg-card shop-biz" :data-testid="`shop-biz-${card.shop.shopKey}`" @click="router.push(`/shops/${encodeURIComponent(card.shop.shopKey)}`)">
             <header class="shop-biz__head">
               <span class="shop-biz__avatar">{{ (card.shop.name || '?').slice(0, 1).toUpperCase() }}</span>
               <span class="shop-biz__name">
                 <strong class="vg-ellipsis">{{ card.shop.name }}</strong>
                 <small v-if="isSyncing(card.shop.shopKey)" class="shop-biz__fresh is-syncing"><LoaderCircle :size="11" class="vg-spin" />{{ t('shops.syncingShop') }}</small>
-                <small v-else class="shop-biz__fresh" :class="{ 'is-stale': freshness(card).stale }" :data-testid="`shop-fresh-${card.shop.shopKey}`"><Clock :size="11" />{{ card.shop.region }} · {{ freshness(card).text }}</small>
+                <small v-else class="shop-biz__fresh" :class="{ 'is-stale': freshness(card).stale }" :data-testid="`shop-fresh-${card.shop.shopKey}`"><span class="shop-biz__region">{{ card.shop.region }}</span>{{ freshness(card).text }}</small>
               </span>
-              <ChevronRight :size="16" class="vg-muted" />
+              <ChevronRight :size="16" class="shop-biz__chevron" />
             </header>
+
             <div class="shop-biz__main">
-              <div>
-                <span class="vg-muted shop-biz__label">{{ t('shops.metric.todayGmv') }}</span>
+              <div class="shop-biz__headline">
+                <span class="shop-biz__label">{{ t('shops.metric.todayGmv') }}</span>
                 <strong class="shop-biz__gmv">{{ money(card.today?.gmv, false) }}</strong>
-                <span class="shop-biz__vs">
-                  {{ t('shops.vsYesterday', { value: money(card.yesterday?.gmv) }) }}
-                </span>
+                <span class="shop-biz__vs">{{ t('shops.vsYesterday', { value: money(card.yesterday?.gmv) }) }}</span>
               </div>
-              <svg viewBox="0 0 100 32" preserveAspectRatio="none" class="shop-biz__spark" aria-hidden="true"><path :d="sparkPath(card)" /></svg>
+              <svg viewBox="0 0 100 32" preserveAspectRatio="none" class="shop-biz__spark" aria-hidden="true">
+                <defs><linearGradient :id="`spark-${card.shop.shopKey}`" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--vg-accent)" stop-opacity="0.28" /><stop offset="1" stop-color="var(--vg-accent)" stop-opacity="0" /></linearGradient></defs>
+                <path :d="`${sparkPath(card)} L100,32 L0,32 Z`" :fill="`url(#spark-${card.shop.shopKey})`" stroke="none" />
+                <path :d="sparkPath(card)" class="shop-biz__spark-line" />
+              </svg>
             </div>
+
             <dl class="shop-biz__facts">
               <div><dt>{{ t('shops.metric.orders') }}</dt><dd>{{ fmtNumber(card.today?.orders, locale) }}</dd></div>
               <div><dt>{{ t('shops.metric.visitors') }}</dt><dd>{{ fmtNumber(card.today?.visitors, locale) }}</dd></div>
@@ -182,25 +232,27 @@ onBeforeUnmount(() => clearInterval(clock))
                 <dt>{{ t('shops.metric.gmv7') }}</dt>
                 <dd>
                   {{ money(card.gmv7) }}
-                  <span v-if="change(card.gmv7, card.gmvPrev7) !== undefined" class="shop-biz__chg" :class="(change(card.gmv7, card.gmvPrev7) || 0) >= 0 ? 'up' : 'down'">
-                    <ArrowUpRight v-if="(change(card.gmv7, card.gmvPrev7) || 0) >= 0" :size="11" /><ArrowDownRight v-else :size="11" />{{ fmtChange(change(card.gmv7, card.gmvPrev7)) }}
-                  </span>
+                  <span v-if="change(card.gmv7, card.gmvPrev7) !== undefined" class="shops-chg" :class="trend(card.gmv7, card.gmvPrev7)">{{ fmtChange(change(card.gmv7, card.gmvPrev7)) }}</span>
+                </dd>
+              </div>
+              <div>
+                <dt>{{ t('shops.metric.profit7') }}</dt>
+                <dd :class="{ 'is-neg': (card.profit7 ?? 0) < 0 }">
+                  {{ card.profit7 === undefined ? '—' : money(card.profit7) }}
+                  <span v-if="card.margin7 !== undefined" class="shop-biz__margin">{{ fmtPercent(card.margin7, locale, 0) }}</span>
                 </dd>
               </div>
             </dl>
-            <div v-if="card.profit7 !== undefined" class="shop-biz__profit" :class="{ 'is-neg': card.profit7 < 0 }">
-              <span>{{ t('shops.metric.profit7') }}</span>
-              <strong>{{ money(card.profit7) }}</strong>
-              <small v-if="card.margin7 !== undefined">{{ t('shops.profit.margin', { value: fmtPercent(card.margin7, locale, 1) }) }}</small>
-            </div>
-            <ShopFindings v-if="card.topFinding" :findings="[card.topFinding]" compact class="shop-biz__finding" />
-            <div v-if="visibleAlerts(card).length || card.shop.state.stageErrors" class="shop-biz__alerts">
-              <span v-for="alert in visibleAlerts(card)" :key="alert.kind" class="vg-pill" :class="alertTone(alert)" :title="alert.kind === 'syncFailed' ? friendlySyncError(card.shop.state.lastSyncError, locale) : undefined">{{ alertText(alert) }}</span>
-              <span v-for="(error, stage) in card.shop.state.stageErrors || {}" :key="stage" class="vg-pill vg-pill--amber" :title="friendlyStageError(stage as SiSyncStage, error, locale)">{{ friendlyStageError(stage as SiSyncStage, error, locale, true) }}</span>
-            </div>
+
+            <footer class="shop-biz__foot">
+              <span v-for="(item, index) in notes(card).slice(0, 3)" :key="index" class="shop-biz__issue" :class="`is-${item.tone}`" :title="item.title || item.text">
+                <i></i><span class="vg-ellipsis">{{ item.text }}</span>
+                <span v-if="index === 2 && notes(card).length > 3" class="shop-biz__more" :title="notes(card).slice(3).map((rest) => rest.title || rest.text).join(LINE)">+{{ notes(card).length - 3 }}</span>
+              </span>
+            </footer>
           </button>
         </section>
-        <p class="vg-muted shops-view__note">{{ t('shops.dataNote') }}</p>
+        <p class="shops-view__note">{{ t('shops.dataNote') }}</p>
       </template>
       <section v-else-if="loading" class="vg-empty"><LoaderCircle :size="22" class="vg-spin" /></section>
     </template>
@@ -209,37 +261,66 @@ onBeforeUnmount(() => clearInterval(clock))
 </template>
 
 <style scoped>
-.shops-view { display: flex; flex-direction: column; gap: 14px; }
+.shops-view { display: flex; flex-direction: column; gap: 16px; }
 .shops-view__tabs { overflow-y: hidden; flex-shrink: 0; }
 .shops-view__sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.shops-view__totals { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.shops-view__totals small { font-size: 11px; margin-top: 2px; }
-.shops-view__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
-.shops-view__note { font-size: 12px; margin: 0; }
+.shops-view__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+.shops-view__note { font-size: 11.5px; line-height: 1.6; margin: 0; color: var(--theme-text-muted); }
 .shops-view__notice > span { flex: 1; white-space: pre-line; }
-.shop-biz__fresh { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--theme-text-muted); }
-.shop-biz__fresh.is-stale { color: var(--vg-amber); font-weight: 600; }
-.shop-biz__fresh.is-syncing { color: var(--vg-accent); }
-.shop-biz { display: flex; flex-direction: column; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+
+.shops-sum { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); padding: 0; overflow: hidden; }
+.shops-sum__item { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px; border-left: 1px solid var(--theme-divider); min-width: 0; }
+.shops-sum__item:first-child { border-left: 0; }
+.shops-sum__label { font-size: 12px; color: var(--theme-text-muted); }
+.shops-sum__value { font-size: 22px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; }
+.shops-sum__item--lead .shops-sum__value { font-size: 26px; }
+.shops-sum__item small { font-size: 11.5px; color: var(--theme-text-muted); }
+
+.shops-chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.shops-chg > span { font-weight: 400; color: var(--theme-text-muted); margin-left: 2px; }
+.shops-chg.up { color: var(--vg-green, #16a34a) !important; }
+.shops-chg.down { color: var(--vg-red) !important; }
+.shops-chg.flat { color: var(--theme-text-muted) !important; }
+
+.shop-biz { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 16px; padding: 18px 18px 0; text-align: left; font: inherit; color: inherit; cursor: pointer; overflow: hidden; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.shop-biz > * { align-self: stretch; }
+.shop-biz:hover { border-color: color-mix(in srgb, var(--vg-accent) 45%, var(--theme-border)); box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
+.shop-biz:hover .shop-biz__chevron { color: var(--vg-accent); transform: translateX(2px); }
 .shop-biz__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.shop-biz__avatar { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; background: var(--vg-accent-soft); color: var(--vg-accent); }
-.shop-biz__name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.shop-biz__main { display: grid; grid-template-columns: 1fr 120px; align-items: end; gap: 10px; }
-.shop-biz__main > div { display: flex; flex-direction: column; min-width: 0; }
-.shop-biz__label { font-size: 12px; }
-.shop-biz__gmv { font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.shop-biz__vs { font-size: 11px; color: var(--theme-text-muted); }
-.shop-biz__spark { width: 120px; height: 34px; }
-.shop-biz__spark path { fill: none; stroke: var(--vg-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.shop-biz__facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; }
-.shop-biz__facts dt { font-size: 11px; color: var(--theme-text-muted); }
-.shop-biz__facts dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shop-biz__chg { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; }
-.shop-biz__chg.up { color: var(--vg-green, #16a34a); }
-.shop-biz__chg.down { color: var(--vg-red); }
-.shop-biz__alerts { display: flex; flex-wrap: wrap; gap: 6px; }
-.shop-biz__profit { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--theme-text-muted); }
-.shop-biz__profit strong { font-size: 14px; color: var(--vg-green, #16a34a); font-variant-numeric: tabular-nums; }
-.shop-biz__profit.is-neg strong { color: var(--vg-red); }
-.shop-biz__finding { padding: 8px 10px; border-radius: 8px; background: var(--theme-panel-soft); }
+.shop-biz__avatar { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; font-weight: 700; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); color: var(--theme-text-secondary); }
+.shop-biz__name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.shop-biz__name strong { font-size: 14px; font-weight: 600; }
+.shop-biz__chevron { color: var(--theme-text-muted); transition: transform .15s, color .15s; flex-shrink: 0; }
+.shop-biz__fresh { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--theme-text-muted); }
+.shop-biz__fresh.is-stale { color: var(--vg-amber); }
+.shop-biz__fresh.is-syncing { color: var(--vg-accent); }
+.shop-biz__region { padding: 0 5px; border-radius: 4px; border: 1px solid var(--theme-border); font-size: 10px; font-weight: 600; line-height: 15px; color: var(--theme-text-secondary); }
+.shop-biz__main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 42%); align-items: end; gap: 12px; }
+.shop-biz__headline { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shop-biz__label { font-size: 12px; color: var(--theme-text-muted); }
+.shop-biz__gmv { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.shop-biz__vs { font-size: 11.5px; color: var(--theme-text-muted); }
+.shop-biz__spark { width: 100%; height: 44px; overflow: visible; }
+.shop-biz__spark-line { fill: none; stroke: var(--vg-accent); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.shop-biz__facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; padding: 12px 0; border-top: 1px solid var(--theme-divider); }
+.shop-biz__facts > div { min-width: 0; padding: 0 10px; border-left: 1px solid var(--theme-divider); }
+.shop-biz__facts > div:first-child { padding-left: 0; border-left: 0; }
+.shop-biz__facts dt { font-size: 11px; color: var(--theme-text-muted); white-space: nowrap; }
+.shop-biz__facts dd { margin: 3px 0 0; display: flex; flex-direction: column; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-biz__facts dd.is-neg { color: var(--vg-red); }
+.shop-biz__facts .shops-chg, .shop-biz__margin { font-size: 11px; }
+.shop-biz__margin { font-weight: 500; color: var(--theme-text-muted); }
+.shop-biz__foot { display: flex; flex-direction: column; gap: 6px; margin: 0 -18px; padding: 10px 18px; border-top: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--theme-panel-soft) 60%, transparent); }
+.shop-biz__issue { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--theme-text-secondary); }
+.shop-biz__issue > .vg-ellipsis { flex: 1; min-width: 0; }
+.shop-biz__issue i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--vg-green, #16a34a); }
+.shop-biz__issue.is-warn i { background: var(--vg-amber); }
+.shop-biz__issue.is-danger i { background: var(--vg-red); }
+.shop-biz__issue.is-danger { color: var(--theme-text); }
+.shop-biz__more { flex-shrink: 0; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--theme-border); font-size: 11px; color: var(--theme-text-muted); }
+@media (max-width: 960px) {
+  .shops-sum { grid-template-columns: 1fr 1fr; }
+  .shops-sum__item:nth-child(3) { border-left: 0; }
+  .shops-sum__item:nth-child(n + 3) { border-top: 1px solid var(--theme-divider); }
+}
 </style>

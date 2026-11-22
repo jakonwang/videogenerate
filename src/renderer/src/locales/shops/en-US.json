@@ -113,7 +113,12 @@
       "returns": "Returns to handle",
       "negativeReviews": "Bad reviews",
       "outOfStock": "Sold-out SKUs"
-    }
+    },
+    "othersPass": "The other {n} indicators all pass",
+    "showAll": "Show all",
+    "hide": "Hide",
+    "indicators": "Service indicators",
+    "todoTitle": "To-do"
   },
   "report": {
     "button": "Morning report",
@@ -170,10 +175,27 @@
     "unitCost": "Unit cost",
     "costPlaceholder": "Cost per unit",
     "moreInSales": "Enter more in Sales & Inventory",
-    "note": "The fee rate comes from this shop's settlements of the last 45 days; refunds and subsidies follow the actual settlement."
+    "note": "The fee rate comes from this shop's settlements of the last 45 days; refunds and subsidies follow the actual settlement.",
+    "emptyTitle": "Profit not available yet",
+    "emptyDesc": "To estimate profit we need to know the platform fees, which takes at least 20 settled orders for this shop. It appears automatically after a sync; new shops usually need 1–2 weeks of settlements.",
+    "subtitle": "estimated by order date",
+    "result": "Est. profit",
+    "setup": "Setup"
   },
   "syncDone": "Sync finished; data is up to date",
   "dismiss": "Got it",
   "syncingShop": "Syncing…",
-  "unchanged": "Flat"
+  "unchanged": "Flat",
+  "findings": {
+    "problems": "Needs attention",
+    "chances": "Opportunities",
+    "more": "{n} more",
+    "less": "Show less"
+  },
+  "issues": "{n} things to check",
+  "allClear": "All good",
+  "kpiTitle": "Key metrics",
+  "periodLabel": "Last {n} days · vs previous period",
+  "calendarLess": "Less",
+  "calendarMore": "More"
 }

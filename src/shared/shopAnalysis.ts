@@ -110,6 +110,14 @@ function pct(value: number | undefined) {
   return `${rounded > 0 ? '+' : ''}${rounded}%`
 }
 
+/** A readable name for a SKU: its code, or a short product name / id while it has no code. */
+export function skuLabel(sku: Pick<SiCodeSummary, 'key' | 'mapped' | 'name'>) {
+  if (sku.mapped) return sku.key
+  const name = sku.name && !sku.name.startsWith('#') ? sku.name : ''
+  if (name) return name.length > 18 ? `${name.slice(0, 18)}…` : name
+  return `ID …${sku.key.replace('#', '').slice(-6)}`
+}
+
 export type AnalyzeInput = {
   shopKey: string
   today: string
@@ -117,6 +125,8 @@ export type AnalyzeInput = {
   skus: SiCodeSummary[]
   health?: ShopHealth
   profit?: { profit7: number; margin7?: number; adShare7?: number; costCoverage?: number }
+  /** Currency symbol of the shop, for money in the wording. */
+  currency?: string
   /** Thresholds; defaults suit most shops. */
   moveThreshold?: number
 }
@@ -193,14 +203,14 @@ export function analyzeShop(input: AnalyzeInput): ShopAnalysis {
   const out = selling.filter((sku) => sku.risk === 'out').sort((a, b) => b.amount30 - a.amount30)
   for (const sku of out.slice(0, 3)) {
     const perDay = sku.amount30 / 30
-    findings.push({ id: `out-${sku.key}`, level: 'error', key: 'skuOut', params: { code: sku.key, perDay: Math.round(perDay) }, action: 'restock' })
+    findings.push({ id: `out-${sku.key}`, level: 'error', key: 'skuOut', params: { code: skuLabel(sku), perDay: Math.round(perDay), currency: input.currency || '' }, action: 'restock' })
   }
   const urgent = selling.filter((sku) => sku.risk === 'urgent').sort((a, b) => b.amount30 - a.amount30)
   for (const sku of urgent.slice(0, 3)) {
-    findings.push({ id: `urgent-${sku.key}`, level: 'warning', key: 'skuUrgent', params: { code: sku.key, days: Math.max(0, Math.round((sku.daysLeft ?? 0) * 10) / 10), qty: sku.suggestQty }, action: 'restock' })
+    findings.push({ id: `urgent-${sku.key}`, level: 'warning', key: 'skuUrgent', params: { code: skuLabel(sku), days: Math.max(0, Math.round((sku.daysLeft ?? 0) * 10) / 10), qty: sku.suggestQty }, action: 'restock' })
   }
   for (const sku of input.skus.filter((item) => item.tag === 'hot').slice(0, 3)) {
-    findings.push({ id: `hot-${sku.key}`, level: 'growth', key: 'skuHot', params: { code: sku.mapped ? sku.key : sku.name.slice(0, 24), units: sku.units7, change: pct(sku.growth7) }, action: 'pushHot' })
+    findings.push({ id: `hot-${sku.key}`, level: 'growth', key: 'skuHot', params: { code: skuLabel(sku), units: sku.units7, change: sku.growth7 === undefined ? '' : pct(sku.growth7) }, action: 'pushHot' })
   }
 
   // 6. Service health and to-dos from the seller center.

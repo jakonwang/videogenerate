@@ -81,22 +81,33 @@ watch(() => props.open, (open) => { if (open) void load() })
         </div>
         <div class="vg-dialog__body report-dialog__body">
           <section class="report-settings">
-            <label class="report-row"><input type="checkbox" :checked="settings.enabled" data-testid="report-enabled" @change="save({ enabled: ($event.target as HTMLInputElement).checked })" /> {{ t('shops.report.enabled') }}</label>
-            <label class="report-row">
-              {{ t('shops.report.hour') }}
-              <select class="vg-select vg-select--sm" :value="settings.hour" @change="save({ hour: Number(($event.target as HTMLSelectElement).value) })">
-                <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}:00</option>
-              </select>
-            </label>
-            <label class="report-row"><input type="checkbox" :checked="settings.desktop" @change="save({ desktop: ($event.target as HTMLInputElement).checked })" /> {{ t('shops.report.desktop') }}</label>
-            <small v-if="!desktopAllowed" class="vg-muted report-hint">{{ t('shops.report.desktopOff') }}</small>
-            <label class="report-row"><input type="checkbox" :checked="settings.feishu" @change="save({ feishu: ($event.target as HTMLInputElement).checked })" /> {{ t('shops.report.feishu') }}</label>
-            <small class="report-hint" :class="feishuReady ? 'vg-muted' : 'report-hint--warn'">
-              {{ feishuReady ? t('shops.report.feishuReady') : t('shops.report.feishuMissing') }}
-              <button type="button" class="vg-link" @click="emit('close'); router.push({ path: '/settings', query: { section: 'automation' } })">{{ t('shops.report.feishuSetup') }}</button>
-            </small>
-            <p class="vg-muted report-hint">{{ t('shops.report.how', { hour: String(settings.hour).padStart(2, '0') }) }}</p>
-            <button type="button" class="vg-btn vg-btn--primary" :disabled="busy" data-testid="report-send" @click="sendNow"><LoaderCircle v-if="busy" :size="14" class="vg-spin" /><Send v-else :size="14" />{{ t('shops.report.sendNow') }}</button>
+            <div class="report-panel">
+              <button type="button" class="report-row" data-testid="report-enabled" @click="save({ enabled: !settings.enabled })">
+                <span class="report-row__text">{{ t('shops.report.enabled') }}</span>
+                <span class="vg-switch" :class="{ 'is-on': settings.enabled }"><span class="vg-switch__track"></span></span>
+              </button>
+              <label class="report-row">
+                <span class="report-row__text">{{ t('shops.report.hour') }}</span>
+                <select class="vg-select vg-select--sm report-row__select" :value="settings.hour" @change="save({ hour: Number(($event.target as HTMLSelectElement).value) })">
+                  <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}:00</option>
+                </select>
+              </label>
+            </div>
+            <div class="report-panel">
+              <button type="button" class="report-row" @click="save({ desktop: !settings.desktop })">
+                <span class="report-row__text">{{ t('shops.report.desktop') }}<small v-if="!desktopAllowed" class="report-hint--warn">{{ t('shops.report.desktopOff') }}</small></span>
+                <span class="vg-switch" :class="{ 'is-on': settings.desktop }"><span class="vg-switch__track"></span></span>
+              </button>
+              <button type="button" class="report-row" @click="save({ feishu: !settings.feishu })">
+                <span class="report-row__text">{{ t('shops.report.feishu') }}<small :class="feishuReady ? '' : 'report-hint--warn'">{{ feishuReady ? t('shops.report.feishuReady') : t('shops.report.feishuMissing') }}</small></span>
+                <span class="vg-switch" :class="{ 'is-on': settings.feishu }"><span class="vg-switch__track"></span></span>
+              </button>
+              <div v-if="!feishuReady" class="report-row report-row--link">
+                <button type="button" class="vg-link" @click="emit('close'); router.push({ path: '/settings', query: { section: 'automation' } })">{{ t('shops.report.feishuSetup') }} →</button>
+              </div>
+            </div>
+            <p class="report-hint">{{ t('shops.report.how', { hour: String(settings.hour).padStart(2, '0') }) }}</p>
+            <button type="button" class="vg-btn vg-btn--primary report-send" :disabled="busy" data-testid="report-send" @click="sendNow"><LoaderCircle v-if="busy" :size="14" class="vg-spin" /><Send v-else :size="14" />{{ t('shops.report.sendNow') }}</button>
             <div v-if="message" class="vg-notice vg-notice--accent"><span>{{ message }}</span></div>
             <div v-if="errorText" class="vg-notice vg-notice--danger"><span>{{ errorText }}</span></div>
           </section>
@@ -110,15 +121,17 @@ watch(() => props.open, (open) => { if (open) void load() })
             <p v-if="!current" class="vg-muted">{{ t('shops.report.none') }}</p>
             <template v-else>
               <article v-for="shop in current.shops" :key="shop.shopKey" class="report-shop" data-testid="report-shop">
-                <header>
-                  <strong>{{ shop.name }}</strong>
-                  <span v-if="shop.analysis.yesterday" class="vg-muted">
-                    {{ t('shops.report.yesterday') }} {{ fmtMoney(shop.analysis.yesterday.gmv, locale, shop.region) }}
-                    <template v-if="shop.analysis.gmvChangeDay !== undefined"> · {{ t('shops.report.vsLastWeek') }} {{ fmtChange(shop.analysis.gmvChangeDay) }}</template>
+                <header class="report-shop__head">
+                  <span class="report-shop__avatar">{{ (shop.name || '?').slice(0, 1).toUpperCase() }}</span>
+                  <strong class="vg-ellipsis">{{ shop.name }}</strong>
+                  <span v-if="shop.analysis.yesterday" class="report-shop__figure">
+                    <small>{{ t('shops.report.yesterday') }}</small>
+                    <b>{{ fmtMoney(shop.analysis.yesterday.gmv, locale, shop.region) }}</b>
+                    <em v-if="shop.analysis.gmvChangeDay !== undefined" :class="shop.analysis.gmvChangeDay >= 0 ? 'up' : 'down'">{{ t('shops.report.vsLastWeek') }} {{ fmtChange(shop.analysis.gmvChangeDay) }}</em>
                   </span>
-                  <span v-else class="vg-muted">{{ t('shops.report.noData') }}</span>
+                  <span v-else class="report-shop__figure"><small>{{ t('shops.report.noData') }}</small></span>
                 </header>
-                <ShopFindings :findings="shop.analysis.findings" :limit="8" />
+                <ShopFindings :findings="shop.analysis.findings" grouped :per-group="3" />
               </article>
             </template>
           </section>
@@ -130,15 +143,32 @@ watch(() => props.open, (open) => { if (open) void load() })
 
 <style scoped>
 .report-dialog { max-height: 88vh; display: flex; flex-direction: column; }
-.report-dialog__body { display: grid; grid-template-columns: 280px 1fr; gap: 18px; overflow: auto; }
-.report-settings { display: flex; flex-direction: column; gap: 10px; }
-.report-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.report-hint { font-size: 12px; line-height: 1.5; margin: 0; }
-.report-hint--warn { color: var(--vg-amber); }
+.report-dialog__body { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; overflow: auto; align-items: start; }
+.report-settings { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; }
+.report-panel { display: flex; flex-direction: column; border: 1px solid var(--theme-border); border-radius: 10px; overflow: hidden; }
+.report-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border: 0; border-top: 1px solid var(--theme-divider); background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; }
+.report-row:first-child { border-top: 0; }
+button.report-row { cursor: pointer; transition: background .15s; }
+button.report-row:hover { background: var(--theme-panel-soft); }
+.report-row__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.report-row__text small { font-size: 11.5px; line-height: 1.5; color: var(--theme-text-muted); }
+.report-row__select { width: 96px; }
+.report-row--link { padding-top: 0; border-top: 0; }
+.report-row .vg-switch { pointer-events: none; }
+.report-hint { font-size: 12px; line-height: 1.6; margin: 0; color: var(--theme-text-muted); }
+.report-hint--warn { color: var(--vg-amber) !important; }
+.report-send { width: 100%; justify-content: center; }
 .report-preview { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .report-preview__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.report-shop { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--theme-border); border-radius: 8px; }
-.report-shop header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.report-shop header span { font-size: 12px; }
-@media (max-width: 900px) { .report-dialog__body { grid-template-columns: 1fr; } }
+.report-shop { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border: 1px solid var(--theme-border); border-radius: 10px; }
+.report-shop__head { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid var(--theme-divider); }
+.report-shop__head > strong { flex: 1; min-width: 0; font-size: 14px; }
+.report-shop__avatar { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: 700; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); color: var(--theme-text-secondary); }
+.report-shop__figure { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+.report-shop__figure small { font-size: 11.5px; color: var(--theme-text-muted); }
+.report-shop__figure b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.report-shop__figure em { font-style: normal; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.report-shop__figure em.up { color: var(--vg-green, #16a34a); }
+.report-shop__figure em.down { color: var(--vg-red); }
+@media (max-width: 900px) { .report-dialog__body { grid-template-columns: 1fr; } .report-settings { position: static; } }
 </style>
