@@ -34,7 +34,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-root h-screen w-screen overflow-hidden">
+  <div class="app-root h-full w-full overflow-hidden">
     <RouterView />
     <DesignInspectorOverlay v-if="showDesignInspectorOverlay" />
     <UpdateReadyModal

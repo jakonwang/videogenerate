@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Klipmill</title>
+    <style>
+      /* The app scrolls inside its own panes; the window itself never scrolls. Without this a
+         sub-pixel rounding at some display scales adds a window scrollbar on both edges. */
+      html, body, #app { height: 100%; margin: 0; overflow: hidden; }
+    </style>
   </head>
   <body class="bg-zinc-950 text-zinc-100">
     <div id="app"></div>
