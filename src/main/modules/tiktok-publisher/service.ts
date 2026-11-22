@@ -194,8 +194,11 @@ function responseStatus(response: any, job: any) {
 }
 function errorDetails(error: any, fallback = 'CreatOK publish failed') {
   const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {}
+  const message = String(metadata.message || error?.message || fallback)
   return {
-    message: String(metadata.message || error?.message || fallback),
+    message: /product link title contains offensive language/i.test(message)
+      ? `商品链接文字被 TikTok 判为含违规词，请在「批量编辑 → 关联商品 → 商品链接文字」里改写后重新提交。（${message}）`
+      : message,
     reason: metadata.reason,
     stage: metadata.stage,
     requestId: metadata.request_id || metadata.requestId,

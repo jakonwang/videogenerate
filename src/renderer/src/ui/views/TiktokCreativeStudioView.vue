@@ -8,6 +8,7 @@ import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import StyleReferenceCard, { type StyleReference } from "../components/StyleReferenceCard.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
+import { buildProductLinkTitle, PRODUCT_LINK_TITLE_MAX_LENGTH } from "../../../../shared/productLinkTitle";
 import {
   Activity,
   AlertTriangle,
@@ -261,6 +262,8 @@ const publisherSyncError = ref("");
 const publisherConnection = ref("");
 const publisherProduct = ref("");
 const publisherTitle = ref("");
+/** Text on the TikTok product link; empty = built from the product name. */
+const publisherLinkTitle = ref("");
 const publisherDescription = ref("");
 const publisherTags = ref<string[]>([
   "#TikTok",
@@ -721,6 +724,9 @@ const publisherConnectionItem = computed(() =>
 );
 const publisherProductItem = computed(() =>
   publisherProducts.value.find((item) => item.id === publisherProduct.value),
+);
+const publisherAutoLinkTitle = computed(() =>
+  buildProductLinkTitle({ productTitle: publisherProductItem.value?.title || publisherProductItem.value?.name || "" }),
 );
 const publisherMusicItems = computed(() => {
   const favoriteIds = new Set(
@@ -2202,6 +2208,7 @@ async function applyPublisherDefaults(ids?: string[]) {
     ) {
       item.productId = publisherProduct.value || item.productId;
       item.productTitle = publisherProductItem.value?.title || item.productTitle;
+      item.productLinkTitle = publisherLinkTitle.value.trim() || undefined;
     }
     if (
       publisherEditorFields.music &&
@@ -2299,6 +2306,7 @@ async function applyPublisherProductToSelection() {
   )) {
     item.productId = publisherProduct.value;
     item.productTitle = product?.title || product?.name || item.productTitle;
+    item.productLinkTitle = publisherLinkTitle.value.trim() || undefined;
     await savePublisherRow(item, false);
   }
   publisherTasks.value = await window.api.tiktokPublisher.refresh();
@@ -2352,6 +2360,7 @@ async function savePublisherRow(item: any, refresh = true) {
       connectionUid: item.connectionUid || undefined,
       productId: item.productId || undefined,
       productTitle: item.productTitle || undefined,
+      productLinkTitle: item.productLinkTitle || undefined,
       videoTitle: item.videoTitle || undefined,
       description: item.description || undefined,
       tags: toPlainPublisherTags(item.tags),
@@ -2729,6 +2738,8 @@ async function choosePublisherConnection(uid: string) {
   else void loadPublisherProducts();
 }
 async function choosePublisherProduct(id: string) {
+  // A typed link title belongs to the previous product.
+  if (id !== publisherProduct.value) publisherLinkTitle.value = "";
   publisherProduct.value = id;
   publisherSyncError.value = "";
   if (publisherEditId.value) {
@@ -2736,6 +2747,7 @@ async function choosePublisherProduct(id: string) {
       (row) => String(row.id) === String(publisherEditId.value),
     );
     if (item) {
+      if (item.productId !== id) item.productLinkTitle = undefined;
       item.productId = id;
       item.productTitle =
         publisherProducts.value.find(
@@ -2879,6 +2891,7 @@ async function editPublisherTask(item: any) {
   publisherEditId.value = item.id;
   publisherConnection.value = item.connectionUid || "";
   publisherProduct.value = item.productId || "";
+  publisherLinkTitle.value = item.productLinkTitle || "";
   publisherTitle.value = item.videoTitle || "";
   publisherDescription.value = item.description || "";
   publisherSchedule.value = item.scheduleAt
@@ -3573,6 +3586,17 @@ onBeforeUnmount(() => {
                 <button class="pub-picker" type="button" @click="openPublisherBatchSelector('product')">
                   <Package :size="15" /><span :class="{ 'is-empty': !publisherProductItem }">{{ publisherProductItem?.title || "选择商品" }}</span><ChevronRight :size="14" />
                 </button>
+                <label v-if="publisherProduct" class="pub-linktitle">
+                  <span class="pub-linktitle__label">商品链接文字</span>
+                  <input
+                    v-model="publisherLinkTitle"
+                    class="vg-input"
+                    type="text"
+                    :maxlength="PRODUCT_LINK_TITLE_MAX_LENGTH"
+                    :placeholder="publisherAutoLinkTitle || '留空自动取商品名'"
+                  />
+                  <small class="pub-linktitle__hint">显示在视频的商品链接上，最多 {{ PRODUCT_LINK_TITLE_MAX_LENGTH }} 字。留空自动取商品名；TikTok 说含违规词时改这里。</small>
+                </label>
               </div>
             </section>
 
