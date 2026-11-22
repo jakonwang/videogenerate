@@ -2,7 +2,7 @@
 /** 工具箱 — same layout as the desktop PluginsView: grouped tool cards with search. */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, BarChart3, Captions, Download, Droplets, Film, ImagePlus, PackageSearch, Replace, Rocket, Scissors, Search, Stamp, Store, Warehouse, Wrench } from 'lucide-vue-next'
+import { ArrowRight, BarChart3, Boxes, Captions, Download, Droplets, Film, ImagePlus, PackageSearch, Replace, Rocket, Scissors, Search, Stamp, Store, Warehouse, Wrench } from 'lucide-vue-next'
 import PageHeader from '@/components/PageHeader.vue'
 
 const router = useRouter()
@@ -38,6 +38,7 @@ const GROUPS = [
       { name: 'TikTok 上架助手', desc: '生成商品标题、卖点和图片，导出上架表格', icon: Store, tone: 'amber', to: '/listings' },
       { name: '达人管理', desc: '多店铺寄样管理与达人履约跟进', icon: PackageSearch, tone: 'violet', to: '/creators' },
       { name: 'GMV MAX 优化器', desc: '分析投放数据，给出预算与 ROI 调整建议', icon: Rocket, tone: 'green', to: '/gmv' },
+      { name: '销售与库存', desc: '多店铺按统一 SKU 看每日销量、库存预警和爆款', icon: Boxes, tone: 'green', to: '/sales' },
       { name: '店小秘库存分析', desc: '同步发货量，预测断货并提示补货', icon: Warehouse, tone: 'amber', to: '/inventory' },
       { name: '数据复盘', desc: '生产线产出、通过率和发布复盘', icon: BarChart3, tone: 'blue', to: '/business?tab=insights' },
     ],

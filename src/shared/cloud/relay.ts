@@ -7,6 +7,8 @@ export const RELAY_MODULES = {
   tiktokGmvMax: { channel: 'plugin:tiktokGmvMax:', blocked: ['selectEvidenceAttachment', 'onSyncProgress'] },
   tiktokCreatorHub: { channel: 'plugin:tiktokCreatorHub:', blocked: ['openBackend', 'openCreatorBackend'] },
   dianxiaomiInventory: { channel: 'plugin:dianxiaomiInventory:', blocked: ['openLogin'] },
+  /** 店铺 / 销售与库存：经营、利润、早报、库存都在电脑上（商家后台登录在电脑上）；打开商家后台窗口只能在电脑端 */
+  sellerInventory: { channel: 'plugin:sellerInventory:', blocked: ['openSellerCenter'] },
   /** 混剪数据洞察：成片台账、效果分析、关联投放素材、送去发布 */
   mixStudio: { channel: 'mixStudio:', only: ['insights', 'ledger', 'refreshPerformance', 'listCreatives', 'linkCreative', 'sendToPublish', 'removeLedgerEntry'] },
   /** tk创意室右栏：账号调度（只有 cookie 数量，不含 cookie）、提示词版本、设置（只读） */

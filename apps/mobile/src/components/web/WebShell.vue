@@ -53,9 +53,9 @@ const navItems = computed(() => [
 
 const SECTIONS: Array<{ title: string; keys: string[] }> = [
   { title: '创作', keys: ['research', 'clone', 'creative-studio', 'live-photo', 'production', 'publish', 'insights'] },
-  { title: '资产', keys: ['products', 'models', 'assets', 'templates', 'works'] },
+  { title: '资产', keys: ['shops', 'products', 'models', 'assets', 'templates', 'works'] },
 ]
-const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/business?tab=creators', '/business?tab=inventory']
+const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/sales', '/business?tab=creators', '/business?tab=inventory']
 const byKey = new Map(MODULES.map((item) => [item.key, item]))
 const sections = computed(() =>
   SECTIONS.map((section) => ({

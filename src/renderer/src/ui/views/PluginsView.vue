@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import {
   ArrowRight,
   BarChart3,
+  Boxes,
   Captions,
   Download,
   Images,
@@ -41,6 +42,7 @@ const TOOLS: Tool[] = [
   { id: 'tiktok-listing-helper', route: '/plugins/tiktok-listing-helper', icon: ShoppingBag, tone: 'amber', group: 'operations' },
   { id: 'tiktok-creator-hub', route: '/plugins/tiktok-creator-hub', icon: Users, tone: 'violet', group: 'operations' },
   { id: 'tiktok-gmv-max-optimizer', route: '/plugins/tiktok-gmv-max-optimizer', icon: BarChart3, tone: 'accent', group: 'operations' },
+  { id: 'seller-inventory', route: '/plugins/seller-inventory', icon: Boxes, tone: 'green', group: 'operations' },
   { id: 'dianxiaomi-inventory', route: '/plugins/dianxiaomi-inventory', icon: Package, tone: 'amber', group: 'operations' },
 ]
 

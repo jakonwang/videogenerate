@@ -36,6 +36,7 @@
     "production": "Batch remix",
     "publish": "Publishing",
     "insights": "Overview",
+    "shops": "Shops",
     "products": "Products",
     "models": "Models",
     "assets": "Asset library",
@@ -737,6 +738,10 @@
       "tiktok-listing-helper": {
         "name": "TikTok listing helper",
         "desc": "Generate titles, selling points and images, then export listing sheets"
+      },
+      "seller-inventory": {
+        "name": "Sales & Inventory",
+        "desc": "Daily sales, stock alerts and best sellers across shops by SKU"
       },
       "tiktok-creator-hub": {
         "name": "Creators",

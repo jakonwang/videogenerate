@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BusinessCreative, BusinessCreators, BusinessInsights, BusinessInventory, SyncBusinessDigest } from '../../../shared/cloud/selling'
+import type { BusinessCreative, BusinessCreators, BusinessInsights, BusinessInventory, BusinessShops, SyncBusinessDigest } from '../../../shared/cloud/selling'
 
 /**
  * 经营摘要：把电脑端的数据复盘、达人中心、店小秘库存、tk创意室整理成一份小摘要给手机看。
@@ -22,6 +22,7 @@ export type BusinessSources = {
     auth: { authenticated: boolean }
     summary: { skuCount: number; outOfStockCount: number; reorderCount: number; lastSyncAt?: number }
   }>
+  shops?: () => Promise<BusinessShops>
   creative?: () => Promise<Array<{ id: string; productName?: string; status: string; totalShots: number; completedShots: number; failedShots: number; lastError?: string; createdAt: number }>>
 }
 
@@ -35,13 +36,15 @@ async function safely<T>(load: (() => Promise<T>) | undefined): Promise<T | unde
 }
 
 export async function buildBusinessDigest(sources: BusinessSources, now = Date.now()): Promise<SyncBusinessDigest> {
-  const [insights, creators, inventory, creative] = await Promise.all([
+  const [insights, creators, inventory, creative, shops] = await Promise.all([
     safely(sources.insights),
     safely(sources.creators),
     safely(sources.inventory),
     safely(sources.creative),
+    safely(sources.shops),
   ])
   const digest: SyncBusinessDigest = { generatedAt: now }
+  if (shops && shops.shops.length) digest.shops = shops
 
   if (insights && (insights.lines.some((line) => line.produced > 0) || insights.publish.total > 0)) {
     digest.insights = {
@@ -116,7 +119,7 @@ export function businessFingerprint(digest: SyncBusinessDigest) {
 }
 
 export function isEmptyBusinessDigest(digest: SyncBusinessDigest) {
-  return !digest.insights && !digest.creators && !digest.inventory && !digest.creative
+  return !digest.insights && !digest.creators && !digest.inventory && !digest.creative && !digest.shops
 }
 
 /** 默认数据源：按需加载电脑端各模块（只在需要时才加载） */
@@ -125,4 +128,5 @@ export const DEFAULT_BUSINESS_SOURCES: BusinessSources = {
   creators: async () => (await import('../tiktok-creator-hub/service')).creatorHubService.getOverview() as any,
   inventory: async () => (await import('../dianxiaomi-inventory/service')).dianxiaomiInventoryService.getDashboard() as any,
   creative: async () => (await import('../tiktok-creative-studio/service')).tiktokCreativeStudioService.listSummary() as any,
+  shops: async () => (await import('../seller-inventory/service')).sellerInventoryService.businessDigest(),
 }

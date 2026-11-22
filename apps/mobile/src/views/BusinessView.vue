@@ -13,22 +13,24 @@ import { getRecord, syncState } from '@/lib/sync'
  * 经营数据（手机版，只读）：数据复盘、达人中心、店小秘库存、tk创意室。
  * 数据来自电脑端（持有店铺 / 后台登录），每次同步时更新。
  */
-type Tab = 'insights' | 'creators' | 'inventory' | 'creative'
+type Tab = 'shops' | 'insights' | 'creators' | 'inventory' | 'creative'
 const route = useRoute()
 const router = useRouter()
 const TABS: Array<{ key: Tab; label: string }> = [
+  { key: 'shops', label: '店铺' },
   { key: 'insights', label: '复盘' },
   { key: 'creators', label: '达人' },
   { key: 'inventory', label: '库存' },
   { key: 'creative', label: '创意室' },
 ]
-const tab = ref<Tab>(TABS.some((t) => t.key === route.query.tab) ? (route.query.tab as Tab) : 'insights')
+const tab = ref<Tab>(TABS.some((t) => t.key === route.query.tab) ? (route.query.tab as Tab) : 'shops')
 // Sidebar entries (数据复盘 / 达人 / 库存 / tk创意室) switch tabs on the same page: follow the URL.
 watch(() => route.query.tab, (value) => {
   if (TABS.some((t) => t.key === value)) tab.value = value as Tab
 })
 const inWebShell = useInWebShell()
 const WEB_TITLE: Record<Tab, [string, string]> = {
+  shops: ['店铺', '每个店铺的今日经营、近 7 天利润和要处理的事（电脑端同步）。'],
   insights: ['数据复盘', '看看每条生产线产出了多少、通过了多少、发出去多少，再决定下一步。'],
   creators: ['达人管理', '多店铺寄样、达人履约与带货数据（电脑端同步）。'],
   inventory: ['店小秘库存', '缺货与需补货的 SKU（电脑端同步）。'],
@@ -56,12 +58,15 @@ const CREATIVE_STATUS: Record<string, { label: string; tone: string }> = {
   failed: { label: '失败', tone: 'red' },
 }
 const EMPTY_TEXT: Record<Tab, string> = {
+  shops: '电脑端还没有同步店铺数据（在电脑上打开「店铺」添加店铺并同步）',
   insights: '电脑端还没有生产数据，用复刻、图生视频等生成内容后会出现在这里',
   creators: '电脑端还没有接入达人中心店铺',
   inventory: '电脑端还没有在店小秘库存里添加 SKU',
   creative: '电脑端还没有 tk创意室任务',
 }
 
+const LEVEL_TONE: Record<string, string> = { error: 'lvl-bad', warning: 'lvl-warn', growth: 'lvl-good', ok: 'lvl-good' }
+const pctText = (value?: number) => (value === undefined || !Number.isFinite(value) ? '' : `${value >= 0 ? '+' : ''}${Math.round(value * 1000) / 10}%`)
 const money = (value: number) => (value >= 10000 ? `${(value / 10000).toFixed(1)}万` : value.toLocaleString('zh-CN', { maximumFractionDigits: 2 }))
 function trend(now: number, before?: number) {
   if (before === undefined || before === 0) return null
@@ -87,6 +92,30 @@ const hasSection = computed(() => Boolean(digest.value?.[tab.value]))
       <span class="m-empty__title">暂无数据</span>
       <span class="m-empty__text">{{ EMPTY_TEXT[tab] }}。数据在电脑端产生，登录同一账号后自动同步。</span>
     </div>
+
+    <!-- 店铺 -->
+    <template v-else-if="tab === 'shops' && digest?.shops">
+      <section v-for="shop in digest.shops.shops" :key="shop.shopKey" class="m-card shop">
+        <div class="shop__head">
+          <strong>{{ shop.name }}</strong>
+          <span v-if="shop.loginExpired" class="shop__tag bad">登录失效</span>
+          <span v-else-if="shop.urgentShip" class="shop__tag bad">{{ shop.urgentShip }} 单快超时发货</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><small>今日 GMV</small><strong>{{ shop.today ? money(shop.today.gmv) : '—' }}</strong><small v-if="shop.yesterdayGmv !== undefined">昨日 {{ money(shop.yesterdayGmv) }}<template v-if="shop.gmvChangeDay !== undefined"> · 比上周同日 {{ pctText(shop.gmvChangeDay) }}</template></small></div>
+          <div class="kpi"><small>近 7 天 GMV</small><strong>{{ money(shop.gmv7) }}</strong><small v-if="shop.gmvChange7 !== undefined" :class="shop.gmvChange7 >= 0 ? 'good' : 'bad'">{{ pctText(shop.gmvChange7) }}</small></div>
+          <div v-if="shop.profit7 !== undefined" class="kpi"><small>近 7 天利润</small><strong :class="shop.profit7 >= 0 ? 'good' : 'bad'">{{ money(shop.profit7) }}</strong><small v-if="shop.margin7 !== undefined">利润率 {{ pctText(shop.margin7).replace('+', '') }}</small></div>
+          <div v-if="shop.today" class="kpi"><small>今日订单 / 访客</small><strong>{{ shop.today.orders }} / {{ shop.today.visitors }}</strong><small>转化 {{ (shop.today.conversion * 100).toFixed(2) }}%</small></div>
+        </div>
+        <ul class="shop__findings">
+          <li v-for="(finding, index) in shop.findings" :key="index" :class="LEVEL_TONE[finding.level]">
+            <span>{{ finding.text }}</span>
+            <small v-if="finding.action" class="m-muted">→ {{ finding.action }}</small>
+          </li>
+        </ul>
+      </section>
+      <p class="m-muted small note">今天和昨天是实时数据；利润按平台费率、成本价和广告费估算。详细数据和设置在电脑端或网页的「店铺」。</p>
+    </template>
 
     <!-- 数据复盘 -->
     <template v-else-if="tab === 'insights' && digest?.insights">
@@ -214,8 +243,18 @@ const hasSection = computed(() => Boolean(digest.value?.[tab.value]))
 
 <style scoped>
 .small { font-size: 12px; }
+.shop { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.shop__head { display: flex; align-items: center; gap: 8px; }
+.shop__head strong { font-size: 16px; flex: 1; }
+.shop__tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--vg-red, #ef4444) 15%, transparent); }
+.shop__findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.shop__findings li { display: flex; flex-direction: column; gap: 2px; padding-left: 10px; border-left: 3px solid var(--theme-border); font-size: 13px; line-height: 1.5; }
+.shop__findings li.lvl-bad { border-left-color: var(--vg-red, #ef4444); }
+.shop__findings li.lvl-warn { border-left-color: var(--vg-amber, #f59e0b); }
+.shop__findings li.lvl-good { border-left-color: var(--vg-green, #16a34a); }
+.shop__findings small { font-size: 12px; }
 .note { margin: 10px 2px 0; line-height: 1.6; }
-.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px; padding: 4px; border-radius: 14px; background: var(--theme-panel); border: 1px solid var(--theme-border); }
+.seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 10px; padding: 4px; border-radius: 14px; background: var(--theme-panel); border: 1px solid var(--theme-border); }
 .seg button { height: 36px; border: 0; border-radius: 10px; background: none; color: var(--theme-text-muted); font-size: 13px; font-weight: 700; }
 .seg button.is-active { background: var(--theme-control-hover); color: var(--theme-text); }
 .meta { display: flex; align-items: center; gap: 4px; margin: 0 2px 10px; color: var(--theme-text-muted); font-size: 12px; }

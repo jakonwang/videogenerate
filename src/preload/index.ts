@@ -15,6 +15,9 @@ import type {
   InventorySyncResult,
   SaveInventorySkuInput,
 } from '../main/modules/dianxiaomi-inventory/types'
+import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
+import type { ShopProfit } from '../shared/shopProfit'
+import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
 import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
 import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
 import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
@@ -922,6 +925,30 @@ const api = {
     getAuthStatus: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:getAuthStatus'),
     openLogin: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:openLogin'),
     logout: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:logout'),
+  },
+  sellerInventory: {
+    listShops: () => ipcRenderer.invoke('plugin:sellerInventory:listShops') as Promise<SiShop[]>,
+    getDashboard: (payload?: { days?: number; shopKey?: string }) => ipcRenderer.invoke('plugin:sellerInventory:getDashboard', payload) as Promise<SiDashboard>,
+    getShopsOverview: () => ipcRenderer.invoke('plugin:sellerInventory:getShopsOverview') as Promise<ShopsOverview>,
+    getShopReport: (payload: { shopKey: string; days?: number }) => ipcRenderer.invoke('plugin:sellerInventory:getShopReport', payload) as Promise<ShopReport>,
+    generateReport: () => ipcRenderer.invoke('plugin:sellerInventory:generateReport') as Promise<MorningReport>,
+    listReports: () => ipcRenderer.invoke('plugin:sellerInventory:listReports') as Promise<MorningReport[]>,
+    getReportSettings: () => ipcRenderer.invoke('plugin:sellerInventory:getReportSettings') as Promise<ReportSettings>,
+    saveReportSettings: (payload: Partial<ReportSettings>) => ipcRenderer.invoke('plugin:sellerInventory:saveReportSettings', payload) as Promise<ReportSettings>,
+    getShopProfit: (payload: { shopKey: string; days?: number }) => ipcRenderer.invoke('plugin:sellerInventory:getShopProfit', payload) as Promise<ShopProfit>,
+    setAdLink: (payload: { shopKey: string; storeId?: string; rate?: number }) => ipcRenderer.invoke('plugin:sellerInventory:setAdLink', payload) as Promise<{ ok: true }>,
+    getProgress: () => ipcRenderer.invoke('plugin:sellerInventory:getProgress') as Promise<SiSyncProgress[]>,
+    sync: (payload?: { shopKey?: string }) => ipcRenderer.invoke('plugin:sellerInventory:sync', payload) as Promise<{ started: boolean; reason?: 'running' }>,
+    openSellerCenter: (shopKey: string, path?: string) => ipcRenderer.invoke('plugin:sellerInventory:openSellerCenter', shopKey, path) as Promise<{ loggedIn: boolean }>,
+    listMappings: () => ipcRenderer.invoke('plugin:sellerInventory:listMappings') as Promise<SiMappingRow[]>,
+    setMapping: (payload: { skuKey: string; code: string }) => ipcRenderer.invoke('plugin:sellerInventory:setMapping', payload) as Promise<{ ok: true }>,
+    applySuggestions: () => ipcRenderer.invoke('plugin:sellerInventory:applySuggestions') as Promise<{ applied: number }>,
+    saveSkuSettings: (payload: { code: string; name?: string | null; leadDays?: number | null; safetyDays?: number | null; cost?: number | null }) => ipcRenderer.invoke('plugin:sellerInventory:saveSkuSettings', payload) as Promise<SiSkuSettings>,
+    listMoves: (payload?: { code?: string }) => ipcRenderer.invoke('plugin:sellerInventory:listMoves', payload) as Promise<SiStockMove[]>,
+    addMove: (payload: SiAddMoveInput) => ipcRenderer.invoke('plugin:sellerInventory:addMove', payload) as Promise<SiStockMove>,
+    removeMove: (id: string) => ipcRenderer.invoke('plugin:sellerInventory:removeMove', id) as Promise<{ ok: true }>,
+    getSettings: () => ipcRenderer.invoke('plugin:sellerInventory:getSettings') as Promise<SiSettings>,
+    saveSettings: (payload: Partial<SiSettings>) => ipcRenderer.invoke('plugin:sellerInventory:saveSettings', payload) as Promise<SiSettings>,
   },
   tiktokCreatorHub: {
     listShops: () => ipcRenderer.invoke('plugin:tiktokCreatorHub:listShops') as Promise<CreatorHubShop[]>,

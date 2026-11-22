@@ -25,14 +25,20 @@ import gmvV2ViVN from './locales/gmv-v2/vi-VN.json'
 import bsxZhCN from './locales/batch-subtitle/zh-CN.json'
 import bsxEnUS from './locales/batch-subtitle/en-US.json'
 import bsxViVN from './locales/batch-subtitle/vi-VN.json'
+import sellerInvZhCN from './locales/seller-inventory/zh-CN.json'
+import sellerInvEnUS from './locales/seller-inventory/en-US.json'
+import sellerInvViVN from './locales/seller-inventory/vi-VN.json'
+import shopsZhCN from './locales/shops/zh-CN.json'
+import shopsEnUS from './locales/shops/en-US.json'
+import shopsViVN from './locales/shops/vi-VN.json'
 
 export const i18n = createI18n({
   legacy: false,
   locale: getInitialAppLocale(),
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': { ...zhCN, gmvMaxHelp: gmvMaxHelpZhCN, creatorHub: creatorHubZhCN, cloud: cloudZhCN, cloneUi: cloneUiZhCN, autoUi: autoUiZhCN, ai: aiZhCN, gmvV2: gmvV2ZhCN, bsx: bsxZhCN },
-    'en-US': { ...enUS, gmvMaxHelp: gmvMaxHelpEnUS, creatorHub: creatorHubEnUS, cloud: cloudEnUS, cloneUi: cloneUiEnUS, autoUi: autoUiEnUS, ai: aiEnUS, gmvV2: gmvV2EnUS, bsx: bsxEnUS },
-    'vi-VN': { ...viVN, gmvMaxHelp: gmvMaxHelpViVN, creatorHub: creatorHubViVN, cloud: cloudViVN, cloneUi: cloneUiViVN, autoUi: autoUiViVN, ai: aiViVN, gmvV2: gmvV2ViVN, bsx: bsxViVN },
+    'zh-CN': { ...zhCN, gmvMaxHelp: gmvMaxHelpZhCN, creatorHub: creatorHubZhCN, cloud: cloudZhCN, cloneUi: cloneUiZhCN, autoUi: autoUiZhCN, ai: aiZhCN, gmvV2: gmvV2ZhCN, bsx: bsxZhCN, sellerInv: sellerInvZhCN, shops: shopsZhCN },
+    'en-US': { ...enUS, gmvMaxHelp: gmvMaxHelpEnUS, creatorHub: creatorHubEnUS, cloud: cloudEnUS, cloneUi: cloneUiEnUS, autoUi: autoUiEnUS, ai: aiEnUS, gmvV2: gmvV2EnUS, bsx: bsxEnUS, sellerInv: sellerInvEnUS, shops: shopsEnUS },
+    'vi-VN': { ...viVN, gmvMaxHelp: gmvMaxHelpViVN, creatorHub: creatorHubViVN, cloud: cloudViVN, cloneUi: cloneUiViVN, autoUi: autoUiViVN, ai: aiViVN, gmvV2: gmvV2ViVN, bsx: bsxViVN, sellerInv: sellerInvViVN, shops: shopsViVN },
   },
 })

@@ -72,9 +72,9 @@
   "cookie": {
     "addTitle": "Add shop",
     "updateTitle": "Update cookies for \"{name}\"",
-    "subtitle": "Import the shop's login cookies. The app checks which shop they belong to before saving.",
-    "step1": "Install the Cookie-Editor extension in Chrome and sign in to this shop's Affiliate Center (affiliate.tiktok.com) in Chrome.",
-    "step2": "On the Affiliate Center page open Cookie-Editor, click Export and choose JSON (copied to the clipboard).",
+    "subtitle": "Import the shop's login cookies. The app checks which shop they belong to before saving. The same login is used by Creator Hub and Sales & Inventory, so updating it once updates both.",
+    "step1": "Install the Cookie-Editor extension in Chrome and sign in to this shop's Seller Center (seller-vn.tiktok.com) or Affiliate Center (affiliate.tiktok.com) in Chrome. Both use the same login.",
+    "step2": "On the Seller Center or Affiliate Center page open Cookie-Editor, click Export and choose JSON (copied to the clipboard).",
     "step3": "Paste it below, or choose the exported .json file.",
     "step4": "For several shops, sign in, export and add each shop separately.",
     "nameLabel": "Shop name (optional)",

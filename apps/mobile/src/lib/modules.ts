@@ -1,6 +1,6 @@
 import { isWeb } from './platform'
 import type { Component } from 'vue'
-import { BarChart3, Boxes, Captions, Clapperboard, Copy, Download, Droplets, Film, FolderOpen, ImagePlus, Inbox, LayoutGrid, LayoutTemplate, ListChecks, Megaphone, PackageSearch, Replace, Rocket, ScanSearch, Scissors, Send, Sparkles, Stamp, Store, Users, Wand2, Warehouse } from 'lucide-vue-next'
+import { BarChart3, Boxes, Building2, Captions, Clapperboard, Copy, Download, Droplets, Film, FolderOpen, ImagePlus, Inbox, LayoutGrid, LayoutTemplate, ListChecks, Megaphone, PackageSearch, Replace, Rocket, ScanSearch, Scissors, Send, Sparkles, Stamp, Store, Users, Wand2, Warehouse } from 'lucide-vue-next'
 
 /**
  * 手机端模块清单（与桌面端一一对应）。phase 表示计划在第几阶段上线；
@@ -46,6 +46,8 @@ export const MODULES: MobileModule[] = [
   { key: 'gmv-max', name: 'GMV Max', description: '投放诊断、调价审批、素材与利润（电脑端执行）', icon: Rocket, group: 'sell', phase: 4, route: '/gmv' },
   { key: 'creative-studio', name: 'tk创意室', description: '场景图换上商品出短视频，电脑用 TikTok 创意账号代跑', icon: Megaphone, group: 'sell', phase: 4, route: '/creative' },
   { key: 'creator-hub', name: '达人中心', description: '达人带货、样品履约待办', icon: PackageSearch, group: 'sell', phase: 4, route: '/creators' },
+  { key: 'shops', name: '店铺', description: '每个店铺每天的经营、利润和要处理的事', icon: Building2, group: 'sell', phase: 4, route: isWeb ? '/shops' : '/business?tab=shops' },
+  { key: 'sales', name: '销售与库存', description: '统一 SKU 的销量、库存预警和爆款', icon: Boxes, group: 'sell', phase: 4, route: isWeb ? '/sales' : '/business?tab=shops' },
   { key: 'inventory', name: '店小秘库存', description: '缺货和需补货的 SKU 提醒', icon: Warehouse, group: 'sell', phase: 4, route: '/inventory' },
 ]
 

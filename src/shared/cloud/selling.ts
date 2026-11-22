@@ -121,8 +121,31 @@ export type BusinessCreative = {
   recent: Array<{ id: string; productName: string; status: string; totalShots: number; completedShots: number; failedShots: number; lastError?: string; createdAt: number }>
 }
 
+/** 店铺：每个店铺的今日 / 昨日经营、近 7 天利润和要处理的事（电脑端从商家后台同步） */
+export type BusinessShops = {
+  shops: Array<{
+    shopKey: string
+    name: string
+    region: string
+    currency: string
+    lastSyncAt?: number
+    loginExpired: boolean
+    today?: { gmv: number; orders: number; visitors: number; conversion: number }
+    yesterdayGmv?: number
+    gmvChangeDay?: number
+    gmv7: number
+    gmvChange7?: number
+    profit7?: number
+    margin7?: number
+    healthFailing: number
+    urgentShip: number
+    findings: Array<{ level: 'error' | 'warning' | 'growth' | 'ok'; text: string; action?: string }>
+  }>
+}
+
 export type SyncBusinessDigest = {
   generatedAt: number
+  shops?: BusinessShops
   insights?: BusinessInsights
   creators?: BusinessCreators
   inventory?: BusinessInventory

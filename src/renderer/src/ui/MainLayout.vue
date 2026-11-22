@@ -19,6 +19,7 @@ import {
   Scissors,
   BarChart3,
   LayoutTemplate,
+  Building2,
   PanelLeftClose,
   PanelLeftOpen,
   X,
@@ -106,6 +107,7 @@ const allSections = computed(() => [
   {
     title: t("ai.nav.groupAssets"),
     items: [
+      { to: "/shops", icon: Building2, label: t("ai.nav.shops"), active: route.path.startsWith("/shops") },
       { to: "/products", icon: FolderOpen, label: t("ai.nav.products"), active: route.path.startsWith("/products") },
       { to: "/models", icon: Sparkles, label: t("ai.nav.models"), active: route.path.startsWith("/models") },
       { to: "/asset-library", icon: Images, label: t("ai.nav.assets"), active: route.path.startsWith("/asset-library") },

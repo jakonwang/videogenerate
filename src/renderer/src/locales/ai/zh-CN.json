@@ -36,6 +36,7 @@
     "production": "批量混剪",
     "publish": "发布中心",
     "insights": "数据概览",
+    "shops": "店铺",
     "products": "商品库",
     "models": "模特库",
     "assets": "素材库",
@@ -737,6 +738,10 @@
       "tiktok-listing-helper": {
         "name": "TikTok 上架助手",
         "desc": "生成商品标题、卖点和图片，导出上架表格"
+      },
+      "seller-inventory": {
+        "name": "销售与库存",
+        "desc": "多店铺按统一 SKU 看每日销量、库存预警和爆款"
       },
       "tiktok-creator-hub": {
         "name": "达人管理",

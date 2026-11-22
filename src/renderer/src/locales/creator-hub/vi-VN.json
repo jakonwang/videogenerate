@@ -72,9 +72,9 @@
   "cookie": {
     "addTitle": "Them cua hang",
     "updateTitle": "Cap nhat cookie cho \"{name}\"",
-    "subtitle": "Nhap cookie dang nhap cua cua hang. Ung dung se kiem tra cookie thuoc cua hang nao truoc khi luu.",
-    "step1": "Cai tien ich Cookie-Editor trong Chrome va dang nhap Trung tam lien ket (affiliate.tiktok.com) cua cua hang nay trong Chrome.",
-    "step2": "Tren trang Trung tam lien ket, mo Cookie-Editor, bam Export va chon JSON (se duoc sao chep).",
+    "subtitle": "Nhap cookie dang nhap cua cua hang. Ung dung se kiem tra cookie thuoc cua hang nao truoc khi luu. Cung mot dang nhap dung chung cho Quan ly nha sang tao va Ban hang & Ton kho, cap nhat mot lan la ca hai deu dung.",
+    "step1": "Cai tien ich Cookie-Editor trong Chrome va dang nhap Seller Center (seller-vn.tiktok.com) hoac Trung tam lien ket (affiliate.tiktok.com) cua cua hang nay trong Chrome; hai noi dung chung mot dang nhap.",
+    "step2": "Tren trang Seller Center hoac Trung tam lien ket, mo Cookie-Editor, bam Export va chon JSON (se duoc sao chep).",
     "step3": "Dan vao o ben duoi, hoac chon tep .json da xuat.",
     "step4": "Voi nhieu cua hang, hay dang nhap, xuat va them tung cua hang rieng.",
     "nameLabel": "Ten cua hang (tuy chon)",

@@ -53,6 +53,7 @@ import { registerVideoWatermarkIpc } from './ipc/registerVideoWatermarkIpc'
 import { registerStorageManagementIpc } from './ipc/registerStorageManagementIpc'
 import { registerTiktokGmvMaxIpc } from './ipc/registerTiktokGmvMaxIpc'
 import { registerDianxiaomiInventoryIpc } from './ipc/registerDianxiaomiInventoryIpc'
+import { registerSellerInventoryIpc } from './ipc/registerSellerInventoryIpc'
 import { registerTiktokCreatorHubIpc } from './ipc/registerTiktokCreatorHubIpc'
 import { closeCreatorHubDb } from './modules/tiktok-creator-hub/repo'
 import { registerProductWatermarkIpc } from './ipc/registerProductWatermarkIpc'
@@ -918,6 +919,7 @@ function wireIpc() {
   // 网页版的 GMV Max / 达人中心页面通过云端实时转交到这台电脑执行（cloud-sync/relayWorker）
   registerTiktokGmvMaxIpc(recordIpcHandlers(ipcMain))
   registerDianxiaomiInventoryIpc(recordIpcHandlers(ipcMain), () => mainWindow)
+  registerSellerInventoryIpc(recordIpcHandlers(ipcMain))
   registerTiktokCreatorHubIpc(recordIpcHandlers(ipcMain))
   registerProductWatermarkIpc(ipcMain)
   registerAssetLibraryIpc(ipcMain)

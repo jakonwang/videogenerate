@@ -72,9 +72,9 @@
   "cookie": {
     "addTitle": "添加店铺",
     "updateTitle": "更新「{name}」的 Cookie",
-    "subtitle": "导入店铺登录 Cookie。软件会先校验它属于哪个店铺，再保存。",
-    "step1": "在 Chrome 安装 Cookie-Editor 扩展，并在 Chrome 里登录这个店铺的联盟中心（affiliate.tiktok.com）。",
-    "step2": "在联盟中心页面打开 Cookie-Editor，点击 Export，选择 JSON（会复制到剪贴板）。",
+    "subtitle": "导入店铺登录 Cookie。软件会先校验它属于哪个店铺，再保存。同一份登录在「达人管理」和「销售与库存」里通用，更新一次两边都生效。",
+    "step1": "在 Chrome 安装 Cookie-Editor 扩展，并在 Chrome 里登录这个店铺的商家后台（seller-vn.tiktok.com）或联盟中心（affiliate.tiktok.com），两边是同一个登录。",
+    "step2": "在商家后台或联盟中心页面打开 Cookie-Editor，点击 Export，选择 JSON（会复制到剪贴板）。",
     "step3": "粘贴到下方输入框，或者选择导出的 .json 文件。",
     "step4": "多个店铺请分别登录、分别导出、分别添加。",
     "nameLabel": "店铺名称（可选）",

@@ -36,6 +36,7 @@
     "production": "Trộn hàng loạt",
     "publish": "Trung tâm đăng",
     "insights": "Tổng quan",
+    "shops": "Cửa hàng",
     "products": "Sản phẩm",
     "models": "Người mẫu",
     "assets": "Thư viện tư liệu",
@@ -737,6 +738,10 @@
       "tiktok-listing-helper": {
         "name": "Trợ lý đăng bán TikTok",
         "desc": "Tạo tiêu đề, điểm bán và ảnh, xuất bảng đăng bán"
+      },
+      "seller-inventory": {
+        "name": "Bán hàng & Tồn kho",
+        "desc": "Doanh số theo ngày, cảnh báo tồn kho và hàng bán chạy theo SKU"
       },
       "tiktok-creator-hub": {
         "name": "Quản lý nhà sáng tạo",

@@ -128,6 +128,21 @@ const router = createRouter({
           component: () => import("@/ui/views/ProductWatermarkView.vue"),
         },
         {
+          path: "shops",
+          name: "shops",
+          component: () => import("@/ui/views/ShopsView.vue"),
+        },
+        {
+          path: "shops/:shopKey",
+          name: "shop-detail",
+          component: () => import("@/ui/views/ShopDetailView.vue"),
+        },
+        {
+          path: "plugins/seller-inventory",
+          name: "plugin-seller-inventory",
+          component: () => import("@/ui/views/SellerInventoryView.vue"),
+        },
+        {
           path: "plugins/dianxiaomi-inventory",
           name: "plugin-dianxiaomi-inventory",
           component: () => import("@/ui/views/DianxiaomiInventoryView.vue"),

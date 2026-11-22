@@ -4,6 +4,8 @@ import { AlertTriangle, Cookie, FileUp, Loader2, ShieldCheck, X } from 'lucide-v
 import { useI18n } from 'vue-i18n'
 import type { CreatorHubShop } from '../../../../../shared/creatorHub'
 import { creatorHubError } from './creatorHubFormat'
+// The dialog is also opened from 销售与库存, so it brings its own styles.
+import './creator-hub.css'
 
 const props = defineProps<{ open: boolean; shop?: CreatorHubShop | null }>()
 const emit = defineEmits<{ close: []; imported: [payload: { shop: CreatorHubShop; merged: boolean }] }>()
