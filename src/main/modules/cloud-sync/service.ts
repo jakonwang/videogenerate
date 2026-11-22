@@ -401,10 +401,16 @@ async function importResearch(session: Session, state: SyncStateFile, changes: S
 
 /* ------------------------------------------------------------------ GMV Max（手机看摘要、批准建议） */
 
-// Loaded lazily: the GMV Max module is large and only needed when the account uses it.
+// GMV Max runs in its worker thread: its dashboard reads a large SQLite database synchronously, and on the
+// main process that froze the whole app for ~2s on every sync. Loaded lazily: only needed when the account uses it.
 let gmvSource: () => Promise<GmvService | null> = async () => {
   try {
-    return (await import('../tiktok-gmv-max/service')).gmvMaxService as unknown as GmvService
+    const { gmvMaxWorkerClient } = await import('../tiktok-gmv-max/workerClient')
+    return {
+      getDashboard: (input) => gmvMaxWorkerClient.call('getDashboard', [input]),
+      approveRecommendation: (id) => gmvMaxWorkerClient.call('approveRecommendation', [id]),
+      rejectRecommendation: (id) => gmvMaxWorkerClient.call('rejectRecommendation', [id]),
+    }
   } catch {
     return null
   }
@@ -413,7 +419,12 @@ let gmvSource: () => Promise<GmvService | null> = async () => {
 /** 仅测试使用：替换 GMV Max 服务 */
 export function setCloudSyncGmvSource(source: () => Promise<GmvService | null>) {
   gmvSource = source
+  lastGmvDigestAt = 0
 }
+
+// GMV data only changes when GMV Max syncs (every 30 min) or a decision runs, so the digest is rebuilt at most this often.
+const GMV_DIGEST_MIN_INTERVAL_MS = 5 * 60_000
+let lastGmvDigestAt = 0
 
 /** 执行手机上的批准 / 拒绝，并把结果写回同一条记录 */
 async function applyGmvDecisions(session: Session, changes: SyncChange[]): Promise<number> {
@@ -427,11 +438,14 @@ async function applyGmvDecisions(session: Session, changes: SyncChange[]): Promi
     results.push({ collection: SYNC_COLLECTIONS.gmvDecisions, id: change.id, updatedAt: Math.max(Date.now(), change.updatedAt + 1), deleted: false, data: outcome })
   }
   if (session.canWrite) await session.client.sync.push(results)
+  lastGmvDigestAt = 0 // the phone should see the new state on this same sync
   return results.length
 }
 
 /** 发布 GMV Max 摘要给手机（只在连接了 GMV Max、内容有变化时上传） */
 async function publishGmvDigest(session: Session, state: SyncStateFile) {
+  if (Date.now() - lastGmvDigestAt < GMV_DIGEST_MIN_INTERVAL_MS) return
+  lastGmvDigestAt = Date.now()
   const service = await gmvSource()
   if (!service) return
   let digest
