@@ -102,7 +102,7 @@
   "daily": {
     "units": "Số lượng",
     "amount": "Doanh thu",
-    "hint": "Hôm nay và các ngày có đơn đã đồng bộ được tính từ đơn hàng (không gồm chưa thanh toán, đã hủy); ngày cũ hơn lấy từ Phân tích dữ liệu."
+    "hint": "Hôm nay tính trực tiếp từ đơn hàng (không gồm chưa thanh toán, đã hủy); \"7 ngày\" và tăng trưởng tính theo ngày trọn vẹn, không gồm hôm nay. Ngày cũ hơn lấy từ Phân tích dữ liệu."
   },
   "stock": {
     "addTitle": "Ghi tồn kho",
@@ -201,5 +201,6 @@
   "updateCookie": "Dán cookie để đăng nhập",
   "cookieSaved": "Đã cập nhật đăng nhập của {shop}, đang đồng bộ lại",
   "sharedLogin": "Đăng nhập cửa hàng được quản lý chung ở mục \"Quản lý cửa hàng\" bên trái và dùng chung với Quản lý nhà sáng tạo; cập nhật ở đâu cũng được.",
-  "manageShops": "Quản lý cửa hàng"
+  "manageShops": "Quản lý cửa hàng",
+  "showMore": "Hiện thêm 100 ({n} còn lại)"
 }

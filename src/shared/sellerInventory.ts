@@ -137,6 +137,8 @@ export type SiShopState = {
   ordersSyncedTo?: number
   lastSyncAt?: number
   lastSyncError?: string
+  /** Steps that failed in the last sync while the rest succeeded (e.g. settlements). */
+  stageErrors?: Partial<Record<SiSyncStage, string>>
   productCount?: number
   skuCount?: number
 }
@@ -244,6 +246,10 @@ export type SiSyncProgress = {
   startedAt: number
   finishedAt?: number
   error?: string
+  /** Steps that failed without stopping the sync. */
+  stageErrors?: Partial<Record<SiSyncStage, string>>
+  /** True for the automatic hourly update, so pages can stay quiet about it. */
+  automatic?: boolean
 }
 
 export type SiRisk = 'out' | 'urgent' | 'reorder' | 'healthy' | 'overstock' | 'unknown'
@@ -357,14 +363,27 @@ export function isValidDate(value: unknown) {
 }
 
 /** Calendar date of an instant in an IANA time zone. */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>()
+
+/** Calendar date of an instant in an IANA time zone. Formatters are reused: creating one is slow. */
 export function zonedDate(ms: number, timeZone: string) {
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms))
+    let formatter = dateFormatters.get(timeZone)
+    if (!formatter) {
+      formatter = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      dateFormatters.set(timeZone, formatter)
+    }
+    const parts = formatter.formatToParts(new Date(ms))
     const get = (type: string) => parts.find((part) => part.type === type)?.value || ''
     return `${get('year')}-${get('month')}-${get('day')}`
   } catch {
     return new Date(ms).toISOString().slice(0, 10)
   }
+}
+
+/** Whole days from `from` to `to` (both YYYY-MM-DD). */
+export function daysBetween(from: string, to: string) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 }
 
 /**
@@ -381,12 +400,16 @@ export function suggestCode(input: { productName: string; sellerSku: string; sin
 type CodeResolver = (shopKey: string, skuId: string, sellerSku: string) => { key: string; mapped: boolean }
 
 export function makeCodeResolver(mappings: Map<string, string>): CodeResolver {
+  const seen = new Map<string, { key: string; mapped: boolean }>()
   return (shopKey, skuId, sellerSku) => {
+    const cacheKey = `${shopKey}|${skuId}|${sellerSku}`
+    const hit = seen.get(cacheKey)
+    if (hit) return hit
     const manual = mappings.get(`${shopKey}:${skuId}`)
-    if (manual) return { key: manual, mapped: true }
-    const code = normalizeCode(sellerSku)
-    if (code) return { key: code, mapped: true }
-    return { key: `#${skuId}`, mapped: false }
+    const code = manual ? '' : normalizeCode(sellerSku)
+    const result = manual ? { key: manual, mapped: true } : code ? { key: code, mapped: true } : { key: `#${skuId}`, mapped: false }
+    seen.set(cacheKey, result)
+    return result
   }
 }
 
@@ -459,11 +482,13 @@ export function buildDashboard(input: BuildDashboardInput): SiDashboard {
   const today = input.today
   const yesterday = shiftDate(today, -1)
   const rangeStart = shiftDate(today, -(Math.max(7, Math.min(input.settings.historyDays, input.days)) - 1))
-  const d7 = shiftDate(today, -6)
-  const d14 = shiftDate(today, -13)
-  const d30 = shiftDate(today, -29)
-  const prev7Start = shiftDate(today, -13)
-  const prev7End = shiftDate(today, -7)
+  // 7 / 14 / 30-day figures use complete days (up to yesterday): today is still running, and
+  // comparing a partial day with full ones made everything look like it was shrinking.
+  const d7 = shiftDate(today, -7)
+  const d14 = shiftDate(today, -14)
+  const d30 = shiftDate(today, -30)
+  const prev7Start = shiftDate(today, -14)
+  const prev7End = shiftDate(today, -8)
   const settingsByCode = new Map(input.skuSettings.map((item) => [item.code, item]))
   const movesByCode = new Map<string, SiStockMove[]>()
   for (const move of input.moves) movesByCode.set(move.code, [...(movesByCode.get(move.code) || []), move])
@@ -511,14 +536,14 @@ export function buildDashboard(input: BuildDashboardInput): SiDashboard {
     acc.unitsByDate.set(row.date, (acc.unitsByDate.get(row.date) || 0) + row.units)
     acc.amountByDate.set(row.date, (acc.amountByDate.get(row.date) || 0) + row.amount)
     acc.ordersByDate.set(row.date, (acc.ordersByDate.get(row.date) || 0) + row.orders)
-    if (row.date >= d7) acc.shopUnits7.set(row.shopKey, (acc.shopUnits7.get(row.shopKey) || 0) + row.units)
+    if (row.date >= d7 && row.date <= yesterday) acc.shopUnits7.set(row.shopKey, (acc.shopUnits7.get(row.shopKey) || 0) + row.units)
     if (row.date === today) { kpi.amountToday += row.amount; kpi.unitsToday += row.units; kpi.ordersToday += row.orders }
     if (row.date === yesterday) { kpi.amountYesterday += row.amount; kpi.unitsYesterday += row.units }
-    if (row.date >= d7) kpi.amount7 += row.amount
+    if (row.date >= d7 && row.date <= yesterday) kpi.amount7 += row.amount
     else if (row.date >= prev7Start && row.date <= prev7End) kpi.amountPrev7 += row.amount
   }
 
-  const sum = (map: Map<string, number>, from: string, to = today) => {
+  const sum = (map: Map<string, number>, from: string, to = yesterday) => {
     let total = 0
     for (const [date, value] of map) if (date >= from && date <= to) total += value
     return total
@@ -539,9 +564,9 @@ export function buildDashboard(input: BuildDashboardInput): SiDashboard {
     const units14 = sum(acc.unitsByDate, d14)
     const units30 = sum(acc.unitsByDate, d30)
     const saleDates = [...acc.unitsByDate.entries()].filter(([, units]) => units > 0).map(([date]) => date).sort()
-    // Average over the last 14 days, or since the first sale when the SKU is newer than that.
     const firstSaleDate = saleDates[0]
-    const window = firstSaleDate && firstSaleDate > d14 ? Math.max(1, dateRange(firstSaleDate, today).length) : 14
+    // Average over the last 14 complete days, or since the first sale when the SKU is newer.
+    const window = firstSaleDate && firstSaleDate > d14 ? Math.max(1, daysBetween(firstSaleDate, today)) : 14
     const avgDaily = units14 / window
     const moves = acc.mapped ? movesByCode.get(acc.key) || [] : []
     const ledger = ledgerStock(moves, acc.unitsByDate)

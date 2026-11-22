@@ -111,6 +111,7 @@
     "test:seller-inventory": "tsx test/seller-inventory.smoke.ts",
     "test:shop-analysis": "tsx test/shop-analysis.smoke.ts",
     "test:seller-inventory:e2e": "node test/seller-inventory.e2e.cjs",
+    "test:seller-inventory:perf": "tsx test/seller-inventory.perf.ts",
     "test:publish-matrix": "tsx test/publish-matrix.smoke.ts",
     "test:publish-matrix:e2e": "node test/publish-matrix.e2e.cjs",
     "test:profit-runway": "tsx test/profit-runway.smoke.ts",

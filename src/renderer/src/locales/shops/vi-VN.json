@@ -71,7 +71,7 @@
     "health": "{n} chỉ số sức khỏe chưa đạt",
     "urgentShip": "{n} đơn sắp trễ gửi"
   },
-  "dataNote": "Hôm nay và hôm qua là dữ liệu thời gian thực; ngày cũ hơn lấy từ Phân tích dữ liệu, thường chốt sau 1–2 ngày.",
+  "dataNote": "Số liệu hôm nay là thời gian thực; \"7 ngày qua\" tính theo ngày trọn vẹn (không gồm hôm nay) để so sánh công bằng. Dữ liệu cũ hơn lấy từ Phân tích dữ liệu, chốt sau 1–2 ngày. Khi ứng dụng mở, dữ liệu tự cập nhật mỗi giờ.",
   "backToShops": "Quay lại cửa hàng",
   "detailSubtitle": "{region} · kinh doanh theo ngày",
   "todaySoFar": "Hôm nay đến giờ",
@@ -171,5 +171,9 @@
     "costPlaceholder": "Giá vốn mỗi cái",
     "moreInSales": "Nhập thêm trong Bán hàng & Tồn kho",
     "note": "Tỷ lệ phí lấy từ quyết toán 45 ngày gần nhất của cửa hàng; hoàn tiền và trợ giá theo quyết toán thực tế."
-  }
+  },
+  "syncDone": "Đồng bộ xong, dữ liệu đã cập nhật",
+  "dismiss": "Đã hiểu",
+  "syncingShop": "Đang đồng bộ…",
+  "unchanged": "Không đổi"
 }

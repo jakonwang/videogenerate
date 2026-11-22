@@ -937,6 +937,7 @@ const api = {
     saveReportSettings: (payload: Partial<ReportSettings>) => ipcRenderer.invoke('plugin:sellerInventory:saveReportSettings', payload) as Promise<ReportSettings>,
     getShopProfit: (payload: { shopKey: string; days?: number }) => ipcRenderer.invoke('plugin:sellerInventory:getShopProfit', payload) as Promise<ShopProfit>,
     setAdLink: (payload: { shopKey: string; storeId?: string; rate?: number }) => ipcRenderer.invoke('plugin:sellerInventory:setAdLink', payload) as Promise<{ ok: true }>,
+    dataVersion: () => ipcRenderer.invoke('plugin:sellerInventory:dataVersion') as Promise<number>,
     getProgress: () => ipcRenderer.invoke('plugin:sellerInventory:getProgress') as Promise<SiSyncProgress[]>,
     sync: (payload?: { shopKey?: string }) => ipcRenderer.invoke('plugin:sellerInventory:sync', payload) as Promise<{ started: boolean; reason?: 'running' }>,
     openSellerCenter: (shopKey: string, path?: string) => ipcRenderer.invoke('plugin:sellerInventory:openSellerCenter', shopKey, path) as Promise<{ loggedIn: boolean }>,

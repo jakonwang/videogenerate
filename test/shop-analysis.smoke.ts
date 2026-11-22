@@ -4,6 +4,7 @@ import { buildReportCard, findingText, reportNotification } from '../src/shared/
 import { shiftDate, type SiCodeSummary, type SiShopDay } from '../src/shared/sellerInventory'
 import { parseShopHealth } from '../src/main/modules/seller-inventory/parser'
 import { buildProfitDays, learnFeeRate, profitTotals } from '../src/shared/shopProfit'
+import { freshnessText, friendlyStageError, friendlySyncError, syncErrorKind } from '../src/shared/sellerSyncText'
 
 const TODAY = '2026-11-22'
 
@@ -109,6 +110,28 @@ function testProfit() {
   assert.ok(!unknownCost.findings.some((item) => item.key.startsWith('profit')), 'no profit verdict while most costs are missing')
 }
 
+function testSyncText() {
+  assert.equal(syncErrorKind('SELLER_LOGIN_REQUIRED'), 'login')
+  assert.equal(syncErrorKind(new Error("Error invoking remote method 'x': Error: SELLER_API_HTTP_0")), 'network')
+  assert.equal(syncErrorKind('SELLER_API_HTTP_503'), 'server')
+  assert.equal(syncErrorKind('SELLER_API_HTTP_429'), 'busy')
+  assert.equal(syncErrorKind('products: code=10001 bad'), 'rejected')
+  for (const raw of ['SELLER_LOGIN_REQUIRED', 'SELLER_API_HTTP_0', 'SELLER_API_HTTP_500', 'weird thing', 'orders: code=1 x']) {
+    for (const locale of ['zh-CN', 'en-US', 'vi-VN']) {
+      const text = friendlySyncError(raw, locale)
+      assert.ok(text && !/SELLER_|HTTP_|code=/.test(text), `no technical codes shown: ${text}`)
+    }
+  }
+  assert.match(friendlyStageError('finance', 'SELLER_API_HTTP_0', 'zh-CN'), /结算数据没有更新（网络不稳定），利润可能不准；其它数据已更新/)
+  assert.equal(friendlyStageError('finance', 'x', 'zh-CN', true), '结算数据没更新')
+  const now = Date.UTC(2026, 10, 22, 8)
+  assert.equal(freshnessText(now - 20_000, now, 'zh-CN').text, '刚刚更新')
+  assert.match(freshnessText(now - 25 * 60_000, now, 'zh-CN').text, /25s?分钟前更新/)
+  assert.deepEqual(freshnessText(now - 5 * 3_600_000, now, 'zh-CN'), { text: '数据已经 5 小时没更新', stale: true })
+  assert.equal(freshnessText(undefined, now, 'zh-CN').stale, true)
+}
+
+testSyncText()
 testDecompose()
 testProfit()
 testAnalyze()

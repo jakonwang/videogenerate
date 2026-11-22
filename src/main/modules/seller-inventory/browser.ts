@@ -45,6 +45,8 @@ function wait(ms: number) {
 /** One hidden window per sync; pages are switched with `open()` so each API runs on its own page. */
 export class SellerSession {
   private window: BrowserWindow | null = null
+  private currentPath = ''
+  private recovering: Promise<void> | null = null
 
   constructor(private readonly target: SellerTarget) {}
 
@@ -54,6 +56,7 @@ export class SellerSession {
   }
 
   async open(path: string) {
+    this.currentPath = path
     if (!this.window || this.window.isDestroyed()) {
       this.window = new BrowserWindow({
         show: false,
@@ -101,7 +104,13 @@ export class SellerSession {
         clearTimeout(timer);
       }
     })()`
-    const result = await this.contents.executeJavaScript(script, true) as { status: number; text: string; url: string }
+    // The page's own request wrapper can stop answering; never wait longer than the request timeout.
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const hardLimit = new Promise<{ status: number; text: string; url: string }>((resolve) => {
+      timer = setTimeout(() => resolve({ status: -1, text: '', url: this.window?.webContents.getURL() || '' }), request.timeoutMs + 10_000)
+    })
+    const result = await Promise.race([this.contents.executeJavaScript(script, true) as Promise<{ status: number; text: string; url: string }>, hardLimit])
+    if (timer) clearTimeout(timer)
     if (isLoginUrl(result.url) || result.status === 401 || result.status === 403) throw new Error('SELLER_LOGIN_REQUIRED')
     if (result.status !== 200) throw new Error(`SELLER_API_HTTP_${result.status}`)
     try {
@@ -109,6 +118,13 @@ export class SellerSession {
     } catch {
       throw new Error('SELLER_API_BAD_JSON')
     }
+  }
+
+  /** Reloads the current page so a stuck request layer starts fresh; concurrent callers share one reload. */
+  async recover() {
+    if (!this.currentPath) return
+    this.recovering ??= this.open(this.currentPath).catch(() => undefined).finally(() => { this.recovering = null })
+    await this.recovering
   }
 
   close() {

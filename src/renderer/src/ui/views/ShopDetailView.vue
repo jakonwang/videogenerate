@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ExternalLink, ImageIcon, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
-import { dateRange, shiftDate, type ShopMetricKey, type ShopReport, type SiShopDay, type SiSyncProgress } from '../../../../shared/sellerInventory'
+import { dateRange, shiftDate, type ShopMetricKey, type ShopReport, type SiShopDay, type SiSyncStage } from '../../../../shared/sellerInventory'
+import { freshnessText, friendlyStageError, friendlySyncError } from '../../../../shared/sellerSyncText'
+import { useSyncWatcher } from './shops/useSyncWatcher'
 import ShopTrendChart from './shops/ShopTrendChart.vue'
 import ShopFindings from './shops/ShopFindings.vue'
 import ShopHealthCard from './shops/ShopHealthCard.vue'
@@ -21,16 +23,28 @@ const metric = ref<ShopMetricKey>('gmv')
 const report = ref<ShopReport | null>(null)
 const loading = ref(false)
 const errorText = ref('')
-const progress = ref<SiSyncProgress[]>([])
-let timer: ReturnType<typeof setInterval> | null = null
-let pollCount = 0
+const doneText = ref('')
+const now = ref(Date.now())
+const clock = setInterval(() => { now.value = Date.now() }, 30_000)
 
 const KPIS: ShopMetricKey[] = ['gmv', 'orders', 'itemsSold', 'buyers', 'visitors', 'conversion', 'aov', 'impressions']
 const TREND: ShopMetricKey[] = ['gmv', 'orders', 'visitors', 'conversion', 'aov']
 
 const region = computed(() => report.value?.shop.region)
-const syncing = computed(() => progress.value.some((item) => item.status === 'running' && item.shopKey === shopKey.value))
-const running = computed(() => progress.value.find((item) => item.status === 'running'))
+const { progress, started, markLoaded } = useSyncWatcher({
+  refresh: () => load(),
+  onFinished: (jobs) => {
+    const job = jobs.find((item) => item.shopKey === shopKey.value)
+    if (job && !job.automatic && job.status === 'done' && !job.stageErrors) {
+      doneText.value = t('shops.syncDone')
+      setTimeout(() => { doneText.value = '' }, 4000)
+    }
+  },
+})
+const running = computed(() => progress.value.find((item) => item.status === 'running' && item.shopKey === shopKey.value))
+const syncing = computed(() => Boolean(running.value))
+const freshness = computed(() => freshnessText(report.value?.shop.state.lastSyncAt, now.value, locale.value))
+const stageProblems = computed(() => Object.entries(report.value?.shop.state.stageErrors || {}).map(([stage, error]) => friendlyStageError(stage as SiSyncStage, error, locale.value)))
 const byDate = computed(() => new Map((report.value?.days || []).map((day) => [day.date, day])))
 const prevByDate = computed(() => new Map((report.value?.previous || []).map((day) => [day.date, day])))
 const allDates = computed(() => (report.value ? dateRange(report.value.start, report.value.end) : []))
@@ -39,6 +53,13 @@ const yesterdayRow = computed(() => byDate.value.get(shiftDate(report.value?.tod
 
 function fmt(key: ShopMetricKey, value: number | undefined, compact = false) {
   return fmtMetric(key, value, locale.value, region.value, compact)
+}
+
+/** Up, down, or flat when the change rounds to 0.0% (shown neutral, not as a red drop). */
+function direction(current: number, previous: number) {
+  const value = change(current, previous)
+  if (value === undefined || Math.abs(value) < 0.0005) return 'flat'
+  return value > 0 ? 'up' : 'down'
 }
 
 function value(day: SiShopDay | undefined, key: ShopMetricKey) {
@@ -92,40 +113,24 @@ async function load() {
   try {
     report.value = await api.getShopReport({ shopKey: shopKey.value, days: days.value })
     errorText.value = ''
+    void markLoaded()
   } catch (error) {
-    errorText.value = error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error)
+    errorText.value = friendlySyncError(error, locale.value)
   } finally {
     loading.value = false
   }
 }
 
-async function poll() {
-  const was = syncing.value
-  progress.value = await api.getProgress().catch(() => progress.value)
-  if (progress.value.some((item) => item.status === 'running')) {
-    // Refresh now and then so a long first sync fills the page as it goes.
-    pollCount += 1
-    if (pollCount % 3 === 0) void load()
-    return
-  }
-  if (timer) clearInterval(timer)
-  timer = null
-  if (was || !syncing.value) await load()
-}
-
 async function sync() {
-  await api.sync({ shopKey: shopKey.value })
-  progress.value = await api.getProgress()
-  if (!timer) timer = setInterval(() => { void poll() }, 2000)
+  doneText.value = ''
+  const result = await api.sync({ shopKey: shopKey.value })
+  if (!result.started) doneText.value = friendlySyncError('SELLER_INVENTORY_SYNC_RUNNING', locale.value)
+  await started()
 }
 
 watch([days, shopKey], () => { void load() })
-onMounted(async () => {
-  await load()
-  progress.value = await api.getProgress().catch(() => [])
-  if (progress.value.some((item) => item.status === 'running') && !timer) timer = setInterval(() => { void poll() }, 2000)
-})
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onMounted(() => { void load() })
+onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
@@ -134,23 +139,26 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
       <button type="button" class="vg-icon-btn" :title="t('shops.backToShops')" @click="router.push('/shops')"><ChevronLeft :size="18" /></button>
       <div class="vg-page-head__text">
         <h1>{{ report?.shop.name || '…' }}</h1>
-        <p>{{ t('shops.detailSubtitle', { region: report?.shop.region || '' }) }}</p>
+        <p>{{ t('shops.detailSubtitle', { region: report?.shop.region || '' }) }} · <span :class="{ 'shop-detail__stale': freshness.stale }" data-testid="shop-detail-fresh">{{ freshness.text }}</span></p>
       </div>
       <div class="vg-page-head__actions">
         <div class="vg-seg vg-seg--sm">
           <button v-for="n in [7, 30, 90]" :key="n" type="button" class="vg-seg__btn" :class="{ 'is-active': days === n }" @click="days = n">{{ t('sellerInv.days', { n }) }}</button>
         </div>
         <button type="button" class="vg-btn vg-btn--sm" @click="api.openSellerCenter(shopKey)"><ExternalLink :size="13" />{{ t('shops.openSeller') }}</button>
-        <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :disabled="Boolean(running)" data-testid="shop-sync" @click="sync"><RefreshCcw :size="13" :class="{ 'vg-spin': syncing }" />{{ t('sellerInv.sync') }}</button>
+        <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :disabled="syncing" data-testid="shop-sync" @click="sync"><RefreshCcw :size="13" :class="{ 'vg-spin': syncing }" />{{ t('sellerInv.sync') }}</button>
       </div>
     </header>
 
     <div v-if="running" class="vg-notice vg-notice--accent"><LoaderCircle :size="15" class="vg-spin" /><span>{{ t(`sellerInv.stage.${running.stage || 'account'}`, { detail: running.detail || '' }) }}</span></div>
+    <div v-if="doneText" class="vg-notice vg-notice--accent"><span>{{ doneText }}</span></div>
     <div v-if="errorText" class="vg-notice vg-notice--danger"><span>{{ errorText }}</span></div>
-    <div v-if="report?.shop.state.lastSyncError" class="vg-notice vg-notice--warning">
-      <span>{{ String(report.shop.state.lastSyncError).includes('LOGIN') ? t('shops.alert.login') : t('shops.alert.syncFailed') }}</span>
-      <button type="button" class="vg-btn vg-btn--sm" @click="router.push({ path: '/shops', query: { tab: 'accounts' } })">{{ t('shops.updateCookie') }}</button>
+    <div v-if="report?.shop.state.lastSyncError && !syncing" class="vg-notice vg-notice--warning" data-testid="shop-detail-sync-error">
+      <span>{{ friendlySyncError(report.shop.state.lastSyncError, locale) }}</span>
+      <button v-if="String(report.shop.state.lastSyncError).includes('LOGIN')" type="button" class="vg-btn vg-btn--sm" @click="router.push({ path: '/shops', query: { tab: 'accounts' } })">{{ t('shops.updateCookie') }}</button>
+      <button v-else type="button" class="vg-btn vg-btn--sm" @click="sync">{{ t('sellerInv.syncAgain') }}</button>
     </div>
+    <div v-for="(problem, index) in syncing ? [] : stageProblems" :key="index" class="vg-notice vg-notice--warning"><span>{{ problem }}</span></div>
 
     <template v-if="report">
       <section class="vg-card shop-detail__today" data-testid="shop-today">
@@ -164,7 +172,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
       <div class="shop-detail__two">
         <section class="vg-card shop-detail__analysis" data-testid="shop-analysis">
           <h2 class="vg-section-title">{{ t('shops.analysisTitle') }}</h2>
-          <p class="vg-muted shop-detail__small">{{ t('shops.analysisHint') }}</p>
+          <p class="vg-muted shop-detail__hint">{{ t('shops.analysisHint') }}</p>
           <ShopFindings :findings="report.analysis.findings" :limit="12" />
         </section>
         <ShopHealthCard :health="report.health" @open="(path) => api.openSellerCenter(shopKey, path)" />
@@ -175,9 +183,9 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
           <span class="vg-stat__body">
             <span class="vg-stat__label">{{ t(`shops.metric.${key}`) }}</span>
             <span class="vg-stat__value">{{ fmt(key, report.totals[key], true) }}</span>
-            <small v-if="change(report.totals[key], report.previousTotals[key]) !== undefined" class="shop-kpi__chg" :class="(change(report.totals[key], report.previousTotals[key]) || 0) >= 0 ? 'up' : 'down'">
-              <ArrowUpRight v-if="(change(report.totals[key], report.previousTotals[key]) || 0) >= 0" :size="11" /><ArrowDownRight v-else :size="11" />
-              {{ fmtChange(change(report.totals[key], report.previousTotals[key])) }} {{ t('shops.vsPrevPeriod') }}
+            <small v-if="change(report.totals[key], report.previousTotals[key]) !== undefined" class="shop-kpi__chg" :class="direction(report.totals[key], report.previousTotals[key])">
+              <ArrowUpRight v-if="direction(report.totals[key], report.previousTotals[key]) === 'up'" :size="11" /><ArrowDownRight v-else-if="direction(report.totals[key], report.previousTotals[key]) === 'down'" :size="11" />
+              {{ direction(report.totals[key], report.previousTotals[key]) === 'flat' ? t('shops.unchanged') : fmtChange(change(report.totals[key], report.previousTotals[key])) }} {{ t('shops.vsPrevPeriod') }}
             </small>
           </span>
         </button>
@@ -301,6 +309,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 .shop-kpi__chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; margin-top: 2px; }
 .shop-kpi__chg.up { color: var(--vg-green, #16a34a); }
 .shop-kpi__chg.down { color: var(--vg-red); }
+.shop-kpi__chg.flat { color: var(--theme-text-muted); }
 .shop-detail__card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .shop-detail__trend { display: flex; flex-direction: column; gap: 8px; }
 .shop-detail__legend { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 0; }
@@ -320,7 +329,9 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 .calendar__cell.empty { border-color: transparent; }
 .calendar__cell small { font-size: 9px; color: var(--theme-text); opacity: 0.75; }
 .shop-detail__analysis { display: flex; flex-direction: column; gap: 10px; }
-.shop-detail__analysis .shop-detail__small { margin: -4px 0 0; }
+/* Content starts at the top; the card is as tall as the health card next to it. */
+.shop-detail__analysis { justify-content: flex-start; }
+.shop-detail__hint { margin: -4px 0 0; font-size: 12px; }
 .shop-detail__table { border: 0; border-radius: 0; max-height: 420px; }
 .shop-detail__small { font-size: 12px; flex: 1; }
 .sku-cell { display: flex; align-items: center; gap: 8px; min-width: 220px; max-width: 360px; }
@@ -328,6 +339,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 .sku-cell__thumb img { width: 100%; height: 100%; object-fit: cover; }
 .sku-cell__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .is-muted td { color: var(--theme-text-muted); }
+.shop-detail__stale { color: var(--vg-amber); font-weight: 600; }
 @media (max-width: 960px) {
   .shop-detail__two { grid-template-columns: 1fr; }
   .shop-detail__today { grid-template-columns: repeat(2, 1fr); }

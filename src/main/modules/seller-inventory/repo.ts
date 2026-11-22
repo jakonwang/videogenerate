@@ -54,11 +54,37 @@ CREATE INDEX IF NOT EXISTS idx_si_reports_date ON si_reports(date, created_at);
 
 let database: Database | null = null
 let databasePath = ''
+/** Bumped on every write; computed views are cached until it changes. */
+let dataVersion = 0
+
+/** Counts writes: any statement run through `run` changes the data. */
+function tracked(handle: Database): Database {
+  // Prepared once per SQL text; preparing on every call showed up in profiles.
+  const statements = new Map<string, Statement>()
+  return {
+    exec: (sql: string) => handle.exec(sql),
+    close: handle.close?.bind(handle),
+    prepare(sql: string) {
+      let statement = statements.get(sql)
+      if (!statement) {
+        statement = handle.prepare(sql)
+        statements.set(sql, statement)
+      }
+      const prepared = statement
+      return {
+        run: (...params: unknown[]) => { dataVersion += 1; return prepared.run(...params) },
+        get: (...params: unknown[]) => prepared.get(...params),
+        all: (...params: unknown[]) => prepared.all(...params),
+      }
+    },
+  }
+}
 
 function db() {
+  // Resolving the app paths on every call cost ~20 ms per query; the handle is reused until close().
+  if (database) return database
   const dbDir = getAppPaths().dbDir
   const path = join(dbDir, 'seller-inventory.sqlite')
-  if (database && databasePath === path) return database
   if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true })
   let DatabaseSync: DatabaseCtor
   try {
@@ -66,9 +92,9 @@ function db() {
   } catch {
     DatabaseSync = require('better-sqlite3') as DatabaseCtor
   }
-  database?.close?.()
-  database = new DatabaseSync(path)
+  database = tracked(new DatabaseSync(path))
   databasePath = path
+  dataVersion += 1
   database.exec('PRAGMA journal_mode = WAL;')
   database.exec('PRAGMA synchronous = NORMAL;')
   database.exec(schema)
@@ -92,6 +118,10 @@ function transaction(run: () => void) {
 }
 
 export const sellerInventoryRepo = {
+  version() {
+    return dataVersion
+  },
+
   /** Closes the handle; tests point the data dir somewhere else between runs. */
   close() {
     database?.close?.()
@@ -173,11 +203,9 @@ export const sellerInventoryRepo = {
   },
 
   dailyFromCompass(shopKey: string, fromDate: string, beforeDate: string): SiDailyRow[] {
-    const rows = db().prepare('SELECT payload FROM si_compass WHERE shop_key = ? AND date >= ? AND date < ?').all(shopKey, fromDate, beforeDate)
-    return rows.map((row) => {
-      const item = parse<SiCompassRow>(row)
-      return { shopKey, skuId: item.skuId, sellerSku: '', date: item.date, units: item.units, amount: item.gmv, orders: item.orders, cancelledUnits: 0 }
-    })
+    // Columns only: parsing the JSON payload of every row was the slowest part of the dashboards.
+    const rows = db().prepare('SELECT sku_id, date, gmv, orders, units FROM si_compass WHERE shop_key = ? AND date >= ? AND date < ?').all(shopKey, fromDate, beforeDate) as Array<{ sku_id: string; date: string; gmv: number; orders: number; units: number }>
+    return rows.map((row) => ({ shopKey, skuId: row.sku_id, sellerSku: '', date: row.date, units: Number(row.units) || 0, amount: Number(row.gmv) || 0, orders: Number(row.orders) || 0, cancelledUnits: 0 }))
   },
 
   // ===== Shop daily metrics (Data Compass) =====

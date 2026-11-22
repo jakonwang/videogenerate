@@ -102,7 +102,7 @@
   "daily": {
     "units": "Units",
     "amount": "Revenue",
-    "hint": "Today and days covered by synced orders are counted from orders (unpaid and cancelled excluded); older days come from Data Compass."
+    "hint": "Today is counted live from orders (unpaid and cancelled excluded); \"7 days\" and growth use complete days, today excluded. Older days come from Data Compass."
   },
   "stock": {
     "addTitle": "Record stock",
@@ -201,5 +201,6 @@
   "updateCookie": "Paste cookies to log in",
   "cookieSaved": "Login for {shop} updated; syncing again",
   "sharedLogin": "Shop logins are managed in one place under \"Shops\" in the sidebar and shared with Creator Hub; updating anywhere updates all.",
-  "manageShops": "Shops"
+  "manageShops": "Shops",
+  "showMore": "Show 100 more ({n} left)"
 }

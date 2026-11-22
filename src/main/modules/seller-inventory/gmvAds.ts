@@ -13,11 +13,17 @@ type Database = { prepare(sql: string): Statement; close?: () => unknown }
 
 let handle: Database | null = null
 let handlePath = ''
+/** When GMV Max is not set up, look for its database again at most once a minute. */
+let missingCheckedAt = 0
 
 function db(): Database | null {
+  if (handle) return handle
+  if (Date.now() - missingCheckedAt < 60_000) return null
   const path = join(getAppPaths().dbDir, 'tiktok-gmv-max.sqlite')
-  if (handle && handlePath === path) return handle
-  if (!existsSync(path)) return null
+  if (!existsSync(path)) {
+    missingCheckedAt = Date.now()
+    return null
+  }
   try {
     try {
       const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (path: string, options?: { readOnly?: boolean }) => Database }
@@ -39,6 +45,7 @@ export const gmvAds = {
     handle?.close?.()
     handle = null
     handlePath = ''
+    missingCheckedAt = 0
   },
 
   listStores(): GmvStoreOption[] {

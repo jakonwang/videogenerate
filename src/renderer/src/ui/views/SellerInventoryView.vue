@@ -34,6 +34,9 @@ import type {
   SiStockMoveKind,
   SiSyncProgress,
 } from '../../../../shared/sellerInventory'
+import type { SiSyncStage } from '../../../../shared/sellerInventory'
+import { friendlyStageError, friendlySyncError } from '../../../../shared/sellerSyncText'
+import { useSyncWatcher } from './shops/useSyncWatcher'
 import type { CreatorHubShop } from '../../../../shared/creatorHub'
 import ChCookieDialog from './creator-hub/ChCookieDialog.vue'
 
@@ -52,7 +55,6 @@ const keyword = ref('')
 const dailyMetric = ref<'units' | 'amount'>('units')
 const loading = ref(false)
 const dashboard = ref<SiDashboard | null>(null)
-const progress = ref<SiSyncProgress[]>([])
 const mappings = ref<SiMappingRow[]>([])
 const mappingDrafts = reactive<Record<string, string>>({})
 const onlyUnmapped = ref(true)
@@ -64,16 +66,29 @@ const moveForm = reactive<{ code: string; kind: SiStockMoveKind; quantity: numbe
 const detailKey = ref('')
 const detailRules = reactive<{ name: string; leadDays: number | null; safetyDays: number | null; cost: number | null }>({ name: '', leadDays: null, safetyDays: null, cost: null })
 const cookieDialog = ref<{ open: boolean; shop: CreatorHubShop | null }>({ open: false, shop: null })
-let pollTimer: ReturnType<typeof setInterval> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
-let pollCount = 0
 
 const CURRENCY: Record<string, string> = { VN: '₫', TH: '฿', MY: 'RM', PH: '₱', ID: 'Rp', SG: 'S$', US: '$', GB: '£' }
 
 const allShops = ref<SiShop[]>([])
 const currency = computed(() => CURRENCY[(allShops.value[0]?.region || '').toUpperCase()] || '')
-const syncing = computed(() => progress.value.some((item) => item.status === 'running'))
+const { progress, syncing, started, markLoaded } = useSyncWatcher({
+  refresh: async () => {
+    await loadDashboard()
+    if (tab.value === 'mapping') await loadMappings()
+  },
+  onFinished: (jobs) => {
+    if (jobs.some((job) => !job.automatic && job.status === 'done' && !job.stageErrors)) flash(t('shops.syncDone'))
+  },
+})
 const runningJob = computed(() => progress.value.find((item) => item.status === 'running'))
+/** Long lists render 100 rows at a time; thousands of table rows made scrolling stutter. */
+const PAGE_ROWS = 100
+const rowLimit = ref(PAGE_ROWS)
+const mappingLimit = ref(PAGE_ROWS)
+const shownItems = computed(() => filteredItems.value.slice(0, rowLimit.value))
+const shownMappings = computed(() => filteredMappings.value.slice(0, mappingLimit.value))
+const partialShops = computed(() => allShops.value.filter((shop) => !shop.state.lastSyncError && shop.state.stageErrors && Object.keys(shop.state.stageErrors).length))
 const items = computed(() => dashboard.value?.items || [])
 const kpi = computed(() => dashboard.value?.kpi)
 const dates = computed(() => [...(dashboard.value?.dates || [])].reverse().slice(0, days.value))
@@ -179,8 +194,9 @@ function shopName(key: string) {
 
 function errorMessage(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error || '')
-  const code = Object.keys({ SELLER_LOGIN_REQUIRED: 1, SELLER_INVENTORY_CODE_REQUIRED: 1, SELLER_INVENTORY_QUANTITY_INVALID: 1, SELLER_INVENTORY_DATE_IN_FUTURE: 1, SELLER_INVENTORY_SYNC_RUNNING: 1 }).find((key) => raw.includes(key))
-  return code ? t(`sellerInv.errors.${code}`) : raw.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+  // Input mistakes have their own wording; anything from the sync gets a plain-language sentence.
+  const code = Object.keys({ SELLER_INVENTORY_CODE_REQUIRED: 1, SELLER_INVENTORY_QUANTITY_INVALID: 1, SELLER_INVENTORY_DATE_IN_FUTURE: 1 }).find((key) => raw.includes(key))
+  return code ? t(`sellerInv.errors.${code}`) : friendlySyncError(raw, locale.value)
 }
 
 function flash(text: string) {
@@ -205,6 +221,7 @@ async function loadDashboard() {
     dashboard.value = next
     allShops.value = shopList
     Object.assign(settingsForm, next.settings)
+    void markLoaded()
   } catch (error) {
     errorText.value = errorMessage(error)
   } finally {
@@ -229,39 +246,12 @@ async function loadMoves() {
   }
 }
 
-async function pollProgress() {
-  const wasSyncing = syncing.value
-  progress.value = await api.getProgress().catch(() => progress.value)
-  if (syncing.value) {
-    // Show partial results every few polls while a long first sync runs.
-    pollCount += 1
-    if (pollCount % 4 === 0) void loadDashboard()
-    return
-  }
-  stopPolling()
-  if (wasSyncing) {
-    await Promise.all([loadDashboard(), loadMappings()])
-    const failed = progress.value.filter((item) => item.status === 'failed')
-    if (failed.length) errorText.value = failed.map((item) => t('sellerInv.syncFailed', { shop: shopName(item.shopKey), error: errorMessage(item.error) })).join('\n')
-  }
-}
-
-function startPolling() {
-  if (pollTimer) return
-  pollTimer = setInterval(() => { void pollProgress() }, 1500)
-}
-
-function stopPolling() {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = null
-}
-
 async function sync(key?: string) {
   errorText.value = ''
   try {
-    await api.sync(key ? { shopKey: key } : undefined)
-    progress.value = await api.getProgress()
-    startPolling()
+    const result = await api.sync(key ? { shopKey: key } : undefined)
+    if (!result.started) flash(friendlySyncError('SELLER_INVENTORY_SYNC_RUNNING', locale.value))
+    await started()
   } catch (error) {
     errorText.value = errorMessage(error)
   }
@@ -388,17 +378,18 @@ onMounted(async () => {
   moveForm.date = ''
   await Promise.all([loadDashboard(), loadMoves()])
   progress.value = await api.getProgress().catch(() => [])
-  if (syncing.value) startPolling()
-  else if (allShops.value.length && (!dashboard.value?.lastSyncAt || Date.now() - dashboard.value.lastSyncAt > 60 * 60 * 1000)) {
+  if (!syncing.value && allShops.value.length && (!dashboard.value?.lastSyncAt || Date.now() - dashboard.value.lastSyncAt > 60 * 60 * 1000)) {
     // Opening the page refreshes data that is more than an hour old.
     void sync()
   }
 })
 
 onBeforeUnmount(() => {
-  stopPolling()
   if (noticeTimer) clearTimeout(noticeTimer)
 })
+// A new filter starts again from the first page of rows.
+watch([filter, keyword, shopKey, days], () => { rowLimit.value = PAGE_ROWS })
+watch(onlyUnmapped, () => { mappingLimit.value = PAGE_ROWS })
 </script>
 
 <template>
@@ -441,10 +432,15 @@ onBeforeUnmount(() => {
     </div>
     <div v-for="shop in failedShops" :key="`err-${shop.shopKey}`" class="vg-notice vg-notice--danger si-notice">
       <AlertTriangle :size="16" />
-      <span>{{ (shop.state.lastSyncError || '').includes('LOGIN') ? t('sellerInv.loginExpired', { shop: shop.name }) : t('sellerInv.syncFailed', { shop: shop.name, error: errorMessage(shop.state.lastSyncError) }) }}</span>
-      <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :data-testid="`si-update-cookie-${shop.shopKey}`" @click="openCookieDialog(shop)"><Cookie :size="13" />{{ t('sellerInv.updateCookie') }}</button>
-      <button type="button" class="vg-btn vg-btn--sm" @click="openSellerCenter(shop.shopKey)"><ExternalLink :size="13" />{{ t('sellerInv.openSellerCenter') }}</button>
+      <span>{{ (shop.state.lastSyncError || '').includes('LOGIN') ? t('sellerInv.loginExpired', { shop: shop.name }) : `${shop.name}：${friendlySyncError(shop.state.lastSyncError, locale)}` }}</span>
+      <template v-if="(shop.state.lastSyncError || '').includes('LOGIN')">
+        <button type="button" class="vg-btn vg-btn--primary vg-btn--sm" :data-testid="`si-update-cookie-${shop.shopKey}`" @click="openCookieDialog(shop)"><Cookie :size="13" />{{ t('sellerInv.updateCookie') }}</button>
+        <button type="button" class="vg-btn vg-btn--sm" @click="openSellerCenter(shop.shopKey)"><ExternalLink :size="13" />{{ t('sellerInv.openSellerCenter') }}</button>
+      </template>
       <button type="button" class="vg-btn vg-btn--sm" :disabled="syncing" @click="sync(shop.shopKey)">{{ t('sellerInv.syncAgain') }}</button>
+    </div>
+    <div v-for="shop in syncing ? [] : partialShops" :key="`partial-${shop.shopKey}`" class="vg-notice vg-notice--warning si-notice si-pre">
+      <AlertTriangle :size="16" /><span>{{ Object.entries(shop.state.stageErrors || {}).map(([stage, error]) => `${shop.name}：${friendlyStageError(stage as SiSyncStage, error, locale)}`).join('\n') }}</span>
     </div>
     <div v-if="errorText" class="vg-notice vg-notice--danger si-notice si-pre"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
     <div v-if="notice" class="vg-notice vg-notice--accent si-notice"><span>{{ notice }}</span></div>
@@ -529,7 +525,7 @@ onBeforeUnmount(() => {
               <tr v-if="loading && !items.length"><td colspan="11" class="vg-table__empty"><LoaderCircle :size="18" class="vg-spin" /></td></tr>
               <tr v-else-if="!items.length"><td colspan="11" class="vg-table__empty">{{ t('sellerInv.table.empty') }}</td></tr>
               <tr v-else-if="!filteredItems.length"><td colspan="11" class="vg-table__empty">{{ t('sellerInv.table.noMatch') }}</td></tr>
-              <tr v-for="item in filteredItems" :key="item.key" class="si-row" @click="openDetail(item)">
+              <tr v-for="item in shownItems" :key="item.key" class="si-row" @click="openDetail(item)">
                 <td>
                   <div class="si-sku">
                     <span class="vg-thumb vg-thumb--sm si-thumb"><img v-if="item.image" :src="item.image" alt="" loading="lazy" /><ImageIcon v-else :size="14" /></span>
@@ -565,6 +561,7 @@ onBeforeUnmount(() => {
             </tbody>
           </table>
         </div>
+        <button v-if="filteredItems.length > shownItems.length" type="button" class="vg-btn vg-btn--sm si-more" data-testid="si-more" @click="rowLimit += PAGE_ROWS">{{ t('sellerInv.showMore', { n: filteredItems.length - shownItems.length }) }}</button>
       </section>
     </template>
 
@@ -590,7 +587,7 @@ onBeforeUnmount(() => {
           </thead>
           <tbody>
             <tr v-if="!filteredItems.length"><td :colspan="dates.length + 2" class="vg-table__empty">{{ t('sellerInv.table.empty') }}</td></tr>
-            <tr v-for="item in filteredItems" :key="item.key" class="si-row" @click="openDetail(item)">
+            <tr v-for="item in shownItems" :key="item.key" class="si-row" @click="openDetail(item)">
               <td class="si-sticky"><strong>{{ item.mapped ? item.key : t('sellerInv.table.unmappedBadge') }}</strong> <small class="vg-muted vg-ellipsis si-matrix__name">{{ item.name }}</small></td>
               <td class="num"><strong>{{ dailyMetric === 'units' ? fmt(dates.reduce((s, d) => s + (dashboard?.matrix[item.key]?.[d]?.units || 0), 0)) : fmtMoney(dates.reduce((s, d) => s + (dashboard?.matrix[item.key]?.[d]?.amount || 0), 0)) }}</strong></td>
               <td v-for="date in dates" :key="date" class="num" :class="{ 'si-zero': !dashboard?.matrix[item.key]?.[date]?.units }">
@@ -600,6 +597,7 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+      <button v-if="filteredItems.length > shownItems.length" type="button" class="vg-btn vg-btn--sm si-more" @click="rowLimit += PAGE_ROWS">{{ t('sellerInv.showMore', { n: filteredItems.length - shownItems.length }) }}</button>
     </section>
 
     <!-- Stock -->
@@ -662,7 +660,7 @@ onBeforeUnmount(() => {
           <thead><tr><th>{{ t('sellerInv.mapping.product') }}</th><th>{{ t('sellerInv.mapping.shop') }}</th><th>{{ t('sellerInv.mapping.sellerSku') }}</th><th>{{ t('sellerInv.mapping.code') }}</th><th>{{ t('sellerInv.mapping.suggestion') }}</th><th class="num">{{ t('sellerInv.mapping.units30') }}</th></tr></thead>
           <tbody>
             <tr v-if="!filteredMappings.length"><td colspan="6" class="vg-table__empty">{{ t('sellerInv.mapping.empty') }}</td></tr>
-            <tr v-for="row in filteredMappings" :key="row.skuKey">
+            <tr v-for="row in shownMappings" :key="row.skuKey">
               <td>
                 <div class="si-sku">
                   <span class="vg-thumb vg-thumb--sm si-thumb"><img v-if="row.image" :src="row.image" alt="" loading="lazy" /><ImageIcon v-else :size="14" /></span>
@@ -681,6 +679,7 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+      <button v-if="filteredMappings.length > shownMappings.length" type="button" class="vg-btn vg-btn--sm si-more" @click="mappingLimit += PAGE_ROWS">{{ t('sellerInv.showMore', { n: filteredMappings.length - shownMappings.length }) }}</button>
     </section>
 
     <!-- Settings -->
@@ -790,6 +789,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .si-page { display: flex; flex-direction: column; gap: 14px; }
+.si-more { align-self: center; margin: 10px auto; }
 .si-page > .vg-tabs { overflow-y: hidden; flex-shrink: 0; }
 .si-toolbar { flex-wrap: wrap; gap: 10px; }
 .si-sync-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }

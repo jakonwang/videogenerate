@@ -46,20 +46,26 @@ const API_DELAY_MS = 150
 const CONCURRENCY = 4
 /** Days of shop stats per request: the stats API takes several query conditions at once. */
 const SHOP_DAYS_PER_REQUEST = 30
+/** Shops are re-synced in the background once their data is older than this. */
+const AUTO_SYNC_AFTER_MS = 60 * 60_000
 
 /** Timeouts, network errors and server errors are retried (twice, with a short pause); a login problem is not. */
-function withRetries<T extends Pick<SellerSession, 'open' | 'api' | 'close'>>(session: T): T {
+function withRetries<T extends Pick<SellerSession, 'open' | 'api' | 'close'> & { recover?: () => Promise<void> }>(session: T): T {
   const transient = (error: unknown) => /SELLER_API_HTTP_(0|-1|429|5\d\d)|SELLER_API_BAD_JSON/.test(String((error as Error)?.message || error))
+  const stuck = (error: unknown) => /SELLER_API_HTTP_(0|-1)\b/.test(String((error as Error)?.message || error))
   return {
     ...session,
     open: session.open.bind(session),
     close: session.close.bind(session),
+    recover: session.recover?.bind(session),
     api: async (input: Parameters<SellerSession['api']>[0]) => {
       for (let attempt = 0; ; attempt += 1) {
         try {
           return await session.api(input)
         } catch (error) {
           if (attempt >= 2 || !transient(error)) throw error
+          // A timed-out request often means the page itself is stuck: reload it before trying again.
+          if (stuck(error)) await session.recover?.()
           await deps.delay(1000 * (attempt + 1))
         }
       }
@@ -86,7 +92,7 @@ type ShopRecord = { id: string; name: string; region: string; loginState: string
 type Dependencies = {
   now: () => number
   listShops: () => ShopRecord[]
-  createSession: (target: { shopKey: string; region: string }) => Pick<SellerSession, 'open' | 'api' | 'close'>
+  createSession: (target: { shopKey: string; region: string }) => Pick<SellerSession, 'open' | 'api' | 'close'> & { recover?: () => Promise<void> }
   delay: (ms: number) => Promise<void>
   /** The login is shared with the creator hub, so its status is updated there too. */
   markLogin: (shopKey: string, state: 'valid' | 'expired') => void
@@ -146,6 +152,24 @@ export function setSellerInventoryDependenciesForTest(next: Partial<Dependencies
 }
 
 const progress = new Map<string, SiSyncProgress>()
+
+/**
+ * Computed views (dashboards, reports, profit) are cached until the data changes. They run on the
+ * main process, so recomputing them on every poll froze the whole app for up to a second.
+ */
+const viewCache = new Map<string, unknown>()
+let viewCacheKey = ''
+function cached<T>(key: string, compute: () => T): T {
+  const current = `${repo.version()}|${zonedDate(deps.now(), DEFAULT_TZ)}|${Math.floor(deps.now() / 60_000)}`
+  if (current !== viewCacheKey) {
+    viewCache.clear()
+    viewCacheKey = current
+  }
+  if (viewCache.has(key)) return viewCache.get(key) as T
+  const value = compute()
+  viewCache.set(key, value)
+  return value
+}
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
 let reportRunning = false
 
@@ -216,13 +240,19 @@ async function syncProducts(session: Pick<SellerSession, 'api'>, shop: ShopRecor
   const products = [first, ...rest].flatMap((page) => page.products)
   report(`${products.length}/${first.total}`)
   // Products with more SKUs than the list shows are expanded, a few at a time.
+  // Products with several variants are read one by one; show that progress too, so it never looks stuck.
+  const variantTotal = products.filter(({ skus, totalSkuCount }) => totalSkuCount > skus.length).length
+  let variantDone = 0
   const expanded = await pool(products, CONCURRENCY, async ({ product, skus, totalSkuCount }) => {
     if (totalSkuCount <= skus.length) return skus
-    return parseProductSkus(await session.api({
+    const full = parseProductSkus(await session.api({
       method: 'GET',
       path: '/api/v1/product/local/product/skus/list',
       query: { ...sellerQuery(state, shop), product_id: String(product.product_id), tab_id: '1', is_online_version: 'true', need_dt_warehouse: 'false', sku_fetch_condition: '2' },
     }))
+    variantDone += 1
+    report(`${products.length}/${first.total} · ${variantDone}/${variantTotal}`)
+    return full
   })
   products.forEach(({ product }, index) => {
     for (const sku of expanded[index]) {
@@ -368,6 +398,10 @@ async function syncFinance(session: Pick<SellerSession, 'api'>, shop: ShopRecord
 
 /** Units sold per unified code per date for one shop, from the same daily rows as 销售与库存. */
 function unitsByCodeForShop(shop: ShopRecord, today: string) {
+  return cached(`units|${shop.id}|${today}`, () => computeUnitsByCode(shop, today))
+}
+
+function computeUnitsByCode(shop: ShopRecord, today: string) {
   const settings = repo.getSettings()
   const resolve = makeCodeResolver(repo.listMappings())
   const sellerSkuById = new Map(repo.listPlatformSkus([shop.id]).map((sku) => [sku.id, sku.sellerSku]))
@@ -407,10 +441,14 @@ async function syncHealth(session: Pick<SellerSession, 'api'>, shop: ShopRecord,
   repo.saveShopHealth(parseShopHealth({ homeTask, performance, violation }, shop.id, deps.now()))
 }
 
-function dailyRows(shops: ShopRecord[], today: string, settings: SiSettings) {
+function dailyRows(shops: ShopRecord[], today: string, settings: SiSettings): SiDailyRow[] {
+  return shops.flatMap((shop) => cached(`daily|${shop.id}|${today}|${settings.historyDays}`, () => shopDailyRows(shop, today, settings)))
+}
+
+function shopDailyRows(shop: ShopRecord, today: string, settings: SiSettings) {
   const rows: SiDailyRow[] = []
   const historyStart = shiftDate(today, -(Math.max(7, settings.historyDays) - 1))
-  for (const shop of shops) {
+  {
     const state = repo.getShopState(shop.id)
     const ordersFrom = state.ordersFrom || shiftDate(today, 1)
     rows.push(...repo.dailyFromCompass(shop.id, historyStart, ordersFrom))
@@ -442,113 +480,123 @@ export const sellerInventoryService = {
   },
 
   getDashboard(input?: { days?: number; shopKey?: string }) {
-    const allShops = deps.listShops()
-    const shops = input?.shopKey ? allShops.filter((shop) => shop.id === input.shopKey) : allShops
-    const settings = repo.getSettings()
-    const today = zonedDate(deps.now(), businessTimeZone(allShops))
-    return buildDashboard({
-      today,
-      days: Math.min(settings.historyDays, Math.max(7, Math.trunc(Number(input?.days) || 30))),
-      shops: shops.map(toShop),
-      platformSkus: repo.listPlatformSkus(shops.map((shop) => shop.id)),
-      daily: dailyRows(shops, today, settings),
-      mappings: repo.listMappings(),
-      moves: repo.listMoves(),
-      skuSettings: repo.listSkuSettings(),
-      settings,
+    return cached(`dashboard|${input?.shopKey || ''}|${input?.days || 30}`, () => {
+      const allShops = deps.listShops()
+      const shops = input?.shopKey ? allShops.filter((shop) => shop.id === input.shopKey) : allShops
+      const settings = repo.getSettings()
+      const today = zonedDate(deps.now(), businessTimeZone(allShops))
+      return buildDashboard({
+        today,
+        days: Math.min(settings.historyDays, Math.max(7, Math.trunc(Number(input?.days) || 30))),
+        shops: shops.map(toShop),
+        platformSkus: repo.listPlatformSkus(shops.map((shop) => shop.id)),
+        daily: dailyRows(shops, today, settings),
+        mappings: repo.listMappings(),
+        moves: repo.listMoves(),
+        skuSettings: repo.listSkuSettings(),
+        settings,
+      })
     })
   },
 
   /** 店铺 page: one card per shop with today, yesterday, 7-day trend and alerts. */
   getShopsOverview(): ShopsOverview {
-    const shops = deps.listShops()
-    const today = zonedDate(deps.now(), businessTimeZone(shops))
-    const cards: ShopCard[] = shops.map((record) => {
-      const shop = toShop(record)
-      const shopToday = zonedDate(deps.now(), tzOf(record))
-      const days = repo.listShopDays(record.id, shiftDate(shopToday, -14), shopToday)
-      const byDate = new Map(days.map((day) => [day.date, day]))
-      const gmv7 = sumShopDays(days.filter((day) => day.date > shiftDate(shopToday, -7))).gmv
-      const gmvPrev7 = sumShopDays(days.filter((day) => day.date <= shiftDate(shopToday, -7) && day.date > shiftDate(shopToday, -14))).gmv
-      const shopDashboard = this.getDashboard({ shopKey: record.id, days: 30 })
-      const stock = shopDashboard.kpi
-      const health = repo.getShopHealth(record.id)
-      const profit = this.profitSignal(record.id)
-      const analysis = analyzeShop({ shopKey: record.id, today: shopToday, days, skus: shopDashboard.items, health, profit })
-      const alerts: ShopCard['alerts'] = []
-      if (record.loginState === 'expired' || String(shop.state.lastSyncError || '').includes('LOGIN')) alerts.push({ kind: 'login' })
-      else if (shop.state.lastSyncError) alerts.push({ kind: 'syncFailed' })
-      if (!days.length) alerts.push({ kind: 'noData' })
-      // Today is still running, so the drop check compares the last 7 full days with the 7 before.
-      const last7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -7) && day.date < shopToday)).gmv
-      const before7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -14) && day.date < shiftDate(shopToday, -7))).gmv
-      if (before7 > 0 && last7 < before7 * 0.8) alerts.push({ kind: 'gmvDrop', value: (last7 - before7) / before7 })
-      if (stock.outCount + stock.reorderCount > 0) alerts.push({ kind: 'stock', value: stock.outCount + stock.reorderCount })
-      if (health?.todo.urgentToShip) alerts.push({ kind: 'urgentShip', value: health.todo.urgentToShip })
-      const failing = analysis.findings.filter((item) => item.key === 'healthFail').length
-      if (failing) alerts.push({ kind: 'health', value: failing })
-      return {
-        shop,
-        today: byDate.get(shopToday),
-        yesterday: byDate.get(shiftDate(shopToday, -1)),
-        gmv7,
-        gmvPrev7,
-        spark: dateRange(shiftDate(shopToday, -13), shopToday).map((date) => ({ date, gmv: byDate.get(date)?.gmv || 0 })),
-        outOfStock: stock.outCount,
-        reorder: stock.reorderCount,
-        alerts,
-        profit7: profit?.profit7,
-        margin7: profit?.margin7,
-        topFinding: analysis.findings.find((item) => item.level === 'error' || item.level === 'warning') || analysis.findings.find((item) => item.level === 'growth'),
+    return cached('overview', () => {
+      const shops = deps.listShops()
+      const today = zonedDate(deps.now(), businessTimeZone(shops))
+      const cards: ShopCard[] = shops.map((record) => {
+        const shop = toShop(record)
+        const shopToday = zonedDate(deps.now(), tzOf(record))
+        const days = repo.listShopDays(record.id, shiftDate(shopToday, -14), shopToday)
+        const byDate = new Map(days.map((day) => [day.date, day]))
+        // Complete days only, so the change compares like with like.
+        const gmv7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -7) && day.date < shopToday)).gmv
+        const gmvPrev7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -14) && day.date < shiftDate(shopToday, -7))).gmv
+        const shopDashboard = this.getDashboard({ shopKey: record.id, days: 30 })
+        const stock = shopDashboard.kpi
+        const health = repo.getShopHealth(record.id)
+        const profit = this.profitSignal(record.id)
+        const analysis = analyzeShop({ shopKey: record.id, today: shopToday, days, skus: shopDashboard.items, health, profit })
+        const alerts: ShopCard['alerts'] = []
+        if (record.loginState === 'expired' || String(shop.state.lastSyncError || '').includes('LOGIN')) alerts.push({ kind: 'login' })
+        else if (shop.state.lastSyncError) alerts.push({ kind: 'syncFailed' })
+        if (!days.length) alerts.push({ kind: 'noData' })
+        // Today is still running, so the drop check compares the last 7 full days with the 7 before.
+        const last7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -7) && day.date < shopToday)).gmv
+        const before7 = sumShopDays(days.filter((day) => day.date >= shiftDate(shopToday, -14) && day.date < shiftDate(shopToday, -7))).gmv
+        if (before7 > 0 && last7 < before7 * 0.8) alerts.push({ kind: 'gmvDrop', value: (last7 - before7) / before7 })
+        if (stock.outCount + stock.reorderCount > 0) alerts.push({ kind: 'stock', value: stock.outCount + stock.reorderCount })
+        if (health?.todo.urgentToShip) alerts.push({ kind: 'urgentShip', value: health.todo.urgentToShip })
+        const failing = analysis.findings.filter((item) => item.key === 'healthFail').length
+        if (failing) alerts.push({ kind: 'health', value: failing })
+        return {
+          shop,
+          today: byDate.get(shopToday),
+          yesterday: byDate.get(shiftDate(shopToday, -1)),
+          gmv7,
+          gmvPrev7,
+          spark: dateRange(shiftDate(shopToday, -13), shopToday).map((date) => ({ date, gmv: byDate.get(date)?.gmv || 0 })),
+          outOfStock: stock.outCount,
+          reorder: stock.reorderCount,
+          alerts,
+          profit7: profit?.profit7,
+          margin7: profit?.margin7,
+          topFinding: analysis.findings.find((item) => item.level === 'error' || item.level === 'warning') || analysis.findings.find((item) => item.level === 'growth'),
+        }
+      })
+      const total = { todayGmv: 0, todayOrders: 0, todayVisitors: 0, yesterdayGmv: 0, gmv7: 0, gmvPrev7: 0 }
+      for (const card of cards) {
+        total.todayGmv += card.today?.gmv || 0
+        total.todayOrders += card.today?.orders || 0
+        total.todayVisitors += card.today?.visitors || 0
+        total.yesterdayGmv += card.yesterday?.gmv || 0
+        total.gmv7 += card.gmv7
+        total.gmvPrev7 += card.gmvPrev7
       }
+      return { today, cards, total, syncing: this.isSyncing() }
     })
-    const total = { todayGmv: 0, todayOrders: 0, todayVisitors: 0, yesterdayGmv: 0, gmv7: 0, gmvPrev7: 0 }
-    for (const card of cards) {
-      total.todayGmv += card.today?.gmv || 0
-      total.todayOrders += card.today?.orders || 0
-      total.todayVisitors += card.today?.visitors || 0
-      total.yesterdayGmv += card.yesterday?.gmv || 0
-      total.gmv7 += card.gmv7
-      total.gmvPrev7 += card.gmvPrev7
-    }
-    return { today, cards, total, syncing: this.isSyncing() }
   },
 
   /** One shop's daily metrics over `days`, the same span before it, and its best SKUs. */
   getShopReport(input: { shopKey: string; days?: number }): ShopReport {
-    const record = requireShop(String(input?.shopKey || ''))
-    const span = Math.min(365, Math.max(7, Math.trunc(Number(input?.days) || 30)))
-    const today = zonedDate(deps.now(), tzOf(record))
-    const start = shiftDate(today, -(span - 1))
-    const prevStart = shiftDate(start, -span)
-    const days = repo.listShopDays(record.id, start, today)
-    const previous = repo.listShopDays(record.id, prevStart, shiftDate(start, -1))
-    const dashboard = this.getDashboard({ shopKey: record.id, days: Math.min(span, 90) })
-    const health = repo.getShopHealth(record.id)
-    // Analysis always looks at yesterday and the last two weeks, whatever range the page shows.
-    const recent = repo.listShopDays(record.id, shiftDate(today, -15), today)
-    return {
-      shop: toShop(record),
-      today,
-      start,
-      end: today,
-      days,
-      previous,
-      totals: sumShopDays(days),
-      previousTotals: sumShopDays(previous),
-      topSkus: [...dashboard.items].sort((a, b) => b.amount7 - a.amount7).slice(0, 15),
-      outOfStock: dashboard.kpi.outCount,
-      reorder: dashboard.kpi.reorderCount,
-      analysis: analyzeShop({ shopKey: record.id, today, days: recent, skus: dashboard.items, health }),
-      health,
-    }
+    return cached(`report|${input?.shopKey}|${input?.days || 30}`, () => {
+      const record = requireShop(String(input?.shopKey || ''))
+      const span = Math.min(365, Math.max(7, Math.trunc(Number(input?.days) || 30)))
+      const today = zonedDate(deps.now(), tzOf(record))
+      const start = shiftDate(today, -(span - 1))
+      const prevStart = shiftDate(start, -span)
+      const days = repo.listShopDays(record.id, start, today)
+      const previous = repo.listShopDays(record.id, prevStart, shiftDate(start, -1))
+      const dashboard = this.getDashboard({ shopKey: record.id, days: Math.min(span, 90) })
+      const health = repo.getShopHealth(record.id)
+      // Analysis always looks at yesterday and the last two weeks, whatever range the page shows.
+      const recent = repo.listShopDays(record.id, shiftDate(today, -15), today)
+      return {
+        shop: toShop(record),
+        today,
+        start,
+        end: today,
+        days,
+        previous,
+        // Period totals stop at yesterday; today has its own "so far" strip on the page.
+        totals: sumShopDays(days.filter((day) => day.date < today)),
+        previousTotals: sumShopDays(previous.filter((day) => day.date < shiftDate(start, -1))),
+        topSkus: [...dashboard.items].sort((a, b) => b.amount7 - a.amount7).slice(0, 15),
+        outOfStock: dashboard.kpi.outCount,
+        reorder: dashboard.kpi.reorderCount,
+        analysis: analyzeShop({ shopKey: record.id, today, days: recent, skus: dashboard.items, health }),
+        health,
+      }
+    })
   },
 
   analyzeShop(shopKey: string): ShopAnalysis {
-    const record = requireShop(shopKey)
-    const today = zonedDate(deps.now(), tzOf(record))
-    const dashboard = this.getDashboard({ shopKey, days: 30 })
-    return analyzeShop({ shopKey, today, days: repo.listShopDays(shopKey, shiftDate(today, -15), today), skus: dashboard.items, health: repo.getShopHealth(shopKey), profit: this.profitSignal(shopKey) })
+    return cached(`analysis|${shopKey}`, () => {
+      const record = requireShop(shopKey)
+      const today = zonedDate(deps.now(), tzOf(record))
+      const dashboard = this.getDashboard({ shopKey, days: 30 })
+      return analyzeShop({ shopKey, today, days: repo.listShopDays(shopKey, shiftDate(today, -15), today), skus: dashboard.items, health: repo.getShopHealth(shopKey), profit: this.profitSignal(shopKey) })
+    })
   },
 
   /** Last 7 full days of profit, for analysis and cards. */
@@ -562,52 +610,54 @@ export const sellerInventoryService = {
 
   /** Daily profit of one shop: payout after platform fees − product cost − ad spend. */
   getShopProfit(input: { shopKey: string; days?: number }): ShopProfit {
-    const record = requireShop(String(input?.shopKey || ''))
-    const span = Math.min(365, Math.max(1, Math.trunc(Number(input?.days) || 30)))
-    const today = zonedDate(deps.now(), tzOf(record))
-    const start = shiftDate(today, -(span - 1))
-    const prevStart = shiftDate(start, -span)
-    const settlements = repo.listSettlements(record.id, shiftDate(today, -45))
-    const fee = learnFeeRate(settlements)
-    const units = unitsByCodeForShop(record, today)
-    const costs = costMap()
-    const stores = gmvAds.listStores()
-    let link = repo.getAdLink(record.id)
-    if (!link) {
+    return cached(`profit|${input?.shopKey}|${input?.days || 30}`, () => {
+      const record = requireShop(String(input?.shopKey || ''))
+      const span = Math.min(365, Math.max(1, Math.trunc(Number(input?.days) || 30)))
+      const today = zonedDate(deps.now(), tzOf(record))
+      const start = shiftDate(today, -(span - 1))
+      const prevStart = shiftDate(start, -span)
+      const settlements = repo.listSettlements(record.id, shiftDate(today, -45))
+      const fee = learnFeeRate(settlements)
+      const units = unitsByCodeForShop(record, today)
+      const costs = costMap()
+      const stores = gmvAds.listStores()
+      let link = repo.getAdLink(record.id)
+      if (!link) {
+        const suggested = suggestStore(record, stores)
+        // Auto-link only when no exchange rate is needed; otherwise the page asks for the rate.
+        if (suggested && (!suggested.currency || suggested.currency === REGION_CURRENCY[record.region.toUpperCase()])) link = { shopKey: record.id, storeId: suggested.storeId, rate: 1, adCurrency: suggested.currency, updatedAt: deps.now() }
+      }
+      const adSpend = link ? gmvAds.dailySpend(link.storeId, prevStart, today) : new Map<string, number>()
+      const shopDays = repo.listShopDays(record.id, prevStart, today)
+      const build = (from: string, to: string) => buildProfitDays({ start: from, end: to, shopDays, unitsByCode: units, costs, adSpend, adRate: link?.rate ?? 1, feeRate: fee.rate })
+      const days = build(start, today)
+      const previous = build(prevStart, shiftDate(start, -1))
+      const dashboard = this.getDashboard({ shopKey: record.id, days: Math.min(span, 90) })
+      const missingCost = dashboard.items
+        .filter((item) => item.mapped && !costs.has(item.key) && item.units30 > 0)
+        .sort((a, b) => b.amount30 - a.amount30)
+        .slice(0, 30)
+        .map((item) => ({ code: item.key, name: item.name, units: item.units30, amount: item.amount30 }))
+      const pending = settlements.filter((item) => item.status === 'pending')
+      const settledSince = shiftDate(today, -6)
+      const settled = settlements.filter((item) => item.status === 'settled' && item.settledAt && zonedDate(item.settledAt, tzOf(record)) >= settledSince)
       const suggested = suggestStore(record, stores)
-      // Auto-link only when no exchange rate is needed; otherwise the page asks for the rate.
-      if (suggested && (!suggested.currency || suggested.currency === REGION_CURRENCY[record.region.toUpperCase()])) link = { shopKey: record.id, storeId: suggested.storeId, rate: 1, adCurrency: suggested.currency, updatedAt: deps.now() }
-    }
-    const adSpend = link ? gmvAds.dailySpend(link.storeId, prevStart, today) : new Map<string, number>()
-    const shopDays = repo.listShopDays(record.id, prevStart, today)
-    const build = (from: string, to: string) => buildProfitDays({ start: from, end: to, shopDays, unitsByCode: units, costs, adSpend, adRate: link?.rate ?? 1, feeRate: fee.rate })
-    const days = build(start, today)
-    const previous = build(prevStart, shiftDate(start, -1))
-    const dashboard = this.getDashboard({ shopKey: record.id, days: Math.min(span, 90) })
-    const missingCost = dashboard.items
-      .filter((item) => item.mapped && !costs.has(item.key) && item.units30 > 0)
-      .sort((a, b) => b.amount30 - a.amount30)
-      .slice(0, 30)
-      .map((item) => ({ code: item.key, name: item.name, units: item.units30, amount: item.amount30 }))
-    const pending = settlements.filter((item) => item.status === 'pending')
-    const settledSince = shiftDate(today, -6)
-    const settled = settlements.filter((item) => item.status === 'settled' && item.settledAt && zonedDate(item.settledAt, tzOf(record)) >= settledSince)
-    const suggested = suggestStore(record, stores)
-    return {
-      shopKey: record.id,
-      start,
-      end: today,
-      feeRate: fee.rate,
-      feeSample: fee.sample,
-      days,
-      totals: profitTotals(days),
-      previousTotals: profitTotals(previous),
-      missingCost,
-      adLink: link,
-      adStores: stores.map((store) => ({ ...store, suggested: store.storeId === suggested?.storeId })),
-      pending: { count: pending.length, settlement: pending.reduce((total, item) => total + item.settlement, 0) },
-      settledRecent: { count: settled.length, settlement: settled.reduce((total, item) => total + item.settlement, 0), since: settledSince },
-    }
+      return {
+        shopKey: record.id,
+        start,
+        end: today,
+        feeRate: fee.rate,
+        feeSample: fee.sample,
+        days,
+        totals: profitTotals(days.filter((day) => day.date < today)),
+        previousTotals: profitTotals(previous.filter((day) => day.date < shiftDate(start, -1))),
+        missingCost,
+        adLink: link,
+        adStores: stores.map((store) => ({ ...store, suggested: store.storeId === suggested?.storeId })),
+        pending: { count: pending.length, settlement: pending.reduce((total, item) => total + item.settlement, 0) },
+        settledRecent: { count: settled.length, settlement: settled.reduce((total, item) => total + item.settlement, 0), since: settledSince },
+      }
+    })
   },
 
   setAdLink(input: { shopKey: string; storeId?: string; rate?: number }) {
@@ -626,31 +676,33 @@ export const sellerInventoryService = {
 
   /** Phone summary (经营数据 → 店铺): today, yesterday, 7-day profit and the top findings, in Chinese. */
   businessDigest(): BusinessShops {
-    const overview = this.getShopsOverview()
-    const SYMBOL: Record<string, string> = { VN: '₫', TH: '฿', MY: 'RM', PH: '₱', ID: 'Rp', SG: 'S$', US: '$', GB: '£' }
-    return {
-      shops: overview.cards.map((card) => {
-        const analysis = this.analyzeShop(card.shop.shopKey)
-        return {
-          shopKey: card.shop.shopKey,
-          name: card.shop.name,
-          region: card.shop.region,
-          currency: SYMBOL[card.shop.region.toUpperCase()] || '',
-          lastSyncAt: card.shop.state.lastSyncAt,
-          loginExpired: card.alerts.some((alert) => alert.kind === 'login'),
-          today: card.today ? { gmv: card.today.gmv, orders: card.today.orders, visitors: card.today.visitors, conversion: card.today.conversion } : undefined,
-          yesterdayGmv: card.yesterday?.gmv,
-          gmvChangeDay: analysis.gmvChangeDay,
-          gmv7: card.gmv7,
-          gmvChange7: card.gmvPrev7 ? (card.gmv7 - card.gmvPrev7) / card.gmvPrev7 : undefined,
-          profit7: card.profit7,
-          margin7: card.margin7,
-          healthFailing: card.alerts.find((alert) => alert.kind === 'health')?.value || 0,
-          urgentShip: card.alerts.find((alert) => alert.kind === 'urgentShip')?.value || 0,
-          findings: analysis.findings.slice(0, 6).map((finding) => ({ level: finding.level, text: findingText(finding, 'zh-CN'), action: actionText(finding, 'zh-CN') || undefined })),
-        }
-      }),
-    }
+    return cached('digest', () => {
+      const overview = this.getShopsOverview()
+      const SYMBOL: Record<string, string> = { VN: '₫', TH: '฿', MY: 'RM', PH: '₱', ID: 'Rp', SG: 'S$', US: '$', GB: '£' }
+      return {
+        shops: overview.cards.map((card) => {
+          const analysis = this.analyzeShop(card.shop.shopKey)
+          return {
+            shopKey: card.shop.shopKey,
+            name: card.shop.name,
+            region: card.shop.region,
+            currency: SYMBOL[card.shop.region.toUpperCase()] || '',
+            lastSyncAt: card.shop.state.lastSyncAt,
+            loginExpired: card.alerts.some((alert) => alert.kind === 'login'),
+            today: card.today ? { gmv: card.today.gmv, orders: card.today.orders, visitors: card.today.visitors, conversion: card.today.conversion } : undefined,
+            yesterdayGmv: card.yesterday?.gmv,
+            gmvChangeDay: analysis.gmvChangeDay,
+            gmv7: card.gmv7,
+            gmvChange7: card.gmvPrev7 ? (card.gmv7 - card.gmvPrev7) / card.gmvPrev7 : undefined,
+            profit7: card.profit7,
+            margin7: card.margin7,
+            healthFailing: card.alerts.find((alert) => alert.kind === 'health')?.value || 0,
+            urgentShip: card.alerts.find((alert) => alert.kind === 'urgentShip')?.value || 0,
+            findings: analysis.findings.slice(0, 6).map((finding) => ({ level: finding.level, text: findingText(finding, 'zh-CN'), action: actionText(finding, 'zh-CN') || undefined })),
+          }
+        }),
+      }
+    })
   },
 
   /** Builds the morning report for every shop and delivers it (desktop + Feishu, per settings). */
@@ -709,10 +761,55 @@ export const sellerInventoryService = {
     }
   },
 
+  /** Changes whenever synced or edited data changes; pages reload only when it moved. */
+  dataVersion() {
+    return repo.version()
+  },
+
+  /**
+   * Keeps data fresh without the user pressing anything: every shop is re-synced when its last
+   * sync is older than an hour. Runs quietly; the 店铺 page shows the time of the last update.
+   */
+  async runAutoSync() {
+    const shops = deps.listShops()
+    if (!shops.length || this.isSyncing() || reportRunning) return null
+    const stale = shops.filter((shop) => {
+      const state = repo.getShopState(shop.id)
+      // A shop whose login expired waits for the user; retrying every hour would only fail again.
+      if (String(state.lastSyncError || '').includes('LOGIN') || shop.loginState === 'expired') return false
+      return !state.lastSyncAt || deps.now() - state.lastSyncAt > AUTO_SYNC_AFTER_MS
+    })
+    if (!stale.length) return null
+    const results = await Promise.all(stale.map((shop) => this.syncShop(shop.id, undefined, true)))
+    this.warmViews()
+    return results
+  },
+
+  /** Computes the 店铺 and 销售与库存 views after a sync, so opening them is instant. */
+  warmViews() {
+    setTimeout(() => {
+      try {
+        this.getShopsOverview()
+        this.getDashboard({ days: 30 })
+      } catch (error) {
+        console.warn('[seller-inventory] warming views failed', error)
+      }
+    }, 200)
+  },
+
   startScheduler() {
     if (schedulerTimer) return
-    schedulerTimer = setInterval(() => { void this.runScheduledReport().catch((error) => console.warn('[seller-inventory] morning report failed', error)) }, 10 * 60_000)
-    setTimeout(() => { void this.runScheduledReport().catch((error) => console.warn('[seller-inventory] morning report failed', error)) }, 60_000)
+    const tick = async () => {
+      try {
+        // The morning report syncs first itself; otherwise keep data fresh hourly.
+        const report = await this.runScheduledReport()
+        if (!report) await this.runAutoSync()
+      } catch (error) {
+        console.warn('[seller-inventory] scheduled work failed', error)
+      }
+    }
+    schedulerTimer = setInterval(() => { void tick() }, 10 * 60_000)
+    setTimeout(() => { void tick() }, 90_000)
   },
 
   stopScheduler() {
@@ -731,13 +828,15 @@ export const sellerInventoryService = {
   /** Syncs one shop, or every shop side by side (each in its own window). Returns once all have finished. */
   async sync(input?: { shopKey?: string; stages?: SiSyncStage[] }) {
     const shops = input?.shopKey ? [requireShop(input.shopKey)] : deps.listShops()
-    return await Promise.all(shops.map((shop) => this.syncShop(shop.id, input?.stages)))
+    const results = await Promise.all(shops.map((shop) => this.syncShop(shop.id, input?.stages)))
+    this.warmViews()
+    return results
   },
 
-  async syncShop(shopKey: string, stages: SiSyncStage[] = ['account', 'products', 'orders', 'compass', 'health', 'finance', 'shopDaily']): Promise<SiSyncProgress> {
+  async syncShop(shopKey: string, stages: SiSyncStage[] = ['account', 'products', 'orders', 'compass', 'health', 'finance', 'shopDaily'], automatic = false): Promise<SiSyncProgress> {
     const shop = requireShop(shopKey)
     if (progress.get(shopKey)?.status === 'running') throw new Error('SELLER_INVENTORY_SYNC_RUNNING')
-    const job: SiSyncProgress = { shopKey, status: 'running', startedAt: deps.now() }
+    const job: SiSyncProgress = { shopKey, status: 'running', startedAt: deps.now(), automatic }
     progress.set(shopKey, job)
     const settings = repo.getSettings()
     const state = repo.getShopState(shopKey)
@@ -745,39 +844,35 @@ export const sellerInventoryService = {
     const report = (stage: SiSyncStage) => (detail: string) => { job.stage = stage; job.detail = detail }
     try {
       // Shop numbers first (店铺 fills in within a minute), then products, orders and history.
+      // A failing step is recorded and the next one still runs; only a lost login stops the sync.
+      const stageErrors: Partial<Record<SiSyncStage, string>> = {}
+      const step = async (stage: SiSyncStage, page: string | null, run: () => Promise<void>) => {
+        if (!stages.includes(stage)) return
+        job.stage = stage
+        job.detail = ''
+        try {
+          if (page) await session.open(page)
+          await run()
+          repo.saveShopState(state)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (message.includes('SELLER_LOGIN_REQUIRED') || message.includes('SELLER_ACCOUNT_NOT_FOUND')) throw error
+          stageErrors[stage] = message
+          job.stageErrors = { ...stageErrors }
+          console.warn('[seller-inventory] sync step failed', { shopKey, stage, message })
+        }
+      }
       job.stage = 'account'
       await session.open('/compass/data-overview')
       if (stages.includes('account') || !state.sellerId) await syncAccount(session, shop, state)
-      if (stages.includes('shopDaily')) {
-        job.stage = 'shopDaily'
-        await syncShopDaily(session, shop, state, settings, report('shopDaily'))
-      }
-      if (stages.includes('health')) {
-        job.stage = 'health'
-        await syncHealth(session, shop, state)
-      }
-      if (stages.includes('products')) {
-        job.stage = 'products'
-        await session.open('/product/manage')
-        await syncProducts(session, shop, state, report('products'))
-        repo.saveShopState(state)
-      }
-      if (stages.includes('orders')) {
-        job.stage = 'orders'
-        await session.open('/order')
-        await syncOrders(session, shop, state, settings, report('orders'))
-        repo.saveShopState(state)
-      }
-      if (stages.includes('compass')) {
-        job.stage = 'compass'
-        await session.open('/compass/product-analysis')
-        await syncCompass(session, shop, state, settings, report('compass'))
-      }
+      await step('shopDaily', null, () => syncShopDaily(session, shop, state, settings, report('shopDaily')))
+      await step('health', null, () => syncHealth(session, shop, state))
+      await step('products', '/product/manage', () => syncProducts(session, shop, state, report('products')))
+      await step('orders', '/order', () => syncOrders(session, shop, state, settings, report('orders')))
+      await step('compass', '/compass/product-analysis', () => syncCompass(session, shop, state, settings, report('compass')))
       // Settlements are the slowest and only feed profit, so they come last.
-      if (stages.includes('finance')) {
-        job.stage = 'finance'
-        await syncFinance(session, shop, state, report('finance'))
-      }
+      await step('finance', null, () => syncFinance(session, shop, state, report('finance')))
+      state.stageErrors = Object.keys(stageErrors).length ? stageErrors : undefined
       state.lastSyncAt = deps.now()
       state.lastSyncError = undefined
       job.status = 'done'
@@ -805,27 +900,29 @@ export const sellerInventoryService = {
   },
 
   listMappings(): SiMappingRow[] {
-    const shops = new Map(deps.listShops().map((shop) => [shop.id, shop]))
-    const mappings = repo.listMappings()
-    const skus = repo.listPlatformSkus().filter((sku) => shops.has(sku.shopKey))
-    const singleSku = new Map<string, number>()
-    for (const sku of skus) singleSku.set(`${sku.shopKey}:${sku.productId}`, (singleSku.get(`${sku.shopKey}:${sku.productId}`) || 0) + 1)
-    const dashboard = this.getDashboard({ days: 30 })
-    const units30 = new Map<string, number>()
-    for (const item of dashboard.items) for (const key of item.skuKeys) units30.set(key, item.units30)
-    return skus.map((sku) => ({
-      skuKey: sku.id,
-      shopKey: sku.shopKey,
-      shopName: shops.get(sku.shopKey)?.name || sku.shopKey,
-      skuId: sku.skuId,
-      productName: sku.productName,
-      skuName: sku.skuName,
-      image: sku.image,
-      sellerSku: sku.sellerSku,
-      mappedCode: mappings.get(sku.id),
-      suggestion: suggestCode({ productName: sku.productName, sellerSku: sku.sellerSku, singleSku: singleSku.get(`${sku.shopKey}:${sku.productId}`) === 1 }),
-      units30: units30.get(sku.id) || 0,
-    })).sort((a, b) => Number(Boolean(a.sellerSku || a.mappedCode)) - Number(Boolean(b.sellerSku || b.mappedCode)) || b.units30 - a.units30)
+    return cached('mappings', () => {
+      const shops = new Map(deps.listShops().map((shop) => [shop.id, shop]))
+      const mappings = repo.listMappings()
+      const skus = repo.listPlatformSkus().filter((sku) => shops.has(sku.shopKey))
+      const singleSku = new Map<string, number>()
+      for (const sku of skus) singleSku.set(`${sku.shopKey}:${sku.productId}`, (singleSku.get(`${sku.shopKey}:${sku.productId}`) || 0) + 1)
+      const dashboard = this.getDashboard({ days: 30 })
+      const units30 = new Map<string, number>()
+      for (const item of dashboard.items) for (const key of item.skuKeys) units30.set(key, item.units30)
+      return skus.map((sku) => ({
+        skuKey: sku.id,
+        shopKey: sku.shopKey,
+        shopName: shops.get(sku.shopKey)?.name || sku.shopKey,
+        skuId: sku.skuId,
+        productName: sku.productName,
+        skuName: sku.skuName,
+        image: sku.image,
+        sellerSku: sku.sellerSku,
+        mappedCode: mappings.get(sku.id),
+        suggestion: suggestCode({ productName: sku.productName, sellerSku: sku.sellerSku, singleSku: singleSku.get(`${sku.shopKey}:${sku.productId}`) === 1 }),
+        units30: units30.get(sku.id) || 0,
+      })).sort((a, b) => Number(Boolean(a.sellerSku || a.mappedCode)) - Number(Boolean(b.sellerSku || b.mappedCode)) || b.units30 - a.units30)
+    })
   },
 
   setMapping(input: { skuKey: string; code: string }) {

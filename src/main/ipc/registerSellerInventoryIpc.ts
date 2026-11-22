@@ -14,6 +14,7 @@ export function registerSellerInventoryIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:sellerInventory:saveReportSettings', async (_event, payload) => sellerInventoryService.saveReportSettings(payload))
   ipcMain.handle('plugin:sellerInventory:getShopProfit', async (_event, payload) => sellerInventoryService.getShopProfit(payload))
   ipcMain.handle('plugin:sellerInventory:setAdLink', async (_event, payload) => sellerInventoryService.setAdLink(payload))
+  ipcMain.handle('plugin:sellerInventory:dataVersion', async () => sellerInventoryService.dataVersion())
   ipcMain.handle('plugin:sellerInventory:getProgress', async () => sellerInventoryService.getProgress())
   // Sync runs in the background; the page polls getProgress / getDashboard.
   ipcMain.handle('plugin:sellerInventory:sync', async (_event, payload) => {

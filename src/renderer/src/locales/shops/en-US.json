@@ -71,7 +71,7 @@
     "health": "{n} health indicators below target",
     "urgentShip": "{n} orders due to ship"
   },
-  "dataNote": "Today and yesterday are real time; older days come from Data Compass and usually settle within 1–2 days.",
+  "dataNote": "Today's numbers are real time; \"last 7 days\" and similar use complete days (today excluded) so comparisons are fair. Older data comes from Data Compass and settles within 1–2 days. While the app is open it updates every hour.",
   "backToShops": "Back to shops",
   "detailSubtitle": "{region} · daily business",
   "todaySoFar": "Today so far",
@@ -171,5 +171,9 @@
     "costPlaceholder": "Cost per unit",
     "moreInSales": "Enter more in Sales & Inventory",
     "note": "The fee rate comes from this shop's settlements of the last 45 days; refunds and subsidies follow the actual settlement."
-  }
+  },
+  "syncDone": "Sync finished; data is up to date",
+  "dismiss": "Got it",
+  "syncingShop": "Syncing…",
+  "unchanged": "Flat"
 }

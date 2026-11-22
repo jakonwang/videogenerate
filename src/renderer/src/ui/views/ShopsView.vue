@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, ChevronRight, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
-import type { ShopCard, ShopsOverview, SiSyncProgress } from '../../../../shared/sellerInventory'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, CheckCircle2, ChevronRight, Clock, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
+import type { ShopCard, ShopsOverview, SiSyncProgress, SiSyncStage } from '../../../../shared/sellerInventory'
 import ShopAccountsPanel from './shops/ShopAccountsPanel.vue'
 import ShopFindings from './shops/ShopFindings.vue'
 import ShopReportDialog from './shops/ShopReportDialog.vue'
 import { change, fmtChange, fmtMoney, fmtNumber, fmtPercent } from './shops/shopFormat'
+import { useSyncWatcher } from './shops/useSyncWatcher'
+import { freshnessText, friendlyStageError, friendlySyncError } from '../../../../shared/sellerSyncText'
 
 /** 店铺: every shop's business at a glance; 账号 holds the shared logins. */
 const { t, locale } = useI18n()
@@ -15,12 +17,12 @@ const router = useRouter()
 const route = useRoute()
 const tab = ref<'business' | 'accounts'>(route.query.tab === 'accounts' ? 'accounts' : 'business')
 const overview = ref<ShopsOverview | null>(null)
-const progress = ref<SiSyncProgress[]>([])
 const loading = ref(false)
 const errorText = ref('')
-let timer: ReturnType<typeof setInterval> | null = null
+const notice = ref<{ tone: 'accent' | 'warning' | 'danger'; text: string } | null>(null)
 const reportOpen = ref(false)
-let pollCount = 0
+const now = ref(Date.now())
+const clock = setInterval(() => { now.value = Date.now() }, 30_000)
 /** Shops sync side by side, so every running shop gets its own status. */
 const runningText = computed(() => progress.value
   .filter((item) => item.status === 'running')
@@ -29,7 +31,26 @@ const runningText = computed(() => progress.value
 
 const api = window.api.sellerInventory
 const region = computed(() => overview.value?.cards[0]?.shop.region)
-const syncing = computed(() => progress.value.some((item) => item.status === 'running'))
+const { progress, syncing, started, markLoaded } = useSyncWatcher({ refresh: () => load(), onFinished: finished })
+
+function isSyncing(shopKey: string) {
+  return progress.value.some((item) => item.shopKey === shopKey && item.status === 'running')
+}
+
+function freshness(card: ShopCard) {
+  return freshnessText(card.shop.state.lastSyncAt, now.value, locale.value)
+}
+
+/** How a sync the user started ended, in one sentence. Background updates stay quiet unless they fail. */
+function finished(jobs: SiSyncProgress[]) {
+  const name = (shopKey: string) => overview.value?.cards.find((card) => card.shop.shopKey === shopKey)?.shop.name || ''
+  const failed = jobs.filter((job) => job.status === 'failed')
+  const partial = jobs.filter((job) => job.status === 'done' && job.stageErrors && Object.keys(job.stageErrors).length)
+  if (failed.length) notice.value = { tone: 'danger', text: failed.map((job) => `${name(job.shopKey)}：${friendlySyncError(job.error, locale.value)}`).join('\n') }
+  else if (partial.length) notice.value = { tone: 'warning', text: partial.flatMap((job) => Object.entries(job.stageErrors || {}).map(([stage, error]) => `${name(job.shopKey)}：${friendlyStageError(stage as SiSyncStage, error, locale.value)}`)).join('\n') }
+  else if (jobs.some((job) => !job.automatic)) notice.value = { tone: 'accent', text: t('shops.syncDone') }
+  if (notice.value?.tone === 'accent') setTimeout(() => { if (notice.value?.tone === 'accent') notice.value = null }, 4000)
+}
 
 function money(value: number | undefined, compact = true) {
   return fmtMoney(value, locale.value, region.value, compact)
@@ -49,6 +70,11 @@ function alertText(alert: ShopCard['alerts'][number]) {
   return t(`shops.alert.${alert.kind}`)
 }
 
+function visibleAlerts(card: ShopCard) {
+  // While a shop is syncing, "not synced yet" is just noise.
+  return card.alerts.filter((alert) => !(alert.kind === 'noData' && isSyncing(card.shop.shopKey)))
+}
+
 function alertTone(alert: ShopCard['alerts'][number]) {
   return alert.kind === 'stock' || alert.kind === 'noData' ? 'vg-pill--amber' : 'vg-pill--red'
 }
@@ -58,31 +84,19 @@ async function load() {
   try {
     overview.value = await api.getShopsOverview()
     errorText.value = ''
+    void markLoaded()
   } catch (error) {
-    errorText.value = error instanceof Error ? error.message : String(error)
+    errorText.value = friendlySyncError(error, locale.value)
   } finally {
     loading.value = false
   }
 }
 
-async function poll() {
-  const was = syncing.value
-  progress.value = await api.getProgress().catch(() => progress.value)
-  if (syncing.value) {
-    // Shop numbers are synced first: refresh the cards while the rest is still loading.
-    pollCount += 1
-    if (pollCount % 3 === 0) void load()
-    return
-  }
-  if (timer) clearInterval(timer)
-  timer = null
-  if (was) await load()
-}
-
 async function syncAll() {
-  await api.sync()
-  progress.value = await api.getProgress()
-  if (!timer) timer = setInterval(() => { void poll() }, 2000)
+  notice.value = null
+  const result = await api.sync()
+  if (!result.started) notice.value = { tone: 'accent', text: friendlySyncError('SELLER_INVENTORY_SYNC_RUNNING', locale.value) }
+  await started()
 }
 
 // Links such as "update cookies" land on /shops?tab=accounts while this page is already open.
@@ -92,13 +106,8 @@ watch(tab, (next) => {
   if (next === 'business') void load()
 })
 
-onMounted(async () => {
-  await load()
-  progress.value = await api.getProgress().catch(() => [])
-  if (syncing.value && !timer) timer = setInterval(() => { void poll() }, 2000)
-})
-
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onMounted(() => { void load() })
+onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
@@ -125,6 +134,10 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 
     <template v-else>
       <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
+      <div v-if="notice" class="vg-notice shops-view__notice" :class="`vg-notice--${notice.tone}`" data-testid="shops-notice">
+        <CheckCircle2 v-if="notice.tone === 'accent'" :size="16" /><AlertTriangle v-else :size="16" /><span>{{ notice.text }}</span>
+        <button type="button" class="vg-btn vg-btn--xs vg-btn--ghost" @click="notice = null">{{ t('shops.dismiss') }}</button>
+      </div>
       <section v-if="overview && !overview.cards.length" class="vg-card vg-empty">
         <span class="vg-empty__icon"><Building2 :size="26" /></span>
         <h3>{{ t('shops.emptyTitle') }}</h3>
@@ -144,7 +157,11 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
           <button v-for="card in overview.cards" :key="card.shop.shopKey" type="button" class="vg-card vg-card--interactive shop-biz" :data-testid="`shop-biz-${card.shop.shopKey}`" @click="router.push(`/shops/${encodeURIComponent(card.shop.shopKey)}`)">
             <header class="shop-biz__head">
               <span class="shop-biz__avatar">{{ (card.shop.name || '?').slice(0, 1).toUpperCase() }}</span>
-              <span class="shop-biz__name"><strong class="vg-ellipsis">{{ card.shop.name }}</strong><small class="vg-muted">{{ card.shop.region }}</small></span>
+              <span class="shop-biz__name">
+                <strong class="vg-ellipsis">{{ card.shop.name }}</strong>
+                <small v-if="isSyncing(card.shop.shopKey)" class="shop-biz__fresh is-syncing"><LoaderCircle :size="11" class="vg-spin" />{{ t('shops.syncingShop') }}</small>
+                <small v-else class="shop-biz__fresh" :class="{ 'is-stale': freshness(card).stale }" :data-testid="`shop-fresh-${card.shop.shopKey}`"><Clock :size="11" />{{ card.shop.region }} · {{ freshness(card).text }}</small>
+              </span>
               <ChevronRight :size="16" class="vg-muted" />
             </header>
             <div class="shop-biz__main">
@@ -177,8 +194,9 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
               <small v-if="card.margin7 !== undefined">{{ t('shops.profit.margin', { value: fmtPercent(card.margin7, locale, 1) }) }}</small>
             </div>
             <ShopFindings v-if="card.topFinding" :findings="[card.topFinding]" compact class="shop-biz__finding" />
-            <div v-if="card.alerts.length" class="shop-biz__alerts">
-              <span v-for="alert in card.alerts" :key="alert.kind" class="vg-pill" :class="alertTone(alert)">{{ alertText(alert) }}</span>
+            <div v-if="visibleAlerts(card).length || card.shop.state.stageErrors" class="shop-biz__alerts">
+              <span v-for="alert in visibleAlerts(card)" :key="alert.kind" class="vg-pill" :class="alertTone(alert)" :title="alert.kind === 'syncFailed' ? friendlySyncError(card.shop.state.lastSyncError, locale) : undefined">{{ alertText(alert) }}</span>
+              <span v-for="(error, stage) in card.shop.state.stageErrors || {}" :key="stage" class="vg-pill vg-pill--amber" :title="friendlyStageError(stage as SiSyncStage, error, locale)">{{ friendlyStageError(stage as SiSyncStage, error, locale, true) }}</span>
             </div>
           </button>
         </section>
@@ -198,6 +216,10 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 .shops-view__totals small { font-size: 11px; margin-top: 2px; }
 .shops-view__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
 .shops-view__note { font-size: 12px; margin: 0; }
+.shops-view__notice > span { flex: 1; white-space: pre-line; }
+.shop-biz__fresh { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--theme-text-muted); }
+.shop-biz__fresh.is-stale { color: var(--vg-amber); font-weight: 600; }
+.shop-biz__fresh.is-syncing { color: var(--vg-accent); }
 .shop-biz { display: flex; flex-direction: column; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .shop-biz__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .shop-biz__avatar { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; background: var(--vg-accent-soft); color: var(--vg-accent); }

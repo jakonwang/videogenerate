@@ -87,6 +87,10 @@ async function testServiceSync() {
   sellerInventoryRepo.close()
   const calls: string[] = []
   const loginMarks: string[] = []
+  let failSettlements = false
+  let stuckOnce = true
+  let recovered = 0
+  let now = NOW
   let statsRequests = 0
   const delivered: string[] = []
   const orderPages = [
@@ -95,7 +99,7 @@ async function testServiceSync() {
     { main_orders: [order('o1', '2026-11-20', [{ skuId: 's1', seller: 'A-1', qty: 1, amount: 100 }]), order('o0', '2026-11-20', [{ skuId: 's1', seller: 'A-1', qty: 9, amount: 900, status: 140 }]), order('old', '2026-10-01', [{ skuId: 's1', seller: 'A-1', qty: 50, amount: 1 }])], search_next_cursor: 'more', search_next_has_more: true },
   ]
   setSellerInventoryDependenciesForTest({
-    now: () => NOW,
+    now: () => now,
     delay: async () => undefined,
     markLogin: (shopKey, state) => { loginMarks.push(`${shopKey}:${state}`) },
     deliver: async (report, settings) => { delivered.push(report.date); return { desktop: settings.desktop, feishu: settings.feishu } },
@@ -103,6 +107,7 @@ async function testServiceSync() {
     createSession: () => ({
       open: async (pathname: string) => { calls.push(`open ${pathname}`) },
       close: () => { calls.push('close') },
+      recover: async () => { recovered += 1 },
       api: async (input) => {
         calls.push(input.path)
         if (input.path.endsWith('get_all_sellers')) return { code: 0, data: { sellers_data: { g: { global_seller: { seller_map: [{ seller_id: 'S1', region: 'VN' }] } } } } }
@@ -110,6 +115,7 @@ async function testServiceSync() {
           { product_id: 'p1', product_name: 'Earring A-1', total_sku_count: 1, skus: [{ id: 's1', seller_sku: 'A-1', quantities: [{ total_quantity: 40, available_quantity: 40 }] }] },
           { product_id: 'p2', product_name: 'Necklace B-7', total_sku_count: 2, skus: [{ id: 's2', seller_sku: '', quantities: [{ available_quantity: 3 }] }] },
         ] } }
+        if (input.path.endsWith('product/skus/list') && stuckOnce) { stuckOnce = false; throw new Error('SELLER_API_HTTP_-1') }
         if (input.path.endsWith('product/skus/list')) return { code: 0, data: { 0: { id: 's2', seller_sku: '', quantities: [{ available_quantity: 3 }] }, 1: { id: 's3', seller_sku: 'B-7-L', quantities: [{ available_quantity: 1 }] } } }
         if (input.path.endsWith('fulfillment/order/list')) {
           const body = input.body as { offset: number; pagination_type: number }
@@ -122,6 +128,7 @@ async function testServiceSync() {
           return { code: 0, data: { items: body.request.time_descriptor.start === '2026-11-01' ? [{ meta: { sku_id: 's1', product_id: 'p1' }, stats: { sku_gmv: { amount: '500' }, sku_order_cnt: 5, sku_unit_sold_cnt: 5 } }] : [] } }
         }
         if (input.path.endsWith('statement/order/list')) {
+          if (failSettlements) throw new Error('SELLER_API_HTTP_500')
           const query = input.query as Record<string, string>
           if (query.from !== '0') return { code: 0, data: { order_records: [] } }
           const status = query.settlement_status === '1' ? 'pending' : 'settled'
@@ -152,6 +159,8 @@ async function testServiceSync() {
   const result = await sellerInventoryService.syncShop('shopA')
   assert.equal(result.status, 'done', result.error)
   assert.deepEqual(loginMarks, ['shopA:valid'], 'a successful sync confirms the shared login')
+  assert.equal(recovered, 1, 'a stuck request reloads the page once, then the retry succeeds')
+  assert.equal(result.stageErrors, undefined)
   assert.ok(calls.includes('open /order') && calls.includes('open /compass/product-analysis'))
   assert.equal(calls.filter((call) => call.endsWith('fulfillment/order/list')).length, 4, 'one parallel batch of order pages, then it stops')
   assert.equal(statsRequests, 3, '90 shop days in 3 requests')
@@ -161,7 +170,7 @@ async function testServiceSync() {
   assert.equal(shopDays.find((day) => day.date === TODAY)?.gmv, 22000)
   const report = sellerInventoryService.getShopReport({ shopKey: 'shopA', days: 7 })
   assert.equal(report.days.length, 7)
-  assert.equal(report.totals.gmv, (16 + 17 + 18 + 19 + 20 + 21 + 22) * 1000)
+  assert.equal(report.totals.gmv, (16 + 17 + 18 + 19 + 20 + 21) * 1000, 'period totals stop at yesterday; today is still running')
   assert.equal(report.totals.conversion, 0.1, 'conversion is buyers / visitors over the period')
   assert.equal(report.totals.videoGmv + report.totals.liveGmv + report.totals.cardGmv, report.totals.gmv)
   assert.equal(sellerInventoryRepo.getShopHealth('shopA')?.todo.urgentToShip, 1, 'health is synced with the shop')
@@ -222,8 +231,9 @@ async function testServiceSync() {
   const a1 = dashboard.items.find((item) => item.key === 'A-1')
   assert.ok(a1, 'A-1 is listed')
   assert.equal(a1.unitsToday, 3)
-  assert.equal(a1.units7, 4, 'cancelled and out-of-window orders are not counted')
-  assert.equal(a1.units30, 4 + 5, 'compass history fills days before order coverage')
+  assert.equal(a1.unitsToday, 3)
+  assert.equal(a1.units7, 1, "7 complete days: cancelled, out-of-window and today's orders are not counted")
+  assert.equal(a1.units30, 1 + 5, 'compass history fills days before order coverage')
   assert.equal(a1.stockSource, 'platform')
   assert.equal(a1.stock, 40)
   assert.equal(dashboard.kpi.amountToday, 300)
@@ -246,6 +256,29 @@ async function testServiceSync() {
   const mappings = sellerInventoryService.listMappings()
   assert.equal(mappings.find((row) => row.skuKey === 'shopA:s2')?.mappedCode, 'B-7-M')
 
+  // A failing step (settlements) is recorded; the rest of the sync still counts as done.
+  failSettlements = true
+  const partial = await sellerInventoryService.syncShop('shopA')
+  assert.equal(partial.status, 'done')
+  assert.match(String(partial.stageErrors?.finance), /HTTP_500/)
+  assert.match(String(sellerInventoryRepo.getShopState('shopA').stageErrors?.finance), /HTTP_500/)
+  assert.equal(sellerInventoryRepo.getShopState('shopA').lastSyncError, undefined)
+  failSettlements = false
+
+  // Hourly auto update: only stale shops, never a shop whose login expired.
+  assert.equal(await sellerInventoryService.runAutoSync(), null, 'just synced: nothing to do')
+  now = NOW + 2 * 3_600_000
+  const auto = await sellerInventoryService.runAutoSync()
+  assert.equal(auto?.length, 1)
+  assert.equal(auto?.[0].automatic, true)
+  sellerInventoryRepo.saveShopState({ ...sellerInventoryRepo.getShopState('shopA'), lastSyncAt: NOW, lastSyncError: 'SELLER_LOGIN_REQUIRED' })
+  assert.equal(await sellerInventoryService.runAutoSync(), null, 'expired login waits for the user')
+  now = NOW
+  const versionBefore = sellerInventoryService.dataVersion()
+  sellerInventoryService.saveSettings({})
+  assert.ok(sellerInventoryService.dataVersion() > versionBefore, 'any write moves the data version')
+  await new Promise((resolve) => setTimeout(resolve, 400))
+
   sellerInventoryRepo.close()
   gmvAds.close()
   await rm(dataDir, { recursive: true, force: true })
@@ -253,7 +286,7 @@ async function testServiceSync() {
 
 function testDashboardRisk() {
   const shops = [{ shopKey: 's', name: 'S', region: 'VN', loginState: 'valid', timezone: TZ, state: { shopKey: 's' } }]
-  const daily = Array.from({ length: 14 }, (_, index) => ({ shopKey: 's', skuId: 'x', sellerSku: 'X-1', date: shiftDate(TODAY, -index), units: 10, amount: 100, orders: 10, cancelledUnits: 0 }))
+  const daily = Array.from({ length: 14 }, (_, index) => ({ shopKey: 's', skuId: 'x', sellerSku: 'X-1', date: shiftDate(TODAY, -index - 1), units: 10, amount: 100, orders: 10, cancelledUnits: 0 }))
   const dashboard = buildDashboard({ today: TODAY, days: 30, shops, platformSkus: [{ id: 's:x', shopKey: 's', skuId: 'x', productId: 'p', productName: 'X', skuName: '', sellerSku: 'X-1', stockTotal: 50, stockAvailable: 50, updatedAt: 1 }], daily, mappings: new Map(), moves: [], skuSettings: [], settings: SI_DEFAULT_SETTINGS })
   const item = dashboard.items[0]
   assert.equal(item.avgDaily, 10)

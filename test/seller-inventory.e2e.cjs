@@ -28,6 +28,11 @@ async function main() {
     const page = await app.firstWindow()
     page.setDefaultTimeout(30_000)
     page.on('pageerror', (error) => errors.push(String(error)))
+    // Error codes such as SELLER_LOGIN_REQUIRED or HTTP_500 must never reach the screen.
+    const noTechnicalText = async (where) => {
+      const text = await page.locator('main').first().innerText()
+      assert.doesNotMatch(text, /SELLER_|HTTP_\d|code=|Error invoking/, `technical text on the ${where}`)
+    }
     page.on('console', (message) => { if (message.type() === 'error' && /seller|sellerInv|i18n|intlify/i.test(message.text())) errors.push(message.text()) })
     await page.setViewportSize({ width: 1480, height: 960 }).catch(() => undefined)
     await page.waitForLoadState('domcontentloaded')
@@ -95,6 +100,7 @@ async function main() {
     await page.locator('[data-testid="si-sync"]').click()
     await page.getByText('商家后台登录已失效').first().waitFor({ timeout: 120_000 })
     await page.screenshot({ path: join(shots, '05-login-required.png'), fullPage: true })
+    await noTechnicalText('sales page after a failed sync')
 
     // The login is shared with 达人管理: the failure offers the same cookie dialog for that shop.
     await page.locator('[data-testid^="si-update-cookie-"]').first().click()
@@ -123,6 +129,8 @@ async function main() {
     assert.match(bizText, /2 单快超时发货|2 项健康指标不达标/)
     assert.match(bizText, /个订单快超时没发货|已售罄|比上周同一天/, 'the most important finding is on the card')
     await page.screenshot({ path: join(shots, '08-shops-business.png'), fullPage: true })
+    assert.match(await page.locator('[data-testid="shop-fresh-shop-b"]').innerText(), /更新|没更新/, 'each card says when it was updated')
+    await noTechnicalText('shops page')
     await bizCard.click()
     await page.waitForFunction(() => window.location.hash.includes('/shops/shop-a'))
     const detailPage = page.locator('[data-testid="shop-detail"]')
@@ -145,7 +153,9 @@ async function main() {
     assert.match(analysisText, /→ /, 'each finding says what to do')
     assert.match(analysisText, /12 小时客服回复率 不达标：82\.0%，要求 85\.0%/)
     const healthText = await detailPage.locator('[data-testid="shop-health"]').innerText()
-    assert.match(healthText, /2 项不达标/)
+    assert.match(healthText, /3 项不达标/)
+    await detailPage.locator('[data-testid="shop-analysis"]').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: join(shots, '09b-analysis.png') })
     assert.match(healthText, /待发货\s*445\s*2 个快超时/)
     assert.match(await detailPage.locator('[data-testid="shop-channels"]').innerText(), /短视频/)
     assert.match(await detailPage.locator('[data-testid="shop-channels"]').innerText(), /达人/)
@@ -153,6 +163,9 @@ async function main() {
     assert.equal(await detailPage.locator('[data-testid="shop-daily-table"] tbody tr').count(), 30)
     assert.match(await detailPage.locator('[data-testid="shop-skus"]').innerText(), /A-152/)
     await page.screenshot({ path: join(shots, '09-shop-detail.png'), fullPage: true })
+    assert.match(await page.locator('[data-testid="shop-detail-fresh"]').innerText(), /更新|没更新/)
+    assert.match(await page.locator('[data-testid="shop-detail-sync-error"]').innerText(), /登录已失效/, 'the failed sync is explained in plain words')
+    await noTechnicalText('shop page')
     await detailPage.locator('.vg-seg__btn', { hasText: '90 天' }).click()
     await page.waitForFunction(() => document.querySelectorAll('[data-testid="shop-daily-table"] tbody tr').length === 90)
 
