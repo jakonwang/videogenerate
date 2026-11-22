@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Check, Clapperboard, Link2, Megaphone, Search, Send, TrendingUp, Users, X } from 'lucide-vue-next'
 
-type SignalAction = 'bind' | 'make_content' | 'make_variant' | 'open_ads' | 'open_creators'
+type SignalAction = 'bind' | 'make_content' | 'make_variant' | 'replenish' | 'open_ads' | 'open_creators'
 type Signal = { key: string; level: 'info' | 'warning' | 'success'; action: SignalAction; params: Record<string, string | number> }
 type ChannelProduct = { id: string; title: string; imageUrl?: string; sources: Array<'ads' | 'creators' | 'publish'> }
 export type ProductSpine = {
@@ -12,7 +12,7 @@ export type ProductSpine = {
   inferredIds: string[]
   tiktokProductIds: string[]
   channelProducts: ChannelProduct[]
-  ads: { windowDays: number; spend: number; revenue: number; orders: number; roi: number; creativeCount: number; activeCreativeCount: number } | null
+  ads: { windowDays: number; spend: number; revenue: number; orders: number; roi: number; creativeCount: number; activeCreativeCount: number; breakEvenRoi?: number; profit?: number } | null
   creators: { sampleCount: number; awaitingContentCount: number; creatorCount: number; videoCount: number; gmv: number; orders: number } | null
   signals: Signal[]
 }
@@ -59,7 +59,12 @@ const stages = computed(() => {
     {
       key: 'ads', icon: Megaphone, active: Boolean(ads && ads.spend > 0),
       value: ads ? `ROI ${number(ads.roi)}` : '—',
-      detail: ads ? t('ai.spine.adsDetail', { days: ads.windowDays, spend: number(ads.spend), creatives: ads.activeCreativeCount }) : t(bound.value ? 'ai.spine.adsEmpty' : 'ai.spine.needBind'),
+      detail: ads
+        ? [
+            ads.profit !== undefined ? t(ads.profit < 0 ? 'ai.spine.adsLosing' : 'ai.spine.adsProfit', { profit: number(Math.abs(ads.profit)) }) : '',
+            t('ai.spine.adsDetail', { days: ads.windowDays, spend: number(ads.spend), creatives: ads.activeCreativeCount }),
+          ].filter(Boolean).join(' · ')
+        : t(bound.value ? 'ai.spine.adsEmpty' : 'ai.spine.needBind'),
       action: () => (bound.value ? void router.push(ADS_ROUTE) : openBind()),
     },
     {
@@ -110,10 +115,21 @@ async function saveBind() {
   }
 }
 
+/** 衰退素材有「还能撑几天」时换一句更具体的提示 */
+function signalText(signal: Signal) {
+  if (signal.key === 'ads_fatigue' && signal.params.daysLeft !== undefined) {
+    const floorName = t(`ai.spine.floor.${signal.params.floorKind === 'break_even' ? 'break_even' : 'average'}`)
+    return Number(signal.params.daysLeft) === 0
+      ? t('ai.spine.signal.ads_fatigue_below', { ...signal.params, floorName })
+      : t('ai.spine.signal.ads_fatigue_runway', { ...signal.params, floorName })
+  }
+  return t(`ai.spine.signal.${signal.key}`, signal.params)
+}
 function runSignal(signal: Signal) {
   if (signal.action === 'bind') openBind()
   else if (signal.action === 'make_content') emit('make-content')
-  else if (signal.action === 'make_variant') emit('make-variant', String(signal.params.name || ''), String(signal.params.creativeId || ''))
+  // 补货：照着正在衰退的主力素材做一批变体，走 AI 制片人 → 审核收件箱
+  else if (signal.action === 'make_variant' || signal.action === 'replenish') emit('make-variant', String(signal.params.name || ''), String(signal.params.creativeId || ''))
   else if (signal.action === 'open_ads') void router.push(ADS_ROUTE)
   else void router.push(CREATORS_ROUTE)
 }
@@ -146,7 +162,7 @@ function runSignal(signal: Signal) {
     <ul v-if="spine.signals.length" class="pc__signals">
       <li v-for="signal in spine.signals" :key="signal.key" class="pc__signal" :data-testid="`product-signal-${signal.key}`">
         <span class="vg-pill" :class="{ 'vg-pill--amber': signal.level === 'warning', 'vg-pill--green': signal.level === 'success', 'vg-pill--blue': signal.level === 'info' }">{{ t(`ai.spine.level.${signal.level}`) }}</span>
-        <span class="pc__signal-text">{{ t(`ai.spine.signal.${signal.key}`, signal.params) }}</span>
+        <span class="pc__signal-text">{{ signalText(signal) }}</span>
         <button type="button" class="vg-btn vg-btn--xs vg-btn--soft" @click="runSignal(signal)">{{ t(`ai.spine.action.${signal.action}`) }}</button>
       </li>
     </ul>

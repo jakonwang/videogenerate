@@ -1,6 +1,12 @@
+import { geelarkWarmup } from '../modules/tiktok-publisher/geelarkWarmup'
 import type { BrowserWindow, IpcMain } from 'electron'
 import { tiktokCreativeStudioService } from '../modules/tiktok-creative-studio/service'
 import { creatokPublisherService } from '../modules/tiktok-publisher/service'
+import { publishMatrixService } from '../modules/tiktok-publisher/matrix'
+import { publishLocalizeService } from '../modules/tiktok-publisher/localize'
+import { geelarkPublisher } from '../modules/tiktok-publisher/geelark'
+import { creatokPublisherRepo } from '../modules/tiktok-publisher/repo'
+import { publishProfitReport } from '../modules/content-hub/publishProfit'
 
 export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain, getWindow: () => BrowserWindow | null = () => null) {
   ipcMain.handle('plugin:tiktokCreative:list', async () => await tiktokCreativeStudioService.list())
@@ -59,4 +65,18 @@ export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain, getWindow: () 
   ipcMain.handle('plugin:tiktokPublisher:precheck', async (_e, ids: string[]) => await creatokPublisherService.precheck(ids))
   ipcMain.handle('plugin:tiktokPublisher:submit', async (_e, ids: string[]) => await creatokPublisherService.submit(ids))
   ipcMain.handle('plugin:tiktokPublisher:refresh', async () => await creatokPublisherService.refresh())
+  ipcMain.handle('plugin:tiktokPublisher:matrixAccounts', async () => await publishMatrixService.accounts())
+  ipcMain.handle('plugin:tiktokPublisher:matrixSaveAccounts', async (_e, list) => await publishMatrixService.saveAccounts(list))
+  ipcMain.handle('plugin:tiktokPublisher:matrixDistribute', async (_e, payload) => await publishMatrixService.distribute(payload))
+  ipcMain.handle('plugin:tiktokPublisher:matrixRetryVariants', async (_e, ids: string[]) => await publishMatrixService.retryVariants(ids))
+  ipcMain.handle('plugin:tiktokPublisher:localizeCreate', async (_e, payload) => await publishLocalizeService.create(payload))
+  ipcMain.handle('plugin:tiktokPublisher:localizeRetry', async (_e, ids: string[]) => await publishLocalizeService.retry(ids))
+  ipcMain.handle('plugin:tiktokPublisher:geelarkStatus', async () => await geelarkPublisher.status())
+  ipcMain.handle('plugin:tiktokPublisher:geelarkSave', async (_e, payload) => await geelarkPublisher.save(payload || {}))
+  ipcMain.handle('plugin:tiktokPublisher:geelarkClear', async () => await geelarkPublisher.clear())
+  ipcMain.handle('plugin:tiktokPublisher:geelarkTest', async () => await geelarkPublisher.test())
+  ipcMain.handle('plugin:tiktokPublisher:warmupStatus', async () => await geelarkWarmup.status())
+  ipcMain.handle('plugin:tiktokPublisher:warmupRunNow', async () => { const result = await geelarkWarmup.run(); return { ...result, status: await geelarkWarmup.status() } })
+  ipcMain.handle('plugin:tiktokPublisher:profitReport', async () => publishProfitReport(await creatokPublisherRepo.list()))
+  ipcMain.handle('plugin:tiktokPublisher:matrixUseOriginal', async (_e, ids: string[]) => await publishMatrixService.useOriginal(ids))
 }

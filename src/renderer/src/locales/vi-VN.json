@@ -2946,7 +2946,9 @@
       "start": "Xuất {n} đoạn",
       "progress": "Đang xuất {n} / {total}",
       "resultLine": "Hoàn tất: {ok} thành công, {failed} lỗi",
-      "openDir": "Mở thư mục xuất"
+      "openDir": "Mở thư mục xuất",
+      "sendToPublish": "Gửi sang trung tâm đăng ({n})",
+      "sendToPublishHint": "Tạo bản nháp đăng theo tên đoạn, có thể phân phối cho nhiều tài khoản"
     },
     "toast": {
       "restored": "Đã khôi phục phiên cắt trước",

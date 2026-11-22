@@ -56,10 +56,10 @@ export function setCreativeVideoTestDependencies(overrides: Partial<Deps> | null
 }
 
 /** Download an ad creative's video (reused when it was downloaded before) and wait for the file. */
-export async function downloadCreativeVideo(input: { creativeId: string; timeoutMs?: number }): Promise<CreativeVideoResult> {
+export async function downloadCreativeVideo(input: { creativeId: string; timeoutMs?: number; /** 已知作者账号（竞品雷达）就不用去达人库查 */ handle?: string }): Promise<CreativeVideoResult> {
   const creativeId = String(input.creativeId || '').trim()
   if (!/^\d{8,25}$/.test(creativeId)) throw new Error('这条投放素材没有 TikTok 视频 ID，没法下载原视频')
-  const handle = deps.handleFor(creativeId)
+  const handle = String(input.handle || '').trim().replace(/^@/, '') || deps.handleFor(creativeId)
   const shareUrl = creativePostUrl(creativeId, handle)
   const base = { creativeId, shareUrl, ...(handle ? { creatorHandle: handle } : {}) }
   const imported = await deps.importShareUrls({ userId: USER_ID, shareUrls: [shareUrl] })

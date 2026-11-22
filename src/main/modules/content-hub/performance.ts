@@ -2,6 +2,7 @@ import { gmvMaxRepo } from '../tiktok-gmv-max/sqlite'
 import { captionSimilarity } from '../mix-studio/insights'
 import { contentIndex } from './contentIndex'
 import { performanceLinkStore } from './stores'
+import { blendedMargin, profitOf, readProductMargins, type ProductMargin } from './productMargin'
 import type { ContentItem, ContentLine, ContentPerformance, ContentPerformanceLink, ContentRef, PerformanceVerdict, ProductPerformance } from './types'
 
 /**
@@ -29,7 +30,7 @@ export type PublishTaskLike = {
   state?: string
 }
 
-type CreativeTotals = { creativeId: string; name: string; spend: number; revenue: number; orders: number }
+type CreativeTotals = { creativeId: string; name: string; productId: string; spend: number; revenue: number; orders: number }
 
 function text(value: unknown) {
   return String(value ?? '').trim()
@@ -54,7 +55,7 @@ function readCreatives(tiktokProductIds: string[], now: number): CreativeTotals[
   }
   const byId = new Map<string, CreativeTotals>()
   for (const row of rows) {
-    const entry = byId.get(row.creativeId) || { creativeId: row.creativeId, name: '', spend: 0, revenue: 0, orders: 0 }
+    const entry = byId.get(row.creativeId) || { creativeId: row.creativeId, name: '', productId: text(row.productId), spend: 0, revenue: 0, orders: 0 }
     entry.name = entry.name || text(row.creativeName)
     entry.spend += Number(row.cost) || 0
     entry.revenue += Number(row.grossRevenue) || 0
@@ -119,12 +120,19 @@ export const contentPerformance = {
    * Performance of one product's content. Auto-links newly published videos as a side effect,
    * so opening the product page is enough to keep the loop current.
    */
-  async forProduct(input: { items: ContentItem[]; tiktokProductIds: string[]; publishTasks: PublishTaskLike[]; now?: number }): Promise<ProductPerformance> {
+  async forProduct(input: { items: ContentItem[]; tiktokProductIds: string[]; publishTasks: PublishTaskLike[]; now?: number; margins?: Map<string, ProductMargin> }): Promise<ProductPerformance> {
     const now = input.now ?? Date.now()
     const content = input.items.filter((item) => item.line !== 'publish')
     const refs = new Set(content.map((item) => item.ref))
     const creatives = readCreatives(input.tiktokProductIds, now)
     const creativeById = new Map(creatives.map((creative) => [creative.creativeId, creative]))
+    const margins = input.margins ?? readProductMargins(input.tiktokProductIds)
+    // 素材利润 = 成交额 × 该商品毛利率 − 花费；商品没填成本时为 undefined（界面显示「未填成本」）
+    const profitFor = (creative?: CreativeTotals) => {
+      if (!creative) return undefined
+      const margin = margins.get(creative.productId) || (input.tiktokProductIds.length === 1 ? margins.get(input.tiktokProductIds[0]!) : undefined)
+      return margin ? profitOf({ revenue: creative.revenue, spend: creative.spend, marginRate: margin.marginRate }) : undefined
+    }
 
     let db = await performanceLinkStore.read()
     const proposals = proposeContentLinks({ refs, publishTasks: input.publishTasks, creatives, linked: db.links, locked: db.locked })
@@ -159,6 +167,7 @@ export const contentPerformance = {
         orders: creative?.orders || 0,
         roi: creative && creative.spend > 0 ? round(creative.revenue / creative.spend) : 0,
         verdict: creative ? verdictFor(creative, productRoi) : 'unproven',
+        profit: profitFor(creative),
       }
     }
 
@@ -175,10 +184,13 @@ export const contentPerformance = {
       lines.set(item.line, row)
     }
 
+    const productMargin = blendedMargin(creatives.map((creative) => ({ productId: creative.productId, revenue: creative.revenue })), margins)
+      ?? (input.tiktokProductIds.length === 1 ? margins.get(input.tiktokProductIds[0]!)?.marginRate ?? null : null)
     const publishedRefs = new Set(input.publishTasks.filter((task) => task.state === 'published').map(publishSourceRef).filter((ref) => refs.has(ref)))
     return {
       windowDays: PERFORMANCE_WINDOW_DAYS,
       productRoi: round(productRoi),
+      ...(productMargin !== null ? { marginRate: round(productMargin, 4), breakEvenRoi: round(1 / productMargin), profit: profitOf({ revenue, spend, marginRate: productMargin }) } : {}),
       byRef,
       byLine: [...lines.values()]
         .map((row) => ({ ...row, spend: round(row.spend), revenue: round(row.revenue), roi: row.spend > 0 ? round(row.revenue / row.spend) : 0 }))
@@ -187,7 +199,7 @@ export const contentPerformance = {
       publishedUnlinkedCount: [...publishedRefs].filter((ref) => !byRef[ref]).length,
       unlinkedCreatives: creatives
         .filter((creative) => !linkedCreativeIds.has(creative.creativeId) && creative.spend > 0)
-        .map((creative) => ({ creativeId: creative.creativeId, name: creative.name || creative.creativeId, spend: round(creative.spend), revenue: round(creative.revenue), orders: creative.orders, roi: round(creative.revenue / creative.spend) }))
+        .map((creative) => ({ creativeId: creative.creativeId, name: creative.name || creative.creativeId, spend: round(creative.spend), revenue: round(creative.revenue), orders: creative.orders, roi: round(creative.revenue / creative.spend), profit: profitFor(creative) }))
         .sort((a, b) => b.spend - a.spend)
         .slice(0, 30),
     }

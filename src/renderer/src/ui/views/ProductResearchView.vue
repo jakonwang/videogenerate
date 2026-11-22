@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import {
   Archive, ArrowDownUp, BarChart3, CalendarDays, CheckCircle2, ChevronRight, Copy, Eye, FolderOpen, List, Loader2,
   MoreHorizontal, Package, Pencil, Play, Plus, RefreshCw, Search, ShoppingBag, ShoppingCart, Smartphone, Star,
-  Trash2, TrendingUp, X,
+  Trash2, TrendingUp, X, Radar,
 } from 'lucide-vue-next'
 import type {
   ProductResearchScheme,
@@ -13,6 +13,7 @@ import type {
   ProductResearchTask,
 } from '../../../../shared/productResearch'
 import PrPager from './product-research/PrPager.vue'
+import CompetitorRadarPanel from '../components/ai/CompetitorRadarPanel.vue'
 import PrToast from './product-research/PrToast.vue'
 import PrConfirmDialog from './product-research/PrConfirmDialog.vue'
 import PrPairingDialog from './product-research/PrPairingDialog.vue'
@@ -23,7 +24,7 @@ import {
 } from './product-research/productResearchUtils'
 import './product-research/product-research.css'
 
-type Tab = 'schemes' | 'tasks' | 'analytics'
+type Tab = 'schemes' | 'tasks' | 'analytics' | 'radar'
 type SortKey = 'name' | 'updatedAt'
 
 const router = useRouter()
@@ -406,6 +407,7 @@ onBeforeUnmount(() => {
         <Play :size="16" />任务执行<span v-if="taskCounts.active" class="prd-seg__count pr-tab__badge">{{ taskCounts.active }}</span>
       </button>
       <button class="pr-tab" :class="{ 'is-active': tab === 'analytics' }" role="tab" @click="tab = 'analytics'"><BarChart3 :size="17" />数据分析</button>
+      <button class="pr-tab" :class="{ 'is-active': tab === 'radar' }" role="tab" data-testid="pr-tab-radar" @click="tab = 'radar'"><Radar :size="17" />竞品雷达</button>
     </nav>
 
     <!-- ===== 方案列表 ===== -->
@@ -587,6 +589,9 @@ onBeforeUnmount(() => {
         <div class="pr-pager-wrap"><PrPager v-model:page="taskPage" v-model:page-size="taskPageSize" :total="filteredTasks.length" unit="个任务" /></div>
       </section>
     </template>
+
+    <!-- ===== 竞品雷达 ===== -->
+    <CompetitorRadarPanel v-else-if="tab === 'radar'" />
 
     <!-- ===== 数据分析 ===== -->
     <template v-else>

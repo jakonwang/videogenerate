@@ -20,7 +20,7 @@ function dbFile(name: string) {
 }
 
 /** Serialises read-modify-write cycles per file so concurrent callers never lose updates. */
-function createJsonStore<T>(fileName: string, empty: () => T, normalize: (value: T) => T = (value) => value) {
+export function createJsonStore<T>(fileName: string, empty: () => T, normalize: (value: T) => T = (value) => value) {
   let queue: Promise<unknown> = Promise.resolve()
   let cached: T | null = null
   const path = () => dbFile(fileName)

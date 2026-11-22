@@ -1,3 +1,10 @@
+import type { MatrixAccountSettings } from '../shared/publishMatrix'
+import type { PublishProfitReport } from '../shared/publishProfit'
+type WarmupStatus = Record<string, { today?: import('../main/modules/tiktok-publisher/geelarkWarmup').WarmupLog; doneDays: number }>
+type GeelarkStatus = { configured: boolean; baseUrl: string; appId: string; maskedKey: string; maskedToken: string; platforms: Array<'tiktok' | 'youtube' | 'instagram' | 'facebook'> }
+type RadarState = { competitors: import('../shared/competitorRadar').RadarCompetitor[]; breakouts: import('../shared/competitorRadar').RadarBreakout[]; lastRunAt?: number; refreshing: boolean }
+type AutopilotToday = { settings: import('../shared/autopilot').AutopilotSettings; day: import('../shared/autopilot').AutopilotDay | null; used: number }
+type CreativeGeneJob = { productId: string; running: boolean; total: number; done: number; failed: number; current?: string; stage?: 'downloading' | 'analyzing'; finishedAt?: number; lastError?: string }
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CapabilityStoredProviderKey, ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../shared/platformSettings'
 import { storageCleanupConfirmation, type StorageCategoryId } from '../shared/storageManagement'
@@ -1118,6 +1125,22 @@ const api = {
     precheck: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:precheck', ids),
     submit: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:submit', ids),
     refresh: () => ipcRenderer.invoke('plugin:tiktokPublisher:refresh'),
+    matrixAccounts: () => ipcRenderer.invoke('plugin:tiktokPublisher:matrixAccounts') as Promise<MatrixAccountSettings[]>,
+    matrixSaveAccounts: (list: Array<Partial<MatrixAccountSettings> & { uid: string }>) => ipcRenderer.invoke('plugin:tiktokPublisher:matrixSaveAccounts', list) as Promise<MatrixAccountSettings[]>,
+    matrixDistribute: (payload: { taskIds: string[]; accounts: Array<{ uid: string; name?: string }>; startAt?: string; videoVariants?: boolean; captionVariants?: boolean }) =>
+      ipcRenderer.invoke('plugin:tiktokPublisher:matrixDistribute', payload) as Promise<{ batchId: string; tasks: any[]; created: number; variants: number; skipped: Array<{ key: string; uid: string; name: string; reason: 'paused' | 'no_slot' }>; firstAt?: string; lastAt?: string }>,
+    matrixRetryVariants: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:matrixRetryVariants', ids),
+    matrixUseOriginal: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:matrixUseOriginal', ids),
+    localizeCreate: (payload: { taskIds: string[]; languages: string[]; voice?: 'female' | 'male'; originalAudio?: 'duck' | 'mute'; coverOldSubtitles?: boolean }) =>
+      ipcRenderer.invoke('plugin:tiktokPublisher:localizeCreate', payload) as Promise<{ tasks: any[] }>,
+    localizeRetry: (ids: string[]) => ipcRenderer.invoke('plugin:tiktokPublisher:localizeRetry', ids),
+    geelarkStatus: () => ipcRenderer.invoke('plugin:tiktokPublisher:geelarkStatus') as Promise<GeelarkStatus>,
+    geelarkSave: (payload: { baseUrl?: string; appId?: string; apiKey?: string; accessToken?: string; platforms?: string[] }) => ipcRenderer.invoke('plugin:tiktokPublisher:geelarkSave', payload) as Promise<GeelarkStatus>,
+    geelarkClear: () => ipcRenderer.invoke('plugin:tiktokPublisher:geelarkClear') as Promise<GeelarkStatus>,
+    geelarkTest: () => ipcRenderer.invoke('plugin:tiktokPublisher:geelarkTest') as Promise<{ phones: number }>,
+    warmupStatus: () => ipcRenderer.invoke('plugin:tiktokPublisher:warmupStatus') as Promise<WarmupStatus>,
+    warmupRunNow: () => ipcRenderer.invoke('plugin:tiktokPublisher:warmupRunNow') as Promise<{ created: number; status: WarmupStatus }>,
+    profitReport: () => ipcRenderer.invoke('plugin:tiktokPublisher:profitReport') as Promise<PublishProfitReport>,
   },
   livePhoto: {
     list: () => ipcRenderer.invoke('plugin:livePhoto:list'),
@@ -1308,6 +1331,20 @@ const api = {
     linkContentPerformance: (payload: { ref: string; creativeId: string; creativeName?: string }) => ipcRenderer.invoke('contentHub:linkContentPerformance', payload),
     unlinkContentPerformance: (ref: string) => ipcRenderer.invoke('contentHub:unlinkContentPerformance', ref) as Promise<{ ok: boolean }>,
     /** Download an ad creative's TikTok video with the video download interface, for cloning. */
+    radarState: () => ipcRenderer.invoke('contentHub:radarState') as Promise<RadarState>,
+    radarAdd: (input: { handle: string; note?: string }) => ipcRenderer.invoke('contentHub:radarAdd', input) as Promise<RadarState>,
+    radarRemove: (handle: string) => ipcRenderer.invoke('contentHub:radarRemove', handle) as Promise<RadarState>,
+    radarDismiss: (videoId: string) => ipcRenderer.invoke('contentHub:radarDismiss', videoId) as Promise<RadarState>,
+    radarRefresh: () => ipcRenderer.invoke('contentHub:radarRefresh') as Promise<RadarState>,
+    radarDownload: (videoId: string) => ipcRenderer.invoke('contentHub:radarDownload', videoId) as Promise<{ localVideoPath: string; title: string }>,
+    autopilotToday: () => ipcRenderer.invoke('contentHub:autopilotToday') as Promise<AutopilotToday>,
+    autopilotGenerate: () => ipcRenderer.invoke('contentHub:autopilotGenerate') as Promise<AutopilotToday>,
+    autopilotApprove: (id: string) => ipcRenderer.invoke('contentHub:autopilotApprove', id) as Promise<import('../shared/autopilot').AutopilotProposal>,
+    autopilotSkip: (id: string) => ipcRenderer.invoke('contentHub:autopilotSkip', id) as Promise<import('../shared/autopilot').AutopilotProposal>,
+    autopilotSaveSettings: (settings: Partial<import('../shared/autopilot').AutopilotSettings>) => ipcRenderer.invoke('contentHub:autopilotSaveSettings', settings) as Promise<import('../shared/autopilot').AutopilotSettings>,
+    creativeGenes: (productId: string) =>
+      ipcRenderer.invoke('contentHub:creativeGenes', productId) as Promise<{ report: import('../shared/creativeGenes').GeneReport | null; pending: number; job: CreativeGeneJob | null }>,
+    analyzeCreativeGenes: (productId: string) => ipcRenderer.invoke('contentHub:analyzeCreativeGenes', productId) as Promise<CreativeGeneJob>,
     downloadCreativeVideo: (creativeId: string) =>
       ipcRenderer.invoke('contentHub:downloadCreativeVideo', creativeId) as Promise<{ creativeId: string; shareUrl: string; creatorHandle?: string; status: 'completed' | 'processing' | 'failed'; localVideoPath?: string; thumbnailPath?: string; title?: string; author?: string; error?: string }>,
     listReviews: (payload?: { decision?: string; line?: string; productId?: string }) => ipcRenderer.invoke('contentHub:listReviews', payload),

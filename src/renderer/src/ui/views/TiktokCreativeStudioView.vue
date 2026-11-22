@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import SubtitleStudioDialog, { type SubtitleDialogSubmit } from '@/ui/components/subtitle/SubtitleStudioDialog.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { openAssetLibraryPicker } from "@/lib/assetLibraryPicker";
 import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import StyleReferenceCard, { type StyleReference } from "../components/StyleReferenceCard.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
+import PublishMatrixAccountsDialog from "../components/publish-matrix/PublishMatrixAccountsDialog.vue";
+import PublishMatrixDistributeDialog from "../components/publish-matrix/PublishMatrixDistributeDialog.vue";
+import PublishLocalizeDialog from "../components/publish-matrix/PublishLocalizeDialog.vue";
+import GeelarkConnectDialog from "../components/publish-matrix/GeelarkConnectDialog.vue";
+import { isGeelarkAccount } from "../../../../shared/geelark";
+import { LOCALIZE_LANGUAGES } from "../../../../shared/localize";
+import { friendlyPublishError } from "../../../../shared/publishMatrix";
+import { formatProfit, type PublishProfitReport } from "../../../../shared/publishProfit";
 import { buildProductLinkTitle, PRODUCT_LINK_TITLE_MAX_LENGTH } from "../../../../shared/productLinkTitle";
 import {
   Activity,
@@ -37,6 +45,10 @@ import {
   LayoutGrid,
   List,
   LoaderCircle,
+  Network,
+  Cloud,
+  Languages,
+  Users,
   Logs,
   Music2,
   Package,
@@ -195,6 +207,21 @@ type Task = {
 };
 
 const router = useRouter();
+const route = useRoute();
+/** 别的页面送过来的草稿（直播切片等）：选中它们，按需打开「分发到多个号」 */
+async function applyPublishHandoff() {
+  const ids = String(route.query.select || "").split(",").map((id) => id.trim()).filter(Boolean);
+  if (!ids.length) return;
+  const known = new Set(publisherTasks.value.map((item: any) => String(item.id)));
+  publisherRowSelection.value = ids.filter((id) => known.has(id));
+  publisherOverviewFilter.value = "all";
+  const wantsDistribute = route.query.distribute === "1";
+  void router.replace({ path: route.path });
+  if (wantsDistribute && publisherRowSelection.value.length) {
+    if (publisherConnections.value.length) openMatrixDistribute();
+    else matrixNotice.value = `已把 ${publisherRowSelection.value.length} 个片段放进发布中心。连接 CreatOK 或 GeeLark 后，就能「分发到多个号」。`;
+  }
+}
 const { t: tr } = useI18n();
 const activeTab = ref<"reference" | "library" | "publish">(
   props.publisherOnly ? "publish" : "reference",
@@ -336,6 +363,72 @@ const publisherCredentialOpen = ref(false);
 const publisherDrawerOpen = ref(false);
 const publisherDeleteTarget = ref<any | null>(null);
 const publisherStatusDetail = ref<any | null>(null);
+// 矩阵发布：账号规则 + 一次分发到多个号
+const matrixAccountsOpen = ref(false);
+const matrixDistributeOpen = ref(false);
+const matrixDistributeIds = ref<string[]>([]);
+const matrixNotice = ref("");
+// GeeLark 云手机：连上后每台手机（× 开启的平台）就是一个发布账号
+const geelarkOpen = ref(false);
+const geelarkConfigured = ref(false);
+async function loadGeelarkStatus() {
+  try {
+    geelarkConfigured.value = Boolean((await window.api.tiktokPublisher.geelarkStatus()).configured);
+  } catch {
+    geelarkConfigured.value = false;
+  }
+}
+async function onGeelarkChanged(status: { configured: boolean }) {
+  geelarkConfigured.value = status.configured;
+  publisherLoadedAt.value = 0;
+  await refreshPublisher();
+}
+// 多语言版
+const localizeOpen = ref(false);
+const localizeIds = ref<string[]>([]);
+const LOCALIZE_STAGE_LABEL: Record<string, string> = { recognizing: "识别原片语音", translating: "AI 改写成当地说法", voicing: "配音", rendering: "合成视频" };
+function publisherLocalizeLabel(item: any) {
+  const info = item?.localize;
+  if (!info) return "";
+  const name = `${LOCALIZE_LANGUAGES[info.language as keyof typeof LOCALIZE_LANGUAGES]?.label || info.language}版`;
+  if (info.status === "pending") return `${name} · 排队中`;
+  if (info.status === "rendering") return `${name} · ${LOCALIZE_STAGE_LABEL[info.stage] || "生成中"}`;
+  if (info.status === "failed") return `${name} · 生成失败`;
+  return info.noSpeech ? `${name} · 原片没人说话，只翻译了文案` : name;
+}
+const localizeFailedIds = computed(() =>
+  publisherSelectedTasks.value.filter((item: any) => item?.localize?.status === "failed").map((item: any) => item.id),
+);
+function openLocalize() {
+  const ids = publisherRowSelection.value.filter((id) => publisherTasks.value.some((item: any) => item.id === id));
+  if (!ids.length) {
+    publisherSyncError.value = "请先勾选要出外语版的视频";
+    return;
+  }
+  localizeIds.value = ids;
+  localizeOpen.value = true;
+}
+async function onLocalizeCreated(result: { tasks: any[]; languages: string[] }) {
+  publisherRowSelection.value = [];
+  publisherTasks.value = await window.api.tiktokPublisher.listTasks();
+  const names = result.languages.map((code) => LOCALIZE_LANGUAGES[code as keyof typeof LOCALIZE_LANGUAGES]?.label || code).join("、");
+  matrixNotice.value = `已开始生成 ${result.tasks.length} 条外语版（${names}），在「草稿」里能看到进度。生成好后记得给它们选当地的发布账号和商品。`;
+}
+async function retryLocalize() {
+  publisherTasks.value = await window.api.tiktokPublisher.localizeRetry(localizeFailedIds.value);
+}
+// 利润视角：已发布的视频对上投放素材后的利润（近 30 天）
+const publisherProfit = ref<PublishProfitReport | null>(null);
+async function loadPublisherProfit() {
+  try {
+    publisherProfit.value = await window.api.tiktokPublisher.profitReport();
+  } catch {
+    publisherProfit.value = null;
+  }
+}
+function publisherTaskProfit(item: any) {
+  return item?.state === "published" ? publisherProfit.value?.byTask?.[item.id] : undefined;
+}
 const publisherConfirmOpen = ref(false);
 const publisherConfirmCount = ref(0);
 const publisherOverwriteTitle = ref(false);
@@ -1089,6 +1182,51 @@ function publisherErrorText(item: any) {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+function publisherFriendlyError(item: any) {
+  if (item?.variant?.status === "failed") return friendlyPublishError(`变体 ${item.variant.error || ""}`);
+  if (item?.localize?.status === "failed") return friendlyPublishError(`外语版 ${item.localize.error || ""}`);
+  return item?.error ? friendlyPublishError(item.error.message) : "";
+}
+function publisherVariantLabel(item: any) {
+  const status = item?.variant?.status;
+  if (status === "pending") return "等待生成变体";
+  if (status === "rendering") return "正在生成变体";
+  if (status === "failed") return "变体生成失败";
+  return "";
+}
+const matrixFailedVariantIds = computed(() =>
+  publisherSelectedTasks.value.filter((item: any) => item?.variant?.status === "failed").map((item: any) => item.id),
+);
+function openMatrixDistribute() {
+  const ids = publisherRowSelection.value.filter((id) => {
+    const task = publisherTasks.value.find((item: any) => item.id === id);
+    return task && !["published", "queued", "scheduled", "publishing", "result_unknown"].includes(task.state);
+  });
+  if (!ids.length) {
+    publisherSyncError.value = "请先勾选还没提交的视频，再分发到多个号";
+    return;
+  }
+  matrixDistributeIds.value = ids;
+  matrixDistributeOpen.value = true;
+}
+function openMatrixAccounts() {
+  matrixDistributeOpen.value = false;
+  matrixAccountsOpen.value = true;
+}
+async function onMatrixDistributed(result: any) {
+  publisherRowSelection.value = [];
+  publisherTasks.value = await window.api.tiktokPublisher.listTasks();
+  const parts = [`已分发出 ${result?.tasks?.length || 0} 条发布任务`];
+  if (result?.variants) parts.push(`${result.variants} 条正在后台生成不同版本，生成完就能提交`);
+  if (result?.skipped?.length) parts.push(`跳过 ${[...new Set(result.skipped.map((s: any) => s.name))].join("、")}（暂停或排不下）`);
+  matrixNotice.value = parts.join("；") + "。";
+}
+async function retryMatrixVariants() {
+  publisherTasks.value = await window.api.tiktokPublisher.matrixRetryVariants(matrixFailedVariantIds.value);
+}
+async function useMatrixOriginal() {
+  publisherTasks.value = await window.api.tiktokPublisher.matrixUseOriginal(matrixFailedVariantIds.value);
 }
 function openPublisherStatusDetail(item: any) {
   publisherStatusDetail.value = item;
@@ -2066,10 +2204,12 @@ async function refreshPublisher() {
   publisherSyncError.value = "";
   publisherRefreshPromise = (async () => { try {
     publisherTasks.value = await window.api.tiktokPublisher.refresh();
+    void loadPublisherProfit();
     const status = await window.api.tiktokPublisher.credentialStatus();
     publisherConfigured.value = Boolean(status?.configured);
     publisherMaskedKey.value = status?.masked || "";
-    if (publisherConfigured.value) {
+    await loadGeelarkStatus();
+    if (publisherConfigured.value || geelarkConfigured.value) {
       try {
         publisherConnections.value =
           await window.api.tiktokPublisher.connections();
@@ -3098,7 +3238,7 @@ async function submitPublisher(confirmed = false) {
   for (const item of selectedTasks) {
     if (!item.sourceVideoPath) missing.add("视频素材");
     if (!item.connectionUid) missing.add("发布账号");
-    if (!item.productId) missing.add("TikTok Shop 商品");
+    if (!item.productId && !isGeelarkAccount(item.connectionUid)) missing.add("TikTok Shop 商品");
     if (!item.videoTitle?.trim()) missing.add("视频标题");
   }
   if (missing.size) {
@@ -3190,7 +3330,10 @@ onMounted(async () => {
   restorePublisherDraft();
   restorePublisherFavoriteMusic();
   await refresh();
-  if (props.publisherOnly) await refreshPublisher();
+  if (props.publisherOnly) {
+    await refreshPublisher();
+    await applyPublishHandoff();
+  }
   stopCreativeChanges = window.api.tiktokCreative.onChanged(({ taskIds }) => {
     for (const id of taskIds || []) pendingChangedTaskIds.add(id);
     scheduleCreativeChangeFlush();
@@ -3200,7 +3343,9 @@ onMounted(async () => {
     if (document.hidden) return;
     if (props.publisherOnly || activeTab.value === "publish") {
       const hasActivePublishTask = publisherTasks.value.some((item: any) =>
-        ["prechecking", "uploading", "queued", "scheduled", "publishing"].includes(String(item.state || "")),
+        ["prechecking", "uploading", "queued", "scheduled", "publishing"].includes(String(item.state || "")) ||
+        ["pending", "rendering"].includes(String(item.variant?.status || "")) ||
+        ["pending", "rendering"].includes(String(item.localize?.status || "")),
       );
       if (!hasActivePublishTask) return;
       void refreshPublisherTasks();
@@ -3345,7 +3490,16 @@ onBeforeUnmount(() => {
               {{ publisherConfigured ? "管理" : "去连接" }}
             </button>
           </div>
+          <div class="pub-conn" :class="{ 'is-ready': geelarkConfigured }">
+            <Cloud :size="14" />
+            <span class="pub-conn__name">GeeLark 云手机</span>
+            <span class="pub-conn__state"><i />{{ geelarkConfigured ? "已连接" : "未连接" }}</span>
+            <button type="button" class="vg-link" data-testid="geelark-open" @click="geelarkOpen = true">{{ geelarkConfigured ? "管理" : "去连接" }}</button>
+          </div>
           <span class="pub-head__sep" />
+          <button class="vg-btn" type="button" data-testid="publish-matrix-accounts-open" @click="openMatrixAccounts">
+            <Users :size="15" />账号矩阵
+          </button>
           <button class="vg-btn" type="button" @click="openPublisherMusicLibrary">
             <Headphones :size="15" />音乐库<span v-if="publisherFavoriteMusic.length" class="vg-count">{{ publisherFavoriteMusic.length }}</span>
           </button>
@@ -3358,6 +3512,10 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
+      <div v-if="matrixNotice" class="vg-notice pub-alert" data-testid="matrix-notice">
+        <Network :size="15" /><span>{{ matrixNotice }}</span>
+        <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭" @click="matrixNotice = ''"><X :size="14" /></button>
+      </div>
       <div v-if="publisherSyncError" class="vg-notice vg-notice--danger pub-alert">
         <AlertTriangle :size="15" /><span>{{ publisherSyncError }}</span>
         <button type="button" class="vg-icon-btn vg-icon-btn--sm" aria-label="关闭" @click="publisherSyncError = ''"><X :size="14" /></button>
@@ -3413,6 +3571,13 @@ onBeforeUnmount(() => {
             <span class="pub-selbar__sep" />
             <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="openPublisherBatchSelector('product')"><Package :size="14" />设置商品</button>
             <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="preparePublisherScheduleSelection"><Clock3 :size="14" />设置时间</button>
+            <button type="button" class="vg-btn vg-btn--soft vg-btn--sm" data-testid="publish-matrix-distribute-open" @click="openMatrixDistribute"><Network :size="14" />分发到多个号</button>
+            <button type="button" class="vg-btn vg-btn--soft vg-btn--sm" data-testid="publish-localize-open" @click="openLocalize"><Languages :size="14" />出其他语言版</button>
+            <button v-if="localizeFailedIds.length" type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="retryLocalize"><RefreshCcw :size="14" />重新生成外语版</button>
+            <template v-if="matrixFailedVariantIds.length">
+              <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="retryMatrixVariants"><RefreshCcw :size="14" />重新生成变体</button>
+              <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" @click="useMatrixOriginal">改用原片</button>
+            </template>
             <button type="button" class="vg-btn vg-btn--ghost vg-btn--sm" :disabled="publisherMusicRandomizing" @click="applyRandomFavoriteMusic()">
               <LoaderCircle v-if="publisherMusicRandomizing" :size="14" class="vg-spin" /><Shuffle v-else :size="14" />随机收藏音乐
             </button>
@@ -3483,6 +3648,25 @@ onBeforeUnmount(() => {
                   <button type="button" class="vg-pill vg-pill--dot pub-state" :class="`vg-pill--${publisherStateTone(item.state)}`" :title="publisherErrorText(item) || publisherStateLabel(item.state)" @click="openPublisherStatusDetail(item)">
                     {{ publisherStateLabel(item.state) }}
                   </button>
+                  <small
+                    v-if="publisherTaskProfit(item)"
+                    class="pub-profit"
+                    :class="{ 'is-loss': (publisherTaskProfit(item)?.profit ?? 0) < 0, 'is-gain': (publisherTaskProfit(item)?.profit ?? 0) > 0 }"
+                    :title="`近 ${publisherProfit?.windowDays} 天：花费 ${publisherTaskProfit(item)?.spend} · 成交 ${publisherTaskProfit(item)?.revenue} · ${publisherTaskProfit(item)?.orders} 单 · ROI ${publisherTaskProfit(item)?.roi}`"
+                    :data-testid="`publish-profit-${item.id}`"
+                  >利润 {{ formatProfit(publisherTaskProfit(item)?.profit) }}</small>
+                  <small
+                    v-if="publisherLocalizeLabel(item)"
+                    class="pub-variant pub-localize"
+                    :class="`is-${item.localize.status}`"
+                    :title="item.localize.error || ''"
+                    :data-testid="`publish-localize-${item.id}`"
+                  >
+                    <LoaderCircle v-if="['pending', 'rendering'].includes(item.localize.status)" :size="11" class="vg-spin" /><AlertTriangle v-else-if="item.localize.status === 'failed'" :size="11" /><Languages v-else :size="11" />{{ publisherLocalizeLabel(item) }}
+                  </small>
+                  <small v-if="publisherVariantLabel(item)" class="pub-variant" :class="`is-${item.variant.status}`">
+                    <LoaderCircle v-if="item.variant.status !== 'failed'" :size="11" class="vg-spin" /><AlertTriangle v-else :size="11" />{{ publisherVariantLabel(item) }}
+                  </small>
                 </span>
                 <span class="pub-cell--ops">
                   <button type="button" class="vg-icon-btn vg-icon-btn--sm" title="编辑" :disabled="item.state === 'published'" @click="focusPublisherRow(item)"><Pencil :size="14" /></button>
@@ -4893,7 +5077,9 @@ onBeforeUnmount(() => {
             :placeholder="
               publisherSelector === 'music'
                 ? '搜索音乐名称或作者'
-                : '输入商品名称或 ID 搜索'
+                : isGeelarkAccount(publisherConnection)
+                  ? '云手机账号：搜投放 / 达人里出现过的商品，或直接粘贴 TikTok 商品 ID'
+                  : '输入商品名称或 ID 搜索'
             "
             @input="publisherSelector === 'product' && searchPublisherProducts()"
             @keydown.enter="
@@ -6262,6 +6448,28 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    <GeelarkConnectDialog :open="geelarkOpen" @close="geelarkOpen = false" @changed="onGeelarkChanged" />
+    <PublishLocalizeDialog
+      :open="localizeOpen"
+      :task-ids="localizeIds"
+      @close="localizeOpen = false"
+      @done="onLocalizeCreated"
+    />
+    <PublishMatrixAccountsDialog
+      :open="matrixAccountsOpen"
+      :connections="publisherConnections"
+      :profit="publisherProfit"
+      @close="matrixAccountsOpen = false"
+    />
+    <PublishMatrixDistributeDialog
+      :open="matrixDistributeOpen"
+      :task-ids="matrixDistributeIds"
+      :tasks="publisherTasks"
+      :connections="publisherConnections"
+      @close="matrixDistributeOpen = false"
+      @done="onMatrixDistributed"
+      @manage-accounts="openMatrixAccounts"
+    />
     <div
       v-if="publisherStatusDetail"
       class="publisher-status-modal"
@@ -6319,9 +6527,12 @@ onBeforeUnmount(() => {
             <dd>{{ publisherStatusDetail.connectionUid }}</dd>
           </div>
         </dl>
-        <div v-if="publisherErrorText(publisherStatusDetail)" class="publisher-status-modal__error">
+        <div v-if="publisherFriendlyError(publisherStatusDetail)" class="publisher-status-modal__error">
           <AlertTriangle class="h-4 w-4" />
-          <p>{{ publisherErrorText(publisherStatusDetail) }}</p>
+          <p>
+            <b>{{ publisherFriendlyError(publisherStatusDetail) }}</b>
+            <small v-if="publisherErrorText(publisherStatusDetail)" class="publisher-status-modal__raw">{{ publisherErrorText(publisherStatusDetail) }}</small>
+          </p>
         </div>
         <div class="publisher-status-modal__actions">
           <button type="button" @click="closePublisherStatusDetail">关闭</button>
@@ -6331,6 +6542,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pub-profit { display: block; margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--theme-text-muted); }
+.pub-profit.is-gain { color: var(--vg-green); }
+.pub-profit.is-loss { color: var(--vg-red); font-weight: 600; }
+.pub-variant { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--theme-text-muted); }
+.pub-localize.is-ready { color: var(--vg-accent); }
+.pub-variant.is-failed { color: var(--theme-danger, #d14343); }
+.publisher-status-modal__raw { display: block; margin-top: 4px; font-size: 11.5px; opacity: 0.75; word-break: break-all; }
 .publisher-batch-workspace {
   border-radius: 16px;
   box-shadow: 0 18px 40px rgba(2, 7, 15, 0.28);

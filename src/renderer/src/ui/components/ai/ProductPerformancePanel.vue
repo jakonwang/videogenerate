@@ -5,14 +5,17 @@ import { useRouter } from 'vue-router'
 import { BadgeCheck, ChevronDown, ChevronUp, Download, Link2, Loader2, Unlink, Wand2 } from 'lucide-vue-next'
 
 type Verdict = 'winner' | 'average' | 'weak' | 'unproven'
-export type ContentPerformance = { creativeId: string; creativeName: string; method: 'auto' | 'manual'; confidence?: number; spend: number; revenue: number; orders: number; roi: number; verdict: Verdict }
+export type ContentPerformance = { creativeId: string; creativeName: string; method: 'auto' | 'manual'; confidence?: number; spend: number; revenue: number; orders: number; roi: number; verdict: Verdict; profit?: number }
 export type PerformanceItem = { ref: string; line: string; title: string; status: string; route: string; performance?: ContentPerformance }
 export type ProductPerformance = {
   windowDays: number
   productRoi: number
+  marginRate?: number
+  breakEvenRoi?: number
+  profit?: number
   measuredCount: number
   publishedUnlinkedCount: number
-  unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number }>
+  unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number; profit?: number }>
 }
 
 type Cloning = { creativeId: string; name: string; state: 'downloading' | 'failed'; error?: string }
@@ -39,6 +42,18 @@ function roiTone(roi: number) {
   if (roi < 1) return 'pp__roi--bad'
   return roi >= props.performance.productRoi ? 'pp__roi--good' : ''
 }
+const hasCost = computed(() => props.performance.marginRate !== undefined)
+/** 利润：+12 / -5；没成本显示「未填成本」 */
+function profitText(value?: number) {
+  if (value === undefined) return t('ai.perf.missingCost')
+  return `${value < 0 ? '-' : '+'}${number(Math.abs(value))}`
+}
+function profitTone(value?: number) {
+  if (value === undefined) return 'pp__roi--none'
+  return value < 0 ? 'pp__roi--bad' : value > 0 ? 'pp__roi--good' : ''
+}
+/** 有成交但亏钱：GMV 看着不错，其实在倒贴 */
+const isLosing = (item: { revenue: number; profit?: number }) => item.profit !== undefined && item.profit < 0 && item.revenue > 0
 const verdictPill: Record<Verdict, string> = { winner: 'vg-pill--green', average: 'vg-pill--blue', weak: 'vg-pill--red', unproven: '' }
 
 async function run(key: string, action: () => Promise<unknown>) {
@@ -85,6 +100,10 @@ function unlink(item: PerformanceItem) {
       <span class="vg-card__title"><BadgeCheck :size="16" /> {{ t('ai.perf.title') }} <small>{{ performance.measuredCount }}</small></span>
       <span class="vg-muted pp__hint">{{ t('ai.perf.hint', { days: performance.windowDays, roi: number(performance.productRoi) }) }}</span>
     </div>
+    <p v-if="hasCost" class="pp__profit" :class="{ 'pp__profit--bad': (performance.profit ?? 0) < 0 }" data-testid="product-performance-profit">
+      {{ t('ai.perf.profitHint', { margin: number((performance.marginRate || 0) * 100), breakEven: number(performance.breakEvenRoi || 0), days: performance.windowDays, profit: profitText(performance.profit) }) }}
+    </p>
+    <p v-else-if="linked.length || creatives.length" class="vg-muted pp__note pp__note--top" data-testid="product-performance-nocost">{{ t('ai.perf.noCost') }}</p>
 
     <div v-if="linked.length" class="vg-table-wrap">
       <table class="vg-table vg-table--compact">
@@ -96,6 +115,7 @@ function unlink(item: PerformanceItem) {
             <th class="pp__num">{{ t('ai.perf.col.revenue') }}</th>
             <th class="pp__num">{{ t('ai.perf.col.orders') }}</th>
             <th class="pp__num">ROI</th>
+            <th v-if="hasCost" class="pp__num">{{ t('ai.perf.col.profit') }}</th>
             <th></th>
           </tr>
         </thead>
@@ -105,11 +125,15 @@ function unlink(item: PerformanceItem) {
               <button type="button" class="pp__title vg-ellipsis" @click="router.push(item.route)">{{ item.title }}</button>
               <span class="pp__sub vg-ellipsis">{{ t(`ai.line.${item.line}`) }} · {{ item.performance.creativeName }} · {{ t(`ai.perf.method.${item.performance.method}`) }}</span>
             </td>
-            <td><span class="vg-pill" :class="verdictPill[item.performance.verdict]">{{ t(`ai.perf.verdict.${item.performance.verdict}`) }}</span></td>
+            <td>
+              <span class="vg-pill" :class="verdictPill[item.performance.verdict]">{{ t(`ai.perf.verdict.${item.performance.verdict}`) }}</span>
+              <span v-if="isLosing(item.performance)" class="vg-pill vg-pill--red pp__losing" :data-testid="`product-performance-losing-${item.ref}`">{{ t('ai.perf.losing') }}</span>
+            </td>
             <td class="pp__num">{{ number(item.performance.spend) }}</td>
             <td class="pp__num">{{ number(item.performance.revenue) }}</td>
             <td class="pp__num">{{ item.performance.orders }}</td>
             <td class="pp__num">{{ number(item.performance.roi) }}</td>
+            <td v-if="hasCost" class="pp__num"><span class="pp__roi" :class="profitTone(item.performance.profit)">{{ profitText(item.performance.profit) }}</span></td>
             <td class="pp__actions">
               <button v-if="item.performance.verdict === 'winner'" type="button" class="vg-btn vg-btn--xs vg-btn--soft" @click="emit('make-variant', item)"><Wand2 :size="13" /> {{ t('ai.spine.action.make_variant') }}</button>
               <button type="button" class="vg-btn vg-btn--xs vg-btn--ghost" :disabled="busy === item.ref" :title="t('ai.perf.unlink')" :data-testid="`product-performance-unlink-${item.ref}`" @click="unlink(item)"><Unlink :size="13" /></button>
@@ -137,6 +161,7 @@ function unlink(item: PerformanceItem) {
               <th class="pp__num">{{ t('ai.perf.col.revenue') }}</th>
               <th class="pp__num">{{ t('ai.perf.col.orders') }}</th>
               <th class="pp__num">ROI</th>
+              <th v-if="hasCost" class="pp__num">{{ t('ai.perf.col.profit') }}</th>
               <th v-if="linkable.length" class="pp__linkcol">{{ t('ai.perf.col.linkTo') }}</th>
               <th class="pp__linkcol"></th>
             </tr>
@@ -148,6 +173,7 @@ function unlink(item: PerformanceItem) {
               <td class="pp__num">{{ number(creative.revenue) }}</td>
               <td class="pp__num" :class="{ 'pp__dim': !creative.orders }">{{ creative.orders }}</td>
               <td class="pp__num"><span class="pp__roi" :class="roiTone(creative.roi)">{{ number(creative.roi) }}</span></td>
+              <td v-if="hasCost" class="pp__num"><span class="pp__roi" :class="profitTone(creative.profit)">{{ profitText(creative.profit) }}</span></td>
               <td v-if="linkable.length" class="pp__linkcol">
                 <div class="pp__link">
                   <select :value="picks[creative.creativeId] ?? ''" class="vg-input vg-input--sm pp__select" @change="picks[creative.creativeId] = ($event.target as HTMLSelectElement).value">
@@ -190,6 +216,10 @@ function unlink(item: PerformanceItem) {
 
 <style scoped>
 .pp__hint { font-size: 11.5px; }
+.pp__profit { margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; background: var(--theme-panel-soft); font-size: 12.5px; color: var(--theme-text); }
+.pp__profit--bad { color: var(--vg-red); }
+.pp__note--top { margin: 0 0 10px; }
+.pp__losing { margin-left: 4px; }
 .pp__focus { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--vg-accent-line, var(--vg-accent)); border-radius: 8px; background: var(--vg-accent-soft); color: var(--theme-text); font-size: 12.5px; }
 .pp__focus svg { flex-shrink: 0; color: var(--vg-accent); }
 .pp__row--focus td { background: var(--vg-accent-soft); }

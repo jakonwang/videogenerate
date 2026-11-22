@@ -15,6 +15,20 @@ function apiKey(credentials: ModelCredentials) {
   return key
 }
 
+/**
+ * 语音识别走对话平台的 OpenAI 兼容 /v1/audio/transcriptions（和云端「字幕」一致）。
+ * 桌面端托管模式下这里的地址就是云端代理，密钥不在本机。
+ */
+export function resolveChatAsrEndpoint(credentials: ModelCredentials): { baseUrl: string; apiKey: string } {
+  if (credentials.chatProviderPrimary === 'grsai' && String(credentials.grsaiApiKey || '').trim()) {
+    const host = String(credentials.grsaiHost || 'https://grsaiapi.com').trim().replace(/\/+$/, '') || 'https://grsaiapi.com'
+    return { baseUrl: `${host}/v1`, apiKey: String(credentials.grsaiApiKey).trim() }
+  }
+  const root = baseUrl(credentials)
+  if (!root) throw new Error('还没有配置 AI 对话平台，无法识别视频里的语音')
+  return { baseUrl: /\/v1$/.test(root) ? root : `${root}/v1`, apiKey: apiKey(credentials) }
+}
+
 function uniqueModels(candidates: string[]) {
   const seen = new Set<string>()
   const normalized: string[] = []

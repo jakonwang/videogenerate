@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const { mkdtemp, mkdir, readdir, rm } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
-const { join } = require('node:path')
+const { dirname, join } = require('node:path')
 const { _electron: electron } = require('playwright')
 const ffmpegPath = require('ffmpeg-static')
 const ffprobePath = require('ffprobe-static').path
@@ -124,6 +124,20 @@ async function main() {
     const size = probeSize(join(outDir, sub, clips[0]))
     console.log('clip size:', size)
     assert.deepEqual(size, { w: 720, h: 1280 })
+
+    // Highlights → publish center drafts (titled after each clip), selected and ready to distribute.
+    const segmentTitles = await page.locator('.ls-row').count()
+    await page.locator('[data-testid="live-slicer-send-publish"]').click()
+    await page.waitForURL(/#\/publish/, { timeout: 30000 })
+    await page.locator('.pub-row:not(.pub-row--head)').first().waitFor({ timeout: 30000 })
+    const drafts = await page.evaluate(() => window.api.tiktokPublisher.listTasks())
+    assert.equal(drafts.length, clips.length, `one draft per exported clip (${segmentTitles} rows)`)
+    assert.ok(drafts.every((task) => task.state === 'draft' && task.videoTitle && task.sourceVideoPath.endsWith('.mp4')))
+    assert.equal(await page.locator('.pub-row.is-selected').count(), clips.length, 'the new drafts are selected')
+    // No publishing account connected in this test → a hint instead of the distribute dialog.
+    await page.locator('[data-testid="matrix-notice"]').waitFor()
+    assert.match(await page.locator('[data-testid="matrix-notice"]').innerText(), new RegExp(`已把 ${clips.length} 个片段放进发布中心`))
+    await page.screenshot({ path: join(dirname(shots.exported), 'live-slicer-to-publish.png') })
 
     console.log('screenshots:', shots)
     console.log('live slicer e2e passed')

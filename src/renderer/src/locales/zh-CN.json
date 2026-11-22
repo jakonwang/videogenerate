@@ -4210,7 +4210,9 @@
       "start": "导出 {n} 个片段",
       "progress": "正在导出第 {n} / {total} 个",
       "resultLine": "导出完成：成功 {ok} 个，失败 {failed} 个",
-      "openDir": "打开输出目录"
+      "openDir": "打开输出目录",
+      "sendToPublish": "送进发布中心（{n} 个）",
+      "sendToPublishHint": "变成发布草稿，标题用片段名，可直接分发到多个号"
     },
     "toast": {
       "restored": "已恢复上次的切片进度",

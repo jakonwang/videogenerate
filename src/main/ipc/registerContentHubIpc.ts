@@ -1,3 +1,6 @@
+import { competitorRadar } from '../modules/content-hub/competitorRadar'
+import { autopilot } from '../modules/content-hub/autopilot'
+import { creativeGenes } from '../modules/content-hub/creativeGenes'
 import type { BrowserWindow, IpcMain } from 'electron'
 import { contentHubService } from '../modules/content-hub/service'
 
@@ -12,6 +15,19 @@ export function registerContentHubIpc(ipcMain: IpcMain, getWindow: () => Browser
 
   ipcMain.handle('contentHub:linkContentPerformance', async (_event, payload) => await contentHubService.linkContentPerformance(payload))
   ipcMain.handle('contentHub:unlinkContentPerformance', async (_event, ref: string) => await contentHubService.unlinkContentPerformance(ref))
+  ipcMain.handle('contentHub:radarState', async () => await competitorRadar.state())
+  ipcMain.handle('contentHub:radarAdd', async (_event, input) => await competitorRadar.add(input || {}))
+  ipcMain.handle('contentHub:radarRemove', async (_event, handle: string) => await competitorRadar.remove(String(handle || '')))
+  ipcMain.handle('contentHub:radarDismiss', async (_event, videoId: string) => await competitorRadar.dismiss(String(videoId || '')))
+  ipcMain.handle('contentHub:radarRefresh', async () => { await competitorRadar.refresh(); return await competitorRadar.state() })
+  ipcMain.handle('contentHub:radarDownload', async (_event, videoId: string) => await competitorRadar.download(String(videoId || '')))
+  ipcMain.handle('contentHub:autopilotToday', async () => await autopilot.today())
+  ipcMain.handle('contentHub:autopilotGenerate', async () => await autopilot.generate())
+  ipcMain.handle('contentHub:autopilotApprove', async (_event, id: string) => await autopilot.approve(String(id || '')))
+  ipcMain.handle('contentHub:autopilotSkip', async (_event, id: string) => await autopilot.skip(String(id || '')))
+  ipcMain.handle('contentHub:autopilotSaveSettings', async (_event, settings) => await autopilot.saveSettings(settings || {}))
+  ipcMain.handle('contentHub:creativeGenes', async (_event, productId: string) => await creativeGenes.report(String(productId || '')))
+  ipcMain.handle('contentHub:analyzeCreativeGenes', async (_event, productId: string) => await creativeGenes.analyze(String(productId || '')))
   ipcMain.handle('contentHub:downloadCreativeVideo', async (_event, creativeId: string) => await contentHubService.downloadCreativeVideo(creativeId))
 
   ipcMain.handle('contentHub:listReviews', async (_event, payload) => await contentHubService.listReviews(payload))

@@ -7,6 +7,7 @@ import { thumbnailUrl } from '@/lib/localMedia'
 import { useAiProducerStore } from '@/stores/aiProducer'
 import ProductChainPanel, { type ProductSpine } from './ProductChainPanel.vue'
 import ProductPerformancePanel, { type ContentPerformance, type ProductPerformance } from './ProductPerformancePanel.vue'
+import CreativeGenesPanel from './CreativeGenesPanel.vue'
 
 type Line = 'clone' | 'creative' | 'livephoto' | 'production' | 'publish'
 type Item = {
@@ -265,6 +266,13 @@ defineExpose({ makeContent })
       @make-variant="makeVariantFrom($event as Item)"
       @clone-creative="cloneFromCreative($event.creativeId, $event.name)"
       @changed="load"
+    />
+
+    <CreativeGenesPanel
+      v-if="overview?.spine?.tiktokProductIds.length"
+      :product-id="productId"
+      :product-name="productName"
+      @make-with-recipe="ai.open({ fresh: true, prompt: $event, context: { productId } })"
     />
 
     <div class="ps__bottom">

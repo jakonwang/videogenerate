@@ -289,7 +289,16 @@ export function computeOverview(input: OverviewInput): OverviewReport {
       const p = signal.params
       if (signal.key === 'ads_winner') push({ id: `product.${product.productId}.winner`, kind: 'growth', level: 'success', area: 'product', title: `「${name}」跑出爆款素材`, detail: `「${p.name}」ROI ${p.roi}，高于平均 ${p.avgRoi}，${p.orders} 单。照着它多做几条变体。`, route, aiPrompt: `商品「${name}」的素材「${p.name}」ROI 很高，照着它做几条变体` })
       else if (signal.key === 'creator_winner') push({ id: `product.${product.productId}.creator`, kind: 'growth', level: 'success', area: 'product', title: `「${name}」有达人视频在出单`, detail: `@${p.creator} 的视频带来 ${p.orders} 单，可以参考它做自有素材。`, route })
-      else if (signal.key === 'ads_fatigue') push({ id: `product.${product.productId}.fatigue`, kind: 'problem', level: 'warning', area: 'product', title: `「${name}」主力素材疲劳`, detail: `「${p.name}」占 ${p.share}% 花费，ROI 从 ${p.previousRoi} 掉到 ${p.recentRoi}。`, route, aiPrompt: `商品「${name}」的主力素材开始疲劳，帮我做一批新素材顶上` })
+      else if (signal.key === 'ads_fatigue') push({
+        id: `product.${product.productId}.fatigue.${p.creativeId || ''}`,
+        kind: 'problem',
+        level: p.daysLeft !== undefined && Number(p.daysLeft) <= 1 ? 'error' : 'warning',
+        area: 'product',
+        title: p.daysLeft === undefined ? `「${name}」主力素材疲劳` : Number(p.daysLeft) === 0 ? `「${name}」主力素材已跌破${p.floorKind === 'break_even' ? '保本线' : '平均线'}` : `「${name}」主力素材约 ${p.daysLeft} 天后撑不住`,
+        detail: `「${p.name}」占 ${p.share}% 花费，ROI 从 ${p.previousRoi} 掉到 ${p.recentRoi}${p.daysLeft === undefined ? '' : `，${p.floorKind === 'break_even' ? '保本' : '平均线'} ROI ${p.floor}`}。照它补一批变体顶上。`,
+        route,
+        aiPrompt: `商品「${name}」的主力素材「${p.name}」开始疲劳${p.daysLeft !== undefined ? `，预计 ${p.daysLeft} 天后跌破底线` : ''}，照着它的结构补一批变体顶上，做完送审`,
+      })
       else if (signal.key === 'ads_unprofitable') push({ id: `product.${product.productId}.loss`, kind: 'problem', level: 'error', area: 'product', title: `「${name}」投放在亏钱`, detail: `ROI ${p.roi}，低于保本 ROI ${p.breakEvenRoi}。`, route: OVERVIEW_ROUTES.ads })
       else if (signal.key === 'ads_need_creatives') push({ id: `product.${product.productId}.few`, kind: 'todo', level: 'info', area: 'product', title: `「${name}」在投素材太少`, detail: `只有 ${p.active} 条在跑，建议至少 ${p.target} 条。`, route, aiPrompt: `给商品「${name}」补几条投放素材` })
     }

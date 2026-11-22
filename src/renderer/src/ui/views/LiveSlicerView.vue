@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   AlertTriangle,
   AudioLines,
@@ -54,6 +54,29 @@ import {
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
+const sendingToPublish = ref(false)
+
+/** 导出好的高光片段 → 发布中心草稿（标题用片段名），跳过去并打开「分发到多个号」 */
+async function sendClipsToPublish() {
+  const ok = exportResults.value.filter((r) => r.ok && r.outputPath)
+  if (!ok.length || sendingToPublish.value) return
+  sendingToPublish.value = true
+  try {
+    const titleOf = (id: string) => segments.value.find((s) => s.id === id)?.title || ''
+    const created: Array<{ id: string }> = []
+    for (const result of ok) {
+      const title = titleOf(result.id).trim().slice(0, 150)
+      const drafts = await window.api.tiktokPublisher.createDraftsFromPaths({ paths: [result.outputPath!], defaults: title ? { videoTitle: title } : {} })
+      created.push(...drafts)
+    }
+    await router.push({ path: '/publish', query: { select: created.map((item) => item.id).join(','), distribute: '1' } })
+  } catch (error: any) {
+    notify('error', String(error?.message || error))
+  } finally {
+    sendingToPublish.value = false
+  }
+}
 
 type Source = {
   path: string
@@ -1221,6 +1244,10 @@ watch(activeId, async (id) => {
               </div>
               <div class="ls-result__path" :title="exportDir">{{ basename(exportDir) }}</div>
               <button class="vg-btn vg-btn--sm vg-btn--block" type="button" @click="openPath(exportDir)"><FolderOpen :size="13" />{{ t('slicer.export.openDir') }}</button>
+              <button v-if="exportOk.length" class="vg-btn vg-btn--sm vg-btn--primary vg-btn--block" type="button" :disabled="sendingToPublish" data-testid="live-slicer-send-publish" @click="sendClipsToPublish">
+                <Loader2 v-if="sendingToPublish" :size="13" class="ls-spin" /><CloudUpload v-else :size="13" />{{ t('slicer.export.sendToPublish', { n: exportOk.length }) }}
+              </button>
+              <small class="ls-result__hint">{{ t('slicer.export.sendToPublishHint') }}</small>
             </div>
           </article>
         </aside>

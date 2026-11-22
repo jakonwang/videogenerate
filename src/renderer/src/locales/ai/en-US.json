@@ -405,7 +405,8 @@
       "make_content": "Make more content",
       "make_variant": "Make variants",
       "open_ads": "Open ads",
-      "open_creators": "Open creators"
+      "open_creators": "Open creators",
+      "replenish": "Replenish from it"
     },
     "signal": {
       "bind_channel": "No shop product is linked, so ads and creator data cannot be grouped under this product.",
@@ -415,9 +416,17 @@
       "ads_concentration": "Creative \"{name}\" takes {share}% of spend. The product depends on a single creative.",
       "ads_unprofitable": "ROI over 14 days is {roi}, below the break-even ROI of {breakEvenRoi}.",
       "creator_winner": "The video \"{name}\" by creator {creator} drove {orders} orders. Use it as a reference.",
-      "creators_awaiting_content": "{count} creator(s) received samples and have not posted yet."
+      "creators_awaiting_content": "{count} creator(s) received samples and have not posted yet.",
+      "ads_fatigue_runway": "Main creative \"{name}\" fell from ROI {previousRoi} to {recentRoi}; at this pace it drops below the {floorName} of {floor} in about {daysLeft} days. Prepare variants now.",
+      "ads_fatigue_below": "Main creative \"{name}\" is at ROI {recentRoi}, below the {floorName} of {floor}. Replace it with fresh variants and lower its budget."
     },
-    "variantNeedVideoPrompt": "For product \"{product}\", ad creative \"{name}\" sells best. I want variants that copy its structure. It was not made in this app, so I am sending you the original video as the reference."
+    "variantNeedVideoPrompt": "For product \"{product}\", ad creative \"{name}\" sells best. I want variants that copy its structure. It was not made in this app, so I am sending you the original video as the reference.",
+    "adsProfit": "Profit {profit}",
+    "adsLosing": "Loss {profit}",
+    "floor": {
+      "break_even": "break-even ROI",
+      "average": "average-line ROI"
+    }
   },
   "perf": {
     "title": "Sales proof",
@@ -439,7 +448,8 @@
       "revenue": "Revenue",
       "orders": "Orders",
       "creative": "Ad creative",
-      "linkTo": "Link to video"
+      "linkTo": "Link to video",
+      "profit": "Profit"
     },
     "verdict": {
       "winner": "Sells well",
@@ -462,7 +472,11 @@
     "cloneDownloading": "Downloading the original video of ad creative \"{name}\"…",
     "cloneFailed": "Could not download the original video of ad creative \"{name}\": {error}",
     "clonePlanPrompt": "For product \"{product}\", ad creative \"{name}\" ({author}) sells best. I downloaded its original video (attached). Clone {count} variants that follow its structure, with this product.",
-    "clonePlanSummary": "Clone ad creative \"{name}\" ×{count} → review"
+    "clonePlanSummary": "Clone ad creative \"{name}\" ×{count} → review",
+    "profitHint": "Margin {margin}% · break-even ROI {breakEven} · {days}-day profit {profit}",
+    "noCost": "Add this product's costs in GMV MAX to see whether each creative makes or loses money.",
+    "losing": "Sells but loses money",
+    "missingCost": "No cost data"
   },
   "brand": {
     "title": "Brand memory",
@@ -792,5 +806,77 @@
     "lastFailed": "Last attempt failed: {error}",
     "replaced": "Shot video replaced. You can re-compose the final video.",
     "projectSent": "Sent {count} storyboard frames to tk Creative. Pick results from each shot's Replace video menu."
+  },
+  "genes": {
+    "title": "Winning video genes",
+    "hint": "{count} ad creatives with spend in this category · category ROI {roi}",
+    "progress": "Analyzing {done}/{total}: {stage}",
+    "stage": {
+      "downloading": "downloading the video",
+      "analyzing": "AI breaking down the structure"
+    },
+    "someFailed": "{count} creatives could not be analyzed ({error}); they will be retried tomorrow.",
+    "best": "Best-selling structure in this category",
+    "make": "Make a batch with it",
+    "makePrompt": "Ad data for the \"{category}\" category of product \"{product}\" shows the best-selling video structure is: {recipe}. Plan a batch of new videos for this product with this structure and send them for review.",
+    "rowTitle": "{count} creatives · spend {spend} · {orders} orders",
+    "thin": "few samples",
+    "count": "{count}",
+    "empty": "No ad creatives analyzed in this category yet. Come back once ads are running.",
+    "emptyPending": "Ad creatives in this category are not analyzed yet. AI will download the top-spending videos, break down opening, pace and delivery, and compare which structure has the higher ROI.",
+    "analyze": "Analyze ad creatives ({count} left)",
+    "cost": "Up to 8 per run; downloads videos and uses AI (a few credits)",
+    "dim": {
+      "hook": "Opening",
+      "delivery": "Delivery",
+      "pace": "Pace",
+      "length": "Length",
+      "subtitle": "Subtitles",
+      "person": "On camera",
+      "cta": "Call to action"
+    }
+  },
+  "daily": {
+    "title": "Daily autopilot",
+    "pending": "{count} to approve",
+    "onSuggest": "On: every day at {hour}:00 a plan is built from ad data and waits for your approval (max {max} tasks a day)",
+    "onAuto": "On: every day at {hour}:00 a plan is built and run within the limit (max {max} tasks a day)",
+    "off": "Turn on to check ad data daily: replenish tiring creatives, scale winners, and get stop-loss reminders. You only approve.",
+    "settings": "Settings",
+    "hour": "Plan at",
+    "max": "Max tasks a day",
+    "modeSuggest": "Suggest, wait for me",
+    "modeAuto": "Run within the limit",
+    "includePublish": "Send approved videos to the publish center (drafts only)",
+    "guard": "Guardrails: losing products are not scaled; a creative is not replenished twice within 3 days; ad budgets are never changed; publishing only creates drafts.",
+    "notYet": "Today's plan has not been built yet.",
+    "generate": "Build today's plan",
+    "nothing": "Nothing to do today, ads are running normally.",
+    "approve": "Approve",
+    "retry": "Retry",
+    "skip": "Skip",
+    "goHandle": "Open",
+    "dismiss": "Got it",
+    "running": "Running",
+    "runningAuto": "Started automatically",
+    "done": "Done, review it",
+    "status": {
+      "skipped": "Skipped",
+      "acknowledged": "Handled",
+      "pending": "To approve",
+      "failed": "Failed",
+      "running": "Running",
+      "done": "Done"
+    },
+    "used": "{used}/{max} tasks run today",
+    "regenerate": "Rebuild",
+    "approveAll": "Approve all ({count})",
+    "kind": {
+      "stop_loss": "Stop loss",
+      "replenish": "Replenish",
+      "scale_winner": "Scale winner",
+      "more_content": "More creatives",
+      "publish_approved": "Publish"
+    }
   }
 }

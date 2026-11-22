@@ -1,6 +1,7 @@
 import { brandMemoryStore } from './stores'
 import { REDO_REASON_LABEL } from './insights'
 import { productPerformanceGuidance } from './performance'
+import { categoryGeneGuidance } from './creativeGenes'
 
 /**
  * Renders brand + product memory as plain guidance for the AI producer's brain and planner.
@@ -39,6 +40,9 @@ export async function buildMemoryGuidance(productId?: string): Promise<string> {
   if (productId) {
     const proof = await productPerformanceGuidance(productId).catch(() => '')
     if (proof) lines.push(proof)
+    // 同类目里出单素材的结构（爆款基因库）
+    const genes = await categoryGeneGuidance(productId).catch(() => '')
+    if (genes) lines.push(genes)
   }
 
   return lines.join('\n')

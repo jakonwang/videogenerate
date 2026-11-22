@@ -44,7 +44,7 @@ async function main() {
 
     const signals = page.locator('[data-testid="overview-signals"]')
     const text = await signals.innerText()
-    for (const pattern of [/投放 GMV 下滑/, /花费涨了/, /个计划在花钱但没出单/, /项链测款/, /SKU 快断货|SKU 已断货/, /在投放但没有新素材|主力素材疲劳/, /跑出爆款素材|有达人视频在出单/, /寄样申请待审核/]) {
+    for (const pattern of [/投放 GMV 下滑/, /花费涨了/, /个计划在花钱但没出单/, /项链测款/, /SKU 快断货|SKU 已断货/, /在投放但没有新素材|主力素材(疲劳|约 \d+ 天后撑不住|已跌破)/, /跑出爆款素材|有达人视频在出单/, /寄样申请待审核/]) {
       assert.match(text, pattern)
     }
     await page.screenshot({ path: join(shots, '01-overview.png'), fullPage: true })

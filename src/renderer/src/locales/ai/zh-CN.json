@@ -405,7 +405,8 @@
       "make_content": "补一批素材",
       "make_variant": "照它做变体",
       "open_ads": "查看投放",
-      "open_creators": "查看达人"
+      "open_creators": "查看达人",
+      "replenish": "照它补一批"
     },
     "signal": {
       "bind_channel": "还没有绑定店铺商品，投放和达人数据暂时归不到这个商品。",
@@ -415,9 +416,17 @@
       "ads_concentration": "素材「{name}」占了 {share}% 的花费，过度依赖单条素材。",
       "ads_unprofitable": "近 14 天 ROI {roi}，低于盈亏平衡 ROI {breakEvenRoi}。",
       "creator_winner": "达人 {creator} 的视频「{name}」出了 {orders} 单，可以照它复刻。",
-      "creators_awaiting_content": "{count} 位达人已收到样品，还没有发视频。"
+      "creators_awaiting_content": "{count} 位达人已收到样品，还没有发视频。",
+      "ads_fatigue_runway": "主力素材「{name}」ROI 从 {previousRoi} 降到 {recentRoi}，按这个速度约 {daysLeft} 天后跌破{floorName} {floor}。先照它补一批变体顶上。",
+      "ads_fatigue_below": "主力素材「{name}」ROI 已跌到 {recentRoi}，低于{floorName} {floor}。照它补一批变体顶上，旧素材可以降预算。"
     },
-    "variantNeedVideoPrompt": "商品「{product}」的投放素材「{name}」出单最好，我想照着它的结构复刻一批变体。这条视频不是在软件里做的，我把原视频发给你（作为参考视频）。"
+    "variantNeedVideoPrompt": "商品「{product}」的投放素材「{name}」出单最好，我想照着它的结构复刻一批变体。这条视频不是在软件里做的，我把原视频发给你（作为参考视频）。",
+    "adsProfit": "利润 {profit}",
+    "adsLosing": "亏 {profit}",
+    "floor": {
+      "break_even": "保本 ROI",
+      "average": "平均线 ROI"
+    }
   },
   "perf": {
     "title": "出单验证",
@@ -439,7 +448,8 @@
       "revenue": "成交额",
       "orders": "订单",
       "creative": "投放素材",
-      "linkTo": "关联到成片"
+      "linkTo": "关联到成片",
+      "profit": "利润"
     },
     "verdict": {
       "winner": "出单好",
@@ -462,7 +472,11 @@
     "cloneDownloading": "正在下载投放素材「{name}」的原视频…",
     "cloneFailed": "投放素材「{name}」的原视频下载失败：{error}",
     "clonePlanPrompt": "商品「{product}」的投放素材「{name}」（{author}）出单最好。我已下载它的原视频（附件），请照着它的结构复刻 {count} 条同款变体，换成这个商品。",
-    "clonePlanSummary": "复刻投放素材「{name}」{count} 条 → 审核"
+    "clonePlanSummary": "复刻投放素材「{name}」{count} 条 → 审核",
+    "profitHint": "毛利率 {margin}% · 保本 ROI {breakEven} · 近 {days} 天利润 {profit}",
+    "noCost": "这个商品还没在 GMV MAX 填成本，填好后这里会显示每条素材赚了还是亏了。",
+    "losing": "有成交但亏钱",
+    "missingCost": "未填成本"
   },
   "brand": {
     "title": "品牌记忆",
@@ -792,5 +806,77 @@
     "lastFailed": "上次出片失败：{error}",
     "replaced": "镜头视频已替换，可重新合成最终成片。",
     "projectSent": "已把 {count} 个分镜交给 tk创意室，出片后可在每个镜头的「替换视频」里选用。"
+  },
+  "genes": {
+    "title": "爆款基因",
+    "hint": "同类目 {count} 条有花费的投放素材 · 类目平均 ROI {roi}",
+    "progress": "正在分析第 {done}/{total} 条：{stage}",
+    "stage": {
+      "downloading": "下载原视频",
+      "analyzing": "AI 拆解结构"
+    },
+    "someFailed": "{count} 条没分析成功（{error}），明天会自动重试。",
+    "best": "这个类目最出单的结构",
+    "make": "照这个结构做一批",
+    "makePrompt": "商品「{product}」所在类目（{category}）的投放数据显示，出单最好的视频结构是：{recipe}。请按这个结构给这个商品规划一批新视频，做完送审。",
+    "rowTitle": "{count} 条素材 · 花费 {spend} · {orders} 单",
+    "thin": "样本少",
+    "count": "{count} 条",
+    "empty": "这个类目还没有分析过的投放素材。投放跑起来后再来分析。",
+    "emptyPending": "还没分析过这个类目的投放素材。点下面的按钮，AI 会下载花费最高的几条视频，拆出开头方式、节奏、讲法等，再对比哪种结构 ROI 更高。",
+    "analyze": "分析投放素材（{count} 条未分析）",
+    "cost": "每次最多分析 8 条，会下载视频并调用 AI（消耗少量点数）",
+    "dim": {
+      "hook": "开头方式",
+      "delivery": "讲法",
+      "pace": "节奏",
+      "length": "时长",
+      "subtitle": "字幕样式",
+      "person": "出镜",
+      "cta": "结尾引导"
+    }
+  },
+  "daily": {
+    "title": "每日自动驾驶",
+    "pending": "{count} 条待批准",
+    "onSuggest": "已开启：每天 {hour}:00 按投放数据生成今日计划，等你批准（每天最多 {max} 个任务）",
+    "onAuto": "已开启：每天 {hour}:00 生成计划，并在额度内自动执行（每天最多 {max} 个任务）",
+    "off": "打开后，每天自动看投放数据：哪条素材在衰退就照它补货、哪条是爆款就放大、亏钱的提醒你止损。你每天只需要点同意。",
+    "settings": "设置",
+    "hour": "每天几点生成",
+    "max": "每天最多执行",
+    "modeSuggest": "只建议，等我批准",
+    "modeAuto": "额度内自动执行",
+    "includePublish": "把审核通过的成片送进发布中心（只建草稿）",
+    "guard": "护栏：亏钱的商品不放大；同一条素材 3 天内不重复补；不会替你改投放预算；发布只建草稿，不自动提交。",
+    "notYet": "今天的计划还没生成。",
+    "generate": "立即生成今日计划",
+    "nothing": "今天没有需要处理的事，投放都在正常跑。",
+    "approve": "批准",
+    "retry": "重试",
+    "skip": "跳过",
+    "goHandle": "去处理",
+    "dismiss": "知道了",
+    "running": "执行中",
+    "runningAuto": "已自动执行",
+    "done": "已完成，去审核",
+    "status": {
+      "skipped": "已跳过",
+      "acknowledged": "已处理",
+      "pending": "待批准",
+      "failed": "失败",
+      "running": "执行中",
+      "done": "已完成"
+    },
+    "used": "今天已执行 {used}/{max} 个任务",
+    "regenerate": "重新生成",
+    "approveAll": "全部批准（{count}）",
+    "kind": {
+      "stop_loss": "止损提醒",
+      "replenish": "补货",
+      "scale_winner": "放大爆款",
+      "more_content": "补素材",
+      "publish_approved": "送去发布"
+    }
   }
 }

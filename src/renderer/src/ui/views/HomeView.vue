@@ -31,6 +31,7 @@ import {
 import heroImage from '@/assets/home-hero.png'
 import { thumbnailUrl } from '@/lib/localMedia'
 import { useAiProducerStore } from '@/stores/aiProducer'
+import AutopilotDailyPanel from '../components/ai/AutopilotDailyPanel.vue'
 import { formatKpi, kpiDeltaText, kpiDeltaTone } from '@/lib/overviewFormat'
 import type { OverviewReport, OverviewSignal } from '../../../../shared/overviewReport'
 
@@ -220,6 +221,8 @@ onBeforeUnmount(() => unsubscribe?.())
         </li>
       </ol>
     </section>
+
+    <AutopilotDailyPanel />
 
     <section class="home-lines">
       <article v-for="line in lines" :key="line.key" class="vg-card home-line" :class="`home-line--${line.tone}`" :data-testid="`home-line-${line.key}`">

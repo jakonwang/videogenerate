@@ -405,7 +405,8 @@
       "make_content": "Làm thêm nội dung",
       "make_variant": "Làm biến thể",
       "open_ads": "Xem quảng cáo",
-      "open_creators": "Xem nhà sáng tạo"
+      "open_creators": "Xem nhà sáng tạo",
+      "replenish": "Bổ sung theo nó"
     },
     "signal": {
       "bind_channel": "Chưa liên kết sản phẩm cửa hàng nên dữ liệu quảng cáo và nhà sáng tạo chưa gom được về sản phẩm này.",
@@ -415,9 +416,17 @@
       "ads_concentration": "Nội dung \"{name}\" chiếm {share}% chi tiêu. Sản phẩm đang phụ thuộc vào một nội dung.",
       "ads_unprofitable": "ROI 14 ngày là {roi}, thấp hơn ROI hòa vốn {breakEvenRoi}.",
       "creator_winner": "Video \"{name}\" của nhà sáng tạo {creator} mang về {orders} đơn. Có thể dùng làm mẫu.",
-      "creators_awaiting_content": "{count} nhà sáng tạo đã nhận mẫu nhưng chưa đăng video."
+      "creators_awaiting_content": "{count} nhà sáng tạo đã nhận mẫu nhưng chưa đăng video.",
+      "ads_fatigue_runway": "Nội dung chính \"{name}\" giảm ROI từ {previousRoi} xuống {recentRoi}; với tốc độ này khoảng {daysLeft} ngày nữa sẽ dưới {floorName} {floor}. Hãy chuẩn bị biến thể ngay.",
+      "ads_fatigue_below": "Nội dung chính \"{name}\" có ROI {recentRoi}, đã dưới {floorName} {floor}. Thay bằng biến thể mới và giảm ngân sách nội dung cũ."
     },
-    "variantNeedVideoPrompt": "Với sản phẩm \"{product}\", nội dung quảng cáo \"{name}\" bán tốt nhất. Tôi muốn làm biến thể theo cấu trúc của nó. Video này không làm trong phần mềm, tôi gửi video gốc làm video tham chiếu."
+    "variantNeedVideoPrompt": "Với sản phẩm \"{product}\", nội dung quảng cáo \"{name}\" bán tốt nhất. Tôi muốn làm biến thể theo cấu trúc của nó. Video này không làm trong phần mềm, tôi gửi video gốc làm video tham chiếu.",
+    "adsProfit": "Lãi {profit}",
+    "adsLosing": "Lỗ {profit}",
+    "floor": {
+      "break_even": "ROI hòa vốn",
+      "average": "ROI mức trung bình"
+    }
   },
   "perf": {
     "title": "Bằng chứng bán hàng",
@@ -439,7 +448,8 @@
       "revenue": "Doanh thu",
       "orders": "Đơn hàng",
       "creative": "Nội dung quảng cáo",
-      "linkTo": "Liên kết với video"
+      "linkTo": "Liên kết với video",
+      "profit": "Lợi nhuận"
     },
     "verdict": {
       "winner": "Bán tốt",
@@ -462,7 +472,11 @@
     "cloneDownloading": "Đang tải video gốc của nội dung quảng cáo \"{name}\"…",
     "cloneFailed": "Không tải được video gốc của nội dung quảng cáo \"{name}\": {error}",
     "clonePlanPrompt": "Với sản phẩm \"{product}\", nội dung quảng cáo \"{name}\" ({author}) bán tốt nhất. Tôi đã tải video gốc (đính kèm). Hãy làm {count} biến thể theo cấu trúc của nó, dùng sản phẩm này.",
-    "clonePlanSummary": "Làm lại nội dung quảng cáo \"{name}\" ×{count} → duyệt"
+    "clonePlanSummary": "Làm lại nội dung quảng cáo \"{name}\" ×{count} → duyệt",
+    "profitHint": "Biên lợi nhuận {margin}% · ROI hòa vốn {breakEven} · lợi nhuận {days} ngày {profit}",
+    "noCost": "Nhập chi phí sản phẩm trong GMV MAX để xem từng nội dung lãi hay lỗ.",
+    "losing": "Có doanh thu nhưng lỗ",
+    "missingCost": "Chưa nhập chi phí"
   },
   "brand": {
     "title": "Bộ nhớ thương hiệu",
@@ -792,5 +806,77 @@
     "lastFailed": "Lần trước thất bại: {error}",
     "replaced": "Đã thay video cảnh. Có thể ghép lại video cuối.",
     "projectSent": "Đã gửi {count} ảnh phân cảnh tới tk Creative. Chọn kết quả trong menu Thay video của từng cảnh."
+  },
+  "genes": {
+    "title": "Gen video bán chạy",
+    "hint": "{count} nội dung quảng cáo có chi tiêu trong ngành · ROI trung bình {roi}",
+    "progress": "Đang phân tích {done}/{total}: {stage}",
+    "stage": {
+      "downloading": "tải video gốc",
+      "analyzing": "AI phân tích cấu trúc"
+    },
+    "someFailed": "{count} nội dung chưa phân tích được ({error}), sẽ tự thử lại vào ngày mai.",
+    "best": "Cấu trúc bán chạy nhất trong ngành",
+    "make": "Làm một loạt theo cấu trúc này",
+    "makePrompt": "Dữ liệu quảng cáo ngành \"{category}\" của sản phẩm \"{product}\" cho thấy cấu trúc video bán tốt nhất là: {recipe}. Hãy lên kế hoạch một loạt video mới theo cấu trúc này rồi gửi duyệt.",
+    "rowTitle": "{count} nội dung · chi {spend} · {orders} đơn",
+    "thin": "ít mẫu",
+    "count": "{count}",
+    "empty": "Ngành này chưa có nội dung quảng cáo nào được phân tích.",
+    "emptyPending": "Chưa phân tích nội dung quảng cáo của ngành này. AI sẽ tải các video chi tiêu cao nhất, phân tích cách mở đầu, nhịp, cách kể và so sánh ROI.",
+    "analyze": "Phân tích nội dung quảng cáo (còn {count})",
+    "cost": "Tối đa 8 mỗi lần; tải video và dùng AI (tốn ít điểm)",
+    "dim": {
+      "hook": "Cách mở đầu",
+      "delivery": "Cách kể",
+      "pace": "Nhịp",
+      "length": "Thời lượng",
+      "subtitle": "Phụ đề",
+      "person": "Xuất hiện",
+      "cta": "Kêu gọi mua"
+    }
+  },
+  "daily": {
+    "title": "Tự lái mỗi ngày",
+    "pending": "{count} việc chờ duyệt",
+    "onSuggest": "Đang bật: mỗi ngày lúc {hour}:00 lập kế hoạch từ dữ liệu quảng cáo và chờ bạn duyệt (tối đa {max} việc/ngày)",
+    "onAuto": "Đang bật: mỗi ngày lúc {hour}:00 lập kế hoạch và tự chạy trong hạn mức (tối đa {max} việc/ngày)",
+    "off": "Bật để mỗi ngày tự xem dữ liệu quảng cáo: bổ sung nội dung đang giảm, nhân bản nội dung hit, nhắc cắt lỗ. Bạn chỉ cần duyệt.",
+    "settings": "Cài đặt",
+    "hour": "Lập kế hoạch lúc",
+    "max": "Tối đa mỗi ngày",
+    "modeSuggest": "Chỉ đề xuất, chờ duyệt",
+    "modeAuto": "Tự chạy trong hạn mức",
+    "includePublish": "Đưa video đã duyệt vào trung tâm đăng (chỉ tạo bản nháp)",
+    "guard": "Rào chắn: sản phẩm lỗ không nhân bản; một nội dung không bổ sung lại trong 3 ngày; không đổi ngân sách quảng cáo; đăng chỉ tạo bản nháp.",
+    "notYet": "Chưa lập kế hoạch hôm nay.",
+    "generate": "Lập kế hoạch hôm nay",
+    "nothing": "Hôm nay không có việc cần xử lý.",
+    "approve": "Duyệt",
+    "retry": "Thử lại",
+    "skip": "Bỏ qua",
+    "goHandle": "Xử lý",
+    "dismiss": "Đã biết",
+    "running": "Đang chạy",
+    "runningAuto": "Đã tự chạy",
+    "done": "Xong, đi duyệt",
+    "status": {
+      "skipped": "Đã bỏ qua",
+      "acknowledged": "Đã xử lý",
+      "pending": "Chờ duyệt",
+      "failed": "Thất bại",
+      "running": "Đang chạy",
+      "done": "Xong"
+    },
+    "used": "Hôm nay đã chạy {used}/{max} việc",
+    "regenerate": "Lập lại",
+    "approveAll": "Duyệt tất cả ({count})",
+    "kind": {
+      "stop_loss": "Cắt lỗ",
+      "replenish": "Bổ sung",
+      "scale_winner": "Nhân bản hit",
+      "more_content": "Thêm nội dung",
+      "publish_approved": "Đăng bài"
+    }
   }
 }

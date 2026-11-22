@@ -4225,7 +4225,9 @@
       "start": "Export {n} clips",
       "progress": "Exporting {n} of {total}",
       "resultLine": "Done: {ok} succeeded, {failed} failed",
-      "openDir": "Open output folder"
+      "openDir": "Open output folder",
+      "sendToPublish": "Send to publish center ({n})",
+      "sendToPublishHint": "Creates publish drafts titled after each clip, ready to distribute to many accounts"
     },
     "toast": {
       "restored": "Restored your previous slicing session",

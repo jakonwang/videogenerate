@@ -13,8 +13,8 @@ export const RELAY_MODULES = {
   tiktokCreative: { channel: 'plugin:tiktokCreative:', only: ['listAccounts', 'listPromptVersions', 'getSettings', 'listSummary'] },
   /** 发布中心（CreatOK）：电脑上的发布凭证和店铺连接；网页选的云端视频由电脑先下载再建草稿（见 CLOUD_FILE_PREFIX） */
   tiktokPublisher: { channel: 'plugin:tiktokPublisher:' },
-  /** 设置 → 体检与自动化：电脑上的系统体检、每日简报 / 每周复盘定时、飞书推送 */
-  contentHub: { channel: 'contentHub:', only: ['getAutomationSettings', 'saveAutomationSettings', 'testFeishuPush', 'healthCheck'] },
+  /** 设置 → 体检与自动化（系统体检、每日简报 / 每周复盘定时、飞书推送）；每日自动驾驶：网页 / 手机上也能看今日计划、批准或跳过（执行仍在电脑上） */
+  contentHub: { channel: 'contentHub:', only: ['getAutomationSettings', 'saveAutomationSettings', 'testFeishuPush', 'healthCheck', 'autopilotToday', 'autopilotGenerate', 'autopilotApprove', 'autopilotSkip', 'autopilotSaveSettings', 'radarState', 'radarAdd', 'radarRemove', 'radarDismiss', 'radarRefresh'] },
   /** 发布中心「关联商品」：电脑端商品库（只读） */
   products: { channel: 'products:', only: ['list'] },
   /** 设置 → 模型与 AI：电脑端的模型密钥（托管字段只返回掩码） */

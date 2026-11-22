@@ -57,18 +57,24 @@ export type ContentPerformance = {
   orders: number
   roi: number
   verdict: PerformanceVerdict
+  /** 成交额 × 毛利率 − 花费；商品没在 GMV MAX 填成本时没有 */
+  profit?: number
 }
 
 export type ProductPerformance = {
   windowDays: number
   productRoi: number
+  /** 商品成本齐全时才有：毛利率、保本 ROI、近 N 天总利润 */
+  marginRate?: number
+  breakEvenRoi?: number
+  profit?: number
   byRef: Record<ContentRef, ContentPerformance>
   byLine: Array<{ line: ContentLine; measured: number; winners: number; spend: number; revenue: number; orders: number; roi: number }>
   measuredCount: number
   /** Published videos of this product that no creative has been matched to yet. */
   publishedUnlinkedCount: number
   /** Creatives with spend that no local video is matched to, for manual linking. */
-  unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number }>
+  unlinkedCreatives: Array<{ creativeId: string; name: string; spend: number; revenue: number; orders: number; roi: number; profit?: number }>
 }
 
 export type ProjectSummary = {

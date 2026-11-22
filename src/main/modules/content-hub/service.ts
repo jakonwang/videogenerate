@@ -1,3 +1,6 @@
+import { geelarkWarmup } from '../tiktok-publisher/geelarkWarmup'
+import { competitorRadar } from './competitorRadar'
+import { autopilot } from './autopilot'
 import { join } from 'node:path'
 import { Notification } from 'electron'
 import { getAppPaths } from '../../lib/paths'
@@ -115,6 +118,38 @@ async function runScheduledAutomations() {
     }
   } catch (error) {
     console.warn('[content-hub] scheduled automation failed', error)
+  }
+  // 每日自动驾驶：到点生成今日计划（自动模式在额度内直接执行）
+  try {
+    const result = await autopilot.runDaily()
+    if (result && (result.pending || result.started)) {
+      notify('自动驾驶', result.started
+        ? `已自动开始 ${result.started} 个任务${result.pending ? `，还有 ${result.pending} 条待你批准` : ''}`
+        : `今日计划已生成：${result.pending} 条待你批准，打开工作台查看`)
+      await emitChange('autopilot')
+    }
+  } catch (error) {
+    console.warn('[content-hub] autopilot failed', error)
+  }
+  // 云手机自动养号：给养号期内的 GeeLark TikTok 号建今天的养号任务
+  try {
+    await geelarkWarmup.run()
+    await geelarkWarmup.sync()
+  } catch (error) {
+    console.warn('[content-hub] geelark warmup failed', error)
+  }
+  // 竞品爆款雷达：每 6 小时看一次竞品账号
+  try {
+    const radar = await competitorRadar.runScheduled()
+    if (radar?.newBreakouts.length) {
+      const top = radar.newBreakouts[0]!
+      notify('竞品爆款雷达', radar.newBreakouts.length === 1
+        ? `@${top.handle} 有条视频跑爆了：播放是平时的 ${top.multiple} 倍，打开「选品 → 竞品雷达」可以一键复刻`
+        : `发现 ${radar.newBreakouts.length} 条竞品爆款，最高是平时的 ${top.multiple} 倍，打开「选品 → 竞品雷达」查看`)
+      await emitChange('radar')
+    }
+  } catch (error) {
+    console.warn('[content-hub] competitor radar failed', error)
   }
 }
 
