@@ -1,0 +1,131 @@
+{
+  "step": {
+    "locate": "Tìm sản phẩm",
+    "image": "Tạo ảnh",
+    "video": "Tạo video",
+    "package": "Xuất"
+  },
+  "state": {
+    "running": "Đang chạy",
+    "waiting": "Đang chờ",
+    "paused": "Đã tạm dừng",
+    "retrying": "Đang thử lại",
+    "failed": "Thất bại",
+    "done": "Hoàn tất",
+    "draft": "Chưa bắt đầu"
+  },
+  "now": {
+    "queued": "Đang xếp hàng, sắp bắt đầu",
+    "locate": "Đang tìm vị trí sản phẩm trong ảnh tham chiếu",
+    "image": "Đang tạo ảnh đã thay sản phẩm",
+    "imageWaiting": "Đã gửi cho mô hình ảnh, đang chờ kết quả",
+    "video": "Đang tạo video từ ảnh",
+    "videoWaiting": "Đã gửi cho mô hình video, đang chờ kết quả",
+    "package": "Đang đóng gói để xuất",
+    "done": "Hoàn tất",
+    "paused": "Đã tạm dừng"
+  },
+  "short": {
+    "locate": "Đang tìm sản phẩm",
+    "image": "Đang tạo ảnh",
+    "imageWaiting": "Chờ ảnh",
+    "video": "Đang tạo video",
+    "videoWaiting": "Chờ video",
+    "package": "Đang đóng gói",
+    "queued": "Đang xếp hàng"
+  },
+  "waited": "Đã chờ {d}",
+  "expected": "thường {min}–{max} phút",
+  "expectedUnderMinute": "thường dưới 1 phút",
+  "overdue": "Lâu hơn bình thường — có thể chờ tiếp hoặc thử lại sau",
+  "dur": {
+    "s": "{s} giây",
+    "ms": "{m} phút {s} giây",
+    "hm": "{h} giờ {m} phút"
+  },
+  "next": {
+    "auto": "Tự chuyển sang bước tiếp theo, không cần thao tác",
+    "retrying": "Sẽ tự thử lại (lần {n}/{max})",
+    "retry": "Bấm «Thử lại» để thử lần nữa",
+    "region": "Hãy khoanh sản phẩm cần thay rồi tạo lại",
+    "resume": "Bấm «Tiếp tục» để làm tiếp",
+    "decide": "Tạo lại ảnh, hoặc dùng ảnh này để tạo video",
+    "play": "Có thể phát, thêm phụ đề hoặc xuất",
+    "retryAfterLimit": "Đã tự thử lại {max} lần vẫn chưa được — bấm «Thử lại» để thử lần nữa"
+  },
+  "failure": {
+    "locate": "Không tìm được vị trí sản phẩm trong ảnh tham chiếu",
+    "region": "Không tìm thấy sản phẩm cần thay",
+    "image_quality": "Ảnh tạo ra không qua kiểm tra",
+    "image": "Dịch vụ ảnh tạm thời không khả dụng",
+    "video": "Tạo video thất bại",
+    "timeout": "Hết thời gian chờ",
+    "other": "Đã xảy ra lỗi"
+  },
+  "action": {
+    "details": "Chi tiết",
+    "play": "Phát",
+    "retry": "Thử lại",
+    "resume": "Tiếp tục",
+    "pause": "Tạm dừng",
+    "continueVideo": "Tạo video từ ảnh này",
+    "retryImage": "Tạo lại ảnh",
+    "region": "Khoanh sản phẩm",
+    "more": "Thao tác khác",
+    "logs": "Nhật ký chạy",
+    "subtitle": "Thêm phụ đề",
+    "revertSubtitle": "Gỡ phụ đề",
+    "reveal": "Mở thư mục",
+    "metadata": "Mở tệp metadata",
+    "regenerate": "Tạo lại",
+    "delete": "Xóa",
+    "close": "Đóng",
+    "open": "Mở",
+    "openLogs": "Toàn bộ nhật ký",
+    "select": "Chọn"
+  },
+  "detail": {
+    "kind": {
+      "reference_replace": "Thay theo ảnh tham chiếu",
+      "clone_shot": "Cảnh nhân bản"
+    },
+    "product": "Sản phẩm {name}",
+    "created": "Tạo lúc {time}",
+    "results": "Kết quả",
+    "reference": "Ảnh tham chiếu",
+    "still": "Ảnh đã tạo",
+    "video": "Video thành phẩm",
+    "notYet": "Chưa có",
+    "withSubtitle": "Đã thêm phụ đề",
+    "tech": "Chi tiết kỹ thuật",
+    "techHint": "Lệnh gọi mô hình, mã tác vụ, prompt — dùng khi cần tra lỗi",
+    "modelCalls": "Lệnh gọi mô hình",
+    "modelStep": {
+      "locate_product": "Tìm sản phẩm",
+      "image_generation": "Tạo ảnh",
+      "video_generation": "Tạo video"
+    },
+    "noModelCalls": "Chưa có lệnh gọi nào",
+    "cached": "Dùng lại kết quả trước, không gọi",
+    "remoteTasks": "Mã tác vụ từ xa",
+    "imageTask": "Ảnh",
+    "videoTask": "Video",
+    "retries": "Số lần thử lại",
+    "promptVersion": "Phiên bản prompt",
+    "quality": "Kiểm tra chất lượng",
+    "qualityNone": "Chưa kiểm tra",
+    "cache": "Bộ nhớ đệm",
+    "cacheHit": "Trúng",
+    "cacheMiss": "Không trúng",
+    "fallback": "Lý do hạ cấp",
+    "hardFailures": "Lỗi cứng",
+    "exportSpec": "Thông số xuất",
+    "assetId": "Mã tài nguyên",
+    "rawError": "Lỗi gốc",
+    "imagePrompt": "Prompt ảnh",
+    "videoPrompt": "Prompt video",
+    "negative": "Prompt loại trừ",
+    "recentLogs": "Nhật ký gần đây",
+    "noLogs": "Chưa có nhật ký"
+  }
+}

@@ -256,7 +256,10 @@ export type LivePhotoItem = {
 export type LivePhotoItemSummary = Omit<
   LivePhotoItem,
   'logs' | 'promptPreview' | 'imagePromptPreview' | 'videoPromptPreview'
->
+> & {
+  /** 当前这一步开始的时间（摘要不带日志，界面用它显示「已等 x 秒」） */
+  stageStartedAt?: number
+}
 
 export type CreateReferenceLivePhotoInput = {
   referenceImagePath?: string

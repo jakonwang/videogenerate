@@ -1,0 +1,131 @@
+{
+  "step": {
+    "locate": "Find product",
+    "image": "Make image",
+    "video": "Make video",
+    "package": "Export"
+  },
+  "state": {
+    "running": "In progress",
+    "waiting": "Waiting",
+    "paused": "Paused",
+    "retrying": "Retrying",
+    "failed": "Failed",
+    "done": "Done",
+    "draft": "Not started"
+  },
+  "now": {
+    "queued": "Queued, starting soon",
+    "locate": "Finding the product in the reference image",
+    "image": "Generating the replaced image",
+    "imageWaiting": "Image sent to the image model, waiting for the result",
+    "video": "Turning the image into a video",
+    "videoWaiting": "Video sent to the video model, waiting for the result",
+    "package": "Packaging the export",
+    "done": "Done",
+    "paused": "Paused"
+  },
+  "short": {
+    "locate": "Finding product",
+    "image": "Making image",
+    "imageWaiting": "Waiting for image",
+    "video": "Making video",
+    "videoWaiting": "Waiting for video",
+    "package": "Packaging",
+    "queued": "Queued"
+  },
+  "waited": "{d} so far",
+  "expected": "usually {min}–{max} min",
+  "expectedUnderMinute": "usually under a minute",
+  "overdue": "Taking longer than usual — keep waiting or retry later",
+  "dur": {
+    "s": "{s}s",
+    "ms": "{m}m {s}s",
+    "hm": "{h}h {m}m"
+  },
+  "next": {
+    "auto": "Moves on to the next step automatically",
+    "retrying": "Will retry automatically ({n}/{max})",
+    "retry": "Click Retry to try again",
+    "region": "Mark the product to replace by hand, then regenerate",
+    "resume": "Click Resume to carry on",
+    "decide": "Regenerate the image, or make the video from this one",
+    "play": "Play it, add subtitles or export",
+    "retryAfterLimit": "Still failing after {max} automatic retries — click Retry to try again"
+  },
+  "failure": {
+    "locate": "Couldn't find the product in the reference image",
+    "region": "No product to replace was found",
+    "image_quality": "The generated image failed the check",
+    "image": "The image service is temporarily unavailable",
+    "video": "Video generation failed",
+    "timeout": "Timed out while waiting",
+    "other": "Something went wrong"
+  },
+  "action": {
+    "details": "Details",
+    "play": "Play",
+    "retry": "Retry",
+    "resume": "Resume",
+    "pause": "Pause",
+    "continueVideo": "Make video from this image",
+    "retryImage": "Regenerate image",
+    "region": "Mark product",
+    "more": "More actions",
+    "logs": "Run log",
+    "subtitle": "Add subtitles",
+    "revertSubtitle": "Remove subtitles",
+    "reveal": "Show in folder",
+    "metadata": "Open metadata file",
+    "regenerate": "Regenerate",
+    "delete": "Delete",
+    "close": "Close",
+    "open": "Open",
+    "openLogs": "Full log",
+    "select": "Select"
+  },
+  "detail": {
+    "kind": {
+      "reference_replace": "Reference replace",
+      "clone_shot": "Cloned shot"
+    },
+    "product": "Product {name}",
+    "created": "Created {time}",
+    "results": "Results",
+    "reference": "Reference",
+    "still": "Generated image",
+    "video": "Final video",
+    "notYet": "Not yet",
+    "withSubtitle": "With subtitles",
+    "tech": "Technical details",
+    "techHint": "Model calls, remote task IDs and prompts, for troubleshooting",
+    "modelCalls": "Model calls",
+    "modelStep": {
+      "locate_product": "Find product",
+      "image_generation": "Make image",
+      "video_generation": "Make video"
+    },
+    "noModelCalls": "No calls recorded yet",
+    "cached": "Reused earlier result, not called",
+    "remoteTasks": "Remote task IDs",
+    "imageTask": "Image",
+    "videoTask": "Video",
+    "retries": "Retries",
+    "promptVersion": "Prompt version",
+    "quality": "Quality check",
+    "qualityNone": "Not checked",
+    "cache": "Cache",
+    "cacheHit": "Hit",
+    "cacheMiss": "Miss",
+    "fallback": "Fallback reason",
+    "hardFailures": "Hard failures",
+    "exportSpec": "Export spec",
+    "assetId": "Asset ID",
+    "rawError": "Raw error",
+    "imagePrompt": "Image prompt",
+    "videoPrompt": "Video prompt",
+    "negative": "Negative prompt",
+    "recentLogs": "Recent log",
+    "noLogs": "No log yet"
+  }
+}

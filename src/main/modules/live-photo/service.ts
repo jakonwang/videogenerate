@@ -1,7 +1,7 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import PQueue from 'p-queue'
 import { runFfmpeg } from '../ffmpeg/runner'
 import { getAppPaths } from '../../lib/paths'
@@ -36,6 +36,7 @@ import {
   livePhotoPromptVersionService,
 } from './promptVersions'
 import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
+import { resolveLivePhotoPhaseStartedAt } from '../../../shared/livePhotoProgress'
 import { resolveAuthoritativeProductReferencePath } from './productInput'
 import { bindLivePhotoReplacementInputs, normalizeLivePhotoScenePaths } from './sceneInput'
 import { buildLivePhotoReplacementPrompt } from './promptBuilder'
@@ -161,6 +162,8 @@ const livePhotoDeps: LivePhotoServiceDependencies = {
 const LIVE_PHOTO_AUTO_FLOW_CONCURRENCY = 2
 const LIVE_PHOTO_AUTO_FLOW_REQUEUE_COOLDOWN_MS = 8_000
 const LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS = 10 * 60 * 1000
+/** 定位参考图里的商品（一次对话模型视觉调用）的超时 */
+const LIVE_PHOTO_LOCATE_TIMEOUT_MS = 2 * 60 * 1000
 const LIVE_PHOTO_REFERENCE_PACKAGING_TIMEOUT_MS = 90 * 1000
 const LIVE_PHOTO_IMAGE_REMOTE_RETRY_MS = 1_000
 const LIVE_PHOTO_VIDEO_REMOTE_RETRY_MS = 5_000
@@ -197,31 +200,7 @@ class LivePhotoAutoFlowHandledError extends Error {
 }
 
 function normalizeLivePhotoFailureReasonSafe(reason: string, stage?: LivePhotoWorkflowStep) {
-  const text = String(reason || '').trim()
-  const lower = text.toLowerCase()
-  if (text.includes('[remote_pending]')) {
-    const remoteTaskId = extractTaskIdFromText(text)
-    const label = stage === 'video_generation' ? '视频任务已提交，正在等待远端结果。' : '图片任务已提交，正在等待远端结果。'
-    return remoteTaskId ? `[remote_pending] ${label}taskId=${remoteTaskId}` : `[remote_pending] ${label}`
-  }
-  const imageStage = stage === 'image_generation' || stage === 'image_validation'
-  if (imageStage && isRetryableLivePhotoReviewLoadError(text)) {
-    return '[remote_pending] Image validation review service is overloaded and may still recover automatically.'
-  }
-  const timeoutLike =
-    lower.includes('timed out after') ||
-    lower.includes('timeout') ||
-    lower.includes('gateway timeout')
-  if (imageStage && timeoutLike) {
-    return '[remote_pending] Image generation timed out while waiting. The remote task may still be processing.'
-  }
-  if (imageStage && isTransientLivePhotoRemoteError(text)) {
-    return '[remote_pending] Remote image service is temporarily unavailable.'
-  }
-  if (timeoutLike) {
-    return '[retryable_timeout] Current step timed out while waiting. Please retry later or inspect the task log.'
-  }
-  return text || 'Unknown error'
+  return normalizeLivePhotoFailureReason(reason, stage)
 }
 
 function extractTaskIdFromText(input: string) {
@@ -261,6 +240,11 @@ function normalizeRemotePendingTimeoutReason(
   return text
 }
 
+/**
+ * 把各种报错归一成带标签的原因。只有真的拿到远端任务号时才算「已提交远端、等待结果」（[remote_pending]，不计重试次数）；
+ * 没有任务号的超时 / 网络错误 / 服务繁忙都是普通的可重试失败，会计入重试次数，到上限就停，
+ * 不能再标成「已提交远端」无限循环（以前定位商品的对话调用失败也会这样，每轮都重新扣一次对话模型的钱）。
+ */
 function normalizeLivePhotoFailureReason(reason: string, stage?: LivePhotoWorkflowStep) {
   const text = String(reason || '').trim()
   const lower = text.toLowerCase()
@@ -269,19 +253,21 @@ function normalizeLivePhotoFailureReason(reason: string, stage?: LivePhotoWorkfl
     const label = stage === 'video_generation' ? '视频任务已提交，正在等待远端结果。' : '图片任务已提交，正在等待远端结果。'
     return remoteTaskId ? `[remote_pending] ${label}taskId=${remoteTaskId}` : `[remote_pending] ${label}`
   }
+  if (text.includes('[locate_failed]') || text.includes('[replacement_region_required]')) return text
   const imageStage = stage === 'image_generation' || stage === 'image_validation'
-  if (imageStage && isRetryableLivePhotoReviewLoadError(text)) {
+  if (stage === 'image_validation' && isRetryableLivePhotoReviewLoadError(text)) {
     return '[remote_pending] Image validation review service is overloaded and may still recover automatically.'
   }
   const timeoutLike =
     lower.includes('timed out after') ||
     lower.includes('timeout') ||
-        lower.includes('gateway timeout')
+    lower.includes('gateway timeout')
   if (imageStage && timeoutLike) {
-    return '[remote_pending] Image generation timed out while waiting. The remote task may still be processing.'
+    // 有图片任务号时 normalizeRemotePendingTimeoutReason 会把它升级成 [remote_pending] 继续查结果
+    return '[retryable_timeout] Image generation timed out while waiting. The remote task may still be processing.'
   }
-  if (imageStage && isTransientLivePhotoRemoteError(text)) {
-    return '[remote_pending] Remote image service is temporarily unavailable.'
+  if (imageStage && (isTransientLivePhotoRemoteError(text) || isRetryableLivePhotoReviewLoadError(text))) {
+    return `[retryable_remote] Remote image service is temporarily unavailable. ${text.slice(0, 200)}`.trim()
   }
   if (timeoutLike) {
     return '[retryable_timeout] Current step timed out while waiting. Please retry later or inspect the task log.'
@@ -373,7 +359,7 @@ async function locateLivePhotoReplacementRegion(input: {
   item: LivePhotoItem
   product: LivePhotoProductSnapshot
   scenePath: string
-}): Promise<{ region: LivePhotoReplacementRegion; sceneInteraction: LivePhotoSceneInteraction }> {
+}): Promise<{ region: LivePhotoReplacementRegion; sceneInteraction: LivePhotoSceneInteraction; modelCall?: LivePhotoModelCall }> {
   const existing = normalizeLivePhotoReplacementRegion(input.item.replacementRegion)
   const existingInteraction = normalizeLivePhotoSceneInteraction(input.item.sceneInteraction)
   if (existing && existingInteraction) return { region: existing, sceneInteraction: existingInteraction }
@@ -434,6 +420,21 @@ async function locateLivePhotoReplacementRegion(input: {
     }
     throw new Error('[replacement_region_required] Automatic product localization is unavailable. Select the replacement region manually.')
   }
+  // 同一张参考图（同一文件、同一商品类目）只定位一次：多个任务共用一张参考图、自动重试，都不再重复调用对话模型
+  const locateCacheKey = await buildLivePhotoLocateCacheKey(input.scenePath, String(input.product.type || '').trim())
+  const cachedLocate = locateCacheKey ? await readLivePhotoLocateCache(locateCacheKey) : null
+  if (cachedLocate) {
+    const region = existing || normalizeAutoLocatedLivePhotoReplacementRegion(cachedLocate, now())
+    if (region) {
+      const sceneInteraction = normalizeLivePhotoSceneInteraction(cachedLocate.interaction, { revision: region.revision, updatedAt: now() }) || {
+        mode: 'unknown' as const,
+        confidence: 0,
+        revision: region.revision,
+        updatedAt: now(),
+      }
+      return { region, sceneInteraction, modelCall: { step: 'locate_product', provider: 'grsai', model: cachedLocate.model, endpoint: '/v1/chat/completions', cached: true } }
+    }
+  }
   const host = String(credentials.grsaiHost || 'https://grsaiapi.com').trim().replace(/\/+$/, '') || 'https://grsaiapi.com'
   const model = String(credentials.grsaiAnalysisModel || 'gemini-3.1-pro').trim() || 'gemini-3.1-pro'
   const analysis = normalizeLivePhotoProductAnalysis(input.product.productAnalysis)
@@ -457,23 +458,32 @@ async function locateLivePhotoReplacementRegion(input: {
     },
     { type: 'image_url', image_url: { url: await imageDataUrl(input.scenePath) } },
   ]
-  const response = await fetch(`${host}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      stream: false,
-      temperature: 0,
-      messages: [
-        { role: 'system', content: 'You are a precise JSON-only product localization system.' },
-        { role: 'user', content },
-      ],
-    }),
-  })
-  const text = await response.text()
+  let response: Response
+  let text = ''
+  try {
+    response = await fetch(`${host}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: 'You are a precise JSON-only product localization system.' },
+          { role: 'user', content },
+        ],
+      }),
+      signal: AbortSignal.timeout(LIVE_PHOTO_LOCATE_TIMEOUT_MS),
+    })
+    text = await response.text()
+  } catch (error) {
+    // 网络错误 / 超时：普通可重试失败（计入重试次数），不是「已提交远端」
+    const reason = String((error as Error)?.message || error || '').trim()
+    throw new Error(`[locate_failed] Product localization request failed: model=${model} ${reason}`.trim())
+  }
   if (!response.ok) {
-    if (isRetryableLivePhotoReviewLoadError(text)) {
-      throw new Error('[remote_pending] Product localization service is temporarily unavailable.')
+    if (isRetryableLivePhotoReviewLoadError(text) || response.status >= 500) {
+      throw new Error(`[locate_failed] Product localization service is temporarily unavailable: model=${model} HTTP ${response.status}`)
     }
     throw new Error(`[replacement_region_required] Automatic product localization failed: HTTP ${response.status}`)
   }
@@ -496,7 +506,67 @@ async function locateLivePhotoReplacementRegion(input: {
     revision: region.revision,
     updatedAt: now(),
   }
-  return { region, sceneInteraction }
+  if (locateCacheKey && parsed) await writeLivePhotoLocateCache(locateCacheKey, { ...parsed, model })
+  return { region, sceneInteraction, modelCall: { step: 'locate_product', provider: 'grsai', model, endpoint: '/v1/chat/completions', cached: false } }
+}
+
+type LivePhotoLocateCacheEntry = Partial<LivePhotoReplacementRegion> & { interaction?: Partial<LivePhotoSceneInteraction>; model?: string }
+
+export type LivePhotoModelCall = { step: string; provider: string; model?: string; endpoint: string; cached: boolean }
+
+function livePhotoLocateCachePath() {
+  return join(getAppPaths().cacheDir, 'live-photo-locate.json')
+}
+
+async function buildLivePhotoLocateCacheKey(scenePath: string, productType: string) {
+  try {
+    const info = await stat(scenePath)
+    return createHash('sha1').update([scenePath, info.size, info.mtimeMs, productType].join('|')).digest('hex')
+  } catch {
+    return ''
+  }
+}
+
+async function readLivePhotoLocateCacheFile(): Promise<Record<string, LivePhotoLocateCacheEntry>> {
+  try {
+    const parsed = JSON.parse(await readFile(livePhotoLocateCachePath(), 'utf-8'))
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+async function readLivePhotoLocateCache(key: string) {
+  const entry = (await readLivePhotoLocateCacheFile())[key]
+  return entry && typeof entry === 'object' ? entry : null
+}
+
+async function writeLivePhotoLocateCache(key: string, entry: LivePhotoLocateCacheEntry) {
+  try {
+    const all = await readLivePhotoLocateCacheFile()
+    all[key] = entry
+    const keys = Object.keys(all)
+    // 只留最近 500 张参考图
+    for (const stale of keys.slice(0, Math.max(0, keys.length - 500))) delete all[stale]
+    await ensureDir(getAppPaths().cacheDir)
+    await writeFile(livePhotoLocateCachePath(), JSON.stringify(all), 'utf-8')
+  } catch (error) {
+    console.warn('[live-photo] locate cache write failed', (error as Error)?.message || error)
+  }
+}
+
+/** 记录一次模型调用（界面「技术详情 → 模型调用」读这一行），格式固定，别随便改 */
+function buildLivePhotoModelCallLog(call: LivePhotoModelCall) {
+  return buildLivePhotoLog(
+    `[live-photo] model call: step=${call.step} provider=${call.provider} model=${call.model || '--'} endpoint=${call.endpoint}${call.cached ? ' cached=1' : ''}`,
+  )
+}
+
+function livePhotoImageEndpoint(provider: string) {
+  if (provider === 'grsai') return '/v1/draw/completions'
+  if (provider === 'apifox_hub') return '/v1/images/edits'
+  if (provider === 'openai') return '/v1/images/edits'
+  return provider
 }
 
 function buildLivePhotoLog(message: string, level: LivePhotoTaskLog['level'] = 'info'): LivePhotoTaskLog {
@@ -613,6 +683,7 @@ function toLivePhotoItemSummary(item: LivePhotoItem): LivePhotoItemSummary {
     subtitleOutputPath: String(overlay?.subtitleOutputPath || '').trim() || '',
     subtitleCoverImagePath: String(overlay?.subtitleCoverImagePath || '').trim() || undefined,
     subtitleAppliedAt: Number(overlay?.appliedAt || 0) || undefined,
+    stageStartedAt: resolveLivePhotoPhaseStartedAt(hydrated),
   }
 }
 
@@ -4041,6 +4112,12 @@ async function finalizeReferenceItem(input: {
     }
   }
 
+  if (!input.item.replacementRegion || !input.item.sceneInteraction) {
+    input.item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(input.item, [buildLivePhotoLog('[live-photo] stage locate_product started')]),
+      updatedAt: now(),
+    })
+  }
   const locatedScene = await locateLivePhotoReplacementRegion({
     item: input.item,
     product: input.product,
@@ -4064,6 +4141,7 @@ async function finalizeReferenceItem(input: {
           `[live-photo] scene interaction ready: mode=${sceneInteraction.mode} confidence=${sceneInteraction.confidence}`,
           'success',
         ),
+        ...(locatedScene.modelCall ? [buildLivePhotoModelCallLog(locatedScene.modelCall)] : []),
       ]),
       replacementRegion,
       sceneInteraction,
@@ -4122,9 +4200,17 @@ async function finalizeReferenceItem(input: {
       LIVE_PHOTO_REFERENCE_STILL_TIMEOUT_MS,
       'Reference still generation',
     )
+    const imageCallLog = buildLivePhotoModelCallLog({
+      step: 'image_generation',
+      provider: submitted.provider,
+      model: submitted.model,
+      endpoint: livePhotoImageEndpoint(submitted.provider),
+      cached: false,
+    })
     if (submitted.mode === 'remote') {
       await livePhotoRepo.upsert({
         ...appendLivePhotoLogs(input.item, [
+          imageCallLog,
           buildLivePhotoLog(`[live-photo] image task submitted: provider=${submitted.provider} taskId=${submitted.taskId}`),
         ]),
         imageTaskId: submitted.taskId,
@@ -4138,6 +4224,7 @@ async function finalizeReferenceItem(input: {
       })
       throw new Error(buildRemotePendingError('image', submitted.taskId))
     }
+    input.item = await livePhotoRepo.upsert({ ...appendLivePhotoLogs(input.item, [imageCallLog]), updatedAt: now() })
     generated = {
       stillPath: submitted.stillPath,
       productReferenceImagePaths: submitted.productReferenceImagePaths,

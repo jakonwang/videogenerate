@@ -1,0 +1,131 @@
+{
+  "step": {
+    "locate": "定位商品",
+    "image": "生成图片",
+    "video": "生成视频",
+    "package": "打包导出"
+  },
+  "state": {
+    "running": "进行中",
+    "waiting": "等待结果",
+    "paused": "已暂停",
+    "retrying": "自动重试中",
+    "failed": "失败",
+    "done": "已完成",
+    "draft": "未开始"
+  },
+  "now": {
+    "queued": "排队中，马上开始",
+    "locate": "正在识别参考图里商品的位置",
+    "image": "正在生成替换后的图片",
+    "imageWaiting": "图片已交给图片模型，等待出图",
+    "video": "正在用图片生成视频",
+    "videoWaiting": "视频已交给视频模型，等待生成",
+    "package": "正在打包导出",
+    "done": "已完成",
+    "paused": "已暂停"
+  },
+  "short": {
+    "locate": "识别商品位置",
+    "image": "生成图片",
+    "imageWaiting": "等待出图",
+    "video": "生成视频",
+    "videoWaiting": "等待视频",
+    "package": "打包中",
+    "queued": "排队中"
+  },
+  "waited": "已等 {d}",
+  "expected": "通常 {min}–{max} 分钟",
+  "expectedUnderMinute": "通常 1 分钟内",
+  "overdue": "比平时久，可以继续等或稍后重试",
+  "dur": {
+    "s": "{s} 秒",
+    "ms": "{m} 分 {s} 秒",
+    "hm": "{h} 小时 {m} 分"
+  },
+  "next": {
+    "auto": "完成后会自动进入下一步，不用操作",
+    "retrying": "稍后自动重试（第 {n}/{max} 次）",
+    "retry": "可以点「重试」再试一次",
+    "region": "请手动框出要替换的商品，然后重新生成",
+    "resume": "点「继续」接着做",
+    "decide": "可以重新生成图片，或直接用这张图生成视频",
+    "play": "可以播放、加字幕或导出",
+    "retryAfterLimit": "已自动重试 {max} 次仍未成功，可以点「重试」再试一次"
+  },
+  "failure": {
+    "locate": "没能识别参考图里商品的位置",
+    "region": "没找到要替换的商品",
+    "image_quality": "生成的图片没通过检查",
+    "image": "图片服务暂时不可用",
+    "video": "视频生成失败",
+    "timeout": "等待超时",
+    "other": "任务出错了"
+  },
+  "action": {
+    "details": "详情",
+    "play": "播放",
+    "retry": "重试",
+    "resume": "继续",
+    "pause": "暂停",
+    "continueVideo": "用这张图生成视频",
+    "retryImage": "重新生成图片",
+    "region": "框选商品",
+    "more": "更多操作",
+    "logs": "运行日志",
+    "subtitle": "添加字幕",
+    "revertSubtitle": "撤销字幕",
+    "reveal": "打开所在文件夹",
+    "metadata": "打开元数据文件",
+    "regenerate": "重新生成",
+    "delete": "删除",
+    "close": "关闭",
+    "open": "打开",
+    "openLogs": "查看完整日志",
+    "select": "选择"
+  },
+  "detail": {
+    "kind": {
+      "reference_replace": "参考图替换",
+      "clone_shot": "复刻分镜"
+    },
+    "product": "商品 {name}",
+    "created": "创建于 {time}",
+    "results": "结果",
+    "reference": "参考图",
+    "still": "生成图片",
+    "video": "成片视频",
+    "notYet": "还没生成",
+    "withSubtitle": "已加字幕",
+    "tech": "技术详情",
+    "techHint": "模型调用、远端任务号、提示词，排查问题时用",
+    "modelCalls": "模型调用",
+    "modelStep": {
+      "locate_product": "定位商品",
+      "image_generation": "生成图片",
+      "video_generation": "生成视频"
+    },
+    "noModelCalls": "还没有调用记录",
+    "cached": "复用上次结果，未调用",
+    "remoteTasks": "远端任务号",
+    "imageTask": "图片",
+    "videoTask": "视频",
+    "retries": "重试次数",
+    "promptVersion": "提示词版本",
+    "quality": "质量检查",
+    "qualityNone": "未检查",
+    "cache": "缓存",
+    "cacheHit": "命中",
+    "cacheMiss": "未命中",
+    "fallback": "降级原因",
+    "hardFailures": "硬性失败",
+    "exportSpec": "导出规格",
+    "assetId": "资源标识",
+    "rawError": "原始错误",
+    "imagePrompt": "图片提示词",
+    "videoPrompt": "视频提示词",
+    "negative": "反向提示词",
+    "recentLogs": "最近日志",
+    "noLogs": "暂无日志"
+  }
+}

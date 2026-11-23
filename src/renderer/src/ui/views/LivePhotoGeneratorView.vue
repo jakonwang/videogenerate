@@ -7,7 +7,10 @@ import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
 import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import StyleReferenceCard, { type StyleReference } from '../components/StyleReferenceCard.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import LivePhotoTaskCard, { type LivePhotoCardAction, type LivePhotoCardCaps } from './live-photo/LivePhotoTaskCard.vue'
+import LivePhotoTaskDetail from './live-photo/LivePhotoTaskDetail.vue'
 // The page brings its own stylesheets so the web version (which reuses this page) gets them too.
+import type { LivePhotoItem, LivePhotoQualityReport } from './live-photo/types'
 import '@/design-system/live-photo.css'
 import '@/design-system/live-photo-page.css'
 import { webApiClient } from '@/lib/webApiClient'
@@ -71,116 +74,6 @@ type ProductImageMaterialOption = {
   createdAt: number
 }
 
-type LivePhotoItem = {
-  id: string
-  sourceType: 'reference_replace' | 'clone_shot'
-  sourceProjectTitle?: string
-  sourceShotLabel?: string
-  productSnapshot?: {
-    id: string
-    name: string
-    type: string
-    coverImagePath?: string
-    authoritativeProductReferencePath?: string
-    imagePaths: string[]
-  }
-  referenceImagePath?: string
-  packagingStatus: 'draft' | 'processing' | 'completed' | 'failed'
-  generatedStillPath?: string
-  motionVideoPath?: string
-  previewVideoPath?: string
-  posterPath?: string
-  exportBundlePath?: string
-  packagingMetadataBridgePath?: string
-  packagingAssetIdentifier?: string
-  videoMetadataMode?: 'quicktime_mdta' | 'copied_fallback'
-  imageMetadataMode?: 'copied_pending_native_metadata'
-  promptPreview?: { title: string; instructions: string[] }
-  imagePromptPreview?: {
-    provider?: string
-    model?: string
-    prompt: string
-    negativePrompt?: string
-    referenceImagePaths: string[]
-  }
-  videoPromptPreview?: {
-    provider?: string
-    model?: string
-    prompt: string
-    negativePrompt?: string
-    referenceImagePaths: string[]
-  }
-  imageTaskId?: string
-  imageTaskProvider?: string
-  imageTaskModel?: string
-  imageTaskBaseUrl?: string
-  imageTaskEndpointStyle?: string
-  videoTaskId?: string
-  videoTaskProvider?: string
-  videoTaskModel?: string
-  videoTaskBaseUrl?: string
-  videoTaskEndpointStyle?: string
-  subtitleOverlay?: {
-    active: boolean
-    originalOutputPath: string
-    originalCoverImagePath?: string
-    subtitleOutputPath: string
-    subtitleCoverImagePath?: string
-    appliedAt: number
-  }
-  workflow?: {
-    currentStep: 'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed'
-    stepStatus: Record<
-      'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed',
-      { status: 'idle' | 'running' | 'done' | 'failed'; updatedAt: number; error?: string }
-    >
-    updatedAt: number
-  }
-  autoFlowStatus?: {
-    enabled: boolean
-    status: 'idle' | 'running' | 'done' | 'failed_retryable' | 'failed_terminal'
-    paused?: boolean
-    retryLimit: number
-    retryCount: number
-    imageRetryMode?: 'auto' | 'manual_once'
-    currentStage: 'queued' | 'image_generation' | 'image_validation' | 'video_generation' | 'live_photo_packaging' | 'completed'
-    lastStartedAt?: number
-    lastCompletedAt?: number
-    lastError?: string
-    imageValidationBypassed?: boolean
-  }
-  promptVersionId?: string
-  promptVersion?: number
-  promptHash?: string
-  cacheHit?: boolean
-  checkerFallbackReason?: string
-  qualityReport?: LivePhotoQualityReport
-  replacementRegion?: {
-    x: number
-    y: number
-    width: number
-    height: number
-    source: 'auto' | 'manual'
-    confidence?: number
-    revision: number
-    updatedAt: number
-  }
-  generationAttempts?: Array<{
-    id: string
-    index: number
-    outputPath: string
-    provider?: string
-    model?: string
-    strategy?: string
-    cacheHit: boolean
-    quality?: LivePhotoQualityReport
-    createdAt: number
-  }>
-  logs?: Array<{ id: string; level: 'info' | 'success' | 'error'; message: string; time: number }>
-  error?: string
-  updatedAt: number
-}
-
 type LivePhotoSettings = {
   referenceMotionTemplate: 'push_in' | 'push_out' | 'ambient_sway'
   outputResolution: '1080x1440' | '2160x2880' | '3024x4032'
@@ -191,21 +84,6 @@ type LivePhotoSettings = {
   qualityRetryFloor?: number
   retryLimit?: number
   updatedAt: number
-}
-
-type LivePhotoQualityReport = {
-  checkerVersion: string
-  mode: 'local_python' | 'remote_fallback'
-  decision: 'pass' | 'retry' | 'reject'
-  score: number
-  threshold: number
-  retryFloor: number
-  components: Record<string, number>
-  hardFailures: string[]
-  notes: string[]
-  fallbackReason?: string
-  durationMs: number
-  checkedAt: number
 }
 
 type LivePhotoPromptVersion = {
@@ -511,19 +389,6 @@ function formatDate(value?: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function formatElapsed(value?: number) {
-  const startedAt = Number(value || 0)
-  if (!startedAt) return '--'
-  const diffMs = Math.max(0, Date.now() - startedAt)
-  const totalSeconds = Math.floor(diffMs / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  if (hours > 0) return t('autoUi.k_a407dd94a3c0', { p0: hours, p1: minutes })
-  if (minutes > 0) return t('autoUi.k_b54206bf2a1c', { p0: minutes, p1: seconds })
-  return t('autoUi.k_ad7dee82f450', { p0: seconds })
-}
-
 function previewSrc(path?: string) {
   const value = String(path || '').trim()
   if (!value) return ''
@@ -536,19 +401,6 @@ function fileNameOf(path?: string) {
   const normalized = value.replace(/\\/g, '/')
   const parts = normalized.split('/')
   return parts[parts.length - 1] || value
-}
-
-function livePhotoImageBaseRef(item: LivePhotoItem) {
-  return String(item.referenceImagePath || item.imagePromptPreview?.referenceImagePaths?.[0] || '').trim()
-}
-
-function livePhotoImageProductRef(item: LivePhotoItem) {
-  return String(
-    item.productSnapshot?.authoritativeProductReferencePath ||
-      item.productSnapshot?.coverImagePath ||
-      item.imagePromptPreview?.referenceImagePaths?.[1] ||
-      '',
-  ).trim()
 }
 
 function dedupePaths(paths: string[]) {
@@ -575,12 +427,6 @@ function itemStatusLabel(status: LivePhotoItem['packagingStatus']) {
   return t('livePhoto.status.draft')
 }
 
-function metadataModeLabel(item: LivePhotoItem) {
-  if (item.videoMetadataMode === 'quicktime_mdta') return t('livePhoto.metadata.videoTagged')
-  if (item.videoMetadataMode === 'copied_fallback') return t('livePhoto.metadata.videoFallback')
-  return t('livePhoto.metadata.pending')
-}
-
 function workflowStepLabel(step?: LivePhotoItem['workflow']['currentStep']) {
   if (step === 'image_generation') return t('autoUi.k_1f6a9dab8b96')
   if (step === 'image_validation') return t('autoUi.k_6e03657a1a84')
@@ -588,11 +434,6 @@ function workflowStepLabel(step?: LivePhotoItem['workflow']['currentStep']) {
   if (step === 'live_photo_packaging') return t('autoUi.k_089c8515d929')
   if (step === 'completed') return t('autoUi.k_e99b48a29bdf')
   return t('autoUi.k_4dcbbcfa6154')
-}
-
-function workflowStepIndex(step?: LivePhotoItem['workflow']['currentStep']) {
-  const index = livePhotoSteps.findIndex((item) => item === step)
-  return index >= 0 ? index : 0
 }
 
 function liveTaskStatusLabel(item: LivePhotoItem) {
@@ -625,26 +466,6 @@ function lpTone(item: LivePhotoItem) {
   return ''
 }
 
-function liveTaskStepTone(step?: LivePhotoItem['workflow']['currentStep']) {
-  if (step === 'image_generation') return 'tone-image'
-  if (step === 'image_validation') return 'tone-validation'
-  if (step === 'video_generation') return 'tone-video'
-  if (step === 'live_photo_packaging') return 'tone-package'
-  if (step === 'completed') return 'tone-done'
-  return 'tone-queue'
-}
-
-function liveTaskProgressPercent(item: LivePhotoItem) {
-  return Math.round(((workflowStepIndex(item.workflow?.currentStep) + (item.packagingStatus === 'completed' ? 1 : 0)) / livePhotoSteps.length) * 100)
-}
-
-function liveTaskRetryText(item: LivePhotoItem) {
-  const retryCount = Number(item.autoFlowStatus?.retryCount ?? 0)
-  const retryLimit = Number(item.autoFlowStatus?.retryLimit ?? 0)
-  if (!retryCount && !retryLimit) return ''
-  return t('autoUi.k_1e7e6cda0875', { p0: retryCount, p1: retryLimit || livePhotoRetryLimitFallback })
-}
-
 function liveTaskErrorSummary(item: LivePhotoItem) {
   const text = String(item.error || item.autoFlowStatus?.lastError || '').trim()
   if (!text) return ''
@@ -661,54 +482,6 @@ function liveTaskErrorSummary(item: LivePhotoItem) {
   return stage === 'video_generation' || stage === 'image_validation'
     ? `${workflowStepLabel(stage)}: ${summary}`
     : summary
-}
-
-function liveTaskAutoSummary(item: LivePhotoItem) {
-  if (item.autoFlowStatus?.paused) return t('autoUi.k_fcbae46bf890')
-  if (String(item.autoFlowStatus?.lastError || item.error || '').includes('[remote_pending]')) return t('autoUi.k_f5903c87b0f8')
-  if (item.autoFlowStatus?.status === 'failed_retryable') return t('autoUi.k_26c89557cf8f')
-  if (item.autoFlowStatus?.status === 'failed_terminal') return t('autoUi.k_cd2eb05a80ae')
-  if (item.autoFlowStatus?.status === 'running') return t('autoUi.k_dc8ac053db7a')
-  if (item.autoFlowStatus?.status === 'done') return t('autoUi.k_69f8125c3ccb')
-  if (item.autoFlowStatus?.status === 'idle') return t('autoUi.k_d0de7734364c')
-  if (item.packagingStatus === 'processing') return t('autoUi.k_fcb979ef0b91')
-  if (item.packagingStatus === 'completed') return t('autoUi.k_e99b48a29bdf')
-  if (item.packagingStatus === 'failed') return t('autoUi.k_3e3c8068bb0e')
-  return t('autoUi.k_59a9eb4e6574')
-}
-
-function isWaitingRemoteResult(item: LivePhotoItem) {
-  return String(item.autoFlowStatus?.lastError || item.error || '').includes('[remote_pending]')
-}
-
-function liveTaskWaitingHint(item: LivePhotoItem) {
-  if (isWaitingRemoteResult(item)) {
-    return t('autoUi.k_1b935b669e03', { p0: formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt) })
-  }
-  if (item.autoFlowStatus?.status === 'running') {
-    return t('autoUi.k_d7dd8a9ea2b3', { p0: formatElapsed(item.autoFlowStatus?.lastStartedAt || item.workflow?.updatedAt || item.updatedAt) })
-  }
-  return ''
-}
-
-function workflowStepStatusText(item: LivePhotoItem, step: (typeof livePhotoSteps)[number]) {
-  const status = String(item.workflow?.stepStatus?.[step]?.status || 'idle').trim()
-  const errorText = String(item.workflow?.stepStatus?.[step]?.error || '').trim()
-  if (status === 'failed' && errorText.includes('[remote_pending]')) return t('autoUi.k_f5903c87b0f8')
-  if (status === 'done') return t('autoUi.k_e99b48a29bdf')
-  if (status === 'failed') return t('autoUi.k_3e3c8068bb0e')
-  if (status === 'running') return t('autoUi.k_594249700590')
-  return t('autoUi.k_bd3488d0a929')
-}
-
-function workflowStepErrorText(item: LivePhotoItem, step: (typeof livePhotoSteps)[number]) {
-  const text = String(item.workflow?.stepStatus?.[step]?.error || '').trim()
-  if (!text) return ''
-  if (text.includes('[remote_pending]')) {
-    const taskId = extractLivePhotoTaskId(item)
-    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
-  }
-  return sanitizeVisibleText(text, t('autoUi.k_543156065601'))
 }
 
 function liveTaskMetaSummary(item: LivePhotoItem) {
@@ -730,77 +503,6 @@ function extractLivePhotoTaskId(item: LivePhotoItem) {
     if (match?.[1]) return match[1]
   }
   return ''
-}
-
-function liveTaskRemoteEntries(item: LivePhotoItem) {
-  const entries = [
-    String(item.imageTaskId || '').trim()
-      ? {
-          stage: t('autoUi.k_1f6a9dab8b96'),
-          provider: String(item.imageTaskProvider || '').trim() || '--',
-          model: String(item.imageTaskModel || '').trim() || '--',
-          taskId: String(item.imageTaskId || '').trim(),
-        }
-      : null,
-    String(item.videoTaskId || '').trim()
-      ? {
-          stage: t('autoUi.k_19978a8da5e2'),
-          provider: String(item.videoTaskProvider || '').trim() || '--',
-          model: String(item.videoTaskModel || '').trim() || '--',
-          taskId: String(item.videoTaskId || '').trim(),
-        }
-      : null,
-  ].filter(Boolean) as Array<{ stage: string; provider: string; model: string; taskId: string }>
-  return entries
-}
-
-function liveTaskRemoteStateText(item: LivePhotoItem) {
-  const taskId = extractLivePhotoTaskId(item)
-  if (isWaitingRemoteResult(item)) {
-    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
-  }
-  if (item.autoFlowStatus?.status === 'running') {
-    return taskId ? t('autoUi.k_b9ee7fea6250', { p0: taskId }) : t('autoUi.k_dc8ac053db7a')
-  }
-  if (item.packagingStatus === 'completed') {
-    return taskId ? t('autoUi.k_8c525989d330', { p0: taskId }) : t('autoUi.k_f2741315f7aa')
-  }
-  if (item.packagingStatus === 'failed') {
-    return taskId ? t('autoUi.k_351dc1e7178c', { p0: taskId }) : t('autoUi.k_2d46ca36d22b')
-  }
-  return taskId ? t('autoUi.k_ccfe4619ca2d', { p0: taskId }) : t('autoUi.k_c786d2a74dc5')
-}
-
-function detailLogPreview(item: LivePhotoItem) {
-  return Array.isArray(item.logs) ? [...item.logs].slice(-6).reverse() : []
-}
-
-function latestExportSettingsText(item: LivePhotoItem) {
-  const logs = Array.isArray(item.logs) ? [...item.logs].slice().reverse() : []
-  const hit = logs.find((log) => String(log.message || '').includes('export settings used:'))
-  if (!hit) return ''
-  const match = String(hit.message).match(/resolution=([^\s]+)\s+frameRate=([^\s]+)\s+quality=([^\s]+)/i)
-  if (!match) return ''
-  return `${match[1]} / ${match[2]} fps / ${match[3]}`
-}
-
-function taskSourceSummary(item: LivePhotoItem) {
-  if (item.sourceType === 'clone_shot') {
-    return item.sourceProjectTitle ? t('autoUi.k_cdef37d90bbe', { p0: item.sourceProjectTitle }) : t('autoUi.k_aef9fefe3e16')
-  }
-  return item.productSnapshot?.name ? t('autoUi.k_bb63a465143b', { p0: item.productSnapshot.name }) : t('autoUi.k_34f1f7105b38')
-}
-
-function hasExportArtifacts(item: LivePhotoItem) {
-  return Boolean(item.exportBundlePath || item.packagingAssetIdentifier)
-}
-
-function hasImageResult(item: LivePhotoItem) {
-  return Boolean(String(item.generatedStillPath || '').trim())
-}
-
-function hasVideoResult(item: LivePhotoItem) {
-  return Boolean(String(item.motionVideoPath || item.previewVideoPath || '').trim())
 }
 
 function sanitizeVisibleText(value: string, fallback = '--') {
@@ -1149,6 +851,41 @@ const subtitlePresets = computed<Array<{
   },
 ])
 
+function cardCaps(item: LivePhotoItem): LivePhotoCardCaps {
+  return {
+    thumb: previewSrc(livePhotoThumbnailPath(item)),
+    hasVideo: Boolean(livePhotoDisplayVideoPath(item)),
+    hasSubtitle: itemHasSubtitle(item),
+    hasAppliedSubtitle: itemHasAppliedSubtitle(item),
+    hasMetadata: Boolean(item.packagingMetadataBridgePath),
+    canRegion: canCorrectReplacementRegion(item),
+    canRetryImage: canRetryImageOnce(item),
+    canContinueVideo: canContinueWithVideo(item),
+    subtitleBusy: subtitleDialogBusy.value,
+  }
+}
+
+/** 卡片和详情弹窗的操作统一在这里分发 */
+function onTaskAction(item: LivePhotoItem, action: LivePhotoCardAction) {
+  switch (action) {
+    case 'select': return toggleLibrarySelection(item.id)
+    case 'details': return openTaskDetail(item)
+    case 'play': return openVideoDialog(item)
+    case 'retry':
+    case 'retryImage': return void retryItem(item)
+    case 'continueVideo': return void continueWithVideo(item)
+    case 'region': return void openReplacementRegionEditor(item)
+    case 'resume': return void resumeItemAutoFlow(item)
+    case 'pause': return void pauseItemAutoFlow(item)
+    case 'logs': return void openRuntimeLogs(item)
+    case 'subtitle': return void openSingleSubtitleDialog(item)
+    case 'revertSubtitle': return void revertSubtitleFromItem(item)
+    case 'reveal': return void showPath(livePhotoDisplayVideoPath(item))
+    case 'metadata': return void openPath(item.packagingMetadataBridgePath)
+    case 'delete': return void removeItem(item.id)
+  }
+}
+
 function openTaskDetail(item: LivePhotoItem) {
   void (async () => {
     detailDialogItem.value = await loadLivePhotoItemDetail(item)
@@ -1221,11 +958,6 @@ async function saveLivePhotoSettings(closeRetrySettings = false) {
   } finally {
     livePhotoSettingsBusy.value = false
   }
-}
-
-function formatQualityScore(value?: number) {
-  const score = Number(value || 0)
-  return `${Math.round(Math.max(0, Math.min(1, score)) * 100)}%`
 }
 
 function selectPromptVersion(id: string) {
@@ -2425,86 +2157,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
         </div>
 
         <div v-else class="lp-items" :class="libraryViewMode === 'list' ? 'lp-items--list' : 'lp-items--grid'">
-          <article v-for="item in pagedLibraryItems" :key="item.id" class="lp-item" :class="{ 'is-on': selectedLibraryIds.includes(item.id) }" :data-testid="`live-photo-item-${item.id}`">
-            <div class="lp-item__media">
-              <button
-                class="lp-item__thumb"
-                type="button"
-                :aria-label="livePhotoDisplayVideoPath(item) ? t('autoUi.k_2d9aa5320638', { p0: item.sourceShotLabel || item.productSnapshot?.name || '图生视频' }) : t('autoUi.k_fe0ccc53ab2b')"
-                @click="livePhotoDisplayVideoPath(item) ? openVideoDialog(item) : openTaskDetail(item)"
-              >
-                <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
-                <FileImage v-else :size="22" />
-                <span v-if="livePhotoDisplayVideoPath(item)" class="preview-play" aria-hidden="true"><Play :size="16" /></span>
-              </button>
-              <label class="lp-item__check">
-                <input :data-testid="`live-photo-select-${item.id}`" type="checkbox" :checked="selectedLibraryIds.includes(item.id)" @change="toggleLibrarySelection(item.id)" />
-              </label>
-            </div>
-
-            <div class="lp-item__body">
-              <div class="lp-item__titleline">
-                <h3 :title="item.sourceShotLabel || item.productSnapshot?.name || item.id">{{ item.sourceShotLabel || item.productSnapshot?.name || item.id }}</h3>
-                <span class="lp-state" :class="lpTone(item)"><i />{{ liveTaskStatusLabel(item) }}</span>
-              </div>
-              <div class="lp-item__meta">
-                <span class="vg-chip">{{ item.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</span>
-                <span v-if="itemHasSubtitle(item)" class="vg-chip">{{ t('autoUi.k_83e422384f7f') }}</span>
-                <span class="lp-item__text">{{ taskSourceSummary(item) }} · {{ metadataModeLabel(item) }}</span>
-              </div>
-              <div v-if="liveTaskErrorSummary(item)" class="lp-item__error" :title="liveTaskErrorSummary(item)">
-                <AlertTriangle :size="13" /><span>{{ liveTaskErrorSummary(item) }}</span>
-              </div>
-              <div v-else-if="liveTaskWaitingHint(item)" class="lp-item__hint">{{ liveTaskWaitingHint(item) }}</div>
-              <div class="lp-item__progress">
-                <div class="vg-progress">
-                  <div class="vg-progress__bar"><div class="vg-progress__fill" :class="{ 'vg-progress__fill--fail': lpTone(item) === 'lp-state--err' }" :style="{ width: `${liveTaskProgressPercent(item)}%` }" /></div>
-                </div>
-                <span class="lp-item__step">{{ workflowStepLabel(item.workflow?.currentStep) }}</span>
-                <span class="vg-num lp-item__time"><Clock3 :size="12" />{{ formatTime(item.updatedAt) }}</span>
-              </div>
-            </div>
-
-            <div class="lp-item__actions">
-              <div v-if="canContinueWithVideo(item) || canRetryImageOnce(item)" class="image-retry-decision">
-                <button
-                  v-if="canRetryImageOnce(item)"
-                  :data-testid="`live-photo-retry-${item.id}`"
-                  class="vg-btn vg-btn--xs"
-                  :title="t('autoUi.k_031c7e12ddae')"
-                  type="button"
-                  :disabled="item.packagingStatus === 'processing'"
-                  @click.stop="retryItem(item)"
-                >
-                  <RefreshCcw :size="12" />{{ t('autoUi.k_031c7e12ddae') }}
-                </button>
-                <button
-                  v-if="canContinueWithVideo(item)"
-                  class="vg-btn vg-btn--xs vg-btn--primary"
-                  :title="t('livePhoto.workspace.continueWithVideo')"
-                  type="button"
-                  @click.stop="continueWithVideo(item)"
-                >
-                  <Play :size="12" />{{ t('livePhoto.workspace.continueWithVideoShort') }}
-                </button>
-              </div>
-              <div class="lp-item__icons">
-                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_faea8c1db9cc')" @click.stop="openTaskDetail(item)"><PanelBottomOpen :size="14" /></button>
-                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_b923b26d335a')" @click.stop="openRuntimeLogs(item)"><Logs :size="14" /></button>
-                <button :data-testid="`live-photo-preview-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.preview" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openVideoDialog(item)"><Play :size="14" /></button>
-                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_aaa5f2e9f006')" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="openSingleSubtitleDialog(item)"><Captions :size="14" /></button>
-                <button v-if="itemHasAppliedSubtitle(item)" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_6d32dea55ea6')" :disabled="subtitleDialogBusy" @click.stop="revertSubtitleFromItem(item)"><RefreshCcw :size="14" /></button>
-                <button :data-testid="`live-photo-metadata-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.metadata" :disabled="!item.packagingMetadataBridgePath" @click.stop="openPath(item.packagingMetadataBridgePath)"><Package :size="14" /></button>
-                <button :data-testid="`live-photo-reveal-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.reveal" :disabled="!livePhotoDisplayVideoPath(item)" @click.stop="showPath(livePhotoDisplayVideoPath(item))"><FolderOpen :size="14" /></button>
-                <button v-if="canCorrectReplacementRegion(item)" :data-testid="`live-photo-region-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="t('autoUi.k_329d5e81ce23')" @click.stop="openReplacementRegionEditor(item)"><ScanLine :size="14" /></button>
-                <button v-if="!canRetryImageOnce(item)" :data-testid="`live-photo-retry-${item.id}`" class="vg-icon-btn vg-icon-btn--sm" type="button" :title="uiText.regenerate" :disabled="item.packagingStatus === 'processing'" @click.stop="retryItem(item)"><RefreshCcw :size="14" /></button>
-                <button class="vg-icon-btn vg-icon-btn--sm" type="button" :title="item.autoFlowStatus?.paused ? t('livePhoto.workspace.resumePaused') : t('livePhoto.workspace.pauseRunning')" :disabled="item.packagingStatus === 'completed'" @click.stop="item.autoFlowStatus?.paused ? resumeItemAutoFlow(item) : pauseItemAutoFlow(item)">
-                  <component :is="item.autoFlowStatus?.paused ? Play : Pause" :size="14" />
-                </button>
-                <button :data-testid="`live-photo-remove-${item.id}`" class="vg-icon-btn vg-icon-btn--sm vg-icon-btn--danger" type="button" :title="uiText.delete" @click.stop="removeItem(item.id)"><Trash2 :size="14" /></button>
-              </div>
-            </div>
-          </article>
+          <LivePhotoTaskCard
+            v-for="item in pagedLibraryItems"
+            :key="item.id"
+            :item="item"
+            :caps="cardCaps(item)"
+            :selected="selectedLibraryIds.includes(item.id)"
+            :list="libraryViewMode === 'list'"
+            :time="formatTime(item.updatedAt)"
+            @action="onTaskAction(item, $event)"
+          />
         </div>
 
         <footer v-if="filteredLibraryItems.length" class="vg-pager lp-pager">
@@ -2643,359 +2305,17 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </section>
     </div>
 
-    <div v-if="detailDialogOpen && detailDialogItem" class="live-detail-dialog" @click.self="closeTaskDetail">
-      <div class="live-detail-dialog__panel">
-        <div class="live-detail-dialog__head">
-          <div class="live-detail-dialog__title">
-            <strong>{{ detailDialogItem.sourceShotLabel || detailDialogItem.productSnapshot?.name || detailDialogItem.id }}</strong>
-            <p>{{ detailDialogItem.sourceType === 'clone_shot' ? t('autoUi.k_d44b948f06f0') : t('autoUi.k_a09de3d53e0c') }}</p>
-          </div>
-          <button class="live-detail-dialog__close" type="button" @click="closeTaskDetail">{{ t('autoUi.k_6c14bd7f6f9e') }}</button>
-        </div>
-
-        <div class="live-detail-dialog__summary">
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_62e951a692ff') }}</span>
-            <strong>{{ liveTaskStatusLabel(detailDialogItem) }}</strong>
-            <small>{{ liveTaskAutoSummary(detailDialogItem) }}</small>
-          </div>
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_0a2489f651ae') }}</span>
-            <strong>{{ workflowStepLabel(detailDialogItem.workflow?.currentStep) }}</strong>
-            <small>{{ formatTime(detailDialogItem.updatedAt) }}</small>
-          </div>
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_8edafb8f44a9') }}</span>
-            <strong>{{ detailDialogItem.imagePromptPreview?.referenceImagePaths?.length || 0 }} / {{ detailDialogItem.videoPromptPreview?.referenceImagePaths?.length || 0 }}</strong>
-            <small>{{ t('autoUi.k_c1f18a2af6b4') }}</small>
-          </div>
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_7df7698e6ee4') }}</span>
-            <strong>{{ liveTaskWaitingHint(detailDialogItem) || '--' }}</strong>
-            <small>{{ isWaitingRemoteResult(detailDialogItem) ? t('autoUi.k_156f1ffe8947') : t('autoUi.k_a08e8ea14d74') }}</small>
-          </div>
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_aa35ad90c049') }}</span>
-            <strong>{{ extractLivePhotoTaskId(detailDialogItem) || '--' }}</strong>
-            <small>{{ liveTaskRemoteStateText(detailDialogItem) }}</small>
-          </div>
-          <div class="live-detail-dialog__summary-card">
-            <span>{{ t('autoUi.k_47928c96a42e') }}</span>
-            <strong>{{ detailDialogItem.qualityReport ? formatQualityScore(detailDialogItem.qualityReport.score) : '--' }}</strong>
-            <small>{{ detailDialogItem.qualityReport?.mode === 'local_python' ? t('autoUi.k_3743ca161582') : detailDialogItem.qualityReport ? t('autoUi.k_94209efc6e97') : t('autoUi.k_0399892b3886') }}</small>
-          </div>
-        </div>
-
-        <div class="live-detail-dialog__hero">
-          <section class="live-detail-dialog__hero-card">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_7ebfc7c126cc') }}</strong>
-              <span>{{ detailDialogItem.sourceProjectTitle || detailDialogItem.productSnapshot?.name || '--' }}</span>
-            </div>
-            <div class="live-detail-dialog__hero-grid">
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_4a6f4156fc71') }}</span>
-                <strong>{{ detailDialogItem.sourceType === 'clone_shot' ? t('autoUi.k_3ce078e030c3') : t('autoUi.k_eff304ed9436') }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_2a83614918bc') }}</span>
-                <strong>{{ liveTaskAutoSummary(detailDialogItem) }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_71df90260b2b') }}</span>
-                <strong>{{ formatTime(detailDialogItem.updatedAt) }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_e53fc9418478') }}</span>
-                <strong>{{ liveTaskRetryText(detailDialogItem) || '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_4659062eaa91') }}</span>
-                <strong>{{ extractLivePhotoTaskId(detailDialogItem) || '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_68e297c888ef') }}</span>
-                <strong>{{ liveTaskRemoteStateText(detailDialogItem) }}</strong>
-              </div>
-            </div>
-          </section>
-
-          <section class="live-detail-dialog__hero-card">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_046e015ff882') }}</strong>
-              <span>{{ detailDialogItem.qualityReport?.checkerVersion || '--' }}</span>
-            </div>
-            <div class="live-detail-dialog__hero-grid">
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_462f8a61da1f') }}</span>
-                <strong>{{ detailDialogItem.qualityReport?.decision || '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_e3ba534bb0ab') }}</span>
-                <strong>{{ detailDialogItem.promptVersion ? `V${detailDialogItem.promptVersion}` : '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_2acbed5a521e') }}</span>
-                <strong>{{ detailDialogItem.generationAttempts?.length || 0 }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_6cdba4aad0c1') }}</span>
-                <strong>{{ detailDialogItem.cacheHit ? t('autoUi.k_7a130d7fde44') : t('autoUi.k_786d17cf29be') }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_33d863c412e8') }}</span>
-                <strong>{{ detailDialogItem.checkerFallbackReason || detailDialogItem.qualityReport?.fallbackReason || '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_7f879a128512') }}</span>
-                <strong>{{ detailDialogItem.qualityReport?.hardFailures?.join(', ') || '--' }}</strong>
-              </div>
-            </div>
-          </section>
-
-          <section class="live-detail-dialog__hero-card">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_fb5212190a9a') }}</strong>
-              <span>{{ hasExportArtifacts(detailDialogItem) ? t('autoUi.k_d3eaaf60ed1c') : t('autoUi.k_792405ac8c02') }}</span>
-            </div>
-            <div class="live-detail-dialog__hero-grid">
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_8d3692399f98') }}</span>
-                <strong>{{ latestExportSettingsText(detailDialogItem) || '--' }}</strong>
-              </div>
-              <div class="live-detail-dialog__metric">
-                <span>{{ t('autoUi.k_0579bf571dd0') }}</span>
-                <strong>{{ detailDialogItem.packagingAssetIdentifier || '--' }}</strong>
-              </div>
-            </div>
-            <div class="live-detail-dialog__artifact-actions">
-              <button
-                v-if="canCorrectReplacementRegion(detailDialogItem)"
-                class="live-detail-dialog__ghost"
-                type="button"
-                @click="openReplacementRegionEditor(detailDialogItem)"
-              >
-                <ScanLine class="h-4 w-4" /> {{ t('autoUi.k_329d5e81ce23') }} </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_441a7a4e66da') }} </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)"> {{ t('autoUi.k_721f98528d0c') }} </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_f7fa88a1d462') }} </button>
-              <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openSingleSubtitleDialog(detailDialogItem)"> {{ t('autoUi.k_6e4c3e5ffee8') }} </button>
-              <button v-if="itemHasAppliedSubtitle(detailDialogItem)" class="live-detail-dialog__ghost" type="button" :disabled="subtitleDialogBusy" @click="revertSubtitleFromItem(detailDialogItem)"> {{ t('autoUi.k_5d2a55f19c91') }} </button>
-            </div>
-          </section>
-
-          <section class="live-detail-dialog__hero-card live-detail-dialog__hero-card--wide">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_99045f8ee1cd') }}</strong>
-              <span>{{ hasImageResult(detailDialogItem) || hasVideoResult(detailDialogItem) ? t('autoUi.k_99f31f48079b') : t('autoUi.k_b05d19807150') }}</span>
-            </div>
-            <div class="live-result-grid">
-              <article class="live-result-card">
-                <div class="live-result-card__head">
-                  <strong>{{ t('autoUi.k_55e7017a46b1') }}</strong>
-                  <span>{{ detailDialogItem.generatedStillPath ? fileNameOf(detailDialogItem.generatedStillPath) : t('autoUi.k_3c04f9eb8b65') }}</span>
-                </div>
-                <button
-                  v-if="detailDialogItem.generatedStillPath"
-                  class="live-result-card__frame"
-                  type="button"
-                  @click="openPath(detailDialogItem.generatedStillPath)"
-                >
-                  <img :src="previewSrc(detailDialogItem.generatedStillPath)" alt="generated still" />
-                </button>
-                <div v-else class="live-result-card__empty">
-                  <FileImage class="h-5 w-5" />
-                  <span>{{ t('autoUi.k_01916819b0dd') }}</span>
-                </div>
-                <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="openPath(detailDialogItem.generatedStillPath)"> {{ t('autoUi.k_e77f787d2a02') }} </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.generatedStillPath" @click="showPath(detailDialogItem.generatedStillPath)"> {{ t('autoUi.k_031c10557843') }} </button>
-                </div>
-              </article>
-
-              <article class="live-result-card">
-                <div class="live-result-card__head">
-                  <strong>{{ t('autoUi.k_d7bf85820488') }}</strong>
-                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : t('autoUi.k_3c04f9eb8b65') }}</span>
-                </div>
-                <video
-                  v-if="livePhotoDisplayVideoPath(detailDialogItem)"
-                  class="live-result-card__video"
-                  :src="previewSrc(livePhotoDisplayVideoPath(detailDialogItem))"
-                  controls
-                  playsinline
-                  preload="metadata"
-                ></video>
-                <div v-else class="live-result-card__empty">
-                  <Play class="h-5 w-5" />
-                  <span>{{ t('autoUi.k_895c04381433') }}</span>
-                </div>
-                <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_af7d6e03da10') }} </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_200787975353') }} </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="showPath(livePhotoDisplayVideoPath(detailDialogItem))"> {{ t('autoUi.k_031c10557843') }} </button>
-                </div>
-              </article>
-
-              <article class="live-result-card">
-                <div class="live-result-card__head">
-                  <strong>{{ t('autoUi.k_107deff0eeb2') }}</strong>
-                  <span>{{ livePhotoDisplayVideoPath(detailDialogItem) ? fileNameOf(livePhotoDisplayVideoPath(detailDialogItem)) : t('autoUi.k_3875de324c45') }}</span>
-                </div>
-                <button
-                  v-if="livePhotoThumbnailPath(detailDialogItem)"
-                  class="live-result-card__frame"
-                  type="button"
-                  @click="openVideoDialog(detailDialogItem)"
-                >
-                  <img :src="previewSrc(livePhotoThumbnailPath(detailDialogItem))" alt="live photo poster" />
-                </button>
-                <div v-else class="live-result-card__empty">
-                  <Package class="h-5 w-5" />
-                  <span>{{ t('autoUi.k_a42b18cc7f5c') }}</span>
-                </div>
-                <div class="live-result-card__actions">
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!livePhotoDisplayVideoPath(detailDialogItem)" @click="openVideoDialog(detailDialogItem)"> {{ t('autoUi.k_f7fa88a1d462') }} </button>
-                  <button class="live-detail-dialog__ghost" type="button" :disabled="!detailDialogItem.packagingMetadataBridgePath" @click="openPath(detailDialogItem.packagingMetadataBridgePath)"> {{ t('autoUi.k_62de58ce6175') }} </button>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="live-detail-dialog__hero-card">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_9e8cf3077f3f') }}</strong>
-              <button class="live-detail-dialog__ghost" type="button" @click="openRuntimeLogs(detailDialogItem)">{{ t('autoUi.k_d13c118628a2') }}</button>
-            </div>
-            <div v-if="detailLogPreview(detailDialogItem).length" class="live-detail-dialog__log-list">
-              <article v-for="log in detailLogPreview(detailDialogItem)" :key="log.id" class="live-detail-dialog__log-item" :class="`is-${log.level}`">
-                <div class="live-detail-dialog__log-meta">
-                  <span>{{ formatTime(log.time) }}</span>
-                  <strong>{{ log.level }}</strong>
-                </div>
-                <p>{{ log.message }}</p>
-              </article>
-            </div>
-            <div v-else class="live-detail-dialog__log-empty">{{ t('autoUi.k_a53be4ed9948') }}</div>
-          </section>
-
-          <section class="live-detail-dialog__hero-card">
-            <div class="live-detail-dialog__hero-head">
-              <strong>{{ t('autoUi.k_2677be45ab9e') }}</strong>
-              <span>{{ liveTaskRemoteEntries(detailDialogItem).length ? t('autoUi.k_ba8faa42e939') : t('autoUi.k_9971be8eec5e') }}</span>
-            </div>
-            <div v-if="liveTaskRemoteEntries(detailDialogItem).length" class="live-detail-dialog__hero-grid">
-              <div v-for="entry in liveTaskRemoteEntries(detailDialogItem)" :key="entry.stage + entry.taskId" class="live-detail-dialog__metric">
-                <span>{{ entry.stage }}</span>
-                <strong>{{ entry.taskId }}</strong>
-                <small>{{ entry.provider }} / {{ entry.model }}</small>
-              </div>
-            </div>
-            <div v-else class="live-detail-dialog__log-empty">{{ t('autoUi.k_a130784863c0') }}</div>
-          </section>
-        </div>
-
-        <div class="live-console-row__detail-grid">
-          <section class="live-console-row__detail-card">
-            <div class="live-console-row__detail-head">
-              <strong>{{ t('autoUi.k_ac8056850c8e') }}</strong>
-              <span>{{ workflowStepLabel(detailDialogItem.workflow?.currentStep) }}</span>
-            </div>
-            <div class="live-console-row__timeline">
-              <div v-for="step in livePhotoSteps" :key="detailDialogItem.id + '-detail-' + step" class="live-console-row__timeline-item">
-                <div class="live-console-row__timeline-main">
-                  <strong>{{ workflowStepLabel(step) }}</strong>
-                  <span>{{ workflowStepStatusText(detailDialogItem, step) }}</span>
-                </div>
-                <small>{{ formatTime(detailDialogItem.workflow?.stepStatus?.[step]?.updatedAt) }}</small>
-                <p v-if="workflowStepErrorText(detailDialogItem, step)" class="live-console-row__timeline-error">{{ workflowStepErrorText(detailDialogItem, step) }}</p>
-              </div>
-            </div>
-          </section>
-
-          <section class="live-console-row__detail-card">
-            <div class="live-console-row__detail-head">
-              <strong>{{ t('autoUi.k_d5d2753e959d') }}</strong>
-              <span>{{ detailDialogItem.imagePromptPreview?.provider || '--' }} / {{ detailDialogItem.imagePromptPreview?.model || '--' }}</span>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_1f1359c9a86e') }}</label>
-              <div class="live-console-row__binding-grid">
-                <button class="live-console-row__binding-card" type="button" :disabled="!livePhotoImageBaseRef(detailDialogItem)" @click="openPath(livePhotoImageBaseRef(detailDialogItem))">
-                  <strong>Image 1</strong>
-                  <span>Base reference</span>
-                  <small>{{ fileNameOf(livePhotoImageBaseRef(detailDialogItem)) || '--' }}</small>
-                </button>
-                <button class="live-console-row__binding-card" type="button" :disabled="!livePhotoImageProductRef(detailDialogItem)" @click="openPath(livePhotoImageProductRef(detailDialogItem))">
-                  <strong>Image 2</strong>
-                  <span>Product reference</span>
-                  <small>{{ fileNameOf(livePhotoImageProductRef(detailDialogItem)) || '--' }}</small>
-                </button>
-              </div>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_ce74779d621a') }}</label>
-              <pre>{{ detailDialogItem.imagePromptPreview?.prompt || detailDialogItem.promptPreview?.instructions?.join('\n') || '--' }}</pre>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_0156a9ed0adc') }}</label>
-              <pre>{{ detailDialogItem.imagePromptPreview?.negativePrompt || '--' }}</pre>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_75e8e161c9b0') }}</label>
-              <div v-if="detailDialogItem.imagePromptPreview?.referenceImagePaths?.length" class="live-console-row__ref-preview-grid">
-                <button
-                  v-for="refPath in detailDialogItem.imagePromptPreview?.referenceImagePaths || []"
-                  :key="detailDialogItem.id + '-image-preview-' + refPath"
-                  class="live-console-row__ref-preview"
-                  type="button"
-                  @click="openPath(refPath)"
-                >
-                  <img :src="previewSrc(refPath)" :alt="fileNameOf(refPath)" />
-                  <span>{{ fileNameOf(refPath) }}</span>
-                </button>
-              </div>
-              <ul class="live-console-row__path-list">
-                <li v-for="refPath in detailDialogItem.imagePromptPreview?.referenceImagePaths || []" :key="detailDialogItem.id + '-image-ref-' + refPath">{{ refPath }}</li>
-              </ul>
-            </div>
-          </section>
-
-          <section class="live-console-row__detail-card">
-            <div class="live-console-row__detail-head">
-              <strong>{{ t('autoUi.k_fecc5ce7de5a') }}</strong>
-              <span>{{ detailDialogItem.videoPromptPreview?.provider || '--' }} / {{ detailDialogItem.videoPromptPreview?.model || '--' }}</span>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_ce74779d621a') }}</label>
-              <pre>{{ detailDialogItem.videoPromptPreview?.prompt || '--' }}</pre>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_0156a9ed0adc') }}</label>
-              <pre>{{ detailDialogItem.videoPromptPreview?.negativePrompt || '--' }}</pre>
-            </div>
-            <div class="live-console-row__detail-block">
-              <label>{{ t('autoUi.k_75e8e161c9b0') }}</label>
-              <div v-if="detailDialogItem.videoPromptPreview?.referenceImagePaths?.length" class="live-console-row__ref-preview-grid">
-                <button
-                  v-for="refPath in detailDialogItem.videoPromptPreview?.referenceImagePaths || []"
-                  :key="detailDialogItem.id + '-video-preview-' + refPath"
-                  class="live-console-row__ref-preview"
-                  type="button"
-                  @click="openPath(refPath)"
-                >
-                  <img :src="previewSrc(refPath)" :alt="fileNameOf(refPath)" />
-                  <span>{{ fileNameOf(refPath) }}</span>
-                </button>
-              </div>
-              <ul class="live-console-row__path-list">
-                <li v-for="refPath in detailDialogItem.videoPromptPreview?.referenceImagePaths || []" :key="detailDialogItem.id + '-video-ref-' + refPath">{{ refPath }}</li>
-              </ul>
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
+    <LivePhotoTaskDetail
+      v-if="detailDialogOpen && detailDialogItem"
+      :item="detailDialogItem"
+      :caps="{ ...cardCaps(detailDialogItem), videoPath: livePhotoDisplayVideoPath(detailDialogItem) }"
+      :file-src="previewSrc"
+      :format-time="formatTime"
+      @close="closeTaskDetail"
+      @action="onTaskAction(detailDialogItem, $event)"
+      @open="openPath"
+      @reveal="showPath"
+    />
 
     <div v-if="videoDialogItem" class="live-subtitle-dialog" @click.self="closeVideoDialog">
       <div class="live-subtitle-dialog__panel live-photo-video-dialog" role="dialog" aria-modal="true" :aria-label="t('autoUi.k_1bb36d91a68c')">
