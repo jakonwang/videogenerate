@@ -41,7 +41,24 @@
     "models": "Models",
     "assets": "Asset library",
     "templates": "Templates",
-    "tools": "Toolbox"
+    "tools": "Toolbox",
+    "groupContent": "Make content",
+    "groupSell": "Sell",
+    "groupLibrary": "Library",
+    "aiVideo": "AI video",
+    "tabs": {
+      "clone": "Clone a hit",
+      "creative": "TK Creative",
+      "livePhoto": "Image to video",
+      "mix": "Mix studio",
+      "pool": "Clip pool",
+      "templates": "Templates",
+      "tasks": "Tasks",
+      "assets": "Assets",
+      "models": "Models",
+      "overview": "Overview"
+    },
+    "library": "Asset library"
   },
   "line": {
     "clone": "Clone",

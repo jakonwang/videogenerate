@@ -5,8 +5,6 @@ import { useI18n } from "vue-i18n";
 import {
   House,
   SearchCheck,
-  Sparkles,
-  CopyPlus,
   FolderOpen,
   Send,
   Puzzle,
@@ -14,11 +12,9 @@ import {
   Images,
   Settings,
   Inbox,
-  Wand2,
-  PlaySquare,
   Scissors,
   BarChart3,
-  LayoutTemplate,
+  Clapperboard,
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -34,6 +30,8 @@ import AssetLibraryPickerHost from "./components/AssetLibraryPickerHost.vue";
 import AiProducerPanel from "./components/ai/AiProducerPanel.vue";
 import AiCommandBar from "./components/ai/AiCommandBar.vue";
 import AiNotices from "./components/ai/AiNotices.vue";
+import SectionTabs from "./navigation/SectionTabs.vue";
+import { lastSectionTab, sectionActive } from "./navigation/sectionTabs";
 import { useAiProducerStore } from "@/stores/aiProducer";
 import { useCloneTopbarStore } from "@/stores/cloneTopbar";
 import { useDesignInspectorStore } from "@/stores/designInspector";
@@ -91,31 +89,35 @@ const allNavItems = computed(() => [
   },
 ]);
 
+// 侧边栏按「做内容 → 卖出去 → 资料」排；复刻 / tk创意室 / 图生视频合成「AI 出片」，模特库并进素材库、
+// 模板库并进批量混剪，在页面上方用标签切换（navigation/sectionTabs.ts，地址都不变）。
 const allSections = computed(() => [
   {
-    title: t("ai.nav.groupCreate"),
+    title: t("ai.nav.groupContent"),
     items: [
       { to: "/product-research", icon: SearchCheck, label: t("nav.productResearch"), active: route.path.startsWith("/product-research") },
-      { to: "/clone", icon: CopyPlus, label: t("nav.clone"), active: route.path.startsWith("/clone") },
-      { to: "/plugins/tiktok-creative-studio", icon: Wand2, label: t("ai.nav.creativeStudio"), active: route.path.startsWith("/plugins/tiktok-creative-studio") },
-      { to: "/plugins/live-photo-generator", icon: PlaySquare, label: t("ai.nav.livePhoto"), active: route.path.startsWith("/plugins/live-photo-generator") },
-      { to: "/production", icon: Scissors, label: t("ai.nav.production"), active: route.path.startsWith("/production") },
+      { to: lastSectionTab("aiVideo").to, icon: Clapperboard, label: t("ai.nav.aiVideo"), active: sectionActive("aiVideo", route.path) },
+      { to: "/production", icon: Scissors, label: t("ai.nav.production"), active: sectionActive("production", route.path) },
+    ],
+  },
+  {
+    title: t("ai.nav.groupSell"),
+    items: [
       { to: "/publish", icon: Send, label: t("ai.nav.publish"), active: route.path.startsWith("/publish") },
+      { to: "/shops", icon: Building2, label: t("ai.nav.shops"), active: route.path.startsWith("/shops") },
       { to: "/insights", icon: BarChart3, label: t("ai.nav.insights"), active: route.path.startsWith("/insights") },
     ],
   },
   {
-    title: t("ai.nav.groupAssets"),
+    title: t("ai.nav.groupLibrary"),
     items: [
-      { to: "/shops", icon: Building2, label: t("ai.nav.shops"), active: route.path.startsWith("/shops") },
       { to: "/products", icon: FolderOpen, label: t("ai.nav.products"), active: route.path.startsWith("/products") },
-      { to: "/models", icon: Sparkles, label: t("ai.nav.models"), active: route.path.startsWith("/models") },
-      { to: "/asset-library", icon: Images, label: t("ai.nav.assets"), active: route.path.startsWith("/asset-library") },
-      { to: "/templates", icon: LayoutTemplate, label: t("ai.nav.templates"), active: route.path.startsWith("/templates") },
+      { to: lastSectionTab("library").to, icon: Images, label: t("ai.nav.assets"), active: sectionActive("library", route.path) },
     ],
   },
   {
-    title: t("ai.nav.tools"),
+    // 只有一项，不另起标题（分隔线隔开）
+    title: "",
     items: [
       { to: "/plugins", icon: Store, label: t("ai.tools.title"), active: isToolRoute.value },
     ],
@@ -269,6 +271,8 @@ onBeforeUnmount(() => {
             <span>{{ cloudAuth.status.announcement }}</span>
           </div>
         </div>
+        <!-- 合并入口（AI 出片 / 批量混剪 / 素材库）的页面标签 -->
+        <SectionTabs :translate="(key) => t(key)" />
         <RouterView />
       </DsMainLayout>
     </div>

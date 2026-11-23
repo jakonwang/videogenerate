@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   Bot,
   Check,
@@ -292,9 +291,6 @@ onMounted(async () => {
 <template>
   <div class="vg-scope vg-page mix">
     <header class="vg-page-head">
-      <button class="vg-icon-btn" type="button" :title="t('production.mix.back')" @click="router.push('/production')">
-        <ArrowLeft :size="18" />
-      </button>
       <div class="vg-page-head__text">
         <h1>{{ t('production.mix.title') }}</h1>
         <p>{{ t('production.mix.desc') }}</p>

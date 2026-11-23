@@ -7,7 +7,7 @@ import { MIX_ORDER_STATE_LABEL, type MixOrderResult } from '@shared/cloud/produc
 import CloudVideo from '@/components/CloudVideo.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { fileBlob } from '@/lib/files'
-import { downloadBlob } from '@/lib/platform'
+import { downloadBlob, isWeb } from '@/lib/platform'
 import { relativeTime } from '@/lib/library'
 import { errorMessage } from '@/lib/session'
 import { toast } from '@/lib/toast'
@@ -63,7 +63,7 @@ async function download(fileId: string, name: string) {
 </script>
 
 <template>
-  <PageHeader title="混剪任务" back="/production" :icon="ListVideo" description="查看任务信息、筛选执行状态并进入任务详情。">
+  <PageHeader title="混剪任务" :back="isWeb ? undefined : '/production'" :icon="ListVideo" description="查看任务信息、筛选执行状态并进入任务详情。">
     <template #actions>
       <button class="vg-btn vg-btn--primary" type="button" @click="router.push('/production/mix')"><Plus :size="15" /> 新建任务</button>
     </template>

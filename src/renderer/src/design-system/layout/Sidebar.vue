@@ -35,8 +35,9 @@ function navigate(to: string) {
         <span class="vg-nav__label">{{ item.label }}</span><span v-if="item.badge" class="vg-nav__badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
       </button>
 
-      <div v-for="section in sections || []" :key="section.title" class="vg-nav__section">
-        <div class="vg-nav__section-title"><span>{{ section.title }}</span></div>
+      <div v-for="(section, index) in sections || []" :key="section.title || index" class="vg-nav__section" :class="{ 'is-untitled': !section.title }">
+        <!-- 没有标题的分组（如工具箱）只留一条分隔线 -->
+        <div v-if="section.title" class="vg-nav__section-title"><span>{{ section.title }}</span></div>
         <button
           v-for="item in section.items"
           :key="item.to"
@@ -184,6 +185,7 @@ function navigate(to: string) {
   font-weight: 600;
   letter-spacing: .12em;
 }
+.vg-nav__section.is-untitled { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--theme-divider); }
 .vg-nav__section-title::after {
   content: '';
   flex: 1;

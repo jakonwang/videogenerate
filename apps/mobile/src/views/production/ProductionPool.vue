@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 /** 混剪素材池（网页版，对应电脑端 ProductionClipPoolView）。切镜和 AI 识别由电脑端执行，结果同步到这里。 */
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -95,7 +96,7 @@ async function onFiles(event: Event) {
 </script>
 
 <template>
-  <PageHeader title="混剪素材池" back="/production" description="把商品的实拍素材和 AI 生成视频切成单个镜头，由 AI 标注镜头作用、钩子分和画质，供混剪按脚本选片。">
+  <PageHeader title="混剪素材池" :back="isWeb ? undefined : '/production'" description="把商品的实拍素材和 AI 生成视频切成单个镜头，由 AI 标注镜头作用、钩子分和画质，供混剪按脚本选片。">
     <template #actions>
       <select v-model="productId" class="vg-select pool__product" aria-label="选择商品">
         <option v-if="!products.length" value="">还没有商品</option>

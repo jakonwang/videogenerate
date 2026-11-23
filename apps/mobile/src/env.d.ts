@@ -35,6 +35,17 @@ declare module '@desktop-src/ui/components/*' {
   const component: DefineComponent<object, object, unknown>
   export default component
 }
+/** 侧边栏合并入口和页面标签（电脑端和网页共用，src/renderer/src/ui/navigation/） */
+declare module '@desktop-src/ui/navigation/SectionTabs.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<{ translate?: (key: string, fallback: string) => string }, object, unknown>
+  export default component
+}
+declare module '@desktop-src/ui/navigation/sectionTabs' {
+  type GroupKey = 'aiVideo' | 'production' | 'library'
+  export const lastSectionTab: (key: GroupKey) => { key: string; to: string }
+  export const sectionActive: (key: GroupKey, path: string) => boolean
+}
 declare module '@desktop-src/stores/cloneTopbar' {
   /** 电脑端复刻页面的步骤条 store（pinia），网页顶栏的步骤条读同一个 */
   export const useCloneTopbarStore: () => any

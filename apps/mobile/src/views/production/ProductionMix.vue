@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWeb } from '@/lib/platform'
 /**
  * AI 混剪工作台（网页版，对应电脑端 ProductionMixStudioView）。
  * 方案在网页上用和电脑端同一套逻辑生成；成片交给电脑（完整：配音、字幕、包装模板）或云端（简版）。
@@ -158,7 +159,7 @@ async function render(runner: 'desktop' | 'cloud') {
 </script>
 
 <template>
-  <PageHeader title="AI 混剪工作台" back="/production" description="按爆款公式从素材池挑选真实镜头，配上钩子标题和口播字幕，每条视频的开头、镜头和文案都不同。">
+  <PageHeader title="AI 混剪工作台" :back="isWeb ? undefined : '/production'" description="按爆款公式从素材池挑选真实镜头，配上钩子标题和口播字幕，每条视频的开头、镜头和文案都不同。">
     <template #actions>
       <button class="vg-btn" type="button" @click="router.push({ path: '/production/mix/insights', query: { productId: form.productId } })"><BarChart3 :size="15" /> 混剪数据洞察</button>
       <button class="vg-btn" type="button" @click="router.push({ path: '/production/pool', query: { productId: form.productId } })"><Layers :size="15" /> 混剪素材池</button>

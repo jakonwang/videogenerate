@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } fro
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import RangeInput from '../components/RangeInput.vue'
-import ProductionTabs from '../components/ProductionTabs.vue'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -1351,7 +1350,6 @@ onBeforeUnmount(() => window.clearInterval(importTimer))
 
 <template>
   <div class="vg-scope vg-page tpl">
-    <ProductionTabs />
     <header class="vg-page-head">
       <span class="vg-page-head__icon"><LayoutTemplate :size="20" /></span>
       <div class="vg-page-head__text">

@@ -5,7 +5,10 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { House, Inbox, PanelLeftClose, PanelLeftOpen, Settings, Wrench } from 'lucide-vue-next'
+import { Clapperboard, FolderOpen, House, Inbox, PanelLeftClose, PanelLeftOpen, Scissors, Settings, Wrench } from 'lucide-vue-next'
+import type { Component } from 'vue'
+import SectionTabs from '@desktop-src/ui/navigation/SectionTabs.vue'
+import { lastSectionTab, sectionActive } from '@desktop-src/ui/navigation/sectionTabs'
 import DsMainLayout from '@design/layout/MainLayout.vue'
 import WebTitleBar from './WebTitleBar.vue'
 import { MODULES, type MobileModule } from '@/lib/modules'
@@ -51,26 +54,43 @@ const navItems = computed(() => [
   { to: '/review', label: '审核收件箱', icon: Inbox, active: isActive('/review'), badge: pending.value.length },
 ])
 
+// Same structure as the desktop sidebar: 做内容 / 卖出去 / 资料. 复刻 / tk创意室 / 图生视频 are one entry (AI 出片),
+// 模特库 sits under 素材库 and 模板库 under 批量混剪 — the pages switch with tabs on top (SectionTabs).
 const SECTIONS: Array<{ title: string; keys: string[] }> = [
-  { title: '创作', keys: ['research', 'clone', 'creative-studio', 'live-photo', 'production', 'publish', 'insights'] },
-  { title: '资产', keys: ['shops', 'products', 'models', 'assets', 'templates', 'works'] },
+  { title: '做内容', keys: ['research', 'ai-video', 'production'] },
+  { title: '卖出去', keys: ['publish', 'shops', 'insights'] },
+  { title: '资料', keys: ['products', 'assets', 'works'] },
 ]
+/** 合并入口：侧边栏一项，进入后在页面上方切换 */
+const MERGED: Record<string, { name: string; icon: Component; group: 'aiVideo' | 'library' | 'production' }> = {
+  'ai-video': { name: 'AI 出片', icon: Clapperboard, group: 'aiVideo' },
+  assets: { name: '素材库', icon: FolderOpen, group: 'library' },
+  production: { name: '批量混剪', icon: Scissors, group: 'production' },
+}
 const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/sales', '/business?tab=creators', '/business?tab=inventory']
 const byKey = new Map(MODULES.map((item) => [item.key, item]))
 const sections = computed(() =>
   SECTIONS.map((section) => ({
     title: section.title,
     items: section.keys
-      .map((key) => byKey.get(key))
+      .map((key) => {
+        const merged = MERGED[key]
+        if (!merged) return byKey.get(key)
+        // Route of the tab used last (desktop paths redirect to the web pages).
+        const target = merged.group === 'production' ? '/production' : lastSectionTab(merged.group).to
+        return { key, name: merged.name, icon: merged.icon, route: target, group: 'create', phase: 1, description: '' } as MobileModule
+      })
       .filter((item): item is MobileModule & { route: string } => Boolean(item?.route))
       .map((item) => {
+        const merged = MERGED[item.key]
+        if (merged) return { to: item.route, label: item.name, icon: item.icon, active: sectionActive(merged.group, route.path) }
         // Web 选品 = the desktop's 选品方案 (schemes + SOP); the phone capture page stays in the App.
         const to = isWeb && item.key === 'research' ? '/product-research' : item.route
         return { to, label: item.name, icon: item.icon, active: isActive(to) }
       }),
   }))
     .filter((section) => section.items.length)
-    .concat([{ title: '工具箱', items: [{ to: '/toolbox', label: '工具箱', icon: Wrench, active: TOOL_ROUTES.some((to) => (to.includes('?') ? isActive(to) : route.path.startsWith(to))) }] }]),
+    .concat([{ title: '', items: [{ to: '/toolbox', label: '工具箱', icon: Wrench, active: TOOL_ROUTES.some((to) => (to.includes('?') ? isActive(to) : route.path.startsWith(to))) }] }]),
 )
 
 const userName = computed(() => session.user?.displayName || session.user?.account || '我的账号')
@@ -111,6 +131,8 @@ onBeforeUnmount(() => document.body.classList.remove('is-web-shell'))
           </div>
         </template>
         <div class="vg-scope web-workspace">
+          <!-- 合并入口（AI 出片 / 批量混剪 / 素材库）的页面标签，和电脑端一样 -->
+          <SectionTabs />
           <slot />
         </div>
       </DsMainLayout>

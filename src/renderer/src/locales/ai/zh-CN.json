@@ -41,7 +41,24 @@
     "models": "模特库",
     "assets": "素材库",
     "templates": "模板库",
-    "tools": "工具箱"
+    "tools": "工具箱",
+    "groupContent": "做内容",
+    "groupSell": "卖出去",
+    "groupLibrary": "资料",
+    "aiVideo": "AI 出片",
+    "tabs": {
+      "clone": "爆款复刻",
+      "creative": "tk创意室",
+      "livePhoto": "图生视频",
+      "mix": "混剪工作台",
+      "pool": "素材池",
+      "templates": "模板库",
+      "tasks": "任务",
+      "assets": "素材",
+      "models": "模特",
+      "overview": "总览"
+    },
+    "library": "素材库"
   },
   "line": {
     "clone": "复刻",

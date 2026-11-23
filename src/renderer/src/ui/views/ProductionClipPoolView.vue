@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AlertTriangle,
-  ArrowLeft,
   Ban,
   Bot,
   Camera,
@@ -247,9 +246,6 @@ onBeforeUnmount(() => {
 <template>
   <div class="vg-scope vg-page pool">
     <header class="vg-page-head">
-      <button class="vg-icon-btn" type="button" :title="t('production.pool.back')" @click="router.push('/production')">
-        <ArrowLeft :size="18" />
-      </button>
       <div class="vg-page-head__text">
         <h1>{{ t('production.pool.title') }}</h1>
         <p>{{ t('production.pool.desc') }}</p>
