@@ -1,5 +1,6 @@
 import type { ShopHealth, ShopHealthIndicator } from '../../../shared/shopAnalysis'
 import type { SiSettlement } from '../../../shared/shopProfit'
+import type { PcDay } from '../../../shared/productCards'
 import { SHOP_METRIC_IDS, zonedDate, type ShopMetricKey, type SiCompassRow, type SiOrderLine, type SiPlatformSku, type SiShopDay } from '../../../shared/sellerInventory'
 
 type Json = Record<string, any>
@@ -210,6 +211,54 @@ export function parseCompassPage(json: unknown, shopKey: string, date: string): 
     })
   }
   return rows
+}
+
+/** Every metric of the product card list; the API returns only the ones asked for. */
+const PRODUCT_CARD_STATS = Array.from({ length: 100 }, (_, index) => index + 1)
+
+/** Body for `/api/v4/insights/seller/shop/product/card/list`: one shop-local day, one page (0-based). */
+export function productCardBody(date: string, nextDate: string, timezoneOffsetSeconds: number, page: number, size: number) {
+  return {
+    request: {
+      params: [{
+        // The end date is exclusive: one day is [date, date + 1).
+        time_descriptor: { start: date, end: nextDate, timezone_offset: timezoneOffsetSeconds, granularity: '1D', with_previous_period: false },
+        filter: { query_type: 1, is_diagnosis_mode: false },
+        list_control: { rules: [{ field: 'SHOP_PRODUCT_CARD_LIST_VIEW_USERS_CNT', direction: 2 }], pagination: { size, page } },
+        stats_types: PRODUCT_CARD_STATS,
+      }],
+    },
+  }
+}
+
+/** One day of the product card list. */
+export function parseProductCardPage(json: unknown, shopKey: string, date: string): { rows: PcDay[]; hasMore: boolean; total: number } {
+  const data = assertOk(json, 'product card')
+  const segment = (Array.isArray(data.segments) ? data.segments[0] : undefined) as Json | undefined
+  const list: Json[] = segment?.timed_list?.[0]?.list || []
+  const rows: PcDay[] = []
+  for (const item of list) {
+    const productId = text(item.product_id)
+    if (!productId) continue
+    rows.push({
+      shopKey,
+      productId,
+      date,
+      name: text(item.product_name),
+      image: firstUrl(item.product_image),
+      views: Math.trunc(num(item.view_cnt)),
+      viewers: Math.trunc(num(item.view_users_cnt)),
+      clicks: Math.trunc(num(item.click_cnt)),
+      clickUsers: Math.trunc(num(item.click_users_cnt)),
+      cartAdds: Math.trunc(num(item.add_to_cart_cnt)),
+      cartUsers: Math.trunc(num(item.add_to_cart_users_cnt)),
+      buyers: Math.trunc(num(item.buyers_cnt)),
+      skuOrders: Math.trunc(num(item.sku_order_cnt)),
+      gmv: money(item.revenue),
+    })
+  }
+  const pagination = (segment?.list_control?.next_pagination || {}) as Json
+  return { rows, hasMore: Boolean(pagination.has_more), total: num(pagination.total) }
 }
 
 /** Body for `/api/v2/insights/seller/unified/query/us_overview_stats` covering one shop-local day. */

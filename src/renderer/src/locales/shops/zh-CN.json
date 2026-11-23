@@ -30,6 +30,7 @@
   "hubSubtitle": "每个店铺每天的经营情况一目了然，点进去看趋势、流量、成交来源和商品。数据从商家后台只读同步。",
   "syncAll": "同步全部店铺",
   "tabBusiness": "经营",
+  "tabProducts": "商品分析",
   "tabAccounts": "账号",
   "total": {
     "todayGmv": "今日总 GMV",
@@ -197,5 +198,105 @@
   "kpiTitle": "经营指标",
   "periodLabel": "近 {n} 天 · 对比上一周期",
   "calendarLess": "少",
-  "calendarMore": "多"
+  "calendarMore": "多",
+  "pc": {
+    "allShops": "全部店铺",
+    "range": "统计 {range}（已完结日）",
+    "syncing": "正在同步…",
+    "emptyTitle": "还没有商品卡数据",
+    "emptyDesc": "同步一次店铺，就会读取商家后台「数据罗盘 → 商品卡」里每个商品的曝光、点击、加购和成交，最近 90 天。",
+    "verdictTitle": "测品结论",
+    "verdictHint": "每个商品和自己店铺的平均水平比较，点任一类只看这类商品",
+    "restockCallout": "款爆款要补货",
+    "newCallout": "款新品在测",
+    "verdict": {
+      "winner": "测款成功",
+      "potential": "潜力款",
+      "leaky": "有点击不成交",
+      "weak": "测款失败",
+      "steady": "表现平稳",
+      "testing": "数据不足"
+    },
+    "verdictDesc": {
+      "winner": "点击和成交都达标，重点补货、加推",
+      "potential": "买家喜欢，曝光还不够，多发视频",
+      "leaky": "有人点没人买，查价格、主图、评价",
+      "weak": "曝光够了但点击太低，换素材或停推",
+      "steady": "接近店铺平均水平，继续观察",
+      "testing": "曝光还少，先别下结论"
+    },
+    "overviewTitle": "商品卡数据概览",
+    "overviewHint": "最近 {n} 个完整日，和之前同样天数比较；点指标看每日走势",
+    "metric": {
+      "viewers": "曝光人数",
+      "clickUsers": "点击人数",
+      "ctr": "点击率",
+      "cartUsers": "加购人数",
+      "cartRate": "加购率",
+      "buyers": "成交买家",
+      "clickToPay": "点击成交率",
+      "gmv": "销售额"
+    },
+    "funnelTitle": "转化漏斗",
+    "stepRate": {
+      "ctr": "点击率 {value}",
+      "cartRate": "点击→加购 {value}",
+      "cartToPay": "加购→成交 {value}"
+    },
+    "viewToPay": "曝光→成交 {value}",
+    "trendTitle": "每日{metric}",
+    "listTitle": "商品明细",
+    "count": "{n} 个商品",
+    "searchPlaceholder": "搜商品名、商品 ID 或 SKU 编码",
+    "col": {
+      "product": "商品",
+      "verdict": "结论",
+      "viewers": "曝光人数",
+      "ctr": "点击率",
+      "cartRate": "加购率",
+      "clickToPay": "点击成交率",
+      "buyers": "买家",
+      "gmv": "销售额",
+      "trend": "曝光走势",
+      "stock": "库存",
+      "date": "日期"
+    },
+    "noMatch": "没有符合条件的商品",
+    "copyId": "复制商品 ID",
+    "copied": "已复制",
+    "restock": {
+      "urgent": "立即补货",
+      "soon": "该补货了",
+      "ok": "库存充足",
+      "unknown": "库存未知",
+      "unlinked": "未关联 SKU 编码"
+    },
+    "daysLeft": "可卖 {n} 天",
+    "advice": {
+      "restock": "库存撑不了多久，建议补 {qty} 件。",
+      "winner": "测款已经成功：点击率和成交率都不低于店铺平均，可以加大投放和视频产出。",
+      "potential": "点的人多、买的比例也不错，就是看到的人还少，多发视频或开 GMV Max 放量。",
+      "leaky": "点击正常，但点进来的人很少下单，先检查价格、主图、详情页和评价。",
+      "weak": "已经有足够曝光，点击率明显低于店铺平均，建议换主图/素材，或者停掉这个款。",
+      "steady": "各项接近店铺平均，继续观察，有变化会自动重新判断。",
+      "testing": "曝光还不够多，先积累数据，再看结论。"
+    },
+    "evidence": {
+      "ctr": "点击率 {value}（店铺平均的 {index} 倍）",
+      "pay": "点击成交率 {value}（{index} 倍）",
+      "volume": "曝光 {viewers} 人，成交 {buyers} 人"
+    },
+    "views": "曝光 {n} 次",
+    "fact": {
+      "orders": "SKU 订单",
+      "cartToPay": "加购→成交",
+      "stock": "当前库存",
+      "suggest": "建议补货",
+      "firstSeen": "首次有曝光"
+    },
+    "openSeller": "在商家后台查看",
+    "dailyTitle": "每日销售额",
+    "showMore": "再显示 50 个（还有 {n} 个）",
+    "note": "数据来自商家后台「数据罗盘 → 商品卡」，按人数统计，每天更新前一天。多日相加的人数可能有重复，比例更有参考意义。库存和补货建议来自「销售与库存」，需要商品的 SKU 编码已填写。"
+  }
 }

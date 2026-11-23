@@ -16,6 +16,7 @@ const ALLOWED_PATHS = [
   '/api/fulfillment/order/list',
   '/api/v2/insights/seller/ttp/product/sku/list',
   '/api/v2/insights/seller/unified/query/us_overview_stats',
+  '/api/v4/insights/seller/shop/product/card/list',
   '/api/v1/seller/home_task/get',
   '/api/v1/seller/growth_center/performance/list',
   '/api/v1/seller/growth_center/violation/overview/get',

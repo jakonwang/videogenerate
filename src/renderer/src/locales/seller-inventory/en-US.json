@@ -14,6 +14,7 @@
     "products": "Reading products and stock {detail}",
     "orders": "Reading orders {detail}",
     "compass": "Reading sales history {detail}",
+    "productCard": "Reading product card data {detail}",
     "shopDaily": "Reading daily shop metrics {detail}",
     "health": "Checking shop health",
     "finance": "Reading settlements {detail}"

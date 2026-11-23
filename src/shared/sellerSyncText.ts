@@ -11,16 +11,16 @@ function lang(locale: string): Lang {
 }
 
 const STAGE: Record<Lang, Record<SiSyncStage, string>> = {
-  zh: { account: '店铺账号', shopDaily: '店铺每日数据', health: '店铺健康', products: '商品和库存', orders: '订单', compass: '商品销量历史', finance: '结算数据' },
-  en: { account: 'shop account', shopDaily: 'daily shop data', health: 'shop health', products: 'products and stock', orders: 'orders', compass: 'SKU sales history', finance: 'settlements' },
-  vi: { account: 'tài khoản cửa hàng', shopDaily: 'số liệu theo ngày', health: 'sức khỏe cửa hàng', products: 'sản phẩm và tồn kho', orders: 'đơn hàng', compass: 'lịch sử bán SKU', finance: 'dữ liệu quyết toán' },
+  zh: { account: '店铺账号', shopDaily: '店铺每日数据', health: '店铺健康', products: '商品和库存', orders: '订单', compass: '商品销量历史', productCard: '商品卡数据', finance: '结算数据' },
+  en: { account: 'shop account', shopDaily: 'daily shop data', health: 'shop health', products: 'products and stock', orders: 'orders', compass: 'SKU sales history', productCard: 'product card data', finance: 'settlements' },
+  vi: { account: 'tài khoản cửa hàng', shopDaily: 'số liệu theo ngày', health: 'sức khỏe cửa hàng', products: 'sản phẩm và tồn kho', orders: 'đơn hàng', compass: 'lịch sử bán SKU', productCard: 'dữ liệu thẻ sản phẩm', finance: 'dữ liệu quyết toán' },
 }
 
 /** What a missing step means for the numbers on screen. */
 const IMPACT: Record<Lang, Partial<Record<SiSyncStage, string>>> = {
-  zh: { finance: '利润可能不准', orders: '今天的销量可能不全', products: '库存可能不是最新', compass: '较早日期的销量可能不全', health: '店铺健康不是最新', shopDaily: '店铺数字不是最新' },
-  en: { finance: 'profit may be off', orders: "today's sales may be incomplete", products: 'stock may be out of date', compass: 'older daily sales may be incomplete', health: 'shop health is not current', shopDaily: 'shop numbers are not current' },
-  vi: { finance: 'lợi nhuận có thể chưa đúng', orders: 'doanh số hôm nay có thể chưa đủ', products: 'tồn kho có thể chưa mới', compass: 'doanh số các ngày cũ có thể chưa đủ', health: 'sức khỏe cửa hàng chưa mới', shopDaily: 'số liệu cửa hàng chưa mới' },
+  zh: { finance: '利润可能不准', orders: '今天的销量可能不全', products: '库存可能不是最新', compass: '较早日期的销量可能不全', productCard: '商品分析不是最新', health: '店铺健康不是最新', shopDaily: '店铺数字不是最新' },
+  en: { finance: 'profit may be off', orders: "today's sales may be incomplete", products: 'stock may be out of date', compass: 'older daily sales may be incomplete', productCard: 'product analysis is not current', health: 'shop health is not current', shopDaily: 'shop numbers are not current' },
+  vi: { finance: 'lợi nhuận có thể chưa đúng', orders: 'doanh số hôm nay có thể chưa đủ', products: 'tồn kho có thể chưa mới', compass: 'doanh số các ngày cũ có thể chưa đủ', productCard: 'phân tích sản phẩm chưa mới', health: 'sức khỏe cửa hàng chưa mới', shopDaily: 'số liệu cửa hàng chưa mới' },
 }
 
 const TEXT: Record<Lang, Record<string, string>> = {

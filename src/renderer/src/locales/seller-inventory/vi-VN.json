@@ -14,6 +14,7 @@
     "products": "Đọc sản phẩm và tồn kho {detail}",
     "orders": "Đọc đơn hàng {detail}",
     "compass": "Đọc lịch sử bán hàng {detail}",
+    "productCard": "Đang đọc dữ liệu thẻ sản phẩm {detail}",
     "shopDaily": "Đọc số liệu cửa hàng theo ngày {detail}",
     "health": "Kiểm tra sức khỏe cửa hàng",
     "finance": "Đọc quyết toán {detail}"

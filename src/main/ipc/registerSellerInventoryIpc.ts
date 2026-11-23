@@ -8,6 +8,7 @@ export function registerSellerInventoryIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:sellerInventory:getDashboard', async (_event, payload) => sellerInventoryService.getDashboard(payload))
   ipcMain.handle('plugin:sellerInventory:getShopsOverview', async () => sellerInventoryService.getShopsOverview())
   ipcMain.handle('plugin:sellerInventory:getShopReport', async (_event, payload) => sellerInventoryService.getShopReport(payload))
+  ipcMain.handle('plugin:sellerInventory:getProductCards', async (_event, payload) => sellerInventoryService.getProductCards(payload))
   ipcMain.handle('plugin:sellerInventory:generateReport', async () => await sellerInventoryService.generateReport())
   ipcMain.handle('plugin:sellerInventory:listReports', async () => sellerInventoryService.listReports())
   ipcMain.handle('plugin:sellerInventory:getReportSettings', async () => sellerInventoryService.getReportSettings())

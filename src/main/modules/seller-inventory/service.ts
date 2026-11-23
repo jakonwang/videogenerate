@@ -25,13 +25,14 @@ import {
   type SiSyncStage,
 } from '../../../shared/sellerInventory'
 import { openSellerCenter, SellerSession } from './browser'
-import { parseCompassPage, parseOrderPage, parseProductPage, parseProductSkus, parseSellerId, parseSettlementPage, parseShopHealth, parseShopStatsMulti, shopStatsBodyMulti, toPlatformSku } from './parser'
+import { parseCompassPage, parseOrderPage, parseProductCardPage, productCardBody, parseProductPage, parseProductSkus, parseSellerId, parseSettlementPage, parseShopHealth, parseShopStatsMulti, shopStatsBodyMulti, toPlatformSku } from './parser'
 import { buildProfitDays, learnFeeRate, profitTotals, type GmvStoreOption, type ShopAdLink, type ShopProfit } from '../../../shared/shopProfit'
 import { gmvAds } from './gmvAds'
 import { analyzeShop, type MorningReport, type ReportSettings, type ShopAnalysis } from '../../../shared/shopAnalysis'
 import { actionText, buildReportCard, findingText, reportNotification } from '../../../shared/shopReportText'
 import type { BusinessShops } from '../../../shared/cloud/selling'
 import { sellerInventoryRepo as repo } from './repo'
+import { addTotals, classifyProduct, emptyTotals, PC_NEW_DAYS, PC_VERDICTS, ratesOf, type PcDay, type PcOverview, type PcProduct, type PcRestock, type PcTotals } from '../../../shared/productCards'
 
 const DEFAULT_TZ = 'Asia/Ho_Chi_Minh'
 const PRODUCT_PAGE_SIZE = 50
@@ -39,6 +40,7 @@ const ORDER_PAGE_SIZE = 100
 const COMPASS_PAGE_SIZE = 100
 const MAX_ORDER_PAGES = 800
 const MAX_COMPASS_DAYS_PER_SYNC = 120
+const PRODUCT_CARD_PAGE_SIZE = 100
 /** Recent orders are re-read on every sync so later cancellations are picked up. */
 const ORDER_REFRESH_DAYS = 3
 const API_DELAY_MS = 150
@@ -336,6 +338,40 @@ async function syncCompass(session: Pick<SellerSession, 'api'>, shop: ShopRecord
   })
 }
 
+/** Product card funnel per product per day (Data Compass is T+1, so it stops at yesterday). */
+async function syncProductCards(session: Pick<SellerSession, 'api'>, shop: ShopRecord, state: SiShopState, settings: SiSettings, report: (detail: string) => void) {
+  const timeZone = tzOf(shop)
+  const now = deps.now()
+  const today = zonedDate(now, timeZone)
+  const start = shiftDate(today, -Math.min(90, Math.max(14, settings.historyDays)))
+  const end = shiftDate(today, -1)
+  const offsetSeconds = Math.round(tzOffsetMs(now, timeZone) / 1000)
+  const fetched = repo.productCardFetchedDates(shop.id)
+  // A day is final once it was fetched at least two days after it ended; newest first.
+  const missing = dateRange(start, end).filter((date) => {
+    const at = fetched.get(date)
+    return !at || zonedDate(at, timeZone) < shiftDate(date, 2)
+  }).reverse().slice(0, MAX_COMPASS_DAYS_PER_SYNC)
+  let done = 0
+  await pool(missing, CONCURRENCY, async (date) => {
+    const rows: PcDay[] = []
+    for (let page = 0; page < 30; page += 1) {
+      const parsed = parseProductCardPage(await session.api({
+        method: 'POST',
+        path: '/api/v4/insights/seller/shop/product/card/list',
+        query: { ...sellerQuery(state, shop), use_content_type_definition: '1' },
+        headers: { 'x-tt-oec-region': shop.region.toUpperCase() },
+        body: productCardBody(date, shiftDate(date, 1), offsetSeconds, page, PRODUCT_CARD_PAGE_SIZE),
+      }), shop.id, date)
+      rows.push(...parsed.rows)
+      if (!parsed.hasMore || parsed.rows.length < PRODUCT_CARD_PAGE_SIZE) break
+    }
+    repo.replaceProductCardDay(shop.id, date, rows, deps.now())
+    done += 1
+    report(`${done}/${missing.length}`)
+  })
+}
+
 /** Shop KPIs per day from Data Compass. Today and yesterday are real time and are re-read on every sync. */
 async function syncShopDaily(session: Pick<SellerSession, 'api'>, shop: ShopRecord, state: SiShopState, settings: SiSettings, report: (detail: string) => void) {
   const timeZone = tzOf(shop)
@@ -478,6 +514,136 @@ function unitsByDateForCode(code: string, today: string) {
   return new Map(Object.entries(cells).map(([date, cell]) => [date, cell.units]))
 }
 
+const RESTOCK_ORDER: PcRestock[] = ['urgent', 'soon', 'ok', 'unknown']
+const RESTOCK_BY_RISK: Record<string, PcRestock> = { out: 'urgent', urgent: 'urgent', reorder: 'soon', healthy: 'ok', overstock: 'ok', unknown: 'unknown' }
+
+type PcDaily = PcProduct['daily'][number]
+
+function buildProductCards(input?: { days?: number; shopKey?: string }): PcOverview {
+  const span = Math.min(90, Math.max(1, Math.trunc(Number(input?.days) || 7)))
+  const allShops = deps.listShops()
+  const shops = input?.shopKey ? allShops.filter((shop) => shop.id === input.shopKey) : allShops
+  // Data Compass is T+1: the period ends with yesterday, a complete day.
+  const end = shiftDate(zonedDate(deps.now(), businessTimeZone(allShops)), -1)
+  const start = shiftDate(end, -(span - 1))
+  const prevStart = shiftDate(start, -span)
+  const dates = dateRange(start, end)
+  const totals = emptyTotals()
+  const prevTotals = emptyTotals()
+  const dailyTotals = new Map<string, PcDaily>(dates.map((date) => [date, { date, viewers: 0, clickUsers: 0, cartUsers: 0, buyers: 0, gmv: 0 }]))
+  const products: PcProduct[] = []
+  const resolve = makeCodeResolver(repo.listMappings())
+  const items = new Map(sellerInventoryService.getDashboard({ days: 30 }).items.map((item) => [item.key, item]))
+  let lastFetchedAt = 0
+  let stored = 0
+  for (const record of shops) {
+    const fetchedDates = repo.productCardFetchedDates(record.id)
+    for (const at of fetchedDates.values()) lastFetchedAt = Math.max(lastFetchedAt, at)
+    // A product only counts as new when it first showed up after the stored history began.
+    const historyStart = [...fetchedDates.keys()].sort()[0] || end
+    const rows = repo.listProductCardDays(record.id, prevStart, end)
+    stored += rows.length
+    const firstSeen = repo.productCardFirstSeen(record.id)
+    // Product -> unified SKU codes of its variants (seller SKU, or the manual mapping).
+    const codesByProduct = new Map<string, Set<string>>()
+    for (const sku of repo.listPlatformSkus([record.id])) {
+      const { key, mapped } = resolve(record.id, sku.skuId, sku.sellerSku)
+      if (!mapped) continue
+      const set = codesByProduct.get(sku.productId) || new Set<string>()
+      set.add(key)
+      codesByProduct.set(sku.productId, set)
+    }
+    type Entry = { current: PcTotals; previous: PcTotals; name: string; image?: string; lastDate: string; days: Map<string, PcDay> }
+    const byProduct = new Map<string, Entry>()
+    const shopTotals = emptyTotals()
+    for (const row of rows) {
+      const entry: Entry = byProduct.get(row.productId) || { current: emptyTotals(), previous: emptyTotals(), name: row.name, image: row.image, lastDate: '', days: new Map<string, PcDay>() }
+      if (row.date >= entry.lastDate) {
+        entry.lastDate = row.date
+        entry.name = row.name || entry.name
+        entry.image = row.image || entry.image
+      }
+      if (row.date >= start) {
+        addTotals(entry.current, row)
+        addTotals(shopTotals, row)
+        entry.days.set(row.date, row)
+        const day = dailyTotals.get(row.date)
+        if (day) {
+          day.viewers += row.viewers
+          day.clickUsers += row.clickUsers
+          day.cartUsers += row.cartUsers
+          day.buyers += row.buyers
+          day.gmv += row.gmv
+        }
+      } else {
+        addTotals(entry.previous, row)
+        addTotals(prevTotals, row)
+      }
+      byProduct.set(row.productId, entry)
+    }
+    addTotals(totals, shopTotals)
+    const shopRates = ratesOf(shopTotals)
+    for (const [productId, entry] of byProduct) {
+      if (!entry.current.viewers && !entry.current.buyers) continue
+      const codes = [...(codesByProduct.get(productId) || [])].sort()
+      const linked = codes.map((code) => items.get(code)).filter((item): item is NonNullable<typeof item> => Boolean(item))
+      const withStock = linked.filter((item) => item.stock !== undefined)
+      const daysLeft = linked.map((item) => item.daysLeft).filter((value): value is number => value !== undefined)
+      const restock = linked.map((item) => RESTOCK_BY_RISK[item.risk] || 'unknown').sort((a, b) => RESTOCK_ORDER.indexOf(a) - RESTOCK_ORDER.indexOf(b))[0] || 'unknown'
+      const { verdict, ctrIndex, clickToPayIndex } = classifyProduct(entry.current, shopRates)
+      const first = firstSeen.get(productId)
+      products.push({
+        key: `${record.id}:${productId}`,
+        shopKey: record.id,
+        shopName: record.name,
+        productId,
+        name: entry.name,
+        image: entry.image,
+        codes,
+        totals: entry.current,
+        rates: ratesOf(entry.current),
+        prevTotals: entry.previous,
+        prevRates: ratesOf(entry.previous),
+        viewersChange: entry.previous.viewers ? (entry.current.viewers - entry.previous.viewers) / entry.previous.viewers : undefined,
+        gmvChange: entry.previous.gmv ? (entry.current.gmv - entry.previous.gmv) / entry.previous.gmv : undefined,
+        ctrIndex,
+        clickToPayIndex,
+        verdict,
+        firstSeen: first,
+        isNew: Boolean(first && first > historyStart && first >= shiftDate(end, -(PC_NEW_DAYS - 1))),
+        stock: withStock.length ? withStock.reduce((sum, item) => sum + (item.stock || 0), 0) : undefined,
+        daysLeft: daysLeft.length ? Math.min(...daysLeft) : undefined,
+        restock,
+        suggestQty: linked.reduce((sum, item) => sum + (item.suggestQty || 0), 0),
+        daily: dates.map((date) => {
+          const day = entry.days.get(date)
+          return { date, viewers: day?.viewers || 0, clickUsers: day?.clickUsers || 0, cartUsers: day?.cartUsers || 0, buyers: day?.buyers || 0, gmv: day?.gmv || 0 }
+        }),
+      })
+    }
+  }
+  products.sort((a, b) => b.totals.gmv - a.totals.gmv || b.totals.viewers - a.totals.viewers)
+  const counts = Object.fromEntries(PC_VERDICTS.map((verdict) => [verdict, 0])) as PcOverview['counts']
+  for (const product of products) counts[product.verdict] += 1
+  return {
+    start,
+    end,
+    days: span,
+    shops: shops.map((shop) => ({ shopKey: shop.id, name: shop.name, region: shop.region })),
+    totals,
+    rates: ratesOf(totals),
+    prevTotals,
+    prevRates: ratesOf(prevTotals),
+    daily: [...dailyTotals.values()],
+    products,
+    counts,
+    restockCount: products.filter((product) => (product.verdict === 'winner' || product.verdict === 'potential') && (product.restock === 'urgent' || product.restock === 'soon')).length,
+    newCount: products.filter((product) => product.isNew).length,
+    lastFetchedAt: lastFetchedAt || undefined,
+    empty: stored === 0,
+  }
+}
+
 export const sellerInventoryService = {
   listShops(): SiShop[] {
     return deps.listShops().map(toShop)
@@ -592,6 +758,11 @@ export const sellerInventoryService = {
         health,
       }
     })
+  },
+
+  /** 商品分析: product card funnel per product over the last `days` complete days, with a verdict each. */
+  getProductCards(input?: { days?: number; shopKey?: string }): PcOverview {
+    return cached(`productCards|${input?.shopKey || ''}|${input?.days || 7}`, () => buildProductCards(input))
   },
 
   analyzeShop(shopKey: string): ShopAnalysis {
@@ -837,7 +1008,7 @@ export const sellerInventoryService = {
     return results
   },
 
-  async syncShop(shopKey: string, stages: SiSyncStage[] = ['account', 'products', 'orders', 'compass', 'health', 'finance', 'shopDaily'], automatic = false): Promise<SiSyncProgress> {
+  async syncShop(shopKey: string, stages: SiSyncStage[] = ['account', 'products', 'orders', 'compass', 'productCard', 'health', 'finance', 'shopDaily'], automatic = false): Promise<SiSyncProgress> {
     const shop = requireShop(shopKey)
     if (progress.get(shopKey)?.status === 'running') throw new Error('SELLER_INVENTORY_SYNC_RUNNING')
     const job: SiSyncProgress = { shopKey, status: 'running', startedAt: deps.now(), automatic }
@@ -874,6 +1045,7 @@ export const sellerInventoryService = {
       await step('products', '/product/manage', () => syncProducts(session, shop, state, report('products')))
       await step('orders', '/order', () => syncOrders(session, shop, state, settings, report('orders')))
       await step('compass', '/compass/product-analysis', () => syncCompass(session, shop, state, settings, report('compass')))
+      await step('productCard', '/compass/single-product-card', () => syncProductCards(session, shop, state, settings, report('productCard')))
       // Settlements are the slowest and only feed profit, so they come last.
       await step('finance', null, () => syncFinance(session, shop, state, report('finance')))
       state.stageErrors = Object.keys(stageErrors).length ? stageErrors : undefined

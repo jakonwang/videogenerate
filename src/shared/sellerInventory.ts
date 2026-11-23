@@ -152,7 +152,7 @@ export type SiShop = {
   state: SiShopState
 }
 
-export type SiSyncStage = 'account' | 'products' | 'orders' | 'compass' | 'shopDaily' | 'health' | 'finance'
+export type SiSyncStage = 'account' | 'products' | 'orders' | 'compass' | 'productCard' | 'shopDaily' | 'health' | 'finance'
 
 /**
  * Data Compass shop metric ids (us_overview_stats). Checked against the page and against each

@@ -30,6 +30,7 @@
   "hubSubtitle": "Xem nhanh tình hình kinh doanh mỗi ngày của từng cửa hàng; mở cửa hàng để xem xu hướng, lưu lượng, nguồn doanh thu và sản phẩm. Đồng bộ chỉ đọc từ Seller Center.",
   "syncAll": "Đồng bộ tất cả",
   "tabBusiness": "Kinh doanh",
+  "tabProducts": "Phân tích sản phẩm",
   "tabAccounts": "Tài khoản",
   "total": {
     "todayGmv": "Tổng GMV hôm nay",
@@ -197,5 +198,105 @@
   "kpiTitle": "Chỉ số kinh doanh",
   "periodLabel": "{n} ngày gần đây · so với kỳ trước",
   "calendarLess": "Ít",
-  "calendarMore": "Nhiều"
+  "calendarMore": "Nhiều",
+  "pc": {
+    "allShops": "Tất cả cửa hàng",
+    "range": "{range} (ngày đã chốt)",
+    "syncing": "Đang đồng bộ…",
+    "emptyTitle": "Chưa có dữ liệu thẻ sản phẩm",
+    "emptyDesc": "Đồng bộ cửa hàng một lần để đọc lượt xem, nhấp, thêm giỏ và đơn của từng sản phẩm từ La bàn dữ liệu → Thẻ sản phẩm trong 90 ngày gần nhất.",
+    "verdictTitle": "Kết quả test sản phẩm",
+    "verdictHint": "Mỗi sản phẩm được so với mức trung bình của chính cửa hàng. Bấm một nhóm để chỉ xem nhóm đó.",
+    "restockCallout": "mẫu bán chạy cần nhập hàng",
+    "newCallout": "sản phẩm mới đang test",
+    "verdict": {
+      "winner": "Test thành công",
+      "potential": "Tiềm năng",
+      "leaky": "Có nhấp, không mua",
+      "weak": "Test thất bại",
+      "steady": "Ổn định",
+      "testing": "Chưa đủ dữ liệu"
+    },
+    "verdictDesc": {
+      "winner": "Nhấp và chốt đơn đều tốt: nhập thêm, đẩy mạnh",
+      "potential": "Người mua thích, cần thêm lượt hiển thị",
+      "leaky": "Có nhấp nhưng không mua: xem giá, ảnh, đánh giá",
+      "weak": "Đủ hiển thị nhưng ít nhấp: đổi nội dung hoặc dừng",
+      "steady": "Gần mức trung bình cửa hàng, tiếp tục theo dõi",
+      "testing": "Lượt xem còn ít, chưa kết luận"
+    },
+    "overviewTitle": "Tổng quan thẻ sản phẩm",
+    "overviewHint": "{n} ngày đã chốt gần nhất so với cùng số ngày trước đó. Bấm chỉ số để xem xu hướng theo ngày.",
+    "metric": {
+      "viewers": "Người xem",
+      "clickUsers": "Người nhấp",
+      "ctr": "Tỷ lệ nhấp",
+      "cartUsers": "Người thêm giỏ",
+      "cartRate": "Tỷ lệ thêm giỏ",
+      "buyers": "Người mua",
+      "clickToPay": "Tỷ lệ nhấp → mua",
+      "gmv": "GMV"
+    },
+    "funnelTitle": "Phễu chuyển đổi",
+    "stepRate": {
+      "ctr": "Tỷ lệ nhấp {value}",
+      "cartRate": "Nhấp → giỏ {value}",
+      "cartToPay": "Giỏ → mua {value}"
+    },
+    "viewToPay": "Xem → mua {value}",
+    "trendTitle": "{metric} theo ngày",
+    "listTitle": "Chi tiết sản phẩm",
+    "count": "{n} sản phẩm",
+    "searchPlaceholder": "Tìm tên, ID sản phẩm hoặc mã SKU",
+    "col": {
+      "product": "Sản phẩm",
+      "verdict": "Kết quả",
+      "viewers": "Người xem",
+      "ctr": "Tỷ lệ nhấp",
+      "cartRate": "Thêm giỏ",
+      "clickToPay": "Nhấp→mua",
+      "buyers": "Người mua",
+      "gmv": "GMV",
+      "trend": "Xu hướng xem",
+      "stock": "Tồn kho",
+      "date": "Ngày"
+    },
+    "noMatch": "Không có sản phẩm phù hợp",
+    "copyId": "Sao chép ID sản phẩm",
+    "copied": "Đã sao chép",
+    "restock": {
+      "urgent": "Nhập hàng ngay",
+      "soon": "Sắp cần nhập",
+      "ok": "Đủ hàng",
+      "unknown": "Chưa rõ tồn kho",
+      "unlinked": "Chưa gắn mã SKU"
+    },
+    "daysLeft": "còn {n} ngày",
+    "advice": {
+      "restock": "Tồn kho sắp hết, nên nhập khoảng {qty} cái.",
+      "winner": "Test thành công: tỷ lệ nhấp và chốt đơn không thấp hơn trung bình cửa hàng. Tăng quảng cáo và video.",
+      "potential": "Người xem nhấp và mua tốt nhưng còn ít người thấy. Đăng thêm video hoặc chạy GMV Max.",
+      "leaky": "Nhấp bình thường nhưng ít người mua. Kiểm tra giá, ảnh chính, trang chi tiết và đánh giá.",
+      "weak": "Đã đủ lượt hiển thị nhưng tỷ lệ nhấp thấp hơn hẳn trung bình. Đổi ảnh/nội dung hoặc dừng mẫu này.",
+      "steady": "Gần mức trung bình cửa hàng. Tiếp tục theo dõi, kết quả tự cập nhật.",
+      "testing": "Lượt xem còn ít. Chờ thêm dữ liệu rồi đánh giá."
+    },
+    "evidence": {
+      "ctr": "Tỷ lệ nhấp {value} ({index}× trung bình)",
+      "pay": "Nhấp → mua {value} ({index}×)",
+      "volume": "{viewers} người xem, {buyers} người mua"
+    },
+    "views": "{n} lượt xem",
+    "fact": {
+      "orders": "Đơn SKU",
+      "cartToPay": "Giỏ → mua",
+      "stock": "Tồn kho",
+      "suggest": "Đề xuất nhập",
+      "firstSeen": "Lần đầu có lượt xem"
+    },
+    "openSeller": "Xem trong Seller Center",
+    "dailyTitle": "GMV theo ngày",
+    "showMore": "Hiện thêm 50 (còn {n})",
+    "note": "Dữ liệu từ Seller Center La bàn dữ liệu → Thẻ sản phẩm, tính theo người, cập nhật mỗi ngày cho ngày hôm trước. Cộng nhiều ngày có thể trùng người nên tỷ lệ đáng tin hơn. Tồn kho và đề xuất nhập lấy từ Bán hàng & tồn kho, cần mã SKU của sản phẩm."
+  }
 }

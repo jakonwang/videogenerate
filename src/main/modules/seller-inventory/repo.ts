@@ -16,6 +16,7 @@ import {
   type SiStockMove,
 } from '../../../shared/sellerInventory'
 import type { ShopAdLink, SiSettlement } from '../../../shared/shopProfit'
+import type { PcDay } from '../../../shared/productCards'
 import { DEFAULT_REPORT_SETTINGS, type MorningReport, type ReportSettings, type ShopHealth } from '../../../shared/shopAnalysis'
 
 type Statement = { run(...params: unknown[]): unknown; get(...params: unknown[]): unknown; all(...params: unknown[]): unknown[] }
@@ -48,6 +49,12 @@ CREATE TABLE IF NOT EXISTS si_settlements (id TEXT PRIMARY KEY, shop_key TEXT NO
 CREATE INDEX IF NOT EXISTS idx_si_settlements ON si_settlements(shop_key, placed_date);
 CREATE TABLE IF NOT EXISTS si_ad_links (shop_key TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS si_shop_health (shop_key TEXT PRIMARY KEY, fetched_at INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS si_product_cards (
+  id TEXT PRIMARY KEY, shop_key TEXT NOT NULL, product_id TEXT NOT NULL, date TEXT NOT NULL,
+  viewers INTEGER NOT NULL, gmv REAL NOT NULL, payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_si_product_cards_date ON si_product_cards(shop_key, date);
+CREATE TABLE IF NOT EXISTS si_product_card_fetch (id TEXT PRIMARY KEY, shop_key TEXT NOT NULL, date TEXT NOT NULL, fetched_at INTEGER NOT NULL, rows INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS si_reports (id TEXT PRIMARY KEY, date TEXT NOT NULL, created_at INTEGER NOT NULL, payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_si_reports_date ON si_reports(date, created_at);
 `
@@ -206,6 +213,33 @@ export const sellerInventoryRepo = {
     // Columns only: parsing the JSON payload of every row was the slowest part of the dashboards.
     const rows = db().prepare('SELECT sku_id, date, gmv, orders, units FROM si_compass WHERE shop_key = ? AND date >= ? AND date < ?').all(shopKey, fromDate, beforeDate) as Array<{ sku_id: string; date: string; gmv: number; orders: number; units: number }>
     return rows.map((row) => ({ shopKey, skuId: row.sku_id, sellerSku: '', date: row.date, units: Number(row.units) || 0, amount: Number(row.gmv) || 0, orders: Number(row.orders) || 0, cancelledUnits: 0 }))
+  },
+
+  // ===== Product cards (Data Compass) =====
+  replaceProductCardDay(shopKey: string, date: string, rows: PcDay[], fetchedAt: number) {
+    const remove = db().prepare('DELETE FROM si_product_cards WHERE shop_key = ? AND date = ?')
+    const insert = db().prepare('INSERT OR REPLACE INTO si_product_cards (id, shop_key, product_id, date, viewers, gmv, payload) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    const mark = db().prepare('INSERT OR REPLACE INTO si_product_card_fetch (id, shop_key, date, fetched_at, rows) VALUES (?, ?, ?, ?, ?)')
+    transaction(() => {
+      remove.run(shopKey, date)
+      for (const row of rows) insert.run(`${shopKey}:${row.productId}:${date}`, shopKey, row.productId, date, row.viewers, row.gmv, JSON.stringify(row))
+      mark.run(`${shopKey}:${date}`, shopKey, date, fetchedAt, rows.length)
+    })
+  },
+
+  productCardFetchedDates(shopKey: string) {
+    const rows = db().prepare('SELECT date, fetched_at FROM si_product_card_fetch WHERE shop_key = ?').all(shopKey) as Array<{ date: string; fetched_at: number }>
+    return new Map(rows.map((row) => [row.date, Number(row.fetched_at)]))
+  },
+
+  listProductCardDays(shopKey: string, fromDate: string, toDate: string): PcDay[] {
+    return db().prepare('SELECT payload FROM si_product_cards WHERE shop_key = ? AND date >= ? AND date <= ?').all(shopKey, fromDate, toDate).map((row) => parse<PcDay>(row))
+  },
+
+  /** First date each product had exposure, over everything stored. */
+  productCardFirstSeen(shopKey: string) {
+    const rows = db().prepare('SELECT product_id, MIN(date) AS first FROM si_product_cards WHERE shop_key = ? AND viewers > 0 GROUP BY product_id').all(shopKey) as Array<{ product_id: string; first: string }>
+    return new Map(rows.map((row) => [row.product_id, row.first]))
   },
 
   // ===== Shop daily metrics (Data Compass) =====

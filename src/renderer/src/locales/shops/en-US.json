@@ -30,6 +30,7 @@
   "hubSubtitle": "Every shop's daily business at a glance. Open a shop for trends, traffic, where sales come from, and products. Read-only sync from Seller Center.",
   "syncAll": "Sync all shops",
   "tabBusiness": "Business",
+  "tabProducts": "Products",
   "tabAccounts": "Accounts",
   "total": {
     "todayGmv": "GMV today, all shops",
@@ -197,5 +198,105 @@
   "kpiTitle": "Key metrics",
   "periodLabel": "Last {n} days · vs previous period",
   "calendarLess": "Less",
-  "calendarMore": "More"
+  "calendarMore": "More",
+  "pc": {
+    "allShops": "All shops",
+    "range": "{range} (complete days)",
+    "syncing": "Syncing…",
+    "emptyTitle": "No product card data yet",
+    "emptyDesc": "Sync your shops once to read each product's views, clicks, add-to-carts and sales from Data Compass → Product card for the last 90 days.",
+    "verdictTitle": "Test results",
+    "verdictHint": "Each product is compared with its own shop's average. Click a group to see only those products.",
+    "restockCallout": "winners to restock",
+    "newCallout": "new products in test",
+    "verdict": {
+      "winner": "Winner",
+      "potential": "Potential",
+      "leaky": "Clicks, no sales",
+      "weak": "Failed test",
+      "steady": "Steady",
+      "testing": "Not enough data"
+    },
+    "verdictDesc": {
+      "winner": "Clicks and sales both strong: restock and push",
+      "potential": "Buyers like it, needs more exposure",
+      "leaky": "Clicked but not bought: check price, images, reviews",
+      "weak": "Seen enough but rarely clicked: change creative or stop",
+      "steady": "Close to the shop average, keep watching",
+      "testing": "Too few views to judge yet"
+    },
+    "overviewTitle": "Product card overview",
+    "overviewHint": "Last {n} complete days vs the same number of days before. Click a metric for its daily trend.",
+    "metric": {
+      "viewers": "Viewers",
+      "clickUsers": "Click users",
+      "ctr": "CTR",
+      "cartUsers": "Add-to-cart users",
+      "cartRate": "Add-to-cart rate",
+      "buyers": "Buyers",
+      "clickToPay": "Click-to-paid rate",
+      "gmv": "GMV"
+    },
+    "funnelTitle": "Conversion funnel",
+    "stepRate": {
+      "ctr": "CTR {value}",
+      "cartRate": "Click → cart {value}",
+      "cartToPay": "Cart → paid {value}"
+    },
+    "viewToPay": "View → paid {value}",
+    "trendTitle": "Daily {metric}",
+    "listTitle": "Products",
+    "count": "{n} products",
+    "searchPlaceholder": "Search name, product ID or SKU code",
+    "col": {
+      "product": "Product",
+      "verdict": "Result",
+      "viewers": "Viewers",
+      "ctr": "CTR",
+      "cartRate": "Cart rate",
+      "clickToPay": "Click→paid",
+      "buyers": "Buyers",
+      "gmv": "GMV",
+      "trend": "Views trend",
+      "stock": "Stock",
+      "date": "Date"
+    },
+    "noMatch": "No products match",
+    "copyId": "Copy product ID",
+    "copied": "Copied",
+    "restock": {
+      "urgent": "Restock now",
+      "soon": "Restock soon",
+      "ok": "Enough stock",
+      "unknown": "Stock unknown",
+      "unlinked": "No SKU code linked"
+    },
+    "daysLeft": "{n} days left",
+    "advice": {
+      "restock": "Stock will not last long: restock about {qty} units.",
+      "winner": "Test passed: CTR and conversion are at or above the shop average. Scale ads and videos.",
+      "potential": "People who see it click and buy, but few see it. Post more videos or run GMV Max.",
+      "leaky": "Clicks are fine but few buy. Check price, main image, detail page and reviews.",
+      "weak": "It had enough views but its CTR is well below average. Change the image or creative, or stop it.",
+      "steady": "Around the shop average. Keep watching; the result updates automatically.",
+      "testing": "Not enough views yet. Let data build up before judging."
+    },
+    "evidence": {
+      "ctr": "CTR {value} ({index}× shop average)",
+      "pay": "Click-to-paid {value} ({index}×)",
+      "volume": "{viewers} viewers, {buyers} buyers"
+    },
+    "views": "{n} views",
+    "fact": {
+      "orders": "SKU orders",
+      "cartToPay": "Cart → paid",
+      "stock": "Stock",
+      "suggest": "Suggested restock",
+      "firstSeen": "First views"
+    },
+    "openSeller": "Open in Seller Center",
+    "dailyTitle": "Daily GMV",
+    "showMore": "Show 50 more ({n} left)",
+    "note": "From Seller Center Data Compass → Product card, counted by people and updated daily for the day before. People summed over several days can overlap, so rates are the better guide. Stock and restock advice come from Sales & inventory and need the product's SKU codes."
+  }
 }

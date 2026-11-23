@@ -14,6 +14,7 @@
     "products": "读取商品和库存 {detail}",
     "orders": "读取订单 {detail}",
     "compass": "读取历史销量 {detail}",
+    "productCard": "读取商品卡数据 {detail}",
     "shopDaily": "读取店铺每日数据 {detail}",
     "health": "检查店铺健康",
     "finance": "读取结算 {detail}"

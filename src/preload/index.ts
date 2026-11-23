@@ -18,6 +18,7 @@ import type {
 import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
 import type { ShopProfit } from '../shared/shopProfit'
 import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
+import type { PcOverview } from '../shared/productCards'
 import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
 import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
 import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
@@ -931,6 +932,7 @@ const api = {
     getDashboard: (payload?: { days?: number; shopKey?: string }) => ipcRenderer.invoke('plugin:sellerInventory:getDashboard', payload) as Promise<SiDashboard>,
     getShopsOverview: () => ipcRenderer.invoke('plugin:sellerInventory:getShopsOverview') as Promise<ShopsOverview>,
     getShopReport: (payload: { shopKey: string; days?: number }) => ipcRenderer.invoke('plugin:sellerInventory:getShopReport', payload) as Promise<ShopReport>,
+    getProductCards: (payload?: { days?: number; shopKey?: string }) => ipcRenderer.invoke('plugin:sellerInventory:getProductCards', payload) as Promise<PcOverview>,
     generateReport: () => ipcRenderer.invoke('plugin:sellerInventory:generateReport') as Promise<MorningReport>,
     listReports: () => ipcRenderer.invoke('plugin:sellerInventory:listReports') as Promise<MorningReport[]>,
     getReportSettings: () => ipcRenderer.invoke('plugin:sellerInventory:getReportSettings') as Promise<ReportSettings>,

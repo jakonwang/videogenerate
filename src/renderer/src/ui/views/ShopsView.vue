@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, CheckCircle2, ChevronRight, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
 import type { ShopCard, ShopsOverview, SiSyncProgress, SiSyncStage } from '../../../../shared/sellerInventory'
 import ShopAccountsPanel from './shops/ShopAccountsPanel.vue'
+import ProductCardsPanel from './shops/ProductCardsPanel.vue'
 import { findingText } from '../../../../shared/shopReportText'
 import ShopReportDialog from './shops/ShopReportDialog.vue'
 import { change, fmtChange, fmtMoney, fmtNumber, fmtPercent } from './shops/shopFormat'
@@ -15,7 +16,11 @@ import { freshnessText, friendlyStageError, friendlySyncError } from '../../../.
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
-const tab = ref<'business' | 'accounts'>(route.query.tab === 'accounts' ? 'accounts' : 'business')
+type ShopsTab = 'business' | 'products' | 'accounts'
+function tabOf(value: unknown): ShopsTab {
+  return value === 'accounts' || value === 'products' ? value : 'business'
+}
+const tab = ref<ShopsTab>(tabOf(route.query.tab))
 const overview = ref<ShopsOverview | null>(null)
 const loading = ref(false)
 const errorText = ref('')
@@ -130,9 +135,9 @@ async function syncAll() {
 }
 
 // Links such as "update cookies" land on /shops?tab=accounts while this page is already open.
-watch(() => route.query.tab, (value) => { tab.value = value === 'accounts' ? 'accounts' : 'business' })
+watch(() => route.query.tab, (value) => { tab.value = tabOf(value) })
 watch(tab, (next) => {
-  void router.replace({ query: next === 'accounts' ? { tab: 'accounts' } : {} })
+  void router.replace({ query: next === 'business' ? {} : { tab: next } })
   if (next === 'business') void load()
 })
 
@@ -157,10 +162,12 @@ onBeforeUnmount(() => clearInterval(clock))
 
     <nav class="vg-tabs shops-view__tabs">
       <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'business' }" data-testid="shops-tab-business" @click="tab = 'business'">{{ t('shops.tabBusiness') }}</button>
+      <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'products' }" data-testid="shops-tab-products" @click="tab = 'products'">{{ t('shops.tabProducts') }}</button>
       <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'accounts' }" data-testid="shops-tab-accounts" @click="tab = 'accounts'">{{ t('shops.tabAccounts') }}</button>
     </nav>
 
     <ShopAccountsPanel v-if="tab === 'accounts'" />
+    <ProductCardsPanel v-else-if="tab === 'products'" :shops="(overview?.cards || []).map((card) => ({ shopKey: card.shop.shopKey, name: card.shop.name, region: card.shop.region }))" @sync="syncAll" />
 
     <template v-else>
       <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
