@@ -54,7 +54,8 @@ function getWorker() {
     else request.resolve(message.result)
   })
   current.on('error', (error) => {
-    for (const request of pending.values()) request.reject(error)
+    const reason = error instanceof Error ? error : new Error(String(error))
+    for (const request of pending.values()) request.reject(reason)
     pending.clear()
     if (worker === current) worker = null
   })
