@@ -46,6 +46,8 @@ export const SYNC_COLLECTIONS = {
   livePhotoItems: 'live-photo-items',
   /** 商品记忆（每个商品一条，记录 id = 云端商品 id） */
   productMemory: 'product-memory',
+  /** 商品分析板提示词版本（整份列表一条，id = analysis-board；电脑和服务器引擎之间同步） */
+  productAnalysisPrompts: 'product-analysis-prompts',
   /** 复刻任务分组 */
   cloneGroups: 'clone-groups',
   /** 图生图（商品图素材）：拆解视频得到的原图和 AI 衍生图 */
@@ -104,6 +106,10 @@ export type SyncProduct = {
   images: SyncFileRef[]
   coverFileId?: string
   createdAt: number
+  /** 电脑端的 AI 结果（商品分析、分析板、标准源图的状态），见 src/main/modules/cloud-sync/productBridge.ts；网页 / 手机原样保留 */
+  desktop?: Record<string, unknown>
+  /** 分析板、标准源图的生成图 */
+  desktopFiles?: { analysisBoardPath?: SyncFileRef; canonicalSourcePath?: SyncFileRef }
 }
 
 /** 模特库中可以跨端同步的部分 */

@@ -1,7 +1,7 @@
-import type { Component } from 'vue'
+import { defineAsyncComponent, type Component } from 'vue'
 import { isWeb } from './lib/platform'
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { session } from './lib/session'
+import { cloud, session } from './lib/session'
 
 /**
  * 网页上原样显示的电脑端页面（window.api 由网页版替身提供）。
@@ -11,6 +11,14 @@ const desktopPage = (load: () => Promise<{ default: Component }>, api?: () => Pr
   component: () => import('./components/web/DesktopPage.vue').then((m) => m.default as Component),
   props: { load, api },
 })
+
+/**
+ * 批量混剪：网页上电脑在线时显示电脑端页面（WebProductionPage），不在线时显示网页的页面；手机 App 只用网页的页面。
+ */
+const productionPage = (load: () => Promise<{ default: Component }>, web: () => Promise<{ default: Component }>) =>
+  isWeb
+    ? { component: () => import('./views/web/WebProductionPage.vue').then((m) => m.default as Component), props: { load, fallback: defineAsyncComponent(web) } }
+    : { component: web }
 
 /** 电脑端页面里的跳转路径 → 网页版对应的页面 */
 const DESKTOP_PATHS: Array<[string, string]> = [
@@ -37,6 +45,17 @@ const DESKTOP_PATHS: Array<[string, string]> = [
   ['/plugins/video-batch-subtitle', '/tools/subtitle'],
 ]
 
+/**
+ * 网页上的旧商品链接（/library/products/<云端 id>）→ 电脑端商品详情页。详情页按服务器引擎里的商品 id 查找，
+ * 同一个商品在引擎里的 id 可能和云端 id 不同：先换算。
+ */
+async function webProductLink(to: { params: Record<string, unknown> }) {
+  const id = String(to.params.id || '')
+  if (!id || id === 'new') return '/products'
+  const local = await cloud.relay.call<string>('products', 'localIdOf', [id], 'server').catch(() => id)
+  return `/products/${encodeURIComponent(local || id)}`
+}
+
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -46,9 +65,23 @@ export const router = createRouter({
     { path: '/research', component: () => import('./views/ResearchView.vue') },
     { path: '/research/:id', component: () => import('./views/ResearchTaskView.vue'), meta: { tabs: false } },
     { path: '/create', component: () => import('./views/CreateView.vue') },
-    { path: '/library', component: () => import('./views/LibraryView.vue') },
-    { path: '/library/products/:id', component: () => import('./views/ProductFormView.vue'), meta: { tabs: false } },
-    { path: '/library/models/:id', component: () => import('./views/ModelFormView.vue'), meta: { tabs: false } },
+    // Web: 商品库 / 模特库 are the desktop pages themselves (/products, /models); the old library links lead there.
+    { path: '/library', component: () => import('./views/LibraryView.vue'), beforeEnter: (to: { query: Record<string, unknown> }) => (!isWeb ? true : to.query.tab === 'models' ? '/models' : '/products') },
+    isWeb
+      ? { path: '/library/products/:id', component: () => import('./views/LibraryView.vue'), beforeEnter: webProductLink }
+      : { path: '/library/products/:id', component: () => import('./views/ProductFormView.vue'), meta: { tabs: false } },
+    // Web: the desktop 商品库 / 商品详情 pages; products live in the server engine (lib/desktopApi/products).
+    ...(isWeb
+      ? [
+          { path: '/products', name: 'products', ...desktopPage(() => import('@desktop-views/ProductLibraryView.vue'), () => import('./lib/desktopApi/products')), meta: { tabs: false } },
+          { path: '/products/:productId', name: 'product-detail', ...desktopPage(() => import('@desktop-views/ProductDetailView.vue'), () => import('./lib/desktopApi/products')), meta: { tabs: false } },
+        ]
+      : []),
+    isWeb
+      ? { path: '/library/models/:id', redirect: '/models' }
+      : { path: '/library/models/:id', component: () => import('./views/ModelFormView.vue'), meta: { tabs: false } },
+    // Web: the desktop 模特库 page itself; model methods run on the server engine (lib/desktopApi/models only covers the keys).
+    ...(isWeb ? [{ path: '/models', ...desktopPage(() => import('@desktop-views/ModelLibraryView.vue'), () => import('./lib/desktopApi/models')), meta: { tabs: false } }] : []),
     // Web: the desktop 上架助手 page (list / editor tabs, export config, 店小秘 Excel); the App keeps list + form.
     // Web: the desktop 上架助手 page itself, backed by the web tiktokListing API (cloud generation, Excel in the browser).
     isWeb
@@ -116,26 +149,37 @@ export const router = createRouter({
       ? { path: '/assets', ...desktopPage(() => import('@desktop-views/AssetLibraryView.vue'), () => import('./lib/desktopApi/assetLibrary')), meta: { tabs: false } }
       : { path: '/assets', component: () => import('./views/AssetsView.vue'), meta: { tabs: false } },
     { path: '/toolbox', component: () => import('./views/web/WebToolbox.vue'), meta: { tabs: false } },
-    { path: '/creative', component: isWeb ? () => import('./views/web/WebCreative.vue') : () => import('./views/CreativeView.vue'), meta: { tabs: false } },
+    // Web: the desktop tk创意室 page through the computer when it is online (the web order form when it is not).
+    { path: '/creative', component: isWeb ? () => import('./views/web/WebCreativeStudio.vue') : () => import('./views/CreativeView.vue'), meta: { tabs: false } },
     { path: '/tasks', component: () => import('./views/TasksView.vue'), meta: { tabs: false } },
     isWeb ? { path: '/membership', ...desktopPage(() => import('@desktop-views/BillingView.vue')), meta: { tabs: false } } : { path: '/membership', component: () => import('./views/MembershipView.vue'), meta: { tabs: false } },
     { path: '/product-research', name: 'product-research', component: () => import('@desktop-views/ProductResearchView.vue').then((m) => m.default as Component), meta: { tabs: false } },
     { path: '/product-research/:schemeId', name: 'product-research-detail', component: () => import('@desktop-views/ProductResearchDetailView.vue').then((m) => m.default as Component), meta: { tabs: false } },
-    { path: '/production', component: () => import('./views/production/ProductionHome.vue'), meta: { tabs: false } },
+    // Web: the desktop 批量混剪 pages through the computer when it is online (the web pages when it is not).
+    { path: '/production', ...productionPage(() => import('@desktop-views/ProductionHomeView.vue'), () => import('./views/production/ProductionHome.vue')), meta: { tabs: false } },
+    ...(isWeb
+      ? [
+          { path: '/production/create', ...productionPage(() => import('@desktop-views/ProductionCreateTaskView.vue'), () => import('./views/production/ProductionMix.vue')), meta: { tabs: false } },
+          { path: '/production/tasks/:taskId', ...productionPage(() => import('@desktop-views/TaskDetailView.vue'), () => import('./views/production/ProductionTasks.vue')), meta: { tabs: false } },
+        ]
+      : []),
     { path: '/production/mix/insights', component: () => import('./views/production/ProductionMixInsights.vue').then((m) => m.default as Component), meta: { tabs: false } },
     { path: '/shops', component: () => import('./views/web/WebShops.vue').then((m) => m.default as Component), meta: { tabs: false }, beforeEnter: () => (isWeb ? true : '/business?tab=shops') },
     { path: '/shops/:shopKey', component: () => import('./views/web/WebShops.vue').then((m) => m.default as Component), props: { detail: true }, meta: { tabs: false }, beforeEnter: () => (isWeb ? true : '/business?tab=shops') },
     { path: '/sales', component: () => import('./views/web/WebSales.vue').then((m) => m.default as Component), meta: { tabs: false }, beforeEnter: () => (isWeb ? true : '/business?tab=shops') },
     { path: '/inventory', component: () => import('./views/web/WebInventory.vue').then((m) => m.default as Component), meta: { tabs: false }, beforeEnter: () => (isWeb ? true : '/business?tab=inventory') },
-    { path: '/production/pool', component: () => import('./views/production/ProductionPool.vue'), meta: { tabs: false } },
-    { path: '/production/mix', component: () => import('./views/production/ProductionMix.vue'), meta: { tabs: false } },
-    { path: '/production/tasks', component: () => import('./views/production/ProductionTasks.vue'), meta: { tabs: false } },
-    { path: '/templates', component: () => import('./views/TemplatesView.vue'), meta: { tabs: false } },
+    { path: '/production/pool', ...productionPage(() => import('@desktop-views/ProductionClipPoolView.vue'), () => import('./views/production/ProductionPool.vue')), meta: { tabs: false } },
+    { path: '/production/mix', ...productionPage(() => import('@desktop-views/ProductionMixStudioView.vue'), () => import('./views/production/ProductionMix.vue')), meta: { tabs: false } },
+    { path: '/production/tasks', ...productionPage(() => import('@desktop-views/TasksView.vue'), () => import('./views/production/ProductionTasks.vue')), meta: { tabs: false } },
+    // Web: the desktop 模板库 page itself; templates live in the server engine and sync with the computer (lib/desktopApi/templates).
+    isWeb
+      ? { path: '/templates', ...desktopPage(() => import('@desktop-views/TemplatesView.vue'), () => import('./lib/desktopApi/templates')), meta: { tabs: false } }
+      : { path: '/templates', component: () => import('./views/TemplatesView.vue'), meta: { tabs: false } },
     { path: '/brand', component: () => import('./views/BrandView.vue'), meta: { tabs: false } },
     { path: '/password', component: () => import('./views/PasswordView.vue'), meta: { tabs: false } },
     { path: '/me', component: () => import('./views/MeView.vue') },
-    ...DESKTOP_PATHS.map(([from, to]) => ({ path: from, redirect: to })),
-    { path: '/products/:id', redirect: (to: { params: Record<string, unknown> }) => `/library/products/${String(to.params.id)}` },
+    ...DESKTOP_PATHS.filter(([from]) => !(isWeb && (from === '/models' || from === '/products'))).map(([from, to]) => ({ path: from, redirect: to })),
+    ...(isWeb ? [] : [{ path: '/products/:id', redirect: (to: { params: Record<string, unknown> }) => `/library/products/${String(to.params.id)}` }]),
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: (_to, _from, saved) => saved || { top: 0 },

@@ -35,6 +35,7 @@ import { DESKTOP_STATUS_ID, PRODUCTION_COLLECTIONS, type SyncDesktopStatus, type
 import { RESEARCH_COLLECTIONS, RESEARCH_STATUS_ID, type SyncPrRequest, type SyncPrResult, type SyncPrStatus, type SyncResearchScheme } from '../../../shared/cloud/research'
 import type { ProductResearchDevice, ProductResearchResult, ProductResearchScheme, ProductResearchSchemeState, ProductResearchTask } from '../../../shared/productResearch'
 import { defaultTemplateStore, fromSyncTemplate, toSyncTemplate, type TemplateLink, type TemplateStore } from './templateBridge'
+import { mergeProductDesktopFields, productDesktopFields, productDesktopFilePaths, type ProductFileKey } from './productBridge'
 import { brandDirection, defaultBrandStore, toSyncBrand, type BrandLink, type BrandStore } from './brandBridge'
 import { defaultCreativeService, reportFingerprint, requestState, shotState, type CreativeService } from './creativeBridge'
 import { defaultCloneStore, syncCloneWorkspaces, type CloneIdMaps, type CloneStore } from './cloneBridge'
@@ -199,6 +200,12 @@ async function productToSync(session: Session, state: SyncStateFile, product: Pr
     if (ref && !images.some((item) => item.fileId === ref.fileId)) images.push({ ...ref, width: image.width, height: image.height })
   }
   const cover = await uploadLocalImage(session, state, product.coverImagePath)
+  // AI results (analysis, analysis board, canonical source) and their generated images: see productBridge.ts.
+  const desktopFiles: NonNullable<SyncProduct['desktopFiles']> = {}
+  for (const [key, path] of Object.entries(productDesktopFilePaths(product)) as Array<[ProductFileKey, string]>) {
+    const ref = existsSync(path) ? await uploadLocalImage(session, state, path) : null
+    if (ref) desktopFiles[key] = ref
+  }
   return {
     ...extra,
     name: product.name,
@@ -208,6 +215,8 @@ async function productToSync(session: Session, state: SyncStateFile, product: Pr
     images,
     coverFileId: cover && images.some((item) => item.fileId === cover.fileId) ? cover.fileId : images[0]?.fileId,
     createdAt: product.createdAt,
+    desktop: productDesktopFields(product),
+    desktopFiles,
   }
 }
 
@@ -229,8 +238,16 @@ async function applyProduct(session: Session, state: SyncStateFile, data: SyncPr
     images.push(match ?? { id: randomUUID(), productId: existing?.id ?? '', filePath, fileName: `${ref.fileId.slice(0, 12)}${MIME_EXT[ref.mime] || '.jpg'}`, fileSize: 0, width: ref.width, height: ref.height, createdAt: ts, updatedAt: ts })
     if (ref.fileId === (data.coverFileId || data.images[0]?.fileId)) coverImagePath = filePath
   }
+  // Generated images of the AI results: reuse ours when the content matches, otherwise download.
+  const files: Partial<Record<ProductFileKey, string>> = {}
+  for (const [key, ref] of Object.entries(data.desktopFiles ?? {}) as Array<[ProductFileKey, SyncFileRef | undefined]>) {
+    if (!ref?.fileId) continue
+    const own = existing?.[key]
+    files[key] = own && (await fileIdOf(state, own)) === ref.fileId ? own : await downloadImage(session, state, ref)
+  }
   return productsRepo.upsert({
     ...(existing ? { id: existing.id } : {}),
+    ...mergeProductDesktopFields(existing, data.desktop, files),
     name: data.name || '未命名商品',
     type: PRODUCT_TYPES.has(data.type) ? data.type : 'general',
     remark: data.remark ?? '',
@@ -297,7 +314,7 @@ async function applyModel(session: Session, state: SyncStateFile, cloudId: strin
 
 /* ------------------------------------------------------------------ 同步主流程 */
 
-const OWN_PRODUCT_FIELDS = ['name', 'type', 'remark', 'tiktokProductIds', 'images', 'coverFileId', 'createdAt']
+const OWN_PRODUCT_FIELDS = ['name', 'type', 'remark', 'tiktokProductIds', 'images', 'coverFileId', 'createdAt', 'desktop', 'desktopFiles']
 const OWN_MODEL_FIELDS = ['name', 'gender', 'ageRange', 'style', 'description', 'images', 'coverFileId', 'createdAt']
 
 function extraFields(data: Record<string, unknown> | null, own: string[]) {
@@ -676,6 +693,44 @@ async function syncBrand(session: Session, state: SyncStateFile): Promise<number
     state.brand = { cloudUpdatedAt: updatedAt, localUpdatedAt: local.updatedAt }
   }
   return await syncProductMemory(session, state, store)
+}
+
+/**
+ * 商品分析板提示词版本：整份列表一条记录，以后改的为准（只有默认版本的设备不算改过，见 promptVersions.exportForSync）。
+ * 网页的商品库在服务器引擎上重新分析时，要和电脑上用同一个提示词。
+ */
+const PRODUCT_PROMPTS_RECORD_ID = 'analysis-board'
+async function syncProductPrompts(session: Session): Promise<number> {
+  const { productAnalysisBoardPromptVersionService: prompts } = await import('../products/promptVersions')
+  const remote = (await session.client.sync.pull(0, [SYNC_COLLECTIONS.productAnalysisPrompts])).changes.find((change) => change.id === PRODUCT_PROMPTS_RECORD_ID && !change.deleted && change.data)
+  const theirs = remote?.data as { versions?: unknown[]; changedAt?: number } | undefined
+  const theirsAt = Number(theirs?.changedAt || 0)
+  const mine = await prompts.exportForSync()
+  if (theirs && theirsAt > mine.changedAt) {
+    await prompts.importFromSync(theirs.versions as never)
+    return 1
+  }
+  if (session.canWrite && mine.changedAt > theirsAt) {
+    await session.client.sync.push([{ collection: SYNC_COLLECTIONS.productAnalysisPrompts, id: PRODUCT_PROMPTS_RECORD_ID, updatedAt: Math.max(mine.changedAt, (remote?.updatedAt ?? 0) + 1), deleted: false, data: { versions: mine.versions, changedAt: mine.changedAt } }] as never)
+  }
+  return 0
+}
+
+/**
+ * 商品 id 换算（同一个商品在每台设备上的本地 id 可能不同，云端 id 是共同的）。
+ * 网页的商品页面在服务器引擎上，交给电脑的调用（投放、内容表现）要先换成云端 id，电脑再换成自己的。
+ */
+export async function cloudProductIdForLocal(localId: string): Promise<string> {
+  const session = await sessionSource()
+  if (!session) return localId
+  const links = (await loadState(session.userId)).links.products
+  return Object.entries(links).find(([, link]) => link.localId === localId)?.[0] ?? localId
+}
+
+export async function localProductIdForCloud(cloudId: string): Promise<string> {
+  const session = await sessionSource()
+  if (!session) return cloudId
+  return (await loadState(session.userId)).links.products[cloudId]?.localId ?? cloudId
 }
 
 /** 商品记忆：每个已同步商品一条，两边都能改，以后改的为准 */
@@ -1322,7 +1377,7 @@ async function syncClone(session: Session, state: SyncStateFile, only?: string[]
 }
 
 /**
- * desktop：电脑端（全部同步）。clone-engine：服务器上的复刻引擎，只同步商品、模特和复刻项目，
+ * desktop：电脑端（全部同步）。clone-engine：服务器上的复刻引擎，只同步商品、模特、模板和复刻项目，
  * 不接 tk创意室订单、不发布经营数据（这些要用电脑上的账号）。
  */
 let syncMode: 'desktop' | 'clone-engine' = 'desktop'
@@ -1340,6 +1395,9 @@ async function runOnce(): Promise<CloudSyncStatus> {
     try {
       status.pushed = session.canWrite ? await push(session, state) : 0
       status.pulled = await pull(session, state, [], [], [COLLECTION_NAME.products, COLLECTION_NAME.models])
+      // 网页的模板库是电脑端同一个页面，在引擎里编辑：模板和电脑端经云端互通
+      status.pulled += await syncTemplates(session, state)
+      status.pulled += await syncProductPrompts(session).catch(() => 0)
       status.pulled += await syncClone(session, state)
       status.lastSyncedAt = Date.now()
       status.lastError = ''
@@ -1359,6 +1417,10 @@ async function runOnce(): Promise<CloudSyncStatus> {
     status.pulled = await pull(session, state, creativeInbox, productionInbox)
     status.pulled += await syncBrand(session, state)
     status.pulled += await syncTemplates(session, state)
+    status.pulled += await syncProductPrompts(session).catch((error) => {
+      console.warn('[cloud-sync] 商品分析提示词同步失败', (error as Error).message)
+      return 0
+    })
     // After products / models, so projects can find them by their local ids.
     status.pulled += await syncClone(session, state).catch((error) => {
       console.warn('[cloud-sync] 复刻项目同步失败', (error as Error).message)

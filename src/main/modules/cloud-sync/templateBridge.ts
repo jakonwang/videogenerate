@@ -71,10 +71,33 @@ export function toSyncTemplate(template: Template, bgmFileIds: string[]): SyncTe
   })
 }
 
+/**
+ * 电脑端独有的设置（配音、转场、LUT、贴纸…）：以云端带来的 desktop 为准——网页版用的是电脑端同一个模板页面
+ * （在服务器引擎上编辑），这些设置在网页上也能改。没带 desktop 的旧客户端就沿用本机的旧版本。
+ * 参考分镜的缩略图是做识别那台设备上的本地文件，换了设备就没有意义：只沿用本机同一镜头已有的缩略图。
+ */
+function mergeDesktopFields(prev: Template | null, desktop: Partial<Template> | undefined): Partial<Template> {
+  if (!desktop) return prev ?? {}
+  const merged: Partial<Template> = { ...(prev ?? {}), ...desktop }
+  const shots = desktop.meta?.referenceShots
+  if (shots) {
+    const ownThumbs = new Map((prev?.meta?.referenceShots ?? []).map((shot) => [shot.index, shot.thumbnailPath]))
+    merged.meta = {
+      ...desktop.meta,
+      referenceShots: shots.map((shot) => {
+        const { thumbnailPath: _foreign, ...rest } = shot
+        const own = ownThumbs.get(shot.index)
+        return own ? { ...rest, thumbnailPath: own } : rest
+      }),
+    }
+  }
+  return merged
+}
+
 /** 云端模板 → 写回电脑端的字段（prev 为电脑上的旧版本，没有则按云端带回的 desktop 部分或默认结构） */
 export function fromSyncTemplate(input: SyncTemplate, prev: Template | null, bgmPaths: string[]): Partial<Template> & Pick<Template, 'name' | 'structure'> {
   const sync = normalizeSyncTemplate(input)
-  const base = (prev ?? (input.desktop as Partial<Template> | undefined) ?? {}) as Partial<Template>
+  const base = mergeDesktopFields(prev, input.desktop as Partial<Template> | undefined)
   let structure: string[]
   let segmentDurationSec: Template['segmentDurationSec']
   let segmentFx: NonNullable<Template['segmentFx']>

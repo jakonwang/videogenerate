@@ -58,8 +58,27 @@ async function listPromptVersions() {
   return [version]
 }
 
+/** 只有自动生成的默认版本（还没人改过）：同步时不算本机的改动，避免新设备用默认值盖掉别处的修改 */
+function isUntouchedDefault(versions: ProductAnalysisBoardPromptVersion[]) {
+  return versions.length === 1 && versions[0]!.version === 1 && versions[0]!.prompt === DEFAULT_PRODUCT_ANALYSIS_BOARD_PROMPT
+}
+
 export const productAnalysisBoardPromptVersionService = {
   list: listPromptVersions,
+
+  /** 云同步：本机的全部版本和最后修改时间（只有默认版本时为 0） */
+  async exportForSync(): Promise<{ versions: ProductAnalysisBoardPromptVersion[]; changedAt: number }> {
+    const versions = await listPromptVersions()
+    return { versions, changedAt: isUntouchedDefault(versions) ? 0 : Math.max(0, ...versions.map((item) => Number(item.updatedAt || 0))) }
+  },
+
+  /** 云同步：用别处较新的版本列表替换本机的 */
+  async importFromSync(versions: ProductAnalysisBoardPromptVersion[]) {
+    const clean = (Array.isArray(versions) ? versions : []).filter((item) => item && typeof item.id === 'string' && typeof item.prompt === 'string')
+    if (!clean.length) return
+    if (!clean.some((item) => item.active)) clean[0] = { ...clean[0]!, active: true }
+    await writeJsonFile(promptVersionsPath(), { versions: clean })
+  },
 
   async getActive() {
     const versions = await listPromptVersions()

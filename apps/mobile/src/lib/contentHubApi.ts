@@ -163,6 +163,22 @@ export function installContentHubApi() {
     saveAutomationSettings: viaDesktop('saveAutomationSettings'),
     testFeishuPush: viaDesktop('testFeishuPush'),
     healthCheck: viaDesktop('healthCheck'),
+    // 工作台「每日自动驾驶」：今日计划在电脑上生成和执行，网页上看、批准或跳过
+    autopilotToday: viaDesktop('autopilotToday'),
+    autopilotGenerate: viaDesktop('autopilotGenerate'),
+    autopilotApprove: viaDesktop('autopilotApprove'),
+    autopilotSkip: viaDesktop('autopilotSkip'),
+    autopilotSaveSettings: viaDesktop('autopilotSaveSettings'),
+    // 选品「竞品雷达」：关注列表和爆款检测在电脑上
+    radarState: viaDesktop('radarState'),
+    radarAdd: viaDesktop('radarAdd'),
+    radarRemove: viaDesktop('radarRemove'),
+    radarDismiss: viaDesktop('radarDismiss'),
+    radarRefresh: viaDesktop('radarRefresh'),
+    // 复刻要把原视频下载到电脑上再交给电脑端的 AI 制片人，网页上做不了
+    radarDownload: async () => {
+      throw new Error('复刻竞品爆款要在电脑端操作：打开电脑上的 Klipmill → 选品 → 竞品雷达')
+    },
     async listReviews(filter: { decision?: Decision | 'all'; line?: ReportLine; productId?: string } = {}) {
       const snap = await snapshot(true)
       const byRef = new Map(snap.items.map((item) => [item.ref, item]))

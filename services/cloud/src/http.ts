@@ -1,5 +1,5 @@
 import { createRelay, type RelayService } from './relay'
-import { routesToCloneEngine, type CloneEngine } from './cloneEngine'
+import { engineFilesToCloudRefs, routesToCloneEngine, type CloneEngine } from './cloneEngine'
 import http from 'node:http'
 import { createWebApp } from './webApp'
 import type { CloudConfig } from './config'
@@ -138,7 +138,9 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     const id = member(ctx).id
     const body = ctx.body as { ns?: string; method?: string; args?: unknown[] }
     if (cloneEngine && routesToCloneEngine(cloneEngine, id, body)) return cloneEngine.call(id, String(body.ns), String(body.method), Array.isArray(body.args) ? body.args : [])
-    return relay.call(id, body as any)
+    // 交给电脑：参数里服务器引擎的文件（复刻 / 图生视频成片）先换成电脑能下载的云端文件
+    if (!cloneEngine || !relay.online(id).online) return relay.call(id, body as any)
+    return engineFilesToCloudRefs(cloneEngine, id, body.args).then((args) => relay.call(id, { ...body, args } as any))
   })
   route('GET', '/api/v1/relay/status', (ctx) => relay.online(user(ctx).id))
   route('GET', '/api/v1/relay/next', (ctx) => relay.next(member(ctx).id, Number(ctx.url.searchParams.get('wait')) || undefined))

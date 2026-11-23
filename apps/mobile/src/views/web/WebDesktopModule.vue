@@ -7,19 +7,33 @@ import { defineAsyncComponent, getCurrentInstance, onBeforeUnmount, onMounted, r
 import { LoaderCircle, Monitor, RefreshCw } from 'lucide-vue-next'
 import { desktopRelayOnline, refreshDesktopRelayStatus } from '@/lib/desktopRelay'
 import { ensureDesktopI18n } from '@/lib/desktopI18n'
+import { installDesktopApiParts, type ApiParts } from '@/lib/desktopApiParts'
 
-const props = defineProps<{ title: string; load: () => Promise<{ default: Component }>; /** 电脑不在线时，横幅最后一句说明下面显示的是什么 */ offlineNote?: string; /** 为什么要电脑执行（默认：要用电脑上登录的 TikTok 账号） */ reason?: string }>()
+const props = defineProps<{
+  title: string
+  load: () => Promise<{ default: Component }>
+  /** 这个页面专用的网页版 window.api 部分（lib/desktopApi/*），电脑端页面显示期间生效 */
+  api?: () => Promise<{ default: ApiParts }>
+  /** 电脑不在线时，横幅最后一句说明下面显示的是什么 */
+  offlineNote?: string
+  /** 为什么要电脑执行（默认：要用电脑上登录的 TikTok 账号） */
+  reason?: string
+}>()
 const app = getCurrentInstance()!.appContext.app
 const page = shallowRef<Component>()
 const checking = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
+let restore: (() => void) | null = null
+let unmounted = false
 
 async function check() {
   checking.value = true
   try {
     const online = await refreshDesktopRelayStatus()
     if (online && !page.value) {
-      await ensureDesktopI18n(app)
+      const [, api] = await Promise.all([ensureDesktopI18n(app), props.api?.()])
+      if (unmounted || page.value) return
+      if (api) restore = installDesktopApiParts(api.default)
       page.value = defineAsyncComponent(props.load)
     }
   } finally {
@@ -33,7 +47,9 @@ onMounted(() => {
   timer = setInterval(() => void check(), 30_000)
 })
 onBeforeUnmount(() => {
+  unmounted = true
   if (timer) clearInterval(timer)
+  restore?.()
 })
 </script>
 

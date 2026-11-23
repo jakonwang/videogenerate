@@ -14,6 +14,7 @@ import { isMeteredRequest } from './meterRule'
 import { AI_PROXY_PATH } from '../../../src/shared/cloud/managedSettings'
 import { WEB_API_RENDER, assertWebApiPath } from './webApiPath'
 import { assertOwnPaths as assertOwnPathsIn } from './ownPaths'
+import { stripCredentialOverrides } from './credentialArgs'
 
 type InitMessage = { type: 'init'; baseUrl: string; token: string; userId: string; credentials: ModelCredentials; idleMs: number }
 type CallMessage = { type: 'call'; id: string; ns: string; method: string; args: unknown[] }
@@ -29,11 +30,24 @@ const SERVER_BLOCKED = new Set([
   'clone:getGrsAiCredits',
   'clone:sendProjectToCreative',
   'clone:sendShotToCreative',
+  // 导入的字体 / 贴纸只在电脑上生效（模板在电脑上成片）
+  'stickers:import',
+  'fonts:import',
 ])
 /** 要用 Remotion 渲染字幕的操作：先向父进程申请渲染名额（全服务器限量） */
 const RENDER_CHANNELS = new Set(['plugin:livePhoto:generateSubtitleVideosForItems'])
 /** 网页调用的命名空间 → 电脑端 IPC 前缀 */
-const CHANNEL_PREFIX: Record<string, string> = { clone: 'clone:', livePhoto: 'plugin:livePhoto:' }
+const CHANNEL_PREFIX: Record<string, string> = {
+  clone: 'clone:',
+  livePhoto: 'plugin:livePhoto:',
+  // 模板库（网页上是电脑端同一个页面）：模板读写、导入视频 AI 识别；内置 LUT / 贴纸 / 字体列表
+  templates: 'templates:',
+  luts: 'luts:',
+  stickers: 'stickers:',
+  fonts: 'fonts:',
+  // 商品库（网页上是电脑端同一个页面）：读写商品、提示词版本、AI 分析 / 标准源图
+  products: 'products:',
+}
 const READ_ONLY = /^(get|list|describe)[A-Z]/
 
 const handlers = new Map<string, Handler>()
@@ -91,7 +105,7 @@ async function syncIfStale() {
   if (Date.now() - lastSyncAt < 10_000) return
   await Promise.race([runSync(), new Promise((resolve) => setTimeout(resolve, 5_000))])
 }
-const REFRESH_BEFORE = new Set(['clone:listProjectSummaries', 'clone:getProject', 'clone:getProjectSummary'])
+const REFRESH_BEFORE = new Set(['clone:listProjectSummaries', 'clone:getProject', 'clone:getProjectSummary', 'templates:list', 'products:list'])
 
 const send = (message: unknown) => process.send?.(message)
 
@@ -184,6 +198,8 @@ async function init(message: InitMessage) {
   registerCloneIpc(host as never)
   registerClonePromptTemplatesIpc(host as never)
   registerLivePhotoIpc(host as never)
+  await registerTemplateHandlers()
+  await registerProductHandlers()
   for (const channel of SERVER_BLOCKED) handlers.delete(channel)
 
   // The first sync brings in projects / products made on the computer; don't keep the page waiting too long for it.
@@ -194,6 +210,38 @@ async function init(message: InitMessage) {
   void import('../../../src/main/modules/live-photo/service')
     .then(({ livePhotoService }) => livePhotoService.resumePendingTasksOnStartup())
     .catch((error) => console.warn('[clone-engine] live photo resume failed', (error as Error)?.message || error))
+}
+
+/**
+ * 模板库：和电脑端 registerTemplatesTasksIpc 里的模板部分相同（生产任务队列不在服务器上跑），
+ * 加上内置 LUT / 贴纸 / 字体列表。导入字体 / 贴纸只在电脑端做（见 SERVER_BLOCKED）。
+ */
+async function registerTemplateHandlers() {
+  const [{ templatesRepo }, { analyzeVideoToTemplateDraft }, { registerMediaAssetsIpc }] = await Promise.all([
+    import('../../../src/main/modules/templates/repo'),
+    import('../../../src/main/modules/templates/analyzeVideoTemplate'),
+    import('../../../src/main/ipc/registerMediaAssetsIpc'),
+  ])
+  handlers.set('templates:list', async () => templatesRepo.list())
+  handlers.set('templates:upsert', async (_e, payload) => templatesRepo.upsert(payload as never))
+  handlers.set('templates:remove', async (_e, id) => templatesRepo.remove(String(id ?? '')))
+  handlers.set('templates:analyzeVideo', async (_e, payload) => {
+    const input = (payload ?? {}) as { videoPath?: string; locale?: string }
+    return analyzeVideoToTemplateDraft({ videoPath: String(input.videoPath ?? ''), locale: input.locale })
+  })
+  // stickers:import / fonts:import are dropped with SERVER_BLOCKED right after this.
+  registerMediaAssetsIpc({ handle: (channel: string, handler: Handler) => void handlers.set(channel, handler) } as never)
+}
+
+/** 商品库：和电脑端 registerProductsIpc 相同，另加「本机商品 id → 云端 id」（交给电脑的调用要用云端 id） */
+async function registerProductHandlers() {
+  const [{ registerProductsIpc }, sync] = await Promise.all([
+    import('../../../src/main/ipc/registerProductsIpc'),
+    import('../../../src/main/modules/cloud-sync/service'),
+  ])
+  registerProductsIpc({ handle: (channel: string, handler: Handler) => void handlers.set(channel, handler) } as never)
+  handlers.set('products:cloudIdOf', async (_e, id) => sync.cloudProductIdForLocal(String(id ?? '')))
+  handlers.set('products:localIdOf', async (_e, id) => sync.localProductIdForCloud(String(id ?? '')))
 }
 
 /** 有图生视频任务在跑（或 3 分钟内有改动）时不退出：任务在这个进程里后台执行 */
@@ -332,15 +380,12 @@ async function webApiRequest(input: WebApiRequest) {
 
 async function handle(message: CallMessage): Promise<unknown> {
   const { materializeCloudFileArgs } = await import('../../../src/main/modules/cloud-sync/relayWorker')
-  const args = await materializeCloudFileArgs(Array.isArray(message.args) ? message.args : [], downloadCloudFile)
+  const raw = Array.isArray(message.args) ? message.args : []
+  const args = await materializeCloudFileArgs(message.ns === 'clone' ? (stripCredentialOverrides(raw) as unknown[]) : raw, downloadCloudFile)
   // webApi: the API path itself ("/plugins/…") is not a file; only the request body can carry file paths.
   assertOwnPaths(message.ns === 'webApi' ? (args[0] as WebApiRequest | undefined)?.body : args)
   if (message.ns === 'media' && message.method === 'publish') return publishMedia((args[0] ?? {}) as { path?: string; width?: number })
   if (message.ns === 'webApi' && message.method === 'request') return webApiRequest((args[0] ?? {}) as WebApiRequest)
-  if (message.ns === 'products' && message.method === 'list') {
-    const { productsRepo } = await import('../../../src/main/modules/products/repo')
-    return productsRepo.list()
-  }
   const prefix = CHANNEL_PREFIX[message.ns]
   if (!prefix) throw new Error('服务器上没有这个功能')
   const channel = `${prefix}${message.method}`

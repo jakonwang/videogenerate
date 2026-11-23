@@ -7,39 +7,21 @@
 import { defineAsyncComponent, getCurrentInstance, onBeforeUnmount, onMounted, shallowRef, type Component } from 'vue'
 import { LoaderCircle } from 'lucide-vue-next'
 import { ensureDesktopI18n } from '@/lib/desktopI18n'
+import { installDesktopApiParts, type ApiParts } from '@/lib/desktopApiParts'
 import DesktopPickerHost from './DesktopPickerHost.vue'
 // 电脑端旧版插件页在 styles.css 里的主题 / 版式规则（构建时从 styles.css 抽出，见 vite.config.ts）
 import 'virtual:desktop-page-themes.css'
 
-type ApiParts = Record<string, unknown>
 const props = defineProps<{ load: () => Promise<{ default: Component }>; api?: () => Promise<{ default: ApiParts }> }>()
 const app = getCurrentInstance()!.appContext.app
 const page = shallowRef<Component>()
 let restore: (() => void) | null = null
 let unmounted = false
 
-function installApi(parts: ApiParts) {
-  const w = window as unknown as { api: Record<string, unknown> }
-  const previous: ApiParts = {}
-  for (const [key, value] of Object.entries(parts)) {
-    previous[key] = w.api[key]
-    const before = w.api[key]
-    // Namespaces are merged so methods the web version doesn't replace keep working. Lookups fall through to the
-    // original object instead of copying it: relay namespaces (lib/desktopRelay) are proxies with nothing to copy.
-    w.api[key] =
-      value && typeof value === 'object' && before && typeof before === 'object'
-        ? new Proxy(value as Record<string | symbol, unknown>, { get: (target, prop) => (prop in target ? target[prop] : (before as Record<string | symbol, unknown>)[prop]) })
-        : value
-  }
-  return () => {
-    for (const [key, value] of Object.entries(previous)) w.api[key] = value
-  }
-}
-
 onMounted(async () => {
   const [, api] = await Promise.all([ensureDesktopI18n(app), props.api?.()])
   if (unmounted) return
-  if (api) restore = installApi(api.default)
+  if (api) restore = installDesktopApiParts(api.default)
   page.value = defineAsyncComponent(props.load)
 })
 onBeforeUnmount(() => {

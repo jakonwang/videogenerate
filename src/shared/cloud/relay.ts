@@ -10,13 +10,28 @@ export const RELAY_MODULES = {
   /** 店铺 / 销售与库存：经营、利润、早报、库存都在电脑上（商家后台登录在电脑上）；打开商家后台窗口只能在电脑端 */
   sellerInventory: { channel: 'plugin:sellerInventory:', blocked: ['openSellerCenter'] },
   /** 混剪数据洞察：成片台账、效果分析、关联投放素材、送去发布 */
-  mixStudio: { channel: 'mixStudio:', only: ['insights', 'ledger', 'refreshPerformance', 'listCreatives', 'linkCreative', 'sendToPublish', 'removeLedgerEntry'] },
-  /** tk创意室右栏：账号调度（只有 cookie 数量，不含 cookie）、提示词版本、设置（只读） */
-  tiktokCreative: { channel: 'plugin:tiktokCreative:', only: ['listAccounts', 'listPromptVersions', 'getSettings', 'listSummary'] },
+  /**
+   * 批量混剪（网页上是电脑端同一组页面，电脑在线时）：方案、预览、成片台账和下单在电脑上执行。
+   * 「从参考视频生成公式」会在电脑上弹选择框，网页改用 formulaFromReferencePath（网页上传的视频）。
+   */
+  mixStudio: { channel: 'mixStudio:', blocked: ['formulaFromReference'] },
+  /** 素材池：电脑上的素材切分打标；「导入」会在电脑上弹选择框，网页改用 importPaths；进度用 latestProgress 读 */
+  mixPool: { channel: 'mixPool:', blocked: ['importFiles'] },
+  /** 生产任务队列（电脑上成片） */
+  tasks: { channel: 'tasks:' },
+  /** 电脑上的软件目录（混剪成片默认输出到电脑的数据目录） */
+  app: { channel: 'app:', only: ['getPaths'] },
+  /**
+   * tk创意室：网页上是电脑端同一个页面，用电脑上的 TikTok 创意账号执行。账号的添加 / 修改 / 测试 / 删除（带 cookie）
+   * 只能在电脑上做；导出由网页自己下载（不写电脑上的文件夹）。
+   */
+  tiktokCreative: { channel: 'plugin:tiktokCreative:', blocked: ['importAccount', 'updateAccount', 'testAccount', 'removeAccount', 'exportItems'] },
+  /** tk创意室「同款参考视频」：在电脑上分析参考视频（网页上传的视频由电脑先下载） */
+  styleReference: { channel: 'plugin:styleReference:', only: ['analyze', 'list'] },
   /** 发布中心（CreatOK）：电脑上的发布凭证和店铺连接；网页选的云端视频由电脑先下载再建草稿（见 CLOUD_FILE_PREFIX） */
   tiktokPublisher: { channel: 'plugin:tiktokPublisher:' },
   /** 设置 → 体检与自动化（系统体检、每日简报 / 每周复盘定时、飞书推送）；每日自动驾驶：网页 / 手机上也能看今日计划、批准或跳过（执行仍在电脑上） */
-  contentHub: { channel: 'contentHub:', only: ['getAutomationSettings', 'saveAutomationSettings', 'testFeishuPush', 'healthCheck', 'autopilotToday', 'autopilotGenerate', 'autopilotApprove', 'autopilotSkip', 'autopilotSaveSettings', 'radarState', 'radarAdd', 'radarRemove', 'radarDismiss', 'radarRefresh'] },
+  contentHub: { channel: 'contentHub:', only: ['getAutomationSettings', 'saveAutomationSettings', 'testFeishuPush', 'healthCheck', 'autopilotToday', 'autopilotGenerate', 'autopilotApprove', 'autopilotSkip', 'autopilotSaveSettings', 'radarState', 'radarAdd', 'radarRemove', 'radarDismiss', 'radarRefresh', 'productOverview', 'saveProductMemory', 'downloadCreativeVideo', 'creativeGenes', 'analyzeCreativeGenes', 'linkContentPerformance', 'unlinkContentPerformance', 'linkProductChannels'] },
   /** 发布中心「关联商品」：电脑端商品库（只读） */
   products: { channel: 'products:', only: ['list'] },
   /** 设置 → 模型与 AI：电脑端的模型密钥（托管字段只返回掩码） */
@@ -27,6 +42,12 @@ export const RELAY_MODULES = {
   webApi: { channel: 'webApi:', only: ['request'] },
   /** 网页显示电脑端页面里的本地图片 / 视频：电脑把文件传到云端（只限软件数据目录） */
   media: { channel: 'relayMedia:', only: ['publish'] },
+  /** 模板：模板库页面指定服务器（模板在服务器引擎里编辑）；批量混剪页面不指定，读电脑上的模板（下单要用电脑上的模板 id） */
+  templates: { channel: 'templates:', only: ['list', 'upsert', 'remove', 'analyzeVideo'] },
+  /** 模板库的 LUT / 贴纸 / 字体下拉：电脑在线时用电脑上的列表（含用户导入的），否则用服务器引擎的内置列表 */
+  luts: { channel: 'luts:', only: ['list'] },
+  stickers: { channel: 'stickers:', only: ['list', 'listUser'] },
+  fonts: { channel: 'fonts:', only: ['list'] },
 } as const satisfies Record<string, { channel: string; blocked?: readonly string[]; only?: readonly string[] }>
 
 export type RelayNamespace = keyof typeof RELAY_MODULES

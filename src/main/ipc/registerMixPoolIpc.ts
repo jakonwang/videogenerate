@@ -4,12 +4,25 @@ import { mixPoolService } from '../modules/mix-pool/service'
 import type { ClipOrigin, ClipRole } from '../../shared/mixPool'
 import type { MixDraft, MixFormula, MixJobInput } from '../../shared/mixFormula'
 import { mixStudioService } from '../modules/mix-studio/service'
+import { registerRelayHandler } from '../modules/cloud-sync/relayWorker'
 
 const asOrigin = (v: unknown): ClipOrigin => (v === 'real' || v === 'ai' ? v : 'unknown')
 const id = (v: unknown) => String(v ?? '').trim()
 
 export function registerMixPoolIpc(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
-  mixPoolService.setProgressListener((p) => getMainWindow()?.webContents.send('mixPool:progress', p))
+  // The web version of these pages (through the live relay) cannot get pushed events: it reads the latest progress instead.
+  const latestProgress = new Map<string, Record<string, unknown> & { at: number }>()
+  mixPoolService.setProgressListener((p) => {
+    getMainWindow()?.webContents.send('mixPool:progress', p)
+    const productId = String((p as { productId?: unknown })?.productId ?? '')
+    if (productId) latestProgress.set(productId, { ...(p as Record<string, unknown>), at: Date.now() })
+  })
+  registerRelayHandler('mixPool:latestProgress', async () => [...latestProgress.values()].filter((p) => Date.now() - p.at < 10 * 60_000))
+  // Web: files picked in the browser arrive as cloudfile: references, downloaded to this computer before the call.
+  registerRelayHandler('mixPool:importPaths', async (_e, raw) => {
+    const payload = raw as { productId?: string; paths?: unknown; origin?: unknown } | undefined
+    return mixPoolService.importFiles(id(payload?.productId), (Array.isArray(payload?.paths) ? payload.paths : []).map(id).filter(Boolean), asOrigin(payload?.origin))
+  })
 
   ipcMain.handle('mixPool:overview', async (_e, productId: string) => ({
     ...(await mixPoolService.overview(id(productId))),
@@ -45,6 +58,11 @@ export function registerMixPoolIpc(ipcMain: IpcMain, getMainWindow: () => Browse
 }
 
 export function registerMixStudioIpc(ipcMain: IpcMain) {
+  // Web: the reference video picked in the browser (cloudfile:, downloaded before the call).
+  registerRelayHandler('mixStudio:formulaFromReferencePath', async (_e, raw) => {
+    const payload = raw as { videoPath?: string; name?: string } | undefined
+    return mixStudioService.formulaFromReference({ videoPath: id(payload?.videoPath), name: payload?.name })
+  })
   ipcMain.handle('mixStudio:listFormulas', async () => mixStudioService.listFormulas())
   ipcMain.handle('mixStudio:saveFormula', async (_e, formula: MixFormula) => mixStudioService.saveFormula(formula))
   ipcMain.handle('mixStudio:removeFormula', async (_e, formulaId: string) => mixStudioService.removeFormula(id(formulaId)))

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import WebProducts from './web/WebProducts.vue'
-import WebModels from './web/WebModels.vue'
 import { useInWebShell } from '@/lib/layout'
 import { isWeb } from '@/lib/platform'
 import { computed, ref, watch } from 'vue'
@@ -47,9 +45,8 @@ function create() {
 </script>
 
 <template>
-  <WebProducts v-if="inWebShell && tab === 'products'" />
-  <WebModels v-else-if="inWebShell" />
-  <template v-else>
+  <!-- Web: never shown (the router sends /library to the desktop 商品库 / 模特库 pages) -->
+  <template v-if="!inWebShell">
   <PageHeader title="素材库" />
   <main class="m-page">
     <div class="seg" role="tablist">

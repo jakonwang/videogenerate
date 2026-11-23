@@ -117,12 +117,28 @@ async function defaultCloudFileDownloader(): Promise<CloudFileDownloader> {
 // A web page never runs on this computer, so progress events sent to the "sender" go nowhere.
 const fakeEvent = { sender: { send: () => undefined, isDestroyed: () => false, id: -1 } } as unknown as IpcMainInvokeEvent
 
+/**
+ * 网页的商品页面（服务器引擎上）传来的是云端商品 id：这些调用先换成这台电脑上的商品 id。
+ * 第一个参数是 id 本身，或带 productId 的对象。
+ */
+const PRODUCT_ID_CALLS = new Set(['contentHub.productOverview', 'contentHub.creativeGenes', 'contentHub.analyzeCreativeGenes', 'contentHub.saveProductMemory', 'contentHub.linkProductChannels'])
+async function toLocalProductIds(call: RelayCall, args: unknown[]): Promise<unknown[]> {
+  if (!PRODUCT_ID_CALLS.has(`${call.ns}.${call.method}`) || !args.length) return args
+  const { localProductIdForCloud } = await import('./service')
+  const [first, ...rest] = args
+  if (typeof first === 'string') return [await localProductIdForCloud(first), ...rest]
+  if (first && typeof first === 'object' && typeof (first as { productId?: unknown }).productId === 'string') {
+    return [{ ...(first as object), productId: await localProductIdForCloud((first as { productId: string }).productId) }, ...rest]
+  }
+  return args
+}
+
 export async function runRelayCall(call: RelayCall): Promise<RelayResult> {
   try {
     if (!relayAllows(call.ns, call.method)) return { id: call.id, ok: false, error: '这个操作需要在电脑端完成' }
     const handler = handlers.get(relayChannel(call.ns as RelayNamespace, call.method))
     if (!handler) return { id: call.id, ok: false, error: '电脑端版本不支持这个操作，请更新 Klipmill' }
-    const args = await materializeCloudFiles(Array.isArray(call.args) ? call.args : [])
+    const args = await toLocalProductIds(call, await materializeCloudFiles(Array.isArray(call.args) ? call.args : []))
     const result = await handler(fakeEvent, ...args)
     // Same shape the desktop page gets over IPC (structured clone ≈ JSON here).
     return { id: call.id, ok: true, result: result === undefined ? null : JSON.parse(JSON.stringify(result)) }

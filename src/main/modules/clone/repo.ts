@@ -2802,10 +2802,12 @@ export const cloneRepo = {
         return next
       })
 
+      // Model tasks pass through untouched: leaving them out made every list empty and this write erase them.
+      const modelTasks = db.modelTasks ?? []
       if (changed || JSON.stringify(migratedProjects) !== JSON.stringify(db.projects)) {
-        await writeCloneDbSource({ projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary })
+        await writeCloneDbSource({ projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary, modelTasks })
       }
-      return { projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary }
+      return { projects: migratedProjects, projectGroups: normalizedGroups, modelIdentityLibrary: normalizedLibrary, modelTasks }
     })
   },
 

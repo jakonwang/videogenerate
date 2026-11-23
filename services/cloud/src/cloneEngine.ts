@@ -1,9 +1,10 @@
 import { fork, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { basename, isAbsolute, join, resolve, sep } from 'node:path'
 import { CloudError, badRequest } from './security'
 import type { ModelCredentials } from '../../../src/main/modules/clone/types'
+import { cloudFileRef } from '../../../src/shared/cloud/relay'
 
 /**
  * 服务器上的复刻引擎：网页的复刻页面（和电脑端同一个页面）调用的复刻功能在服务器上执行，不需要电脑开着。
@@ -14,6 +15,7 @@ import type { ModelCredentials } from '../../../src/main/modules/clone/types'
 
 const CALL_TIMEOUT_MS = 10 * 60_000
 const WORKER_PATH = resolve(__dirname, '../engine/cloneWorker.ts')
+const RESOURCES_DIR = resolve(__dirname, '../../../resources')
 
 export type CloneEngineDeps = {
   dataDir: string
@@ -83,7 +85,15 @@ export function createCloneEngine(deps: CloneEngineDeps) {
     mkdirSync(join(root, 'data'), { recursive: true })
     const child = fork(WORKER_PATH, [], {
       cwd: root,
-      env: { ...process.env, VIDEOGENERATE_USER_DATA_DIR: root, VIDEOGENERATE_DATA_DIR: join(root, 'data'), VIDEOGENERATE_CLONE_ENGINE: '1', ...(deps.fontsDir ? { VIDEOGENERATE_FONTS_DIR: deps.fontsDir } : {}) },
+      env: {
+        ...process.env,
+        VIDEOGENERATE_USER_DATA_DIR: root,
+        VIDEOGENERATE_DATA_DIR: join(root, 'data'),
+        VIDEOGENERATE_CLONE_ENGINE: '1',
+        // 模板库的内置 LUT / 贴纸（和电脑端安装包里的同一份 resources/）
+        VIDEOGENERATE_RESOURCES_DIR: RESOURCES_DIR,
+        ...(deps.fontsDir ? { VIDEOGENERATE_FONTS_DIR: deps.fontsDir } : {}),
+      },
       // The desktop clone code logs a lot of debug lines to stdout; keep warnings / errors (stderr) only.
       stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
     })
@@ -195,10 +205,38 @@ export function routesToCloneEngine(engine: CloneEngine, userId: string, body: {
   if (ns === 'clone') return !DESKTOP_CLONE_METHODS.has(method)
   // 图生视频、批量字幕（电脑端本地 Web API）：网页和电脑端同一个页面，在服务器引擎上执行
   if (ns === 'livePhoto' || ns === 'webApi') return true
-  if (ns === 'products' && method === 'list') return body?.target === 'server'
+  // 模板库：模板在引擎里编辑并经云端和电脑互通；素材下拉列表网页先问电脑，电脑不在线再指定服务器
+  if (ns === 'templates') return body?.target === 'server'
+  if (ns === 'luts' || ns === 'stickers' || ns === 'fonts') return body?.target === 'server'
+  // 商品：网页的商品库页面和复刻页面指定服务器（引擎里的商品）；发布中心等不指定，用电脑上的商品
+  if (ns === 'products') return body?.target === 'server'
   if (ns === 'media' && method === 'publish') {
     const input = Array.isArray(body?.args) ? (body.args[0] as { path?: unknown } | undefined) : undefined
     return engine.ownsPath(userId, input?.path)
   }
   return false
+}
+
+/**
+ * 交给电脑执行的调用里，如果带着服务器引擎里的文件路径（网页上的复刻成片、图生视频成片都在引擎里），
+ * 电脑是读不到的：先由引擎把文件传到云端，换成 `cloudfile:` 引用，电脑执行前会自动下载。
+ * 例：发布中心从「复刻成片」选视频建草稿。
+ */
+export async function engineFilesToCloudRefs(engine: Pick<CloneEngine, 'call' | 'ownsPath'>, userId: string, args: unknown): Promise<unknown> {
+  const published = new Map<string, Promise<string>>()
+  const convert = (path: string) => {
+    let ref = published.get(path)
+    if (!ref) {
+      ref = engine.call(userId, 'media', 'publish', [{ path }]).then(({ result }) => cloudFileRef((result as { fileId: string }).fileId, basename(path)))
+      published.set(path, ref)
+    }
+    return ref
+  }
+  const walk = async (value: unknown): Promise<unknown> => {
+    if (typeof value === 'string') return isAbsolute(value.trim()) && engine.ownsPath(userId, value) ? convert(value.trim()) : value
+    if (Array.isArray(value)) return Promise.all(value.map(walk))
+    if (value && typeof value === 'object') return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await walk(item)] as const)))
+    return value
+  }
+  return walk(args)
 }

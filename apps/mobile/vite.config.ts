@@ -15,6 +15,8 @@ const DESKTOP_SHIMS: Record<string, string> = {
   'lib/localMedia': 'lib/desktopShims/localMedia.ts',
   // 电脑端本机 Web API 客户端 → 交给服务器引擎（批量字幕）
   'lib/webApiClient': 'lib/desktopShims/webApiClient.ts',
+  // 电脑端文案包只带中文（网页版界面固定中文），省掉英文 / 越南文约 2/3 的下载量
+  i18n: 'lib/desktopShims/i18n.ts',
 }
 const isDesktopFile = (importer?: string) => Boolean(importer && /[\/]src[\/]renderer[\/]src[\/]/.test(importer))
 
@@ -73,6 +75,7 @@ export default defineConfig(({ mode }) => ({
       { find: '@design', replacement: fileURLToPath(new URL('../../src/renderer/src/design-system', import.meta.url)) },
       // Desktop pages reused as-is on the web (e.g. 选品方案), backed by web stand-ins for window.api.
       { find: '@desktop-views', replacement: fileURLToPath(new URL('../../src/renderer/src/ui/views', import.meta.url)) },
+      { find: /^@desktop-src\/i18n$/, replacement: fileURLToPath(new URL('./src/lib/desktopShims/i18n.ts', import.meta.url)) },
       { find: '@desktop-src', replacement: fileURLToPath(new URL('../../src/renderer/src', import.meta.url)) },
     ],
   },

@@ -15,9 +15,10 @@ function isCube(n: string): boolean {
   return /\.cube$/i.test(n) && !n.startsWith('.')
 }
 
-/** 主进程 out/main/resources/luts、或项目根 resources/luts（开发 cwd） */
+/** 主进程 out/main/resources/luts、或项目根 resources/luts（开发 cwd）；服务器复刻引擎用 VIDEOGENERATE_RESOURCES_DIR 指定 */
 export function findBundledLutsDir(): string | null {
-  const candidates = [join(__dirname, 'resources', 'luts'), join(process.cwd(), 'resources', 'luts')]
+  const override = String(process.env.VIDEOGENERATE_RESOURCES_DIR || '').trim()
+  const candidates = [join(__dirname, 'resources', 'luts'), join(process.cwd(), 'resources', 'luts'), ...(override ? [join(override, 'luts')] : [])]
   for (const d of candidates) {
     if (!existsDir(d)) continue
     try {

@@ -44,6 +44,14 @@ const LOCAL: Partial<Record<RelayNamespace, Record<string, (...args: any[]) => u
       throw new Error('店小秘登录要在电脑端完成：打开电脑上的 Klipmill → 店小秘库存 → 登录')
     },
   },
+  tiktokCreative: Object.fromEntries(
+    ['importAccount', 'updateAccount', 'testAccount', 'removeAccount'].map((method) => [
+      method,
+      async () => {
+        throw new Error('添加、修改、测试或删除 TikTok 账号要在电脑端操作（账号 cookie 只保存在电脑上）')
+      },
+    ]),
+  ),
   tiktokCreatorHub: {
     openBackend: async () => {
       throw new Error('店铺后台带着电脑上的登录，只能在电脑端打开')
@@ -54,27 +62,58 @@ const LOCAL: Partial<Record<RelayNamespace, Record<string, (...args: any[]) => u
   },
 }
 
-function proxyFor(ns: RelayNamespace) {
+type Methods = Record<string, (...args: unknown[]) => unknown>
+
+/**
+ * Progress reads the desktop pages poll every ~1 s (GMV 同步进度 900 ms, 达人中心 1.5 s). On the web each one
+ * travels browser → cloud → computer and back, so the same call (same arguments) shares the answer that is in
+ * flight or less than POLL_REUSE_MS old. Read-only methods only.
+ */
+const POLLED = new Set(['tiktokGmvMax.getSyncJob', 'tiktokCreatorHub.getSyncProgress', 'sellerInventory.getProgress', 'sellerInventory.dataVersion'])
+const POLL_REUSE_MS = 3_000
+const recentPolls = new Map<string, { at: number; result: Promise<unknown> }>()
+function sharePoll(key: string, run: () => Promise<unknown>) {
+  const hit = recentPolls.get(key)
+  if (hit && Date.now() - hit.at < POLL_REUSE_MS) return hit.result
+  const entry = { at: Date.now(), result: run() }
+  recentPolls.set(key, entry)
+  // A failed read is not reused: the next poll asks again.
+  entry.result.catch(() => recentPolls.get(key) === entry && recentPolls.delete(key))
+  return entry.result
+}
+
+/**
+ * `webOwn`: the web's own stand-in for this namespace installed before the relay (e.g. lib/researchApi's cloud
+ * `products.list / upsert`). Methods the relay does not allow use it, and so does an allowed call while the
+ * computer is offline — otherwise installing the relay would silently replace those stand-ins.
+ */
+function proxyFor(ns: RelayNamespace, webOwn?: Methods) {
   return new Proxy({} as Record<string, (...args: unknown[]) => Promise<unknown>>, {
     get(_target, method) {
       if (typeof method !== 'string' || method === 'then') return undefined
       const local = LOCAL[ns]?.[method]
       if (local) return local
+      const own = typeof webOwn?.[method] === 'function' ? webOwn[method]!.bind(webOwn) : undefined
       // Event subscriptions (onChanged, onProgress…) cannot cross the relay: pages refresh by polling instead.
-      if (/^on[A-Z]/.test(method)) return () => () => undefined
-      if (!relayAllows(ns, method)) return async () => { throw new Error('这个操作需要在电脑端完成') }
-      return async (...args: unknown[]) => {
+      if (/^on[A-Z]/.test(method)) return own ?? (() => () => undefined)
+      if (!relayAllows(ns, method)) return own ?? (async () => { throw new Error('这个操作需要在电脑端完成') })
+      const call = async (...args: unknown[]) => {
+        // clone / livePhoto always run on the server engine (services/cloud/src/cloneEngine.ts)
+        const toServer = ns === 'clone' || ns === 'livePhoto' || serverTargets.has(ns)
+        if (!toServer && own && desktopRelayOnline.value === false) return own(...args)
         try {
-          // clone / livePhoto always run on the server engine (services/cloud/src/cloneEngine.ts)
-          const toServer = ns === 'clone' || ns === 'livePhoto' || serverTargets.has(ns)
           const result = await cloud.relay.call(ns, method, args, serverTargets.has(ns) ? 'server' : undefined)
           if (!toServer) desktopRelayOnline.value = true
           return result
         } catch (error) {
-          if ((error as { code?: string })?.code === 'DESKTOP_OFFLINE') desktopRelayOnline.value = false
+          if ((error as { code?: string })?.code !== 'DESKTOP_OFFLINE') throw error
+          desktopRelayOnline.value = false
+          if (!toServer && own) return own(...args)
           throw error
         }
       }
+      const key = `${ns}.${method}`
+      return POLLED.has(key) ? (...args: unknown[]) => sharePoll(`${key}:${JSON.stringify(args)}`, () => call(...args)) : call
     },
   })
 }
@@ -107,7 +146,8 @@ function pickFilesViaCloud(options: { multiple?: boolean; filters?: Array<{ exte
 export function installDesktopRelayApi() {
   const w = window as unknown as { api?: Record<string, unknown> }
   // clone / mixStudio only expose a few methods (see RELAY_MODULES); other web code never uses them.
-  w.api = { ...(w.api ?? {}), ...Object.fromEntries(RELAY_NAMESPACES.map((ns) => [ns, proxyFor(ns)])) }
+  const before = w.api ?? {}
+  w.api = { ...before, ...Object.fromEntries(RELAY_NAMESPACES.map((ns) => [ns, proxyFor(ns, before[ns] as Methods | undefined)])) }
   w.api.pickFiles ??= pickFilesViaCloud
   // 电脑端页面的「打开文件 / 在文件夹中显示」：把电脑上的文件经云端在新标签页打开；导出到电脑文件夹要在电脑端做
   // Merged: lib/researchApi installs shell.openExternal first.

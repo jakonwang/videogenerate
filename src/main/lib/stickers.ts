@@ -22,9 +22,10 @@ function existsDir(p: string): boolean {
   }
 }
 
-/** 主进程 out/main/resources/stickers、或项目根 resources/stickers（开发 cwd） */
+/** 主进程 out/main/resources/stickers、或项目根 resources/stickers（开发 cwd）；服务器复刻引擎用 VIDEOGENERATE_RESOURCES_DIR 指定 */
 export function findBundledStickersDir(): string | null {
-  const candidates = [join(__dirname, 'resources', 'stickers'), join(process.cwd(), 'resources', 'stickers')]
+  const override = String(process.env.VIDEOGENERATE_RESOURCES_DIR || '').trim()
+  const candidates = [join(__dirname, 'resources', 'stickers'), join(process.cwd(), 'resources', 'stickers'), ...(override ? [join(override, 'stickers')] : [])]
   for (const d of candidates) {
     if (!existsDir(d)) continue
     try {

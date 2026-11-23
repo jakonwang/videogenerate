@@ -18,11 +18,11 @@ export type MobileModule = {
 
 export const MODULES: MobileModule[] = [
   { key: 'research', name: '选品', description: '在手机上直接搜索抖音商品，按销量采集', icon: ScanSearch, group: 'research', phase: 1, route: '/research' },
-  { key: 'products', name: '商品库', description: '商品图片和资料，与电脑端同步', icon: Boxes, group: 'library', phase: 1, route: '/library?tab=products' },
+  { key: 'products', name: '商品库', description: '商品图片和资料，与电脑端同步', icon: Boxes, group: 'library', phase: 1, route: isWeb ? '/products' : '/library?tab=products' },
   { key: 'assets', name: '素材库', description: '自己上传的视频、图片、音乐，按文件夹整理，做视频时直接选', icon: FolderOpen, group: 'library', phase: 2, route: '/assets' },
   { key: 'works', name: '作品库', description: '所有生成的图片和视频，存相册、分享、加到商品', icon: LayoutGrid, group: 'library', phase: 2, route: '/works' },
   { key: 'tasks', name: '任务中心', description: '正在跑和失败的任务汇总', icon: ListChecks, group: 'library', phase: 2, route: '/tasks' },
-  { key: 'models', name: '模特库', description: '模特形象资料，与电脑端同步', icon: Users, group: 'library', phase: 1, route: '/library?tab=models' },
+  { key: 'models', name: '模特库', description: '模特形象资料，与电脑端同步', icon: Users, group: 'library', phase: 1, route: isWeb ? '/models' : '/library?tab=models' },
 
   { key: 'clone', name: '复刻', description: '对标视频拆解，AI 生成同款', icon: Copy, group: 'create', phase: 2, route: '/clone' },
   { key: 'producer', name: 'AI 制片人', description: '一句话安排整条生产线', icon: Wand2, group: 'create', phase: 2, route: '/producer' },

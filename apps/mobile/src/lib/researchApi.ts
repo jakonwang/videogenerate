@@ -25,20 +25,49 @@ async function status() {
   return { record, online }
 }
 
+/**
+ * Result images load in the background, a few at a time: the list is returned at once (without the images not
+ * loaded yet) and the pages, which poll every few seconds, pick the images up as they arrive. Awaiting each image
+ * in turn made the first load wait for hundreds of downloads.
+ */
 const imageCache = new Map<string, string>()
-async function imageUrl(fileId?: string) {
+const imageQueue: string[] = []
+const imageQueued = new Set<string>()
+let imageActive = 0
+const IMAGE_PARALLEL = 6
+function pumpImages() {
+  while (imageActive < IMAGE_PARALLEL && imageQueue.length) {
+    const fileId = imageQueue.shift()!
+    imageActive += 1
+    // A missing image is remembered as '' so the pages' polling does not download it again and again.
+    void fileUrl(fileId)
+      .then((url) => imageCache.set(fileId, url || ''))
+      .catch(() => imageCache.set(fileId, ''))
+      .finally(() => {
+        imageQueued.delete(fileId)
+        imageActive -= 1
+        pumpImages()
+      })
+  }
+}
+function imageUrl(fileId?: string) {
   if (!fileId) return undefined
-  if (!imageCache.has(fileId)) imageCache.set(fileId, (await fileUrl(fileId).catch(() => '')) || '')
-  return imageCache.get(fileId) || undefined
+  if (imageCache.has(fileId)) return imageCache.get(fileId) || undefined
+  if (!imageQueued.has(fileId)) {
+    imageQueued.add(fileId)
+    imageQueue.push(fileId)
+    pumpImages()
+  }
+  return undefined
 }
 
-async function allResults(): Promise<ProductResearchResult[]> {
+async function allResults(withImages = true): Promise<ProductResearchResult[]> {
   const records = await listRecords<SyncPrResult>(SYNC_COLLECTIONS.prResults)
   const list: ProductResearchResult[] = []
   for (const record of records) {
     if (!record.data) continue
     const { imageFileId, ...rest } = record.data
-    list.push({ ...rest, id: record.id, imageDataUrl: await imageUrl(imageFileId) })
+    list.push({ ...rest, id: record.id, imageDataUrl: withImages ? imageUrl(imageFileId) : undefined })
   }
   // Phone App captures not yet imported by the computer: show them in 手机采集 too.
   const phone = await listRecords<any>(SYNC_COLLECTIONS.researchResults)
@@ -60,7 +89,7 @@ async function allResults(): Promise<ProductResearchResult[]> {
       rank: item.rank,
       capturedAt: item.capturedAt ?? record.updatedAt,
       confidence: 0.88,
-      imageDataUrl: await imageUrl(item.image?.fileId),
+      imageDataUrl: withImages ? imageUrl(item.image?.fileId) : undefined,
     })
   }
   return list
@@ -132,11 +161,14 @@ const productResearch = {
   },
 
   async listSchemes(): Promise<ProductResearchScheme[]> {
-    const [records, results] = await Promise.all([schemeRecords(), allResults()])
+    // Counts only: no result images needed here.
+    const [records, results] = await Promise.all([schemeRecords(), allResults(false)])
+    const countBy = new Map<string, number>()
+    for (const r of results) if (r.schemeId) countBy.set(r.schemeId, (countBy.get(r.schemeId) ?? 0) + 1)
     const schemes = records.map(({ id, data }) => ({
       ...data.scheme,
       id,
-      resultCount: results.filter((r) => r.schemeId === id).length,
+      resultCount: countBy.get(id) ?? 0,
       candidateCount: data.state?.candidateIds?.length ?? 0,
     }))
     // Phone captures without a computer yet: a read-only 手机采集 scheme.
