@@ -76,3 +76,24 @@ watch(() => route.path, (path) => rememberSectionTab(path), { immediate: true })
 .section-switch__icon { width: 15px; height: 15px; flex-shrink: 0; stroke-width: 1.9; opacity: 0.8; }
 .section-switch__item.is-active .section-switch__icon { color: var(--vg-accent); opacity: 1; }
 </style>
+
+<style>
+/*
+ * Pages under a switcher share one frame, so every page's content starts at the same 20px inset as the switcher:
+ * the workspace adds no padding of its own (older pages got 10–14px from the layout on top of their own padding),
+ * and full-height pages that scroll themselves fill the space left under the switcher instead of 100% of it.
+ * Doubled classes outrank the shared plugin-workspace rules in styles.css.
+ */
+html[data-app-theme] body #app :is(.app-shell, .web-shell) :is(.ds-workspace.ds-workspace, .web-workspace.web-workspace):has(> .section-switch) {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+}
+html[data-app-theme] body #app :is(.app-shell, .web-shell) :is(.ds-workspace, .web-workspace):has(> .section-switch) > .section-switch {
+  flex: 0 0 auto;
+}
+html[data-app-theme] body #app :is(.app-shell, .web-shell) :is(.ds-workspace, .web-workspace):has(> .section-switch) > :is(.plugin-workspace-standard, .live-photo-page, .asset-page) {
+  flex: 1 1 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+}</style>
