@@ -21,7 +21,12 @@ export type ManagedSoftwareSettings = {
     chat: { platform: ChatPlatformProfile; model: string }
   }
   qiniu: { accessKey: string; secretKey: string; bucket: string; domain: string; uploadHost: string; prefix: string }
+  /** 批量换景「保真」用的腾讯云数据万象抠图，只在服务器使用，不下发 */
+  matting: ManagedMatting
 }
+
+export const MATTING_TYPES = ['AIPicMatting', 'AIPortraitMatting', 'GoodsMatting'] as const
+export type ManagedMatting = { secretId: string; secretKey: string; bucket: string; region: string; type: (typeof MATTING_TYPES)[number] }
 
 /** 管理后台读取时，密钥字段只返回掩码 */
 export const SECRET_MASK_PREFIX = '••••'
@@ -46,6 +51,7 @@ export function createDefaultManagedSettings(): ManagedSoftwareSettings {
       chat: { platform: 'vectorengine', model: '' },
     },
     qiniu: { accessKey: '', secretKey: '', bucket: '', domain: '', uploadHost: '', prefix: '' },
+    matting: { secretId: '', secretKey: '', bucket: '', region: '', type: 'AIPicMatting' },
   }
 }
 
@@ -69,6 +75,9 @@ export function normalizeManagedSettings(input: unknown): ManagedSoftwareSetting
   const chatPlatform = IMAGE_CHAT_PLATFORMS.includes(cap.chat?.platform) ? cap.chat.platform : base.capabilities.chat.platform
   const quality = ['low', 'medium', 'high'].includes(cap.image?.quality) ? cap.image.quality : 'high'
   const q = src.qiniu ?? ({} as any)
+  const m = src.matting ?? ({} as any)
+  // 桶名、地域会拼进请求域名，只留合法字符
+  const hostPart = (value: unknown) => str(value, 80).toLowerCase().replace(/[^a-z0-9-]/g, '')
   return {
     enabled: Boolean(src.enabled),
     platforms,
@@ -85,6 +94,13 @@ export function normalizeManagedSettings(input: unknown): ManagedSoftwareSetting
       domain: str(q.domain),
       uploadHost: str(q.uploadHost),
       prefix: str(q.prefix, 120),
+    },
+    matting: {
+      secretId: str(m.secretId),
+      secretKey: str(m.secretKey),
+      bucket: hostPart(m.bucket),
+      region: hostPart(m.region),
+      type: MATTING_TYPES.includes(m.type) ? m.type : 'AIPicMatting',
     },
   }
 }
@@ -103,6 +119,7 @@ export function maskManagedSettings(settings: ManagedSoftwareSettings): ManagedS
     platforms,
     tikhubApiKey: maskSecret(settings.tikhubApiKey),
     qiniu: { ...settings.qiniu, accessKey: maskSecret(settings.qiniu.accessKey), secretKey: maskSecret(settings.qiniu.secretKey) },
+    matting: { ...settings.matting, secretId: maskSecret(settings.matting.secretId), secretKey: maskSecret(settings.matting.secretKey) },
   }
 }
 
@@ -121,6 +138,11 @@ export function mergeManagedSecrets(incoming: ManagedSoftwareSettings, previous:
       ...incoming.qiniu,
       accessKey: keep(incoming.qiniu.accessKey, previous.qiniu.accessKey),
       secretKey: keep(incoming.qiniu.secretKey, previous.qiniu.secretKey),
+    },
+    matting: {
+      ...incoming.matting,
+      secretId: keep(incoming.matting.secretId, previous.matting.secretId),
+      secretKey: keep(incoming.matting.secretKey, previous.matting.secretKey),
     },
   }
 }
@@ -274,6 +296,7 @@ export function stripManagedSecretsForClient(settings: ManagedSoftwareSettings):
   }
   copy.tikhubApiKey = copy.tikhubApiKey ? PROXY_KEY_PLACEHOLDER : ''
   copy.qiniu = { ...copy.qiniu, accessKey: '', secretKey: '' }
+  copy.matting = createDefaultManagedSettings().matting
   return copy
 }
 
@@ -290,5 +313,6 @@ export function toProxiedManagedSettings(settings: ManagedSoftwareSettings, inpu
   }
   copy.tikhubApiKey = copy.tikhubApiKey ? input.token : ''
   copy.qiniu = { ...copy.qiniu, accessKey: '', secretKey: '' }
+  copy.matting = createDefaultManagedSettings().matting
   return copy
 }

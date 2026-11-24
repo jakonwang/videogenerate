@@ -185,32 +185,3 @@ export function checkKeep(stats: MaskStats, canvas: { width: number; height: num
     { key: 'frame', level: cut || badMask ? 'warn' : 'ok' },
   ]
 }
-
-function toLab(r: number, g: number, b: number) {
-  const lin = [r, g, b].map((v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4))
-  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116)
-  const x = f((0.4124 * lin[0]! + 0.3576 * lin[1]! + 0.1805 * lin[2]!) / 0.95047)
-  const y = f(0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!)
-  const z = f((0.0193 * lin[0]! + 0.1192 * lin[1]! + 0.9505 * lin[2]!) / 1.08883)
-  return [116 * y - 16, 500 * (x - y), 200 * (y - z)]
-}
-
-async function personColor(path: string, mask: Buffer, width: number, height: number) {
-  const rgb = await sharp(path).removeAlpha().resize(width, height, { fit: 'fill' }).toColourspace('srgb').raw().toBuffer()
-  const sum = [0, 0, 0]
-  let n = 0
-  for (let i = 0; i < width * height; i += 3) {
-    if (mask[i]! < 230) continue
-    for (let c = 0; c < 3; c += 1) sum[c]! += rgb[i * 3 + c]!
-    n += 1
-  }
-  return n ? toLab(sum[0]! / n, sum[1]! / n, sum[2]! / n) : null
-}
-
-/** 融合模式：整张重画，比较前后人物区域的平均颜色（亮度会随场景变，主要看色度） */
-export async function checkBlendColor(before: { path: string; mask: Buffer; width: number; height: number }, after: { path: string; mask: Buffer; width: number; height: number }): Promise<SceneSwapCheck> {
-  const a = await personColor(before.path, before.mask, before.width, before.height)
-  const b = await personColor(after.path, after.mask, after.width, after.height)
-  if (!a || !b) return { key: 'color', level: 'warn' }
-  return { key: 'color', level: Math.hypot((a[0]! - b[0]!) * 0.4, a[1]! - b[1]!, a[2]! - b[2]!) > 7 ? 'warn' : 'ok' }
-}

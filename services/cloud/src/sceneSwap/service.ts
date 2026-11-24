@@ -28,7 +28,7 @@ import {
   type SceneSwapScene,
   type SceneSwapSize,
 } from '../../../../src/shared/sceneSwap'
-import { checkBlendColor, checkKeep, composeKeep, maskStats, normalizeSource, readMask, type MaskStats } from './compose'
+import { checkKeep, composeKeep, maskStats, normalizeSource, readMask, type MaskStats } from './compose'
 import type { Matting } from './matting'
 import { blendPrompt, inspectPrompt, parseInspection, platePrompt } from './prompts'
 
@@ -202,7 +202,7 @@ export function createSceneSwapService(deps: {
     const all = new Map(listScenes(userId).map((scene) => [scene.id, scene]))
     const scenes = sceneIds.map((id) => all.get(id) ?? (() => { throw badRequest('有场景已被删除，请重新选择') })())
     const mode: SceneSwapMode = body.mode === 'blend' ? 'blend' : 'keep'
-    if (mode === 'keep' && !deps.matting.available()) throw new CloudError('NO_ENTITLEMENT', '服务器还没有安装抠图组件，暂时不能用保真模式，请联系客服', 503)
+    if (mode === 'keep' && !deps.matting.available()) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置抠图服务，暂时不能用保真模式', 503)
     deps.assertConfigured()
     for (const image of images) if (!deps.sync.readFile(userId, image.fileId).mime.startsWith('image/')) throw badRequest(`「${image.name}」不是图片`)
     const size: SceneSwapSize = body.size === '3:4' || body.size === '1:1' || body.size === '9:16' ? body.size : 'original'
@@ -376,9 +376,9 @@ export function createSceneSwapService(deps: {
 
   async function attempt(row: ItemRow, batch: BatchData, workDir: string, reasons: string[]): Promise<{ output: string; checks: SceneSwapCheck[] }> {
     const data = parse<ItemData>(row.data)
-    const canMatte = deps.matting.available()
-    if (batch.mode === 'keep' && !canMatte) throw new Error('服务器的抠图组件不可用')
-    const source = await prepareSource(row.user_id, data.sourceFileId, canMatte)
+    if (batch.mode === 'keep' && !deps.matting.available()) throw new Error('管理员还没有配置抠图服务')
+    // 抠图按张收费，融合模式用不到就不抠
+    const source = await prepareSource(row.user_id, data.sourceFileId, batch.mode === 'keep')
     const scenePath = join(workDir, 'scene.png')
     if (!existsSync(scenePath)) await normalizeSource(deps.sync.readFile(row.user_id, data.sceneFileId).body, scenePath)
     const scene = { fileId: data.sceneFileId, path: scenePath }
@@ -412,16 +412,7 @@ export function createSceneSwapService(deps: {
       deps.quota.record(row.user_id, ok)
     }
     await sharp(rendered).rotate().flatten({ background: '#ffffff' }).jpeg({ quality: 95 }).toFile(output)
-    const checks = await vision('blend', source.path, output)
-    if (source.mask) {
-      const maskPath = join(workDir, `mask_${randomUUID()}.png`)
-      await deps.matting.run(output, maskPath)
-      const meta = await sharp(output).metadata()
-      const mask = await readMask(maskPath, meta.width!, meta.height!)
-      const color = await checkBlendColor({ path: source.path, mask: source.mask, width: source.width, height: source.height }, { path: output, mask, width: meta.width!, height: meta.height! })
-      return { output, checks: [...checks.filter((check) => check.key !== 'color'), checks.some((check) => check.key === 'color' && check.level === 'warn') ? { key: 'color', level: 'warn' } : color] }
-    }
-    return { output, checks }
+    return { output, checks: await vision('blend', source.path, output) }
   }
 
   /** 融合模式没法确认衣服没变时也算不确定；保真模式衣服来自原图，只看明确的问题 */
@@ -527,7 +518,6 @@ export function createSceneSwapService(deps: {
     addScene, removeScene, systemScenes, start: pump, cleanupCache, idle,
     close: () => {
       closed = true
-      deps.matting.close()
     },
   }
 }

@@ -231,7 +231,6 @@
     "electron-vite": "^3.1.0",
     "eslint": "^9.20.1",
     "globals": "^15.15.0",
-    "onnxruntime-node": "1.20.1",
     "playwright": "^1.59.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.0",

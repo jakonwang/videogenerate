@@ -947,7 +947,7 @@
       "blend": "融合"
     },
     "keepHint": "保留原图人物和衣服",
-    "keepUnavailable": "服务器还没装抠图组件，暂不可用",
+    "keepUnavailable": "管理员还没配置抠图服务，暂不可用",
     "blendHint": "更自然，衣服细节可能变化",
     "images": "原图",
     "scenes": "场景",

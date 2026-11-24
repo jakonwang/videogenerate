@@ -947,7 +947,7 @@
       "blend": "Hòa trộn"
     },
     "keepHint": "Giữ người và quần áo trong ảnh gốc",
-    "keepUnavailable": "Máy chủ chưa cài công cụ tách nền",
+    "keepUnavailable": "Dịch vụ tách nền chưa được cấu hình",
     "blendHint": "Tự nhiên hơn, chi tiết quần áo có thể đổi",
     "images": "Ảnh gốc",
     "scenes": "Cảnh",

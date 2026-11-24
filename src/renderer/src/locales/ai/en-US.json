@@ -947,7 +947,7 @@
       "blend": "Blend"
     },
     "keepHint": "Keeps the original person and clothes",
-    "keepUnavailable": "Cut-out is not installed on the server yet",
+    "keepUnavailable": "The cut-out service is not configured yet",
     "blendHint": "More natural, clothing details may change",
     "images": "Photos",
     "scenes": "Scenes",

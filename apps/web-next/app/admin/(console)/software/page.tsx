@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Clapperboard, HardDrive, ImageIcon, KeyRound, MessagesSquare, Save, ShieldAlert, SlidersHorizontal } from 'lucide-react'
+import { Clapperboard, HardDrive, ImageIcon, KeyRound, MessagesSquare, Save, Scissors, ShieldAlert, SlidersHorizontal } from 'lucide-react'
 
 import {
   MANAGED_PLATFORM_KEYS,
   MANAGED_PLATFORM_LABELS,
+  MATTING_TYPES,
   SECRET_MASK_PREFIX,
   type ManagedPlatformKey,
   type ManagedSoftwareSettings,
@@ -16,6 +17,12 @@ import { adminClient } from '@/lib/admin-client'
 
 const VIDEO_PLATFORMS: ManagedPlatformKey[] = ['grsai', 'ai666', 'vectorengine', 'xibapi', 'gaorui']
 const IMAGE_CHAT_PLATFORMS: ManagedPlatformKey[] = ['grsai', 'ai666', 'vectorengine']
+
+const MATTING_LABELS: Record<ManagedSoftwareSettings['matting']['type'], string> = {
+  AIPicMatting: '通用抠图（0.02 元/张）',
+  AIPortraitMatting: '人像抠图（0.02 元/张）',
+  GoodsMatting: '商品抠图（0.01 元/张）',
+}
 
 /** 密钥输入框：显示掩码，聚焦时全选方便直接粘贴新值；保留掩码表示不修改 */
 function SecretInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -247,6 +254,32 @@ export default function AdminSoftwareSettingsPage() {
               </AdminField>
               <AdminField label="路径前缀" hint="可选">
                 <Input value={form.qiniu.prefix} placeholder="videogen/" onChange={(e) => setForm({ ...form, qiniu: { ...form.qiniu, prefix: e.target.value } })} />
+              </AdminField>
+            </div>
+          </AdminPanel>
+
+          <AdminPanel icon={Scissors} title="腾讯云抠图" subtitle="AI 修图「保真」模式用，按张收费；密钥只在服务器使用">
+            <div className="admin-form-grid">
+              <AdminField label="SecretId" hint="建议用只授权这个存储桶的子账号">
+                <SecretInput value={form.matting.secretId} onChange={(v) => setForm({ ...form, matting: { ...form.matting, secretId: v } })} />
+              </AdminField>
+              <AdminField label="SecretKey">
+                <SecretInput value={form.matting.secretKey} onChange={(v) => setForm({ ...form, matting: { ...form.matting, secretKey: v } })} />
+              </AdminField>
+              <AdminField label="存储桶" hint="私有读写，已绑定数据万象">
+                <Input value={form.matting.bucket} placeholder="matting-1250000000" onChange={(e) => setForm({ ...form, matting: { ...form.matting, bucket: e.target.value } })} />
+              </AdminField>
+              <AdminField label="地域">
+                <Input value={form.matting.region} placeholder="ap-guangzhou" onChange={(e) => setForm({ ...form, matting: { ...form.matting, region: e.target.value } })} />
+              </AdminField>
+              <AdminField label="抠图类型">
+                <select className={selectClass} value={form.matting.type} onChange={(e) => setForm({ ...form, matting: { ...form.matting, type: e.target.value as ManagedSoftwareSettings['matting']['type'] } })}>
+                  {MATTING_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {MATTING_LABELS[type]}
+                    </option>
+                  ))}
+                </select>
               </AdminField>
             </div>
           </AdminPanel>

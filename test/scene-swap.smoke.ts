@@ -13,9 +13,10 @@ import { join } from 'node:path'
 import sharp from 'sharp'
 import { createCloudApp } from '../services/cloud/src/app'
 import { MANAGED_SETTINGS_KEY } from '../services/cloud/src/service'
+import { cosAuthorization, createMatting } from '../services/cloud/src/sceneSwap/matting'
 import { canvasFor, composeKeep, maskStats, normalizeSource, readMask } from '../services/cloud/src/sceneSwap/compose'
 import { createCloudClient } from '../src/shared/cloud/client'
-import { createDefaultManagedSettings } from '../src/shared/cloud/managedSettings'
+import { createDefaultManagedSettings, maskManagedSettings, mergeManagedSecrets, normalizeManagedSettings, stripManagedSecretsForClient, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
 import { SYNC_COLLECTIONS } from '../src/shared/cloud/sync'
 import { styleGroupOf } from '../src/shared/sceneSwap'
 
@@ -79,6 +80,51 @@ async function main() {
     assert.equal(maskStats(mask, W, H).bottom, false)
   }
 
+  // ---- 腾讯云抠图：签名、上传→抠图→删除、限流重试、尺寸不一致要报错、密钥不下发
+  {
+    const cfg = { secretId: 'AKID', secretKey: 'SECRET', bucket: 'b-1250000000', region: 'ap-guangzhou', type: 'AIPicMatting' as const }
+    assert.match(cosAuthorization({ ...cfg, method: 'GET', path: '/a.jpg', params: { 'ci-process': 'AIPicMatting' }, headers: { host: 'h' }, now: 1557989813000 }), /^q-sign-algorithm=sha1&q-ak=AKID&q-sign-time=1557989753;1557990413&q-key-time=1557989753;1557990413&q-header-list=host&q-url-param-list=ci-process&q-signature=[0-9a-f]{40}$/)
+    const input = join(dir, 'cos-in.png')
+    const output = join(dir, 'cos-mask.png')
+    writeFileSync(input, await photo(1))
+    const calls: string[] = []
+    let mode = 'ok'
+    const cut = async (width: number, height: number) => sharp({ create: { width, height, channels: 4, background: { r: 1, g: 2, b: 3, alpha: 0.5 } } }).png().toBuffer()
+    const fake = (async (url: string, init: any) => {
+      calls.push(init.method)
+      assert.ok(url.startsWith('https://b-1250000000.cos.ap-guangzhou.myqcloud.com/scene-swap-temp/'))
+      if (init.method !== 'GET') return new Response(null, { status: 200 })
+      if (mode === 'slow') { mode = 'ok'; return new Response('<Error><Code>SlowDown</Code></Error>', { status: 503 }) }
+      if (mode === 'denied') return new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })
+      return new Response(new Uint8Array(await cut(mode === 'crop' ? W - 10 : W, H)))
+    }) as any
+    const matting = createMatting({ settings: () => cfg, fetchImpl: fake, retryMs: 1 })
+    await matting.run(input, output)
+    assert.deepEqual(calls.splice(0), ['PUT', 'GET', 'DELETE'])
+    const raw = await sharp(output).extractChannel(0).raw().toBuffer({ resolveWithObject: true })
+    assert.deepEqual([raw.info.width, raw.info.height], [W, H])
+    assert.ok(Math.abs(raw.data[0]! - 128) <= 1, 'mask is the alpha channel')
+    mode = 'slow'
+    await matting.run(input, output)
+    assert.deepEqual(calls.splice(0), ['PUT', 'GET', 'GET', 'DELETE'])
+    mode = 'crop'
+    await assert.rejects(matting.run(input, output), /不一致/)
+    calls.length = 0
+    mode = 'denied'
+    await assert.rejects(matting.run(input, output), /没有权限/)
+    assert.deepEqual(calls.splice(0), ['PUT', 'GET', 'DELETE'], 'temp photo is deleted on failure, no pointless retry')
+    mode = 'ok'
+    await Promise.all([1, 2, 3, 4, 5].map((n) => matting.run(input, join(dir, `cos-${n}.png`))))
+    assert.equal(createMatting({ settings: () => ({ ...cfg, secretKey: '' }) }).available(), false)
+
+    const saved = normalizeManagedSettings({ ...createDefaultManagedSettings(), matting: cfg })
+    assert.deepEqual(saved.matting, cfg)
+    assert.equal(normalizeManagedSettings({ matting: { ...cfg, bucket: 'evil.com/' } }).matting.bucket, 'evilcom')
+    assert.ok(!JSON.stringify(maskManagedSettings(saved)).includes('SECRET'))
+    assert.deepEqual(mergeManagedSecrets(normalizeManagedSettings(maskManagedSettings(saved)), saved).matting, cfg)
+    for (const out of [stripManagedSecretsForClient(saved), toProxiedManagedSettings(saved, { cloudBaseUrl: 'https://x', token: 't' })]) assert.equal(out.matting.secretKey + out.matting.secretId, '')
+  }
+
   let verdict = '{"edge":true,"light":true,"color":true,"pattern":true,"face":true}'
   let renders = 0
   let mattes = 0
@@ -92,7 +138,7 @@ async function main() {
         return { outputPath } as any
       },
     },
-    matting: { available: () => true, run: async (_input: string, output: string) => { mattes += 1; await writeMask(output) }, close: () => undefined },
+    matting: { available: () => true, run: async (_input: string, output: string) => { mattes += 1; await writeMask(output) } },
     inspect: async () => {
       if (verdict === 'down') throw new Error('not configured')
       return verdict

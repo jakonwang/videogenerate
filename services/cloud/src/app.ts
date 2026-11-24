@@ -69,7 +69,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     },
     assertConfigured: generation.assertImageConfigured,
     quota: { remaining: ai.quota.remaining, record: (userId, ok) => ai.quota.record(userId, 'scene-swap', ok) },
-    matting: options.matting ?? createMatting(config.matteModelPath),
+    matting: options.matting ?? createMatting({ settings: () => service.readManagedSettings().matting, fetchImpl: options.fetchImpl }),
     renderImage: generation.renderImage,
     inspect: options.inspect ?? ai.inspect,
     concurrency: config.sceneSwapConcurrency,
