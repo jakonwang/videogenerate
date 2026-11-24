@@ -42,7 +42,7 @@ const tasks = useTasks()
 const running = computed(() => tasks.value.filter((task) => task.state === 'running'))
 const failedCount = computed(() => tasks.value.filter((task) => task.state === 'failed').length)
 const toReview = useGenerations((item) => item.status === 'succeeded' && item.review === 'pending')
-const featured = MODULES.filter((m) => ['research', 'producer', 'listing', 'clone', 'product-images', 'live-photo', 'publish', 'review'].includes(m.key))
+const featured = ['research', 'garment-studio', 'clone', 'live-photo', 'product-images', 'production', 'producer', 'review', 'listing', 'publish', 'works', 'tasks'].flatMap((key) => MODULES.filter((m) => m.key === key))
 
 function open(module: MobileModule) {
   if (module.route) router.push(module.route)

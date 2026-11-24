@@ -1,6 +1,7 @@
-import { defineAsyncComponent, type Component } from 'vue'
+import { defineAsyncComponent, h, type Component } from 'vue'
+import { isWideScreen } from './lib/layout'
 import { isWeb } from './lib/platform'
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, type LocationQueryRaw } from 'vue-router'
 import { cloud, session } from './lib/session'
 
 /**
@@ -11,6 +12,13 @@ const desktopPage = (load: () => Promise<{ default: Component }>, api?: () => Pr
   component: () => import('./components/web/DesktopPage.vue').then((m) => m.default as Component),
   props: { load, api },
 })
+
+/** 电脑网页显示电脑端页面，手机浏览器显示手机页面 */
+const byScreen = (desktop: ReturnType<typeof desktopPage>, phone: () => Promise<{ default: Component }>) => {
+  const Desktop = defineAsyncComponent(desktop.component)
+  const Phone = defineAsyncComponent(phone)
+  return { component: () => (isWideScreen.value ? h(Desktop, desktop.props) : h(Phone)) }
+}
 
 /**
  * 批量混剪：网页上电脑在线时显示电脑端页面（WebProductionPage），不在线时显示网页的页面；手机 App 只用网页的页面。
@@ -61,7 +69,10 @@ export const router = createRouter({
   routes: [
     { path: '/login', component: () => import('./views/LoginView.vue'), meta: { public: true, tabs: false } },
     // Web: 工作台 / 审核收件箱 / 数据复盘 / 账号与会员 are the desktop pages themselves; the App keeps its own.
-    isWeb ? { path: '/', ...desktopPage(() => import('@desktop-views/HomeView.vue')) } : { path: '/', component: () => import('./views/HomeView.vue') },
+    // 手机浏览器用手机首页（电脑页面没有侧边栏，找不到功能入口）
+    isWeb
+      ? { path: '/', ...byScreen(desktopPage(() => import('@desktop-views/HomeView.vue')), () => import('./views/HomeView.vue')) }
+      : { path: '/', component: () => import('./views/HomeView.vue') },
     { path: '/research', component: () => import('./views/ResearchView.vue') },
     { path: '/research/:id', component: () => import('./views/ResearchTaskView.vue'), meta: { tabs: false } },
     { path: '/create', component: () => import('./views/CreateView.vue') },
@@ -143,11 +154,11 @@ export const router = createRouter({
     isWeb
       ? { path: '/product-watermark', ...desktopPage(() => import('@desktop-views/ProductWatermarkView.vue'), () => import('./lib/desktopApi/productWatermark')), meta: { tabs: false } }
       : { path: '/product-watermark', component: () => import('./views/ProductWatermarkView.vue'), meta: { tabs: false } },
-    // AI 修图 · 批量换景：网页是电脑端页面（批次在云端），手机 App 用自己的页面
+    // AI 修图 · 批量换景：电脑网页是电脑端页面（批次在云端），手机 App 和手机浏览器用手机页面
     isWeb
-      ? { path: '/garment-studio', ...desktopPage(() => import('@desktop-views/GarmentStudioView.vue'), () => import('./lib/desktopApi/sceneSwap')), meta: { tabs: false } }
+      ? { path: '/garment-studio', ...desktopPage(() => import('@desktop-views/GarmentStudioView.vue'), () => import('./lib/desktopApi/sceneSwap')), meta: { tabs: false }, beforeEnter: (to: { query: LocationQueryRaw }) => isWideScreen.value || { path: '/scene-swap', query: to.query } }
       : { path: '/garment-studio', redirect: '/scene-swap' },
-    isWeb ? { path: '/scene-swap', redirect: '/garment-studio' } : { path: '/scene-swap', component: () => import('./views/SceneSwapView.vue'), meta: { tabs: false } },
+    { path: '/scene-swap', component: () => import('./views/SceneSwapView.vue'), meta: { tabs: false }, beforeEnter: (to: { query: LocationQueryRaw }) => (isWeb && isWideScreen.value ? { path: '/garment-studio', query: to.query } : true) },
     { path: '/works', component: () => import('./views/WorksView.vue'), meta: { tabs: false } },
     // Web: the desktop 素材库 page itself, backed by the web assetLibrary API (cloud assets; images and videos only).
     isWeb

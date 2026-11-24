@@ -188,7 +188,7 @@ onBeforeUnmount(() => {
     <section v-if="!trialMode" class="m-card progress">
       <strong>{{ finished }} / {{ batch.items.length }}</strong>
       <div class="bar" role="progressbar" :aria-valuenow="finished" aria-valuemin="0" :aria-valuemax="batch.items.length"><span :style="{ width: `${(finished / Math.max(1, batch.items.length)) * 100}%` }" /></div>
-      <span class="m-muted small">{{ finished < batch.items.length ? '可以退出 App，云端会继续生成' : `合格 ${passed.length} 张，已存进素材库` }}</span>
+      <span class="m-muted small">{{ finished < batch.items.length ? '可以先离开，云端会继续生成' : `合格 ${passed.length} 张，已存进素材库` }}</span>
     </section>
     <p v-else class="m-muted small">不满意可以换图或换场景，满意再跑整批。</p>
     <button v-if="!trialMode && review.length" type="button" class="m-card warn" @click="open(review[0])"><strong>{{ review.length }} 张要看一下</strong><br />点开决定，不要的不扣点</button>
