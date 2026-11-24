@@ -2615,7 +2615,7 @@
       "placeholders": {
         "videoPrimaryModel": "例如 veo_3_1-fast",
         "videoFallbackModel": "主链路失败时使用",
-        "imagePrimaryModel": "例如 gpt-image-1",
+        "imagePrimaryModel": "例如 gpt-image-2",
         "chatPrimaryModel": "例如 gemini-3.1-pro"
       },
       "quality": {

@@ -682,7 +682,7 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
               imageModel:
                 typeof (input as Record<string, unknown>).imageModel === 'string'
                   ? String((input as Record<string, unknown>).imageModel)
-                  : 'gpt-image-1',
+                  : 'gpt-image-2',
               imageEditModel:
                 typeof (input as Record<string, unknown>).imageEditModel === 'string'
                   ? String((input as Record<string, unknown>).imageEditModel)

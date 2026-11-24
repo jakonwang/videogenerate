@@ -3120,7 +3120,7 @@
       "placeholders": {
         "videoPrimaryModel": "For example veo_3_1-fast",
         "videoFallbackModel": "Used when the primary path fails",
-        "imagePrimaryModel": "For example gpt-image-1",
+        "imagePrimaryModel": "For example gpt-image-2",
         "chatPrimaryModel": "For example gemini-3.1-pro"
       },
       "quality": {

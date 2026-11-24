@@ -1416,7 +1416,7 @@ export const webPlatformService = {
               chatModel: currentCredentials.apifoxHub?.chatModel ?? 'gpt-4.1-mini',
               chatEndpointStyle: currentCredentials.apifoxHub?.chatEndpointStyle ?? 'openai_chat',
               imageProvider: currentCredentials.apifoxHub?.imageProvider ?? 'openai',
-              imageModel: input.apifoxHub.imageModel ?? currentCredentials.apifoxHub?.imageModel ?? 'gpt-image-1',
+              imageModel: input.apifoxHub.imageModel ?? currentCredentials.apifoxHub?.imageModel ?? 'gpt-image-2',
               imageEditModel: currentCredentials.apifoxHub?.imageEditModel,
               imageEndpointStyle: currentCredentials.apifoxHub?.imageEndpointStyle ?? 'openai_images',
               videoProvider: currentCredentials.apifoxHub?.videoProvider ?? 'veo',

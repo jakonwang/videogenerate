@@ -1383,7 +1383,7 @@
       "placeholders": {
         "videoPrimaryModel": "Vi du veo_3_1-fast",
         "videoFallbackModel": "Su dung khi duong chinh that bai",
-        "imagePrimaryModel": "Vi du gpt-image-1",
+        "imagePrimaryModel": "Vi du gpt-image-2",
         "chatPrimaryModel": "Vi du gemini-3.1-pro"
       },
       "quality": {

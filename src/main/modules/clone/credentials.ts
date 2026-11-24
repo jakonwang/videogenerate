@@ -43,6 +43,17 @@ function normalizeVectorEngineBaseUrl(value: unknown) {
   return String(value ?? '').trim().replace(/\/+$/, '')
 }
 
+/** 中转平台已下线 gpt-image-1（2026-11 VectorEngine 报 No available channel），旧设置自动换成 gpt-image-2 */
+export const DEFAULT_HUB_IMAGE_MODEL = 'gpt-image-2'
+const RETIRED_HUB_IMAGE_MODELS = new Set(['gpt-image-1'])
+
+/** fallback 传 null 表示「没填就保持为空」（不能用 undefined，会触发默认值） */
+export function normalizeHubImageModel(value: unknown, fallback: string | null = DEFAULT_HUB_IMAGE_MODEL) {
+  const model = String(value ?? '').trim()
+  if (!model) return fallback ?? undefined
+  return RETIRED_HUB_IMAGE_MODELS.has(model.toLowerCase()) ? DEFAULT_HUB_IMAGE_MODEL : model
+}
+
 function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
   return {
     enabled: Boolean(parsed?.enabled ?? true),
@@ -61,8 +72,8 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
       parsed?.imageProvider === 'gemini' || parsed?.imageProvider === 'jimeng' || parsed?.imageProvider === 'midjourney'
         ? parsed.imageProvider
         : 'openai',
-    imageModel: String(parsed?.imageModel ?? '').trim() || 'gpt-image-1',
-    imageEditModel: String(parsed?.imageEditModel ?? '').trim() || undefined,
+    imageModel: normalizeHubImageModel(parsed?.imageModel) as string,
+    imageEditModel: normalizeHubImageModel(parsed?.imageEditModel, null),
     imageEndpointStyle:
       parsed?.imageEndpointStyle === 'official_rest' || parsed?.imageEndpointStyle === 'midjourney_task'
         ? parsed.imageEndpointStyle

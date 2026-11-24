@@ -310,6 +310,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .lpd__result { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .lpd__frame { position: relative; aspect-ratio: 3 / 4; max-height: 300px; border: 1px solid var(--theme-border); border-radius: 9px; overflow: hidden; background: var(--theme-panel-soft); display: grid; place-items: center; }
 .lpd__frame video, .lpd__img img { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+/* 铺满画框：网格居中时子元素没有确定高度，图片会按原比例撑开、底部被裁掉（商品常在画面下方） */
+.lpd__frame > video, .lpd__img { position: absolute; inset: 0; }
 .lpd__img { width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
 .lpd__empty { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--theme-text-muted); }
 .lpd__result figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--theme-text-secondary); }
