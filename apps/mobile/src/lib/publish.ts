@@ -77,10 +77,11 @@ export async function shareTo(target: Target, input: { fileId: string; caption?:
   return result
 }
 
-export async function saveToGallery(input: { fileId: string; label: string; generationId?: string; mime?: string }) {
+/** skipRecord：批量存图时不写发布记录 */
+export async function saveToGallery(input: { fileId: string; label: string; generationId?: string; mime?: string; skipRecord?: boolean }) {
   if (isWeb) await webDownload(input.fileId, input.label, input.mime)
   else await native.saveToGallery({ url: fileApiUrl(input.fileId), token: session.token, fileId: input.fileId, mime: input.mime })
-  await record({ fileId: input.fileId, generationId: input.generationId, target: 'gallery', label: input.label })
+  if (!input.skipRecord) await record({ fileId: input.fileId, generationId: input.generationId, target: 'gallery', label: input.label })
 }
 
 export function usePublishRecords() {

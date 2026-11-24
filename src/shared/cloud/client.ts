@@ -58,6 +58,8 @@ export type CloudGenerateRedeemInput = {
 
 export type CloudBillingOverview = { defaults: BillingDefaults; models: AiModelEntry[] }
 
+import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene } from '../sceneSwap'
+
 export type CloudUsageStats = {
   days: number
   outstandingCredits: number
@@ -168,6 +170,19 @@ export function createCloudClient(options: CloudClientOptions) {
         (await (await binary('PUT', '/api/v1/files', body, mime)).json()) as SyncUploadResponse,
       downloadFile: async (fileId: string) => (await binary('GET', `/api/v1/files/${encodeURIComponent(fileId)}`)).blob(),
     },
+    /** AI 修图 · 批量换景（批次和队列都在云端） */
+    sceneSwap: {
+      info: () => request<SceneSwapInfo>('GET', '/api/v1/scene-swap/info'),
+      addScene: (input: { fileId: string; name: string; category?: string }) => request<{ scene: SceneSwapScene }>('POST', '/api/v1/scene-swap/scenes', input).then((r) => r.scene),
+      removeScene: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/scenes/${encodeURIComponent(id)}`),
+      list: () => request<{ batches: SceneSwapBatch[] }>('GET', '/api/v1/scene-swap/batches').then((r) => r.batches),
+      get: (id: string) => request<{ batch: SceneSwapBatch }>('GET', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}`).then((r) => r.batch),
+      create: (input: SceneSwapCreateInput) => request<{ batch: SceneSwapBatch }>('POST', '/api/v1/scene-swap/batches', input, 60_000).then((r) => r.batch),
+      remove: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}`),
+      action: (id: string, action: 'run' | 'pause' | 'resume' | 'retrial') => request<{ batch: SceneSwapBatch }>('POST', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}/${action}`, {}).then((r) => r.batch),
+      item: (id: string, itemId: string, action: 'redo' | 'accept' | 'reject', reasons: string[] = []) =>
+        request<{ batch: SceneSwapBatch }>('POST', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/${action}`, { reasons }).then((r) => r.batch),
+    },
     ai: {
       chat: (input: AiChatRequest) => request<AiChatResponse>('POST', '/api/v1/ai/chat', input, 130_000),
       usage: () => request<AiUsageResponse>('GET', '/api/v1/ai/usage'),
@@ -211,6 +226,11 @@ export function createCloudClient(options: CloudClientOptions) {
       request<{ hold: UsageHold }>('POST', `/api/v1/usage/holds/${encodeURIComponent(holdId)}/settle`, { ok, reason }),
 
     admin: {
+      listScenes: () => request<{ scenes: SceneSwapScene[] }>('GET', '/api/v1/admin/scenes'),
+      addScene: (input: { fileId: string; name: string; category: string }) => request<{ scene: SceneSwapScene }>('POST', '/api/v1/admin/scenes', input),
+      removeScene: (id: string) => request<object>('DELETE', `/api/v1/admin/scenes/${encodeURIComponent(id)}`),
+      uploadFile: async (body: Blob, mime: string) => (await (await binary('PUT', '/api/v1/admin/files', body, mime)).json()) as SyncUploadResponse,
+      downloadFile: async (fileId: string) => (await binary('GET', `/api/v1/admin/files/${encodeURIComponent(fileId)}`)).blob(),
       stats: () => request<{ stats: CloudAdminStats; channels: CloudPayChannel[] }>('GET', '/api/v1/admin/stats'),
       listUsers: (q: { keyword?: string; role?: string; status?: string; page?: number }) =>
         request<CloudPage<CloudUser>>('GET', `/api/v1/admin/users${qs(q)}`),

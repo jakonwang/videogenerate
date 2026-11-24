@@ -1,3 +1,4 @@
+import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene } from '../shared/sceneSwap'
 import type { MatrixAccountSettings } from '../shared/publishMatrix'
 import type { PublishProfitReport } from '../shared/publishProfit'
 type WarmupStatus = Record<string, { today?: import('../main/modules/tiktok-publisher/geelarkWarmup').WarmupLog; doneDays: number }>
@@ -893,6 +894,22 @@ const api = {
     exportMaterials: (payload: { userId: string; materialIds: string[]; outputDir: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:exportMaterials', payload),
     listProducts: () => ipcRenderer.invoke('plugin:productImageMaterials:listProducts'),
+  },
+  /** AI 修图 · 批量换景 */
+  sceneSwap: {
+    pick: (kind: 'files' | 'folder') => ipcRenderer.invoke('sceneSwap:pick', kind) as Promise<Array<{ path: string; name: string }>>,
+    expandPaths: (paths: string[]) => ipcRenderer.invoke('sceneSwap:expandPaths', paths) as Promise<Array<{ path: string; name: string }>>,
+    upload: (path: string) => ipcRenderer.invoke('sceneSwap:upload', path) as Promise<{ fileId: string }>,
+    imagePath: (fileId: string) => ipcRenderer.invoke('sceneSwap:imagePath', fileId) as Promise<string>,
+    info: () => ipcRenderer.invoke('sceneSwap:info') as Promise<SceneSwapInfo>,
+    list: () => ipcRenderer.invoke('sceneSwap:list') as Promise<SceneSwapBatch[]>,
+    create: (input: SceneSwapCreateInput) => ipcRenderer.invoke('sceneSwap:create', input) as Promise<SceneSwapBatch>,
+    remove: (id: string) => ipcRenderer.invoke('sceneSwap:remove', id) as Promise<object>,
+    action: (id: string, action: 'run' | 'pause' | 'resume' | 'retrial') => ipcRenderer.invoke('sceneSwap:action', id, action) as Promise<SceneSwapBatch>,
+    item: (id: string, itemId: string, action: 'redo' | 'accept' | 'reject', reasons?: string[]) => ipcRenderer.invoke('sceneSwap:item', id, itemId, action, reasons) as Promise<SceneSwapBatch>,
+    addScene: (input: { fileId: string; name: string }) => ipcRenderer.invoke('sceneSwap:addScene', input) as Promise<SceneSwapScene>,
+    removeScene: (id: string) => ipcRenderer.invoke('sceneSwap:removeScene', id) as Promise<object>,
+    exportResults: (files: Array<{ fileId: string; name: string }>) => ipcRenderer.invoke('sceneSwap:exportResults', files) as Promise<{ canceled: boolean; count: number }>,
   },
   productReplacement: {
     listProducts: () => ipcRenderer.invoke('plugin:productReplacement:listProducts'),

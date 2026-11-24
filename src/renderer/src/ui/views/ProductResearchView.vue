@@ -381,22 +381,17 @@ onBeforeUnmount(() => {
 <template>
   <div class="vg-scope prd-page pr-list">
     <!-- Hero -->
-    <header class="pr-hero">
-      <div class="pr-hero__icon"><ShoppingCart :size="34" /></div>
-      <div class="pr-hero__copy">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><ShoppingCart :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>{{ $t('ai.pages.productResearch') }}</h1>
         <p>管理选品方案，按标准 SOP 完成从需求收集、采集、筛选到输出的全流程选品。</p>
       </div>
-      <div class="pr-hero__side">
+      <div class="vg-page-head__actions">
         <button class="pr-phone-chip" :class="{ 'is-online': onlineDevices > 0 }" title="连接采集手机" @click="pairingOpen = true">
           <Smartphone :size="15" /><span class="pr-phone-chip__dot" />手机连接：{{ onlineDevices }} 台在线
         </button>
         <button class="prd-btn prd-btn--outline prd-btn--sm" title="刷新" @click="refreshAll"><RefreshCw :size="13" />刷新</button>
-      </div>
-      <div class="pr-hero__art" aria-hidden="true">
-        <span class="pr-hero__bars"><i /><i /><i /></span>
-        <ShoppingBag :size="96" :stroke-width="1.2" />
-        <TrendingUp class="pr-hero__trend" :size="34" />
       </div>
     </header>
 

@@ -5,16 +5,14 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clapperboard, FolderOpen, House, Inbox, PanelLeftClose, PanelLeftOpen, Scissors, Settings, Wrench } from 'lucide-vue-next'
+import { Clapperboard, FolderOpen, House, PanelLeftClose, PanelLeftOpen, Scissors, Settings, Wrench } from 'lucide-vue-next'
 import type { Component } from 'vue'
-import SectionTabs from '@desktop-src/ui/navigation/SectionTabs.vue'
 import { lastSectionTab, sectionActive } from '@desktop-src/ui/navigation/sectionTabs'
 import DsMainLayout from '@design/layout/MainLayout.vue'
 import WebTitleBar from './WebTitleBar.vue'
 import { MODULES, type MobileModule } from '@/lib/modules'
 import { provideWebShell } from '@/lib/layout'
 import { session } from '@/lib/session'
-import { useGenerations } from '@/lib/generate'
 import { isWeb } from '@/lib/platform'
 
 const route = useRoute()
@@ -37,7 +35,6 @@ function toggleCollapsed() {
   }
 }
 
-const pending = useGenerations((item) => item.status === 'succeeded' && item.review === 'pending')
 
 function isActive(to: string) {
   const [path, query] = to.split('?')
@@ -51,13 +48,12 @@ function isActive(to: string) {
 // Same structure as the desktop sidebar (src/renderer/src/ui/MainLayout.vue): 创作 / 资产 / 工具箱.
 const navItems = computed(() => [
   { to: '/', label: '工作台', icon: House, active: isActive('/') },
-  { to: '/review', label: '审核收件箱', icon: Inbox, active: isActive('/review'), badge: pending.value.length },
 ])
 
 // Same structure as the desktop sidebar: 做内容 / 卖出去 / 资料. 复刻 / tk创意室 / 图生视频 are one entry (AI 出片),
 // 模特库 sits under 素材库 and 模板库 under 批量混剪 — the pages switch with tabs on top (SectionTabs).
 const SECTIONS: Array<{ title: string; keys: string[] }> = [
-  { title: '做内容', keys: ['research', 'ai-video', 'production'] },
+  { title: '做内容', keys: ['research', 'ai-video', 'garment-studio', 'production'] },
   { title: '卖出去', keys: ['publish', 'shops', 'insights'] },
   { title: '资料', keys: ['products', 'assets', 'works'] },
 ]
@@ -131,8 +127,6 @@ onBeforeUnmount(() => document.body.classList.remove('is-web-shell'))
           </div>
         </template>
         <div class="vg-scope web-workspace">
-          <!-- 合并入口（AI 出片 / 批量混剪 / 素材库）的页面标签，和电脑端一样 -->
-          <SectionTabs />
           <slot />
         </div>
       </DsMainLayout>
@@ -144,17 +138,20 @@ onBeforeUnmount(() => document.body.classList.remove('is-web-shell'))
 .web-shell { display: flex; flex-direction: column; height: 100vh; background: var(--theme-shell); }
 .web-shell__body { flex: 1; min-height: 0; }
 .web-workspace { min-height: 100%; }
+/* AI 修图自己分栏滚动，占满工作区 */
+.web-workspace:has(> .garment) { height: 100%; padding: 0; }
 
 /* Sidebar footer — same metrics as the desktop shell (src/renderer/src/ui/MainLayout.vue). */
-.shell-foot__btn { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 8px; border: 0; border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--theme-text) 86%, transparent); font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left; }
-.shell-foot__tile { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: color-mix(in srgb, var(--theme-text) 5%, transparent); border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent); color: var(--theme-text-secondary); }
-.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); color: var(--theme-text); }
-.shell-foot__btn.is-active { background: color-mix(in srgb, var(--theme-accent) 12%, transparent); color: var(--theme-text); }
-.shell-foot__btn.is-active .shell-foot__tile { background: var(--theme-accent); border-color: var(--theme-accent); color: #fff; }
-.shell-foot__icon { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.9; }
-.shell-foot__user { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px; border: 1px solid var(--theme-border); border-radius: 12px; background: color-mix(in srgb, var(--theme-text) 3%, transparent); cursor: pointer; }
-.shell-foot__user:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
-.shell-foot__avatar { width: 32px; height: 32px; flex-shrink: 0; }
+.shell-foot__btn { display: flex; align-items: center; gap: 12px; width: 100%; height: 39px; padding: 0 9px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--theme-text) 92%, transparent); font-size: 14.5px; text-align: left; cursor: pointer; transition: background .14s; }
+.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
+.shell-foot__btn.is-active { border-color: color-mix(in srgb, var(--theme-accent) 20%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 24%, transparent), color-mix(in srgb, var(--theme-accent) 7%, transparent)); color: var(--theme-text); font-weight: 600; }
+.shell-foot__tile { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--theme-text) 5%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--theme-text) 7%, transparent); color: color-mix(in srgb, var(--theme-text) 88%, transparent); }
+.shell-foot__tile .shell-foot__icon { width: 15px; height: 15px; stroke-width: 1.9; }
+.shell-foot__btn.is-active .shell-foot__tile { border-color: transparent; background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 94%, #fff), color-mix(in srgb, var(--theme-accent) 78%, #003d31)); color: #fff; box-shadow: 0 0 12px color-mix(in srgb, var(--theme-accent) 40%, transparent); }
+.shell-foot__icon { width: 15px; height: 15px; flex-shrink: 0; stroke-width: 1.8; }
+.shell-foot__user { display: flex; align-items: center; gap: 9px; min-width: 0; margin-top: 8px; padding: 8px 6px 8px 9px; border: 1px solid var(--theme-border); border-radius: 10px; background: linear-gradient(160deg, color-mix(in srgb, var(--theme-text) 8%, transparent), color-mix(in srgb, var(--theme-text) 3%, transparent)); cursor: pointer; }
+.shell-foot__user:hover { border-color: var(--theme-border-control); }
+.shell-foot__avatar { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: linear-gradient(145deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 70%, #003d31)); color: #fff; font-size: 12px; font-weight: 700; }
 .shell-foot__user-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .shell-foot__user-copy strong { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell-foot__user-copy small { font-size: 11px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

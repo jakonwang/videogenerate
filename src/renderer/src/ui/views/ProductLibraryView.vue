@@ -18,7 +18,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
-  X,
+  X, Boxes
 } from 'lucide-vue-next'
 
 type ProductType =
@@ -407,15 +407,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="vg-scope vg-page pl" data-testid="product-library-page">
-    <header class="pl-head">
-      <div class="pl-head__text">
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><Boxes :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>
           {{ t('productLibrary.title') }}
           <span class="pl-head__count vg-num" data-testid="product-library-total">{{ list.length }}</span>
         </h1>
         <p>{{ t('productLibrary.desc') }}</p>
       </div>
-      <div class="pl-head__actions">
+      <div class="vg-page-head__actions">
         <button class="vg-btn vg-btn--ghost" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
           <SlidersHorizontal :size="15" /> {{ t('productLibrary.promptSettings.button') }}
         </button>

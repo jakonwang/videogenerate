@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Copy, FolderOpen, Minus, Square, X } from 'lucide-vue-next'
 import AiTitlebarActions from './ai/AiTitlebarActions.vue'
+import SectionTabs from '../navigation/SectionTabs.vue'
 import brandIconAsset from '../../../../../resources/icon-brand-green.png'
 
 const { t } = useI18n()
@@ -48,6 +49,7 @@ async function close() {
       <span class="vg-titlebar__subtitle">{{ t('titleBar.productSubtitle') }}</span>
     </div>
 
+    <SectionTabs v-if="!route.meta.public" :translate="(key) => t(key)" />
     <div class="vg-titlebar__drag" @dblclick="toggleMax"></div>
 
     <div class="vg-titlebar__actions">
@@ -74,10 +76,10 @@ async function close() {
   z-index: 100;
   display: flex;
   align-items: center;
-  height: 48px;
+  height: 44px;
   flex-shrink: 0;
   padding-left: 16px;
-  background: var(--theme-sidebar);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 6%, var(--theme-sidebar)), var(--theme-sidebar) 60%);
   border-bottom: 1px solid var(--theme-border);
   color: var(--theme-text);
   -webkit-app-region: drag;
@@ -91,14 +93,14 @@ async function close() {
   min-width: 0;
 }
 .vg-titlebar__logo {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 8px;
   flex-shrink: 0;
 }
 .vg-titlebar__name {
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -.01em;
   white-space: nowrap;
 }

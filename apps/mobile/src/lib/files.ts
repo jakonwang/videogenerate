@@ -37,9 +37,9 @@ export function fileUrl(fileId: string | undefined | null): Promise<string> {
 }
 
 /** 把手机里选的图片缩到最长边 1600px、转 JPEG 后上传，返回云端引用 */
-export async function uploadImage(file: Blob): Promise<SyncFileRef> {
+export async function uploadImage(file: Blob, options: { maxEdge?: number; quality?: number } = {}): Promise<SyncFileRef> {
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
+  const scale = Math.min(1, (options.maxEdge ?? MAX_IMAGE_EDGE) / Math.max(bitmap.width, bitmap.height))
   const width = Math.round(bitmap.width * scale)
   const height = Math.round(bitmap.height * scale)
   const canvas = document.createElement('canvas')
@@ -48,7 +48,7 @@ export async function uploadImage(file: Blob): Promise<SyncFileRef> {
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
   const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error('图片处理失败'))), 'image/jpeg', 0.86),
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error('图片处理失败'))), 'image/jpeg', options.quality ?? 0.86),
   )
   const result = await cloud.sync.uploadFile(blob, 'image/jpeg')
   // Seed the cache so the new image shows without a round trip.

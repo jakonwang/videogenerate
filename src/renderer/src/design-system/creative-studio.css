@@ -14,27 +14,31 @@ html[data-app-theme] body #app .app-shell .tiktok-page.ts-page {
 }
 
 /* ---------- head + tabs ---------- */
-.ts-top { display: flex; flex-direction: column; gap: 14px; }
-.ts-head { display: flex; align-items: center; gap: 14px; }
-.ts-head__icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--vg-accent-line); border-radius: 12px; background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ts-top { display: flex; flex-direction: column; gap: 10px; }
+.ts-head { position: relative; isolation: isolate; display: flex; align-items: center; gap: 13px; }
+html[data-app-theme='dark-teal'] .ts-head::before { content: ''; position: absolute; z-index: -1; right: 318px; bottom: -8px; width: min(380px, 38%); height: 70px; background: url(../assets/hero-frames.svg) right bottom / auto 100% no-repeat; pointer-events: none; }
+@media (max-width: 1100px) { html[data-app-theme='dark-teal'] .ts-head::before { display: none; } }
+.ts-head__icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--vg-accent) 30%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--vg-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--vg-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--vg-accent) 80%, #fff); }
+.ts-head__icon svg { width: 20px; height: 20px; stroke-width: 1.7; }
 .ts-head__text { flex: 1; min-width: 0; }
-.ts-head__text h1 { font-size: 20px; font-weight: 800; line-height: 1.25; }
-.ts-head__text p { margin-top: 2px; font-size: 13px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ts-head__actions { display: flex; gap: 8px; }
-.ts-tabs { display: flex; align-items: stretch; gap: 4px; min-height: 44px; border-bottom: 1px solid var(--theme-divider); }
-.ts-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; border: 0; background: transparent; color: var(--theme-text-muted); font-size: 14px; font-weight: 600; cursor: pointer; transition: color .15s; }
+.ts-head__text h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
+.ts-head__text p { margin-top: 2px; font-size: 12.5px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-head__actions { display: flex; gap: 8px; align-items: center; }
+.ts-tabs { display: flex; align-items: stretch; gap: 26px; min-height: 40px; border-bottom: 1px solid var(--theme-divider); }
+.ts-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; color: var(--theme-text-muted); font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: color .15s; }
 .ts-tab:hover { color: var(--theme-text); }
-.ts-tab.is-active { color: var(--theme-text); }
-.ts-tab.is-active::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: var(--vg-accent); }
+.ts-tab.is-active { color: var(--theme-text); font-weight: 600; }
+.ts-tab.is-active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--vg-accent); }
 .ts-tab.is-active svg { color: var(--vg-accent); }
 .ts-tab em, .ts-util em { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 11px; font-style: normal; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
 .ts-tab.is-active em { background: var(--vg-accent-soft); color: var(--vg-accent); }
 .ts-tabs__spacer { flex: 1; }
-.ts-util { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 32px; margin-bottom: 6px; padding: 0 10px; border: 1px solid var(--theme-border); border-radius: 8px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.ts-util { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 11px; border: 1px solid var(--theme-border-control); border-radius: 8px; background: color-mix(in srgb, var(--theme-panel) 82%, transparent); color: var(--theme-text-secondary); font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.ts-util--icon { width: 32px; padding: 0; }
 .ts-util:hover { border-color: var(--theme-border-control); background: var(--theme-panel-soft); color: var(--theme-text); }
 
 /* ---------- shared ---------- */
-.ts-card { display: flex; flex-direction: column; gap: 18px; min-width: 0; padding: 20px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); }
+.ts-card { display: flex; flex-direction: column; gap: 13px; min-width: 0; padding: 20px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); }
 .ts-card--flush { gap: 0; padding: 0; overflow: hidden; }
 .ts-card__head { display: flex; align-items: flex-start; gap: 12px; }
 .ts-card__title { min-width: 0; }
@@ -150,20 +154,18 @@ html[data-app-theme] body #app .app-shell .tiktok-page.ts-page {
 
 /* ---------- library ---------- */
 .ts-library { display: flex; flex-direction: column; }
-.ts-libbar { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px; }
-.ts-libbar__title { flex: 1; min-width: 0; }
-.ts-libbar__title h2 { font-size: 16px; font-weight: 800; }
-.ts-libbar__title span { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--theme-text-muted); }
+.ts-toolbar { display: flex; align-items: center; gap: 14px; min-height: 50px; padding: 0 14px 0 16px; border-bottom: 1px solid var(--theme-divider); }
+.ts-toolbar__all { flex-shrink: 0; padding-right: 14px; border-right: 1px solid var(--theme-divider); }
+.ts-filters { display: flex; flex: 1; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ts-filter { display: inline-flex; align-items: center; gap: 6px; height: 30px; flex-shrink: 0; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--theme-text-secondary); font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+.ts-filter:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); color: var(--theme-text); }
+.ts-filter em { color: var(--theme-text-muted); font-size: 12px; font-style: normal; font-weight: 400; font-variant-numeric: tabular-nums; }
+.ts-filter.is-active { background: color-mix(in srgb, var(--vg-accent) 18%, transparent); color: var(--theme-text); font-weight: 600; }
+.ts-filter.is-active em { color: var(--vg-accent); }
 .ts-viewtoggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-panel-soft); }
 .ts-viewtoggle button { display: grid; place-items: center; width: 30px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-muted); cursor: pointer; }
 .ts-viewtoggle button.is-on { background: var(--theme-panel); color: var(--vg-accent); box-shadow: 0 0 0 1px var(--vg-accent-line); }
-.ts-filters { display: flex; gap: 6px; padding: 0 18px 12px; overflow-x: auto; scrollbar-width: none; }
-.ts-filter { display: inline-flex; align-items: center; gap: 6px; height: 30px; flex-shrink: 0; padding: 0 12px; border: 1px solid var(--theme-border); border-radius: 999px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: all .15s; }
-.ts-filter:hover { border-color: var(--theme-border-control); color: var(--theme-text); }
-.ts-filter em { font-style: normal; font-weight: 500; color: var(--theme-text-muted); font-variant-numeric: tabular-nums; }
-.ts-filter.is-active { border-color: var(--vg-accent); background: var(--vg-accent-soft); color: var(--vg-accent); }
-.ts-filter.is-active em { color: var(--vg-accent); }
-.ts-actionsbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 18px; border-top: 1px solid var(--theme-divider); border-bottom: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--theme-panel-soft) 55%, var(--theme-panel)); }
+.ts-actionsbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 46px; padding: 6px 14px 6px 16px; border-bottom: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--vg-accent) 6%, var(--theme-panel)); font-size: 12px; }
 .ts-actionsbar__spacer { flex: 1; }
 
 .ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; padding: 16px 18px; }

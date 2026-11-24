@@ -691,13 +691,13 @@ onMounted(load)
 .sim-start__count { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
 .sim-start__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .sim-start__steps > li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--grid); border-radius: 10px; }
-.sim-start__steps > li.is-current { border-color: color-mix(in srgb, var(--series-1) 55%, var(--grid)); background: color-mix(in srgb, var(--series-1) 6%, transparent); }
+.sim-start__steps > li.is-current { border-color: color-mix(in srgb, var(--theme-accent) 55%, var(--grid)); background: color-mix(in srgb, var(--theme-accent) 6%, transparent); }
 .sim-start__steps > li.is-locked { opacity: .55; }
 .sim-start__steps strong { font-size: 14px; color: var(--text-primary); }
 .sim-start__steps p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); }
 .sim-start__mark { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--text-primary) 8%, transparent); color: var(--text-primary); font-size: 13px; }
 .is-done .sim-start__mark { background: transparent; color: var(--status-good); }
-.is-current .sim-start__mark { background: var(--series-1); color: #fff; }
+.is-current .sim-start__mark { background: var(--theme-accent); color: var(--theme-on-accent); }
 .sim-start__body { display: flex; flex-direction: column; gap: 6px; }
 .sim-start__margin { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 .sim-start__store { font-weight: 600; font-size: 13px; min-width: 100px; }

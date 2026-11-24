@@ -82,7 +82,7 @@ async function openRun(conversationId: string) {
 
 <style scoped>
 .ai-tb { display: flex; align-items: center; gap: 6px; -webkit-app-region: no-drag; }
-.ai-tb__search { display: inline-flex; align-items: center; gap: 8px; height: 30px; min-width: 200px; padding: 0 8px 0 10px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 12.5px; cursor: pointer; }
+.ai-tb__search { display: inline-flex; align-items: center; gap: 8px; height: 30px; min-width: 200px; padding: 0 8px 0 10px; border: 1px solid var(--theme-border-control); border-radius: 9px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 12.5px; cursor: pointer; }
 .ai-tb__search span { flex: 1; text-align: left; }
 .ai-tb__search:hover { border-color: var(--theme-border-control); color: var(--theme-text); }
 .ai-tb__search kbd { font-family: inherit; font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--theme-border); border-radius: 4px; background: var(--theme-panel); }

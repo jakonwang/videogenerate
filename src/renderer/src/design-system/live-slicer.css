@@ -8,10 +8,11 @@
 
 /* ---------- head ---------- */
 .ls-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.ls-head__icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--vg-accent-line); border-radius: 12px; background: var(--vg-accent-soft); color: var(--vg-accent); }
+.ls-head__icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--vg-accent) 30%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--vg-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--vg-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--vg-accent) 80%, #fff); }
+.ls-head__icon svg { width: 20px; height: 20px; stroke-width: 1.7; }
 .ls-head__text { flex: 1; min-width: 0; }
-.ls-head__text h1 { font-size: 20px; font-weight: 800; line-height: 1.25; }
-.ls-head__text p { margin-top: 2px; font-size: 13px; color: var(--theme-text-muted); }
+.ls-head__text h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
+.ls-head__text p { margin-top: 2px; font-size: 12.5px; color: var(--theme-text-muted); }
 .ls-head__actions { display: flex; align-items: center; gap: 8px; }
 
 /* ---------- import (empty state) ---------- */

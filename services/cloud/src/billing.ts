@@ -227,7 +227,7 @@ export function createBillingService(deps: {
   }
 
   function sweep() {
-    db.prepare("UPDATE usage_holds SET status = 'committed', settled_at = ?, reason = '超时自动确认' WHERE status = 'held' AND created_at < ?").run(now(), now() - HOLD_AUTO_COMMIT_MS)
+    db.prepare("UPDATE usage_holds SET status = 'committed', settled_at = ?, reason = '超时自动确认' WHERE status = 'held' AND created_at < ? AND id NOT IN (SELECT hold_id FROM scene_swap_items WHERE hold_id IS NOT NULL AND status IN ('queued', 'running', 'review'))").run(now(), now() - HOLD_AUTO_COMMIT_MS)
   }
 
   /* ---------------------------------------------------------------- 生成前冻结 / 生成后结算 */
@@ -285,7 +285,8 @@ export function createBillingService(deps: {
   }
 
   /** ok=true 确认；ok=false 失败退回（受每日退还次数限制）。重复调用安全。userId 为 null 表示云端内部调用 */
-  function settle(userId: string | null, holdId: string, ok: boolean, reason = ''): UsageHold {
+  /** alwaysRefund：云端自己判定要退的（批量换景质检没过），不受、也不占每日退还次数 */
+  function settle(userId: string | null, holdId: string, ok: boolean, reason = '', options: { alwaysRefund?: boolean } = {}): UsageHold {
     return transaction(db, () => {
       const row = db.prepare('SELECT * FROM usage_holds WHERE id = ?').get(String(holdId || '')) as Row | undefined
       if (!row || (userId !== null && row.user_id !== userId)) throw notFound('计费记录不存在')
@@ -297,10 +298,10 @@ export function createBillingService(deps: {
       } else {
         const points = Number(row.points)
         let refundable = true
-        if (points > 0) {
+        if (points > 0 && !options.alwaysRefund) {
           const limit = readDefaults().refundPerDay
           const used = Number(
-            (db.prepare("SELECT COUNT(*) AS n FROM usage_holds WHERE user_id = ? AND status = 'released' AND points > 0 AND settled_at >= ?").get(row.user_id, t - DAY) as Row).n,
+            (db.prepare("SELECT COUNT(*) AS n FROM usage_holds WHERE user_id = ? AND status = 'released' AND points > 0 AND feature != 'scene-swap' AND settled_at >= ?").get(row.user_id, t - DAY) as Row).n,
           )
           refundable = used < limit
         }

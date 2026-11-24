@@ -270,19 +270,16 @@ onMounted(async () => {
 
 <template>
   <div class="inventory-page">
-    <section class="inventory-head">
-      <div class="inventory-head__intro">
-        <div class="inventory-head__icon"><Boxes class="h-5 w-5" /></div>
-        <div>
-          <div class="inventory-kicker">{{ t('plugins.categories.inventoryAnalysis') }}</div>
-          <h1>{{ t('dianxiaomiInventory.title') }}</h1>
-          <p>{{ t('dianxiaomiInventory.subtitle') }}</p>
-        </div>
+    <header class="vg-scope vg-page-head">
+      <span class="vg-page-head__icon"><Boxes :size="20" /></span>
+      <div class="vg-page-head__text">
+        <h1>{{ t('dianxiaomiInventory.title') }}</h1>
+        <p>{{ t('dianxiaomiInventory.subtitle') }}</p>
       </div>
-      <div class="inventory-head__actions">
-        <button class="ghost-button" type="button" @click="router.push('/plugins')"><ChevronLeft class="h-4 w-4" />{{ t('ai.tools.back') }}</button>
+      <div class="vg-page-head__actions">
+        <button class="vg-btn" type="button" @click="router.push('/plugins')"><ChevronLeft :size="15" />{{ t('ai.tools.back') }}</button>
       </div>
-    </section>
+    </header>
 
     <section class="inventory-toolbar">
       <div class="inventory-toolbar__status">

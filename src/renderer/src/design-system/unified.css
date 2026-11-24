@@ -1,0 +1,76 @@
+/*
+ * 全软件统一规范（电脑端和网页共用，最后加载）。
+ * 每一页都按这里的尺寸：页边距 16/20、标题区 56 高、标题 20、卡片圆角 12、控件 32 高 8 圆角、标签下划线、一种强调色。
+ * 新页面直接用 vg- 组件；这里只负责把早期各自写的标题 / 卡片 / 标签 / 按钮拉到同一套。
+ */
+
+/* ===== 1. 页面边距 ===== */
+html[data-app-theme] body #app :is(.vg-page, .ctl-page, .lp-main, .pm, .prd-page.pr-list, .asset-page) { padding: 16px 20px 28px; gap: 14px; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .inventory-page { max-width: none; margin: 0; padding: 16px 20px 28px; gap: 14px; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page { padding: 16px 20px 28px !important; background: transparent !important; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page .listing-shell { gap: 14px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .replacement-page { padding: 16px 20px 28px !important; background: transparent !important; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .tiktok-page.ts-page { padding: 16px 20px 28px !important; gap: 14px !important; }
+
+/* ===== 2. 页面标题区 ===== */
+html[data-app-theme] body #app :is(.vg-page-head:has(h1), .ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .pub-head, .asset-head) { position: relative; display: flex; flex-flow: row nowrap; align-items: center; gap: 13px; min-height: 56px; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+html[data-app-theme] body #app :is(.ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .pub-head, .asset-head)::before { display: none; }
+html[data-app-theme] body #app :is(.vg-page-head__icon, .ctl-head__icon, .ts-head__icon, .lp-head__icon, .ls-head__icon, .pm-head__icon, .pub-head__icon, .asset-head__icon) { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--theme-accent) 80%, #fff); }
+html[data-app-theme='light-teal'] body #app :is(.vg-page-head__icon, .ctl-head__icon, .ts-head__icon, .lp-head__icon, .ls-head__icon, .pm-head__icon, .pub-head__icon, .asset-head__icon), html[data-app-theme='mono'] body #app :is(.vg-page-head__icon, .ctl-head__icon, .ts-head__icon, .lp-head__icon, .ls-head__icon, .pm-head__icon, .pub-head__icon, .asset-head__icon) { border-color: transparent; background: var(--theme-accent-soft); color: var(--theme-accent); }
+html[data-app-theme] body #app :is(.vg-page-head__icon, .ctl-head__icon, .ts-head__icon, .lp-head__icon, .ls-head__icon, .pm-head__icon, .pub-head__icon, .asset-head__icon) svg { width: 20px; height: 20px; stroke-width: 1.7; }
+html[data-app-theme] body #app :is(.vg-page-head, .ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .pub-head, .asset-head) h1 { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--theme-text); font-size: 20px; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; white-space: nowrap; }
+html[data-app-theme] body #app :is(.vg-page-head__text, .ctl-head__text, .ts-head__text, .lp-head__text, .ls-head__text, .pm-head__text, .pub-head__text, .asset-head__text) > p { margin: 3px 0 0; overflow: hidden; color: var(--theme-text-muted); font-size: 12.5px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+html[data-app-theme] body #app :is(.vg-page-head__text, .ctl-head__text, .ts-head__text, .lp-head__text, .ls-head__text, .pm-head__text, .pub-head__text, .asset-head__text) { min-width: 0; }
+html[data-app-theme] body #app :is(.vg-page-head__actions, .ctl-head__actions, .ts-head__actions, .lp-head__actions, .ls-head__actions, .pm-head__actions, .pub-head__actions, .asset-head__actions) { display: flex; flex-wrap: nowrap; order: 2; gap: 8px; align-items: center; margin-left: auto; flex-shrink: 0; }
+/* 标题右侧的画面：弹性占位，不会压到按钮 */
+@media (min-width: 1280px) {
+  html[data-app-theme='dark-teal'] body #app :is(.vg-page-head:has(h1), .ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .asset-head)::after { content: ''; order: 1; align-self: flex-end; flex: 0 1 300px; min-width: 0; height: 58px; margin: 0 4px -6px auto; background: url(../assets/hero-frames.svg) right bottom / auto 100% no-repeat; pointer-events: none; }
+  html[data-app-theme='dark-teal'] body #app :is(.vg-page-head:has(h1), .ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .asset-head) > [class*='head__actions'] { margin-left: 0; }
+}
+@media (max-width: 900px) { html[data-app-theme] body #app :is(.vg-page-head:has(h1), .ctl-head, .ts-head, .lp-head, .ls-head, .pm-head, .pub-head, .asset-head) { flex-wrap: wrap; } }
+
+/* ===== 3. 页内标签：统一下划线 ===== */
+html[data-app-theme] body #app :is(.pr-tabs, .listing-page .tab-bar, .pm-tabs, .lp-tabs, .ts-tabs) { display: flex; gap: 26px; align-items: stretch; width: 100%; min-height: 40px; padding: 0; border: 0; border-bottom: 1px solid var(--theme-divider); border-radius: 0; background: none; box-shadow: none; }
+html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .listing-page .tab-bar .tab-button, .pm-tabs > button, .lp-tabs .lp-tab, .ts-tabs .ts-tab) { position: relative; display: inline-flex; flex: none; align-items: center; gap: 7px; width: auto; min-width: 0; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--theme-text-muted); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .listing-page .tab-bar .tab-button, .pm-tabs > button, .lp-tabs .lp-tab, .ts-tabs .ts-tab):hover { color: var(--theme-text); }
+html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .listing-page .tab-bar .tab-button, .pm-tabs > button, .lp-tabs .lp-tab, .ts-tabs .ts-tab):is(.is-active, .active) { color: var(--theme-text); font-weight: 600; }
+html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .listing-page .tab-bar .tab-button, .pm-tabs > button, .lp-tabs .lp-tab, .ts-tabs .ts-tab):is(.is-active, .active)::after { content: ''; position: absolute; inset: auto 0 -1px; width: auto; height: 2px; border-radius: 2px; background: var(--theme-accent); }
+html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .pm-tabs > button) svg { width: 15px; height: 15px; }
+
+/* ===== 4. 卡片：内容卡平面，统计卡轻渐变 ===== */
+html[data-app-theme] body #app :is(.vg-card, .lp-card, .ts-card, .pm-card, .ls-card, .ctl-bench, .pr-panel, .listing-page .workspace-card, .replacement-page .content-card, .replacement-page .confirm-sticky, .inventory-page .inventory-panel):not(.is-active, .is-selected, .vg-card--soft) { border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); box-shadow: none; }
+html[data-app-theme] body #app :is(.vg-stat, .ctl-stat, .ml-stat, .listing-page .stat-card, .inventory-page .summary-card) { min-height: 76px; border: 1px solid var(--theme-border); border-radius: 12px; background: linear-gradient(160deg, color-mix(in srgb, var(--theme-text) 6%, var(--theme-panel)), var(--theme-panel) 62%); box-shadow: none; }
+html[data-app-theme] body #app :is(.ctl-stat, .ml-stat).is-active { border-color: color-mix(in srgb, var(--theme-accent) 60%, transparent); background: linear-gradient(150deg, color-mix(in srgb, var(--theme-accent) 15%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 30%, var(--theme-panel))); box-shadow: inset 0 -2px 0 var(--theme-accent); }
+html[data-app-theme] body #app :is(.vg-stat__value, .ctl-stat__value, .listing-page .stat-card strong, .inventory-page .summary-card strong) { font-size: 20px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+html[data-app-theme] body #app :is(.vg-stat__icon, .listing-page .stat-icon, .inventory-page .summary-card__icon) { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; box-shadow: none; }
+html[data-app-theme] body #app .inventory-page .summary-card { gap: 4px; padding: 12px 14px; }
+html[data-app-theme] body #app .inventory-page .summary-card::after { display: none; }
+html[data-app-theme] body #app .listing-page .stat-card { padding: 12px 14px; }
+
+/* ===== 5. 按钮和输入：32 高、8 圆角 ===== */
+html[data-app-theme] body #app :is(.inventory-page :is(.primary-button, .ghost-button), .prd-page .prd-btn:not(.prd-btn--link), .listing-page :is(.hero-primary-button, .hero-ghost-button, .toolbar-button), .replacement-page :is(.secondary-button:not(.upload-product-button), .run-button)) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; height: 32px; padding: 0 13px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: none; white-space: nowrap; }
+html[data-app-theme] body #app :is(.inventory-page .primary-button, .prd-page .prd-btn--primary, .listing-page .hero-primary-button, .replacement-page .run-button) { border: 1px solid transparent; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 92%, #fff), color-mix(in srgb, var(--theme-accent) 76%, #003d31)); color: var(--theme-on-accent); font-weight: 600; }
+html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page :is(.hero-ghost-button, .toolbar-button), .replacement-page .secondary-button:not(.upload-product-button)) { border: 1px solid var(--theme-border-control); background: var(--theme-control); color: var(--theme-text); }
+html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page :is(.hero-ghost-button, .toolbar-button), .replacement-page .secondary-button:not(.upload-product-button)):hover:not(:disabled) { background: var(--theme-control-hover); }
+html[data-app-theme] body #app :is(.inventory-page, .prd-page, .listing-page, .replacement-page) button:disabled { opacity: .5; }
+html[data-app-theme] body #app :is(.prd-page :is(.prd-input, .prd-select), .listing-page .field-shell) { min-height: 32px; height: 32px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-input); font-size: 13px; box-shadow: none; }
+html[data-app-theme] body #app .listing-page .field-shell :is(input, select) { height: 30px; min-height: 0; border: 0; background: transparent; font-size: 13px; }
+
+/* ===== 6. 图标色块：全部同一种强调色，颜色只用来表示状态 ===== */
+html[data-app-theme] body #app :is(.home-line__icon, .toolbox__icon, .tb-card__icon, .home-tool__icon, .home-auto__icon, .apd__icon) { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--theme-accent) 22%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--theme-accent) 14%, var(--theme-panel)); box-shadow: none; color: var(--theme-accent); }
+html[data-app-theme] body #app .home .home-auto { border-color: var(--theme-border); background: var(--theme-panel); }
+html[data-app-theme] body #app .home .home-hero { border-color: var(--theme-border); border-radius: 12px; }
+html[data-app-theme] body #app .home .home-hero h1 { font-size: 26px; font-weight: 700; }
+
+/* ===== 7. 空状态 ===== */
+html[data-app-theme] body #app :is(.vg-empty__icon, .ctl-empty__art, .ts-empty__icon, .ls-drop__icon) { display: grid; place-items: center; width: 52px; height: 52px; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--theme-accent) 14%, var(--theme-panel)); color: var(--theme-accent); }
+html[data-app-theme] body #app .ls-drop { border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+
+/* ===== 8. 个别页面的收尾 ===== */
+html[data-app-theme] body #app .web-workspace > .vg-page-head { padding: 16px 20px 14px; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page .tab-bar .tab-button:is(.active, :hover) { background: none !important; box-shadow: none !important; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page :is(.empty-state, .empty-text, .table-empty, .empty) { color: var(--theme-text-muted) !important; }
+html[data-app-theme] body #app :is(.app-shell, .web-shell) .replacement-page.plugin-workspace-standard { max-width: none; margin: 0; gap: 14px; }
+html[data-app-theme] body #app .replacement-page :is(.step, .prompt-heading-icon, .history-icon) { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--theme-accent) 16%, var(--theme-panel)); color: var(--theme-accent); font-size: 12px; font-weight: 700; box-shadow: none; }
+html[data-app-theme] body #app .replacement-page .history-icon svg { width: 16px; height: 16px; }
+html[data-app-theme] body #app .replacement-page h2 { font-size: 15px; font-weight: 600; }

@@ -6,6 +6,8 @@ import { createRepo } from './repo'
 import { createCloudService } from './service'
 import { createSyncService } from './sync'
 import { createAiService } from './ai'
+import { createMatting, type Matting } from './sceneSwap/matting'
+import { createSceneSwapService } from './sceneSwap/service'
 import { createGenerationService, type GenerationProviders } from './generate'
 import { createHash } from 'node:crypto'
 import { createCloneEngine } from './cloneEngine'
@@ -15,7 +17,7 @@ import { applyManagedSettings, toProxiedManagedSettings } from '../../../src/sha
 import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
-export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders> } = {}) {
+export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders>; matting?: Matting; inspect?: (prompt: string, images: Buffer[]) => Promise<string> } = {}) {
   const config = { ...loadCloudConfig(), ...overrides }
   if (config.isProduction && config.mockPay) {
     throw new Error('生产环境禁止开启 CLOUD_PAY_MOCK')
@@ -55,6 +57,24 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     fontsDir: config.fontsDir,
     providers: options.generationProviders,
   })
+  const sceneSwap = createSceneSwapService({
+    db,
+    now: options.now ?? Date.now,
+    dataDir: config.dataDir,
+    sync,
+    billing: service.billing,
+    imageModel: () => {
+      const cap = service.readManagedSettings().capabilities.image
+      return { platform: cap.platform, model: cap.model }
+    },
+    assertConfigured: generation.assertImageConfigured,
+    quota: { remaining: ai.quota.remaining, record: (userId, ok) => ai.quota.record(userId, 'scene-swap', ok) },
+    matting: options.matting ?? createMatting(config.matteModelPath),
+    renderImage: generation.renderImage,
+    inspect: options.inspect ?? ai.inspect,
+    concurrency: config.sceneSwapConcurrency,
+    trialsPerDay: config.sceneSwapTrialsPerDay,
+  })
   let listenPort = config.port
   const cloneEngine = createCloneEngine({
     dataDir: config.dataDir,
@@ -84,13 +104,14 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     tikhubBaseUrl: config.tikhubBaseUrl,
     maxBodyBytes: Math.max(1, config.aiProxyMaxBodyMb) * 1024 * 1024,
   })
-  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy)
+  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap)
   const server = http.createServer((req, res) => void handler(req, res))
 
   // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.
   let cleanupTimer: NodeJS.Timeout | null = null
   function runCleanup() {
     if (!config.orphanFileDays) return
+    void sceneSwap.cleanupCache().catch(() => undefined)
     try {
       const result = sync.cleanupOrphans(config.orphanFileDays * 24 * 60 * 60 * 1000)
       if (result.removed) console.log(`[videogen-cloud] 清理未引用文件 ${result.removed} 个，释放 ${(result.bytes / 1024 / 1024).toFixed(1)} MB`)
@@ -108,6 +129,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     generation,
     sync,
     cloneEngine,
+    sceneSwap,
     listen: () =>
       new Promise<number>((resolve, reject) => {
         server.once('error', reject)
@@ -119,6 +141,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
           }
           const address = server.address()
           listenPort = typeof address === 'object' && address ? address.port : config.port
+          sceneSwap.start()
           resolve(listenPort)
         })
       }),
@@ -127,6 +150,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
         if (cleanupTimer) clearInterval(cleanupTimer)
         cleanupTimer = null
         cloneEngine.close()
+        sceneSwap.close()
         server.close(() => {
           db.close()
           resolve()

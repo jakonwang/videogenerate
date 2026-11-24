@@ -35,7 +35,7 @@ const props = defineProps<{
 
 <style scoped>
 .vg-shell {
-  --vg-sidebar-width: 224px;
+  --vg-sidebar-width: 228px;
   display: grid;
   grid-template-columns: var(--vg-sidebar-width) minmax(0, 1fr);
   height: 100%;
@@ -59,6 +59,6 @@ const props = defineProps<{
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  background: transparent;
+  background: radial-gradient(1100px 380px at 60% -140px, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 72%);
 }
 </style>

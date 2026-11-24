@@ -48,6 +48,10 @@ export function loadCloudConfig() {
     aiProxyMaxBodyMb: envInt('CLOUD_AI_PROXY_MAX_BODY_MB', 64),
     /** 水印、字幕用的中文字体目录（部署时运行 npm run setup:fonts 准备） */
     fontsDir: resolve(env('CLOUD_FONTS_DIR', join(process.cwd(), 'resources', 'fonts'))),
+    /** 批量换景：抠图模型文件、同时处理几张、每个账号每天免费试图几张 */
+    matteModelPath: resolve(env('CLOUD_MATTE_MODEL', join(dataDir, 'models', 'birefnet_lite_fp16.onnx'))),
+    sceneSwapConcurrency: envInt('CLOUD_SCENE_SWAP_CONCURRENCY', 3),
+    sceneSwapTrialsPerDay: envInt('CLOUD_SCENE_SWAP_TRIALS_PER_DAY', 10),
     /** 云端同时执行的图片 / 视频生成任务数 */
     aiJobConcurrency: envInt('CLOUD_AI_JOB_CONCURRENCY', 4),
     /** 服务器 ffmpeg 处理（合成、水印、字幕、切片、混剪）同时跑几个；按 CPU 核数调 */

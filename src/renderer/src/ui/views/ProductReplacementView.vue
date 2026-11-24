@@ -244,15 +244,13 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 
 <template>
   <main class="replacement-page plugin-workspace-standard">
-    <header class="page-header hero-banner">
-      <button type="button" class="back-button" @click="router.push('/plugins')"><ArrowLeft :size="15" />{{ t('productReplacement.backToPlugins') }}</button>
-      <div class="hero-copy"><span class="eyebrow" aria-hidden="true"><Sparkles :size="14" /></span><h1>{{ t('productReplacement.title') || '商品替换' }}</h1><p>{{ t('productReplacement.description') }}</p></div>
-      <div class="hero-visual" aria-hidden="true">
-        <span class="hero-frame hero-frame-source"><img v-if="productImages[0]" :src="src(productImages[0])" /></span>
-        <span class="hero-arrow"><Sparkles :size="18" /></span>
-        <span class="hero-frame hero-frame-result"><img v-if="productImages[1] || productImages[0]" :src="src(productImages[1] || productImages[0])" /></span>
+    <header class="vg-scope vg-page-head">
+      <span class="vg-page-head__icon"><Sparkles :size="20" /></span>
+      <div class="vg-page-head__text"><h1>{{ t('productReplacement.title') || '商品替换' }}</h1><p>{{ t('productReplacement.description') }}</p></div>
+      <div class="vg-page-head__actions">
+        <button type="button" class="vg-btn vg-btn--ghost" @click="router.push('/plugins')"><ArrowLeft :size="15" />{{ t('productReplacement.backToPlugins') }}</button>
+        <button type="button" class="vg-btn" @click="showPrompts = !showPrompts"><Archive :size="15" />{{ t('productReplacement.promptManagement') }}</button>
       </div>
-      <button class="icon-button hero-action" :title="t('productReplacement.promptManagement')" @click="showPrompts = !showPrompts"><Archive :size="17" /></button>
     </header>
 
     <div class="workspace-grid">

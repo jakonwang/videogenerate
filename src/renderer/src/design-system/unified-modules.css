@@ -1,0 +1,67 @@
+/* 统一规范（续）：GMV Max、复刻项目内页、选品详情、发布中心，以及所有列表的表头和标签。接在 unified.css 后面加载。 */
+
+/* ===== GMV Max：同一套标题、标签、卡片、按钮；图表的数据色不动 ===== */
+html[data-app-theme] body #app .gmv-workspace.gv-skin { --d-radius: 12px; background: transparent !important; }
+html[data-app-theme] body #app .gmv-topnav { background: var(--theme-shell); }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__bar { height: 56px; padding: 0 20px; gap: 26px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__brand { gap: 11px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__brand > span { width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent); border-radius: 10px; background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--theme-accent) 80%, #fff); }
+html[data-app-theme='light-teal'] body #app .gmv-topnav .gmv-topnav__brand > span,
+html[data-app-theme='mono'] body #app .gmv-topnav .gmv-topnav__brand > span { border-color: transparent; background: var(--theme-accent-soft); color: var(--theme-accent); }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__brand strong { font-size: 16px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__tabs { gap: 26px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__tab { gap: 7px; padding: 0 !important; color: var(--theme-text-muted) !important; font-size: 13.5px !important; font-weight: 500 !important; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__tab.is-active { color: var(--theme-text) !important; font-weight: 600 !important; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__tab.is-active::after { left: 0; right: 0; border-radius: 2px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__sub { gap: 26px; padding: 0 20px; }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__sub button.is-active::after { border-radius: 2px; background: var(--theme-accent); }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__mode { border-color: var(--theme-border-control); background: var(--theme-panel-soft); }
+html[data-app-theme] body #app .gmv-topnav .gmv-topnav__mode button.is-active { background: color-mix(in srgb, var(--theme-accent) 22%, var(--theme-panel)) !important; color: var(--theme-text) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-task-header h1 { font-size: 20px !important; font-weight: 700 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-button { border-radius: 8px !important; font-size: 13px !important; box-shadow: none !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-button--primary { border-color: transparent !important; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 92%, #fff), color-mix(in srgb, var(--theme-accent) 76%, #003d31)) !important; color: var(--theme-on-accent) !important; font-weight: 600 !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-button--secondary { border: 1px solid var(--theme-border-control) !important; background: var(--theme-control) !important; color: var(--theme-text) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-button--secondary:hover:not(:disabled) { background: var(--theme-control-hover) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-task-summary, .gmv-today-status, .gmv-v2-results, .gmv-v2-signals, .gmv-v2-decision-categories, .gmv-v2-protection-goals) > article,
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi { background: linear-gradient(160deg, color-mix(in srgb, var(--theme-text) 6%, var(--theme-panel)), var(--theme-panel) 62%) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin .gmv-dkpi.is-selected { border-color: color-mix(in srgb, var(--theme-accent) 60%, transparent) !important; background: linear-gradient(150deg, color-mix(in srgb, var(--theme-accent) 15%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 30%, var(--theme-panel))) !important; box-shadow: inset 0 -2px 0 var(--theme-accent) !important; }
+html[data-app-theme] body #app .gmv-workspace.gv-skin :is(.gmv-table, .gmv-dtable) thead th { background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 9%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 5%, var(--theme-panel))) !important; }
+
+/* ===== 表头：所有列表同一种色带 ===== */
+html[data-app-theme] body #app :is(.vg-table th, .prd-table th, .pub-row--head, .inventory-page thead th, .product-table__head) { background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 9%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 5%, var(--theme-panel))); color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; }
+html[data-app-theme] body #app :is(.vg-table-wrap, .prd-table-wrap) { border-radius: 10px; }
+
+/* ===== 标签：组件库和发布中心 ===== */
+html[data-app-theme] body #app :is(.vg-tabs, .pub-tabs) { gap: 26px; }
+html[data-app-theme] body #app :is(.vg-tabs__btn, .pub-tab) { height: 42px; padding: 0; font-size: 13.5px; font-weight: 500; }
+html[data-app-theme] body #app :is(.vg-tabs__btn, .pub-tab).is-active { font-weight: 600; }
+html[data-app-theme] body #app :is(.vg-tabs__btn, .pub-tab).is-active::after { left: 0; right: 0; background: var(--theme-accent); }
+html[data-app-theme] body #app .pub-tabs { height: 46px; }
+html[data-app-theme] body #app .pub-tab { height: auto; }
+
+/* ===== 复刻项目内页 ===== */
+html[data-app-theme] body #app .cw-step-view { padding: 16px 20px 0; }
+html[data-app-theme] body #app .cw-head { gap: 13px; min-height: 56px; }
+html[data-app-theme] body #app .cw-head__no { width: 44px; height: 44px; border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--theme-accent) 80%, #fff); font-size: 15px; font-weight: 700; }
+html[data-app-theme='light-teal'] body #app .cw-head__no,
+html[data-app-theme='mono'] body #app .cw-head__no { border-color: transparent; background: var(--theme-accent-soft); color: var(--theme-accent); }
+html[data-app-theme] body #app .cw-head__text h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+html[data-app-theme] body #app .cw-head__text p { font-size: 12.5px; }
+html[data-app-theme] body #app .cw-card:not(.cw-card--theater, .is-active, .is-selected) { border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); }
+html[data-app-theme] body #app .cw-card__head h3 { font-size: 14px; font-weight: 600; }
+html[data-app-theme] body #app .cwf { min-height: 48px; border-radius: 12px; background: var(--theme-panel); }
+html[data-app-theme] body #app .cwf-step { height: 34px; border-radius: 8px; }
+
+/* ===== 选品详情 ===== */
+html[data-app-theme] body #app .prd-detail__head h1 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+html[data-app-theme] body #app :is(.prd-card, .prd-stepper) { border-radius: 12px; }
+html[data-app-theme] body #app .prd-page :is(.prd-btn--sm, .prd-btn--xs):not(.prd-btn--link) { min-height: 0; height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; }
+
+/* ===== 筛选按钮：和库页的筛选同一种样子 ===== */
+html[data-app-theme] body #app :is(.vg-seg__btn, .pl-tab) { height: 30px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; font-size: 12.5px; }
+html[data-app-theme] body #app .vg-seg__btn:hover:not(:disabled) { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
+html[data-app-theme] body #app :is(.vg-seg__btn, .pl-tab).is-active { background: color-mix(in srgb, var(--theme-accent) 18%, transparent); color: var(--theme-text); font-weight: 600; }
+html[data-app-theme] body #app .vg-seg { gap: 2px; }
+/* GMV 的提示色跟品牌色 */
+html[data-app-theme] body #app .gmv-workspace.gv-skin { --status-info: var(--theme-accent); }
+html[data-app-theme] body #app .pl-tabs { gap: 2px; padding: 0; border: 0; background: none; }

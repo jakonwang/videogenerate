@@ -143,6 +143,11 @@ export const router = createRouter({
     isWeb
       ? { path: '/product-watermark', ...desktopPage(() => import('@desktop-views/ProductWatermarkView.vue'), () => import('./lib/desktopApi/productWatermark')), meta: { tabs: false } }
       : { path: '/product-watermark', component: () => import('./views/ProductWatermarkView.vue'), meta: { tabs: false } },
+    // AI 修图 · 批量换景：网页是电脑端页面（批次在云端），手机 App 用自己的页面
+    isWeb
+      ? { path: '/garment-studio', ...desktopPage(() => import('@desktop-views/GarmentStudioView.vue'), () => import('./lib/desktopApi/sceneSwap')), meta: { tabs: false } }
+      : { path: '/garment-studio', redirect: '/scene-swap' },
+    isWeb ? { path: '/scene-swap', redirect: '/garment-studio' } : { path: '/scene-swap', component: () => import('./views/SceneSwapView.vue'), meta: { tabs: false } },
     { path: '/works', component: () => import('./views/WorksView.vue'), meta: { tabs: false } },
     // Web: the desktop 素材库 page itself, backed by the web assetLibrary API (cloud assets; images and videos only).
     isWeb

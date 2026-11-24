@@ -11,8 +11,8 @@ import {
   Store,
   Images,
   Settings,
-  Inbox,
   Scissors,
+  Shirt,
   BarChart3,
   Clapperboard,
   Building2,
@@ -30,7 +30,6 @@ import AssetLibraryPickerHost from "./components/AssetLibraryPickerHost.vue";
 import AiProducerPanel from "./components/ai/AiProducerPanel.vue";
 import AiCommandBar from "./components/ai/AiCommandBar.vue";
 import AiNotices from "./components/ai/AiNotices.vue";
-import SectionTabs from "./navigation/SectionTabs.vue";
 import { lastSectionTab, sectionActive } from "./navigation/sectionTabs";
 import { useAiProducerStore } from "@/stores/aiProducer";
 import { useCloneTopbarStore } from "@/stores/cloneTopbar";
@@ -80,13 +79,6 @@ const allNavItems = computed(() => [
     label: t("ai.nav.workbench"),
     active: route.path.startsWith("/home"),
   },
-  {
-    to: "/inbox",
-    icon: Inbox,
-    label: t("ai.nav.inbox"),
-    active: route.path.startsWith("/inbox"),
-    badge: aiProducer.pendingReviews,
-  },
 ]);
 
 // 侧边栏按「做内容 → 卖出去 → 资料」排；复刻 / tk创意室 / 图生视频合成「AI 出片」，模特库并进素材库、
@@ -97,6 +89,7 @@ const allSections = computed(() => [
     items: [
       { to: "/product-research", icon: SearchCheck, label: t("nav.productResearch"), active: route.path.startsWith("/product-research") },
       { to: lastSectionTab("aiVideo").to, icon: Clapperboard, label: t("ai.nav.aiVideo"), active: sectionActive("aiVideo", route.path) },
+      { to: "/garment-studio", icon: Shirt, label: t("ai.nav.garmentStudio"), active: route.path.startsWith("/garment-studio") },
       { to: "/production", icon: Scissors, label: t("ai.nav.production"), active: sectionActive("production", route.path) },
     ],
   },
@@ -197,7 +190,8 @@ onBeforeUnmount(() => {
             data-testid="app-settings-button"
             :class="{ 'is-active': route.path.startsWith('/settings') }"
             type="button"
-            :title="appSidebarCollapsed ? t('nav.settings') : undefined"
+            :title="t('nav.settings')"
+            :aria-label="t('nav.settings')"
             @click="go('/settings')"
           >
             <span class="shell-foot__tile"><Settings class="shell-foot__icon" /></span>
@@ -272,7 +266,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <!-- 合并入口（AI 出片 / 批量混剪 / 素材库）的页面标签 -->
-        <SectionTabs :translate="(key) => t(key)" />
         <RouterView />
       </DsMainLayout>
     </div>
@@ -305,113 +298,28 @@ onBeforeUnmount(() => {
 .app-shell :deep(.ds-workspace) {
   padding: 10px 14px 12px;
 }
+.app-shell :deep(.ds-workspace:has(> .garment)),
 .app-shell :deep(.ds-workspace:has(> .vg-page)) {
   padding: 0;
 }
 
 /* ===== Sidebar footer ===== */
-.shell-foot__btn {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  height: 40px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: color-mix(in srgb, var(--theme-text) 86%, transparent);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: .02em;
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.shell-foot__tile {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
-  color: var(--theme-text-secondary);
-  transition: all .15s;
-}
-.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); color: var(--theme-text); }
-.shell-foot__btn:hover .shell-foot__tile { color: var(--theme-text); border-color: color-mix(in srgb, var(--theme-text) 14%, transparent); }
-.shell-foot__btn.is-active {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 18%, transparent), color-mix(in srgb, var(--theme-accent) 4%, transparent));
-  border-color: color-mix(in srgb, var(--theme-accent) 24%, transparent);
-  color: var(--theme-text);
-  font-weight: 600;
-}
-.shell-foot__btn.is-active .shell-foot__tile {
-  border-color: transparent;
-  background: var(--theme-accent);
-  color: var(--theme-on-accent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--theme-accent) 38%, transparent);
-}
-.shell-foot__icon { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.9; }
-
+.shell-foot__btn { display: flex; align-items: center; gap: 12px; width: 100%; height: 39px; padding: 0 9px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--theme-text) 92%, transparent); font-size: 14.5px; text-align: left; cursor: pointer; transition: background .14s; }
+.shell-foot__btn:hover { background: color-mix(in srgb, var(--theme-text) 5%, transparent); }
+.shell-foot__btn.is-active { border-color: color-mix(in srgb, var(--theme-accent) 20%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 24%, transparent), color-mix(in srgb, var(--theme-accent) 7%, transparent)); color: var(--theme-text); font-weight: 600; }
+.shell-foot__tile { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--theme-text) 5%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--theme-text) 7%, transparent); color: color-mix(in srgb, var(--theme-text) 88%, transparent); }
+.shell-foot__tile .shell-foot__icon { width: 15px; height: 15px; stroke-width: 1.9; }
+.shell-foot__btn.is-active .shell-foot__tile { border-color: transparent; background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 94%, #fff), color-mix(in srgb, var(--theme-accent) 78%, #003d31)); color: #fff; box-shadow: 0 0 12px color-mix(in srgb, var(--theme-accent) 40%, transparent); }
+.shell-foot__icon { width: 15px; height: 15px; flex-shrink: 0; stroke-width: 1.8; }
+.shell-foot__user { display: flex; align-items: center; gap: 9px; min-width: 0; margin-top: 8px; padding: 8px 6px 8px 9px; border: 1px solid var(--theme-border); border-radius: 10px; background: linear-gradient(160deg, color-mix(in srgb, var(--theme-text) 8%, transparent), color-mix(in srgb, var(--theme-text) 3%, transparent)); cursor: pointer; }
+.shell-foot__user:hover { border-color: var(--theme-border-control); }
+.shell-foot__avatar { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: linear-gradient(145deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 70%, #003d31)); color: #fff; font-size: 12px; font-weight: 700; }
 /* Language picker rendered as a nav row with an icon tile */
-.app-shell :deep(.vg-nav__footer .locale-select::before) {
-  content: '';
-  position: absolute;
-  left: 8px;
-  width: 28px;
-  height: 28px;
-  border: 1px solid color-mix(in srgb, var(--theme-text) 8%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
-  pointer-events: none;
-}
-.app-shell :deep(.vg-nav__footer .locale-select__icon) {
-  left: 15px;
-  z-index: 1;
-  width: 16px;
-  height: 16px;
-  color: var(--theme-text-secondary);
-}
-.app-shell :deep(.vg-nav__footer .locale-select__control) {
-  height: 40px;
-  padding-left: 47px;
-  border-color: transparent;
-  border-radius: 10px;
-  background-color: transparent;
-  box-shadow: none;
-  color: color-mix(in srgb, var(--theme-text) 86%, transparent);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: .02em;
-  cursor: pointer;
-}
-.app-shell :deep(.vg-nav__footer .locale-select__control:hover) {
-  background-color: color-mix(in srgb, var(--theme-text) 5%, transparent);
-  color: var(--theme-text);
-}
-
-.shell-foot__user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  margin-top: 6px;
-  padding: 8px 6px 8px 8px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme-text) 4%, transparent), color-mix(in srgb, var(--theme-text) 1.5%, transparent));
-}
-.shell-foot__avatar {
-  width: 30px;
-  height: 30px;
-  font-size: 13px;
-  font-weight: 700;
-  border-radius: 9px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-accent) 100%, #ffffff 12%), color-mix(in srgb, var(--theme-accent) 100%, #000000 30%));
-  color: var(--theme-on-accent);
-}
+.app-shell :deep(.vg-nav__footer .locale-select) { height: 39px; }
+.app-shell :deep(.vg-nav__footer .locale-select::before) { content: ''; position: absolute; left: 10px; width: 28px; height: 28px; border: 1px solid color-mix(in srgb, var(--theme-text) 5%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--theme-text) 7%, transparent); color: color-mix(in srgb, var(--theme-text) 88%, transparent); box-sizing: border-box; pointer-events: none; }
+.app-shell :deep(.vg-nav__footer .locale-select__icon) { left: 16.5px; z-index: 1; width: 15px; height: 15px; color: color-mix(in srgb, var(--theme-text) 88%, transparent); stroke-width: 2; }
+.app-shell :deep(.vg-nav__footer .locale-select__control) { height: 39px; padding-left: 50px; border-color: transparent; border-radius: 9px; background-color: transparent; box-shadow: none; color: color-mix(in srgb, var(--theme-text) 92%, transparent); font-size: 14.5px; font-weight: 400; cursor: pointer; }
+.app-shell :deep(.vg-nav__footer .locale-select__control:hover) { background-color: color-mix(in srgb, var(--theme-text) 5%, transparent); }
 .shell-foot__user-copy {
   display: flex;
   flex-direction: column;

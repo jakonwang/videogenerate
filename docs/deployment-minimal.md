@@ -52,6 +52,17 @@ apt-get install -y libnss3 libdbus-1-3 libatk1.0-0 libgbm1 libasound2 libxrandr2
 
 同时渲染数用 `CLOUD_SUBTITLE_RENDER_SLOTS` 控制（默认 1，全服务器共用；每个渲染约占几百 MB 内存）。
 
+批量换景的「保真」模式在服务器抠图，部署时额外准备模型（约 115 MB，MIT 许可；`onnxruntime-node` 随 `npm install` 装好，Linux 上先设 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` 避免下载 CUDA 版）：
+
+```bash
+mkdir -p services/cloud/data/models   # 即 CLOUD_DATA_DIR/models；也可用 CLOUD_MATTE_MODEL 指定文件
+curl -L -o services/cloud/data/models/birefnet_lite_fp16.onnx https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/main/onnx/model_fp16.onnx
+sha256sum services/cloud/data/models/birefnet_lite_fp16.onnx   # d39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402
+```
+
+抠图在单独的子进程里一次跑一张（12 线程开发机约 27 秒，实测峰值约 5.9 GB，闲置 2 分钟退出）；同一张原图只抠一次。机器内存或容器上限低于 7000 MB（`CLOUD_MATTE_MIN_MEMORY_MB`）时自动停用，避免 OOM 拖垮云端。没有模型或已停用时只能用「融合」模式。
+并发和每天免费试图数：`CLOUD_SCENE_SWAP_CONCURRENCY`（默认 3）、`CLOUD_SCENE_SWAP_TRIALS_PER_DAY`（默认 10）。系统场景在后台「换景场景库」上传。
+
 ## 环境模板
 
 - 预发布：`env/staging.env.example`

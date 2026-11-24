@@ -119,6 +119,7 @@ async function buildImageEditFormData(input: {
   quality: 'low' | 'medium' | 'high'
   imagePaths?: string[]
   uploadFileNames?: string[]
+  size?: string
 }) {
   const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
   if (!refs.length) throw new Error(`${VECTOR_ENGINE_LABEL} 图片编辑缺少参考图`)
@@ -127,7 +128,7 @@ async function buildImageEditFormData(input: {
   form.set('prompt', input.prompt)
   if (String(input.negativePrompt || '').trim()) form.set('negative_prompt', String(input.negativePrompt || '').trim())
   form.set('quality', input.quality)
-  form.set('size', '1024x1536')
+  form.set('size', input.size || '1024x1536')
   form.set('n', '1')
   const uploadFileNames = Array.isArray(input.uploadFileNames) ? input.uploadFileNames : []
   for (const [index, ref] of refs.entries()) {
@@ -218,6 +219,8 @@ async function generateImageUnmetered(input: {
   capability: Extract<UnifiedCapability, 'image_generate' | 'image_edit'>
   imagePaths?: string[]
   uploadFileNames?: string[]
+  /** 图片编辑的出图尺寸，默认 1024x1536 */
+  size?: string
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'image')!
   const root = baseUrl(input.credentials)
@@ -308,6 +311,7 @@ async function generateImageUnmetered(input: {
       quality,
       imagePaths: refs,
       uploadFileNames: input.uploadFileNames,
+      size: input.size,
     })
     const res = await fetchWithRetry({
       url,

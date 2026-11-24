@@ -223,6 +223,37 @@ export function createGenerationService(deps: {
     return settings
   }
 
+  type RenderInput = { userId: string; prompt: string; negativePrompt?: string; refs: Array<{ fileId: string; path: string }>; aspectRatio: '1:1' | '9:16' | '16:9'; size?: string; workDir: string }
+
+  async function renderWith(credentials: ModelCredentials, input: RenderInput): Promise<string> {
+    if (credentials.imageProviderPrimary === 'grsai') {
+      const urls = await Promise.all(input.refs.map((ref) => publicUrl(credentials, input.userId, ref.fileId, ref.path)))
+      const task = await providers.createGrsImageTask({ credentials, prompt: input.prompt, negativePrompt: input.negativePrompt, urls, aspectRatio: input.aspectRatio })
+      const outputUrl = task.directUrl || (await providers.waitGrsResult(credentials, task.taskId)).outputUrl
+      const outputPath = join(input.workDir, `output_${randomUUID()}${extname(new URL(outputUrl).pathname) || '.png'}`)
+      await writeFile(outputPath, await providers.download(outputUrl))
+      return outputPath
+    }
+    const result = await providers.generateImage({
+      credentials,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      outDir: input.workDir,
+      filePrefix: 'output',
+      capability: input.refs.length ? 'image_edit' : 'image_generate',
+      imagePaths: input.refs.map((ref) => ref.path),
+      ...(input.size ? { size: input.size } : {}),
+    })
+    return result.outputPath
+  }
+
+  /** 批量换景用：按画面宽高选最接近的出图尺寸，返回本地文件 */
+  async function renderImage(input: { userId: string; prompt: string; refs: Array<{ fileId: string; path: string }>; width: number; height: number; workDir: string }) {
+    const ratio = input.width / input.height
+    const [aspectRatio, size] = ratio > 1.2 ? (['16:9', '1536x1024'] as const) : ratio > 0.83 ? (['1:1', '1024x1024'] as const) : (['9:16', '1024x1536'] as const)
+    return renderWith(credentialsFrom(assertConfigured('image')), { ...input, aspectRatio, size })
+  }
+
   async function execute(row: JobRow) {
     const input = JSON.parse(row.input) as AiGenerationRequest
     const settings = assertConfigured(row.kind)
@@ -275,24 +306,7 @@ export function createGenerationService(deps: {
 
       let outputPath = ''
       if (row.kind === 'image') {
-        if (credentials.imageProviderPrimary === 'grsai') {
-          const urls = await Promise.all(refs.map((ref) => publicUrl(credentials, row.user_id, ref.fileId, ref.path)))
-          const task = await providers.createGrsImageTask({ credentials, prompt, negativePrompt: input.negativePrompt, urls, aspectRatio: input.aspectRatio ?? '1:1' })
-          const outputUrl = task.directUrl || (await providers.waitGrsResult(credentials, task.taskId)).outputUrl
-          outputPath = join(workDir, `output${extname(new URL(outputUrl).pathname) || '.png'}`)
-          await writeFile(outputPath, await providers.download(outputUrl))
-        } else {
-          const result = await providers.generateImage({
-            credentials,
-            prompt,
-            negativePrompt: input.negativePrompt,
-            outDir: workDir,
-            filePrefix: 'output',
-            capability: refs.length ? 'image_edit' : 'image_generate',
-            imagePaths: refs.map((ref) => ref.path),
-          })
-          outputPath = result.outputPath
-        }
+        outputPath = await renderWith(credentials, { userId: row.user_id, prompt, negativePrompt: input.negativePrompt, refs, aspectRatio: input.aspectRatio ?? '1:1', workDir })
       } else {
         const first = refs[0]
         if (!first) throw badRequest('图生视频需要一张商品图')
@@ -509,7 +523,7 @@ export function createGenerationService(deps: {
     while (Object.values(lanes).some((lane) => lane.running || lane.queue.length)) await new Promise((resolve) => setTimeout(resolve, 20))
   }
 
-  return { create, get, list, readPublicFile, publicUrls, fileLinks, idle }
+  return { create, get, list, readPublicFile, publicUrls, fileLinks, renderImage, assertImageConfigured: () => void assertConfigured('image'), idle }
 }
 
 export type GenerationService = ReturnType<typeof createGenerationService>

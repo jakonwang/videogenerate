@@ -103,7 +103,8 @@ watch(
 
 onMounted(async () => {
   const current = await cloudAuth.ensureLoaded()
-  if (current.licensed) {
+  // 内部版（mode = off）不登录也算已授权：没登录时留在这里，否则永远登不上云端账号
+  if (current.licensed && (current.mode !== 'off' || current.loggedIn)) {
     goNext()
     return
   }

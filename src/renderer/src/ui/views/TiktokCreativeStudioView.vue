@@ -3386,8 +3386,14 @@ onBeforeUnmount(() => {
           <p>{{ tr("autoUi.k_c5d1c075a08a") }}</p>
         </div>
         <div class="ts-head__actions">
-          <button class="vg-btn" type="button" :disabled="loading" @click="refresh()">
-            <RefreshCcw :size="15" :class="{ 'vg-spin': loading }" />{{ tr("autoUi.k_38108eaa1d32") }}
+          <button class="ts-util" type="button" @click="accountDialogOpen = true">
+            <KeyRound :size="14" />{{ tr("autoUi.k_9d4ca7f307e7") }}<em>{{ accounts.length }}</em>
+          </button>
+          <button class="ts-util" type="button" @click="retrySettingsOpen = true">
+            <ShieldCheck :size="14" />{{ tr("tiktokCreative.retry.guard") }}<em>{{ creativeSettings.imageRetryLimit }}</em>
+          </button>
+          <button class="ts-util ts-util--icon" type="button" :title="tr('autoUi.k_38108eaa1d32')" :aria-label="tr('autoUi.k_38108eaa1d32')" :disabled="loading" @click="refresh()">
+            <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />
           </button>
         </div>
       </header>
@@ -3397,13 +3403,6 @@ onBeforeUnmount(() => {
         </button>
         <button class="ts-tab" :class="{ 'is-active': activeTab === 'library' }" type="button" @click="setActiveTab('library')">
           <FolderOpen :size="15" />{{ tr("autoUi.k_21eb39d9da89") }}<em>{{ completedCount }}</em>
-        </button>
-        <span class="ts-tabs__spacer" />
-        <button class="ts-util" type="button" @click="accountDialogOpen = true">
-          <KeyRound :size="14" />{{ tr("autoUi.k_9d4ca7f307e7") }}<em>{{ accounts.length }}</em>
-        </button>
-        <button class="ts-util" type="button" @click="retrySettingsOpen = true">
-          <ShieldCheck :size="14" />{{ tr("tiktokCreative.retry.guard") }}<em>{{ creativeSettings.imageRetryLimit }}</em>
         </button>
       </nav>
     </section>
@@ -5582,36 +5581,34 @@ onBeforeUnmount(() => {
 
     <section v-if="activeTab === 'library'" class="vg-scope ts-library">
       <div class="ts-card ts-card--flush">
-        <div class="ts-libbar">
-          <div class="ts-libbar__title">
-            <h2>{{ tr("autoUi.k_21eb39d9da89") }}</h2>
-            <span>{{ filteredItems.length }} {{ tr("autoUi.k_64728a772742") }} · {{ tr("autoUi.k_ec4fb1482924") }}</span>
-          </div>
-          <div class="ts-viewtoggle" role="group">
-            <button type="button" :class="{ 'is-on': libraryViewMode === 'grid' }" @click="libraryViewMode = 'grid'"><Grid2x2 :size="15" /></button>
-            <button type="button" :class="{ 'is-on': libraryViewMode === 'list' }" @click="libraryViewMode = 'list'"><List :size="15" /></button>
-          </div>
-        </div>
-        <div class="ts-filters" role="tablist">
-          <button
-            v-for="option in libraryFilterOptions"
-            :key="option"
-            type="button"
-            class="ts-filter"
-            :class="{ 'is-active': libraryFilter === option }"
-            @click="setLibraryFilter(option)"
-          >{{ libraryFilterLabel(option) }}<em>{{ libraryFilterCounts[option] }}</em></button>
-        </div>
-        <div class="ts-actionsbar">
-          <label class="ts-check">
-            <input type="checkbox" :checked="Boolean(filteredItems.length) && selectedShotIds.length === filteredItems.length" :disabled="!filteredItems.length" @change="selectAllFiltered" />
-            <span>{{ selectedShotIds.length ? `${selectedShotIds.length} / ${filteredItems.length}` : (selectedShotIds.length && selectedShotIds.length === filteredItems.length ? tr("autoUi.k_f02e9439542f") : tr("autoUi.k_3fca9c80cc8a")) }}</span>
+        <header class="ts-toolbar">
+          <label class="ts-check ts-toolbar__all">
+            <input type="checkbox" :checked="Boolean(filteredItems.length) && selectedShotIds.length === filteredItems.length" :disabled="!filteredItems.length" :aria-label="tr('autoUi.k_3fca9c80cc8a')" :title="tr('autoUi.k_3fca9c80cc8a')" @change="selectAllFiltered" />
           </label>
+          <nav class="ts-filters" :aria-label="tr('autoUi.k_21eb39d9da89')">
+            <button
+              v-for="option in libraryFilterOptions"
+              :key="option"
+              type="button"
+              class="ts-filter"
+              :class="{ 'is-active': libraryFilter === option }"
+              :aria-pressed="libraryFilter === option"
+              @click="setLibraryFilter(option)"
+            >{{ libraryFilterLabel(option) }}<em>{{ libraryFilterCounts[option] }}</em></button>
+          </nav>
+          <div class="ts-viewtoggle" role="group">
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'grid' }" :aria-label="tr('livePhoto.workspace.gridView')" :aria-pressed="libraryViewMode === 'grid'" @click="libraryViewMode = 'grid'"><Grid2x2 :size="14" /></button>
+            <button type="button" :class="{ 'is-on': libraryViewMode === 'list' }" :aria-label="tr('livePhoto.workspace.listView')" :aria-pressed="libraryViewMode === 'list'" @click="libraryViewMode = 'list'"><List :size="14" /></button>
+          </div>
+        </header>
+        <!-- 批量操作：选中后才出现 -->
+        <div v-if="selectedShotIds.length" class="ts-actionsbar">
+          <span>{{ tr('livePhoto.workspace.selected') }} <b class="vg-num">{{ selectedShotIds.length }}</b> / {{ filteredItems.length }}</span>
           <span class="ts-actionsbar__spacer" />
-          <button v-if="selectedShotIds.length" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles"><Captions :size="14" />{{ tr("tiktokCreative.revertSubtitles") }}</button>
-          <button class="vg-btn vg-btn--sm" type="button" :disabled="!subtitleEligibleItems.length" @click="openSubtitleDialog"><Captions :size="14" />{{ tr("autoUi.k_4d25c03db6e0") }}{{ subtitleEligibleItems.length }})</button>
-          <button class="vg-btn vg-btn--sm ts-danger" type="button" :disabled="!selectedShotIds.length" @click="openBatchDelete"><Trash2 :size="14" />{{ tr("autoUi.k_4edb066d4627") }}{{ selectedShotIds.length }})</button>
-          <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" :disabled="!selectedShotIds.length" @click="exportSelected"><Download :size="14" />{{ tr("autoUi.k_6bd41d31e000") }}{{ selectedShotIds.length }})</button>
+          <button class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles"><Captions :size="13" />{{ tr("tiktokCreative.revertSubtitles") }}</button>
+          <button class="vg-btn vg-btn--sm" type="button" :disabled="!subtitleEligibleItems.length" @click="openSubtitleDialog"><Captions :size="13" />{{ tr("autoUi.k_4d25c03db6e0") }}{{ subtitleEligibleItems.length }})</button>
+          <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" @click="openBatchDelete"><Trash2 :size="13" />{{ tr("autoUi.k_4edb066d4627") }}{{ selectedShotIds.length }})</button>
+          <button class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click="exportSelected"><Download :size="13" />{{ tr("autoUi.k_6bd41d31e000") }}{{ selectedShotIds.length }})</button>
         </div>
 
         <div v-if="!pagedItems.length" class="ts-empty">

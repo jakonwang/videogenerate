@@ -10,6 +10,7 @@ import type { GenerationService } from './generate'
 import { SYNC_MAX_FILE_BYTES } from '../../../src/shared/cloud/sync'
 import { CloudError, badRequest } from './security'
 import type { AiProxy } from './aiProxy'
+import type { SceneSwapService } from './sceneSwap/service'
 
 const MAX_BODY_BYTES = 1024 * 1024
 
@@ -68,7 +69,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy, sceneSwap?: SceneSwapService) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -157,6 +158,37 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   /* ---------------------------------------------------------------- AI 网关（手机 App） */
   route('POST', '/api/v1/ai/chat', (ctx) => ai.chat(member(ctx).id, ctx.body as any))
   route('GET', '/api/v1/ai/usage', (ctx) => ai.usage(user(ctx).id))
+  /* ---------------------------------------------------------------- AI 修图 · 批量换景 */
+  if (sceneSwap) {
+    const base = '/api/v1/scene-swap'
+    route('GET', `${base}/info`, (ctx) => {
+      const current = user(ctx)
+      const image = service.billing.summary(current).usage.find((item) => item.capability === 'image')
+      const free = !image || image.rule.mode === 'unlimited' || (image.rule.mode === 'free_then_credits' && image.freeUsed < image.rule.freePerMonth)
+      return sceneSwap.info(current.id, free ? 0 : image.points)
+    })
+    route('POST', `${base}/scenes`, (ctx) => ({ scene: sceneSwap.addScene(member(ctx).id, ctx.body) }))
+    route('DELETE', `${base}/scenes/:id`, (ctx) => sceneSwap.removeScene(user(ctx).id, ctx.params.id))
+    route('GET', `${base}/batches`, (ctx) => ({ batches: sceneSwap.list(user(ctx).id) }))
+    route('POST', `${base}/batches`, (ctx) => ({ batch: sceneSwap.create(member(ctx).id, ctx.body as any) }))
+    route('GET', `${base}/batches/:id`, (ctx) => ({ batch: sceneSwap.get(user(ctx).id, ctx.params.id) }))
+    route('DELETE', `${base}/batches/:id`, (ctx) => sceneSwap.remove(user(ctx).id, ctx.params.id))
+    for (const action of ['run', 'pause', 'resume', 'retrial'] as const) {
+      route('POST', `${base}/batches/:id/${action}`, (ctx) => ({ batch: sceneSwap[action](member(ctx).id, ctx.params.id) }))
+    }
+    route('POST', `${base}/batches/:id/items/:itemId/redo`, (ctx) => ({ batch: sceneSwap.redo(member(ctx).id, ctx.params.id, ctx.params.itemId, ctx.body) }))
+    route('POST', `${base}/batches/:id/items/:itemId/accept`, (ctx) => ({ batch: sceneSwap.accept(member(ctx).id, ctx.params.id, ctx.params.itemId) }))
+    route('POST', `${base}/batches/:id/items/:itemId/reject`, (ctx) => ({ batch: sceneSwap.reject(user(ctx).id, ctx.params.id, ctx.params.itemId) }))
+    route('GET', '/api/v1/admin/scenes', (ctx) => (admin(ctx), { scenes: sceneSwap.systemScenes() }))
+    route('POST', '/api/v1/admin/scenes', (ctx) => ({ scene: sceneSwap.addScene(admin(ctx).user.id, ctx.body, true) }))
+    route('DELETE', '/api/v1/admin/scenes/:id', (ctx) => sceneSwap.removeScene(admin(ctx).user.id, ctx.params.id, true))
+    route('PUT', '/api/v1/admin/files', (ctx) => sync.uploadFile(admin(ctx).user.id, ctx.bodyBuffer, String(ctx.req.headers['content-type'] || '')), { maxBodyBytes: SYNC_MAX_FILE_BYTES })
+    route('GET', '/api/v1/admin/files/:id', (ctx) => {
+      const file = sync.readFile(admin(ctx).user.id, ctx.params.id)
+      return raw(200, file.body, file.mime)
+    })
+  }
+
   route('POST', '/api/v1/ai/jobs', (ctx) => ({ job: generation.create(member(ctx).id, ctx.body as any) }))
   route('GET', '/api/v1/ai/jobs', (ctx) => generation.list(user(ctx).id, String(ctx.url.searchParams.get('ids') || '').split(',')))
   route('GET', '/api/v1/ai/jobs/:id', (ctx) => ({ job: generation.get(user(ctx).id, ctx.params.id) }))

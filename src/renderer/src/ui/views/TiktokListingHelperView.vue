@@ -602,42 +602,19 @@ onBeforeUnmount(() => {
 <template>
   <div class="listing-page plugin-workspace-standard">
     <section class="listing-shell">
-      <div class="page-top">
-        <div class="crumb-row">
-          <button class="back-link" type="button" @click="router.push('/plugins')">
-            <ChevronLeft class="h-4 w-4" /> {{ tr('ai.tools.back') }} </button>
-          <span>/</span>
-          <strong>{{ tr('ai.tools.items.tiktok-listing-helper.name') }}</strong>
+      <header class="vg-scope vg-page-head">
+        <span class="vg-page-head__icon"><List :size="20" /></span>
+        <div class="vg-page-head__text">
+          <h1>{{ tr('ai.tools.items.tiktok-listing-helper.name') }}</h1>
+          <p>{{ activeTab === 'list' ? tr('autoUi.k_13ba9420d681') : tr('autoUi.k_5040843bf739') }}</p>
         </div>
-
-        <div class="page-top__main">
-          <div class="hero-copy">
-            <div class="page-title-row">
-              <h1>{{ activeTab === 'list' ? tr('autoUi.k_44544d214520') : tr('autoUi.k_8ded76cf707b') }}</h1>
-            </div>
-            <p>
-              {{
-                activeTab === 'list'
-                  ? tr('autoUi.k_13ba9420d681')
-                  : tr('autoUi.k_5040843bf739')
-              }}
-            </p>
-          </div>
-
-          <div class="hero-actions">
-            <button class="hero-ghost-button" type="button" @click="openExportConfigDialog">
-              <Pencil class="h-4 w-4" /> {{ tr('autoUi.k_3d05c8ad5e08') }} </button>
-            <button class="hero-ghost-button" type="button" @click="openCreate">
-              <Plus class="h-4 w-4" />
-              {{ activeTab === 'list' ? tr('autoUi.k_78e54d4ece28') : tr('autoUi.k_8d420ca267bb') }}
-            </button>
-            <button class="hero-primary-button" type="button" :disabled="exporting" @click="exportExcel">
-              <Download class="h-4 w-4" />
-              {{ exporting ? tr('autoUi.k_a2c0cf876cfc') : tr('autoUi.k_10462051c131') }}
-            </button>
-          </div>
+        <div class="vg-page-head__actions">
+          <button class="vg-btn vg-btn--ghost" type="button" @click="router.push('/plugins')"><ChevronLeft :size="15" />{{ tr('ai.tools.back') }}</button>
+          <button class="vg-btn" type="button" @click="openExportConfigDialog"><Pencil :size="15" />{{ tr('autoUi.k_3d05c8ad5e08') }}</button>
+          <button class="vg-btn" type="button" @click="openCreate"><Plus :size="15" />{{ activeTab === 'list' ? tr('autoUi.k_78e54d4ece28') : tr('autoUi.k_8d420ca267bb') }}</button>
+          <button class="vg-btn vg-btn--primary" type="button" :disabled="exporting" @click="exportExcel"><Download :size="15" />{{ exporting ? tr('autoUi.k_a2c0cf876cfc') : tr('autoUi.k_10462051c131') }}</button>
         </div>
-      </div>
+      </header>
 
       <div v-if="notice" class="notice success">{{ notice }}</div>
       <div v-if="errorText" class="notice error">{{ errorText }}</div>

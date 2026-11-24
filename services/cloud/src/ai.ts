@@ -36,7 +36,7 @@ export function createAiService(deps: {
   const day = (at: number) => new Date(at).toISOString().slice(0, 10)
 
   function usedToday(userId: string): number {
-    const row = db.prepare('SELECT COALESCE(SUM(calls), 0) AS calls FROM ai_usage WHERE user_id = ? AND day = ? AND purpose != ?').get(userId, day(now()), CLONE_ENGINE_PURPOSE) as { calls: number }
+    const row = db.prepare('SELECT COALESCE(SUM(calls), 0) AS calls FROM ai_usage WHERE user_id = ? AND day = ? AND purpose NOT IN (?, ?)').get(userId, day(now()), CLONE_ENGINE_PURPOSE, 'scene-swap-trial') as { calls: number }
     return Number(row.calls)
   }
 
@@ -143,6 +143,27 @@ export function createAiService(deps: {
     }
   }
 
+  /** 云端内部的看图检查（批量换景质检）：不占用户的 AI 次数 */
+  async function inspect(prompt: string, images: Buffer[]): Promise<string> {
+    const route = chatRoute()
+    const res = await fetchImpl(`${route.baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${route.apiKey}`, 'x-api-key': route.apiKey },
+      body: JSON.stringify({
+        model: route.model,
+        stream: false,
+        temperature: 0,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...images.map((image) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image.toString('base64')}` } }))] }],
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const message = ((await res.json()) as any)?.choices?.[0]?.message?.content
+    return Array.isArray(message) ? message.map((part: any) => part?.text || '').join('') : String(message ?? '')
+  }
+
+  const remaining = (userId: string) => Math.max(0, deps.perDay - usedToday(userId))
+
   function usage(userId: string): AiUsageResponse {
     return {
       usedToday: usedToday(userId),
@@ -152,7 +173,7 @@ export function createAiService(deps: {
     }
   }
 
-  return { chat, usage, quota: { assert: assertQuota, record }, cloneEngine: { meter: meterCloneEngine, usedToday: cloneEngineUsedToday } }
+  return { chat, inspect, usage, quota: { assert: assertQuota, record, remaining }, cloneEngine: { meter: meterCloneEngine, usedToday: cloneEngineUsedToday } }
 }
 
 export type AiService = ReturnType<typeof createAiService>

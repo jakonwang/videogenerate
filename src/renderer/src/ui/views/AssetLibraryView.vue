@@ -1383,11 +1383,14 @@ onUnmounted(() => {
 .asset-page { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 520px; padding: 14px 20px 16px; container-type: inline-size; container-name: libpage; }
 
 /* ---------- head ---------- */
-.asset-head { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
-.asset-head__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--vg-accent-soft); border: 1px solid var(--vg-accent-line); color: var(--vg-accent); flex-shrink: 0; }
+.asset-head { position: relative; isolation: isolate; display: flex; align-items: center; gap: 13px; flex-shrink: 0; }
+html[data-app-theme='dark-teal'] .asset-head::before { content: ''; position: absolute; z-index: -1; right: 130px; bottom: -8px; width: min(380px, 38%); height: 70px; background: url(../../assets/hero-frames.svg) right bottom / auto 100% no-repeat; pointer-events: none; }
+@media (max-width: 1100px) { html[data-app-theme='dark-teal'] .asset-head::before { display: none; } }
+.asset-head__icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--vg-accent) 30%, transparent); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--vg-accent) 46%, var(--theme-panel)), color-mix(in srgb, var(--vg-accent) 10%, var(--theme-panel))); color: color-mix(in srgb, var(--vg-accent) 80%, #fff); }
+.asset-head__icon svg { width: 20px; height: 20px; stroke-width: 1.7; }
 .asset-head__text { flex: 1; min-width: 0; }
-.asset-head__text h1 { font-size: 20px; font-weight: 800; line-height: 1.25; }
-.asset-head__text p { margin-top: 2px; font-size: 13px; color: var(--theme-text-muted); }
+.asset-head__text h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; }
+.asset-head__text p { margin-top: 2px; font-size: 12.5px; color: var(--theme-text-muted); }
 .asset-head__actions { display: flex; gap: 8px; }
 
 /* ---------- workbench frame ---------- */

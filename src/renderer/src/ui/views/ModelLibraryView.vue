@@ -29,7 +29,7 @@ import {
   X,
   Pencil,
   Sparkles,
-  Trash2,
+  Trash2, UserRound
 } from 'lucide-vue-next'
 
 type CloneProject = {
@@ -1167,13 +1167,13 @@ watch([activeTab, statusFilter, search], () => {
 
 <template>
   <div class="vg-scope vg-page ml" data-testid="models-library-page">
-    <header class="ml-head">
-      <div class="ml-head__text">
-        <span class="ml-head__eyebrow"><Sparkles :size="13" /> AI Model Studio</span>
+    <header class="vg-page-head">
+      <span class="vg-page-head__icon"><UserRound :size="20" /></span>
+      <div class="vg-page-head__text">
         <h1>{{ t('modelLibrary.title') }}</h1>
         <p>{{ t('modelLibrary.desc') }}</p>
       </div>
-      <div class="ml-head__actions">
+      <div class="vg-page-head__actions">
         <button type="button" class="vg-btn" @click="openCreatePanel"><Download :size="15" /> {{ t('modelLibrary.import') }}</button>
         <button type="button" class="vg-btn vg-btn--primary" data-testid="models-open-create" @click="openCreatePanel">
           <Wand2 :size="15" /> {{ t('modelLibrary.create') }}

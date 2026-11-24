@@ -204,6 +204,10 @@ const products = ref<Product[]>([])
 const productImageMaterials = ref<ProductImageMaterialOption[]>([])
 const libraryFilter = ref<'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled'>('all')
 function setLibraryFilter(value: string) { if (['all', 'failed', 'running', 'paused', 'success_not_exported', 'success_exported', 'success_not_subtitled'].includes(value)) libraryFilter.value = value as typeof libraryFilter.value }
+/** 只有总数和三种进行状态有统计，其余筛选不显示数字 */
+function libraryFilterCount(key: string): number | null {
+  return key === 'all' ? libraryStats.value.total : key === 'running' ? libraryStats.value.running : key === 'failed' ? libraryStats.value.failed : key === 'paused' ? libraryStats.value.paused : null
+}
 const libraryStatusFilters = computed(() => [
   { key: 'all', label: t('common.all') },
   { key: 'running', label: t('livePhoto.workspace.running') },
@@ -1885,8 +1889,11 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <p>{{ uiText.workspaceHint }}</p>
           </div>
           <div class="lp-head__actions">
-            <button class="vg-btn" data-testid="live-photo-refresh" type="button" :disabled="loading" @click="loadAll">
-              <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />{{ t('livePhoto.hero.refresh') }}
+            <button class="lp-util" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
+              <Settings :size="14" />{{ t('livePhoto.workspace.retryGuard') }}<em>{{ livePhotoSettings.retryLimit ?? 0 }}</em>
+            </button>
+            <button class="lp-util lp-util--icon" data-testid="live-photo-refresh" type="button" :title="t('livePhoto.hero.refresh')" :aria-label="t('livePhoto.hero.refresh')" :disabled="loading" @click="loadAll">
+              <RefreshCcw :size="14" :class="{ 'vg-spin': loading }" />
             </button>
           </div>
         </header>
@@ -1897,10 +1904,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           </button>
           <button class="lp-tab" data-testid="live-photo-tab-library" :class="{ 'is-active': activeTab === 'library' }" role="tab" type="button" @click="activeTab = 'library'">
             <FolderOpen :size="15" />{{ uiText.tabLibrary }}<em>{{ libraryStats.total }}</em>
-          </button>
-          <span class="lp-tabs__spacer" />
-          <button class="lp-util" data-testid="live-photo-open-retry-settings" type="button" @click="livePhotoRetrySettingsOpen = true">
-            <Settings :size="14" />{{ t('livePhoto.workspace.retryGuard') }}<em>{{ livePhotoSettings.retryLimit ?? 0 }}</em>
           </button>
         </nav>
       </section>
@@ -2096,44 +2099,31 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 
       <!-- ============ 库 / 导出 ============ -->
       <section v-else class="lp-card lp-card--flush lp-library">
-        <header class="lp-bar">
-          <div class="lp-bar__title">
-            <h2>{{ uiText.libraryTitle }}<em class="vg-num">{{ libraryStats.total }} {{ uiText.itemUnit }}</em></h2>
-            <div class="lp-stats">
-              <span class="lp-stat lp-stat--run"><i />{{ t('livePhoto.workspace.running') }} <b class="vg-num">{{ libraryStats.running }}</b></span>
-              <span class="lp-stat lp-stat--err"><i />{{ t('livePhoto.status.failed') }} <b class="vg-num">{{ libraryStats.failed }}</b></span>
-              <span class="lp-stat lp-stat--warn"><i />{{ t('livePhoto.workspace.paused') }} <b class="vg-num">{{ libraryStats.paused }}</b></span>
-            </div>
-          </div>
-          <div class="lp-bar__tools">
-            <div class="lp-seg">
-              <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" :class="{ 'is-on': libraryFilter === filterItem.key }" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}</button>
-            </div>
-            <div class="lp-seg" :aria-label="t('livePhoto.workspace.viewMode')">
-              <button :class="{ 'is-on': libraryViewMode === 'grid' }" type="button" :aria-label="t('livePhoto.workspace.gridView')" :aria-pressed="libraryViewMode === 'grid'" @click="libraryViewMode = 'grid'"><Grid2x2 :size="14" /></button>
-              <button :class="{ 'is-on': libraryViewMode === 'list' }" type="button" :aria-label="t('livePhoto.workspace.listView')" :aria-pressed="libraryViewMode === 'list'" @click="libraryViewMode = 'list'"><List :size="14" /></button>
-            </div>
+        <header class="lp-toolbar">
+          <label class="lp-check lp-toolbar__all">
+            <input type="checkbox" :disabled="!filteredLibraryItems.length" :checked="!!selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length" :aria-label="t('livePhoto.workspace.selectFiltered')" :title="t('livePhoto.workspace.selectFiltered')" @change="toggleSelectAllFiltered" />
+          </label>
+          <nav class="lp-filters" :aria-label="uiText.libraryTitle">
+            <button v-for="filterItem in libraryStatusFilters" :key="filterItem.key" type="button" class="lp-filter" :class="{ 'is-active': libraryFilter === filterItem.key }" :aria-pressed="libraryFilter === filterItem.key" @click="setLibraryFilter(filterItem.key)">{{ filterItem.label }}<em v-if="libraryFilterCount(filterItem.key) !== null">{{ libraryFilterCount(filterItem.key) }}</em></button>
+          </nav>
+          <div class="lp-seg" :aria-label="t('livePhoto.workspace.viewMode')">
+            <button :class="{ 'is-on': libraryViewMode === 'grid' }" type="button" :aria-label="t('livePhoto.workspace.gridView')" :aria-pressed="libraryViewMode === 'grid'" @click="libraryViewMode = 'grid'"><Grid2x2 :size="14" /></button>
+            <button :class="{ 'is-on': libraryViewMode === 'list' }" type="button" :aria-label="t('livePhoto.workspace.listView')" :aria-pressed="libraryViewMode === 'list'" @click="libraryViewMode = 'list'"><List :size="14" /></button>
           </div>
         </header>
 
-        <div class="lp-selbar" :class="{ 'is-live': selectedLibraryIds.length }">
-          <label class="lp-check">
-            <input type="checkbox" :disabled="!filteredLibraryItems.length" :checked="!!selectedLibraryItems.length && selectedLibraryItems.length === filteredLibraryItems.length" @change="toggleSelectAllFiltered" />
-            <span>{{ t('livePhoto.workspace.selectFiltered') }}</span>
-          </label>
-          <span class="vg-muted">{{ t('livePhoto.workspace.selected') }} <b class="vg-num">{{ selectedLibraryIds.length }}</b></span>
-          <template v-if="retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length">
-            <span class="lp-selbar__sep" />
-            <button v-if="retryableFailedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="retryFailedItems">
-              <RefreshCcw :size="13" />{{ t('livePhoto.workspace.retryFailed') }} ({{ retryableFailedLibraryItems.length }})
-            </button>
-            <button v-if="pausedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="resumePausedItems">
-              <Play :size="13" />{{ t('livePhoto.workspace.resumePaused') }} ({{ pausedLibraryItems.length }})
-            </button>
-            <button v-if="runningLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="pauseRunningItems">
-              <Pause :size="13" />{{ t('livePhoto.workspace.pauseRunning') }} ({{ runningLibraryItems.length }})
-            </button>
-          </template>
+        <!-- 批量操作：选中了，或有失败 / 暂停 / 运行中的任务时才出现 -->
+        <div v-if="selectedLibraryIds.length || retryableFailedLibraryItems.length || pausedLibraryItems.length || runningLibraryItems.length" class="lp-selbar" :class="{ 'is-live': selectedLibraryIds.length }">
+          <span v-if="selectedLibraryIds.length">{{ t('livePhoto.workspace.selected') }} <b class="vg-num">{{ selectedLibraryIds.length }}</b></span>
+          <button v-if="retryableFailedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="retryFailedItems">
+            <RefreshCcw :size="13" />{{ t('livePhoto.workspace.retryFailed') }} ({{ retryableFailedLibraryItems.length }})
+          </button>
+          <button v-if="pausedLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="resumePausedItems">
+            <Play :size="13" />{{ t('livePhoto.workspace.resumePaused') }} ({{ pausedLibraryItems.length }})
+          </button>
+          <button v-if="runningLibraryItems.length" class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="pauseRunningItems">
+            <Pause :size="13" />{{ t('livePhoto.workspace.pauseRunning') }} ({{ runningLibraryItems.length }})
+          </button>
           <span class="vg-toolbar__spacer" />
           <template v-if="selectedLibraryIds.length">
             <button v-if="subtitleRevertEligibleSelectedCount" class="vg-btn vg-btn--sm" type="button" @click="revertSelectedSubtitles">{{ t('livePhoto.workspace.revertSubtitles') }}</button>
@@ -2143,10 +2133,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <button class="vg-btn vg-btn--sm vg-btn--danger" type="button" @click="openBatchDelete">
               <Trash2 :size="13" />{{ t('livePhoto.workspace.batchDelete') }} ({{ selectedLibraryIds.length }})
             </button>
+            <button class="vg-btn vg-btn--sm vg-btn--primary" data-testid="live-photo-export-selected" type="button" :disabled="exporting" @click="exportSelected">
+              <Package :size="13" />{{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
+            </button>
           </template>
-          <button class="vg-btn vg-btn--sm vg-btn--primary" data-testid="live-photo-export-selected" type="button" :disabled="exporting || !selectedLibraryIds.length" @click="exportSelected">
-            <Package :size="13" />{{ exporting ? t('livePhoto.actions.exporting') : `${uiText.exportSelectedPrefix} (${selectedLibraryIds.length})` }}
-          </button>
         </div>
 
         <div v-if="!filteredLibraryItems.length" class="vg-empty lp-empty" data-testid="live-photo-empty">

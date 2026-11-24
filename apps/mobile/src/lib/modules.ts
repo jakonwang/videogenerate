@@ -1,6 +1,6 @@
 import { isWeb } from './platform'
 import type { Component } from 'vue'
-import { BarChart3, Boxes, Building2, Captions, Clapperboard, Copy, Download, Droplets, Film, FolderOpen, ImagePlus, Inbox, LayoutGrid, LayoutTemplate, ListChecks, Megaphone, PackageSearch, Replace, Rocket, ScanSearch, Scissors, Send, Sparkles, Stamp, Store, Users, Wand2, Warehouse } from 'lucide-vue-next'
+import { BarChart3, Boxes, Building2, Captions, Clapperboard, Copy, Download, Droplets, Film, FolderOpen, ImagePlus, Inbox, LayoutGrid, LayoutTemplate, ListChecks, Megaphone, PackageSearch, Replace, Rocket, ScanSearch, Scissors, Send, Shirt, Sparkles, Stamp, Store, Users, Wand2, Warehouse } from 'lucide-vue-next'
 
 /**
  * 手机端模块清单（与桌面端一一对应）。phase 表示计划在第几阶段上线；
@@ -27,6 +27,7 @@ export const MODULES: MobileModule[] = [
   { key: 'clone', name: '复刻', description: '对标视频拆解，AI 生成同款', icon: Copy, group: 'create', phase: 2, route: '/clone' },
   { key: 'producer', name: 'AI 制片人', description: '一句话安排整条生产线', icon: Wand2, group: 'create', phase: 2, route: '/producer' },
   { key: 'product-images', name: '商品图素材', description: 'AI 生成商品主图、上身图、特写', icon: ImagePlus, group: 'create', phase: 2, route: '/product-images' },
+  { key: 'garment-studio', name: 'AI 修图', description: '批量换景：模特和衣服不变，只换背景', icon: Shirt, group: 'create', phase: 2, route: isWeb ? '/garment-studio' : '/scene-swap' },
   { key: 'product-replace', name: '商品替换', description: '把场景图里的商品换成我的商品', icon: Replace, group: 'create', phase: 2, route: '/product-replace' },
   { key: 'product-watermark', name: '商品图水印', description: '透明 PNG 模板批量盖到商品图上', icon: Stamp, group: 'create', phase: 2, route: '/product-watermark' },
   { key: 'live-photo', name: '图生视频', description: '商品图生成视频', icon: Sparkles, group: 'create', phase: 2, route: '/image-to-video' },

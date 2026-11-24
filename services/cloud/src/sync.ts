@@ -135,9 +135,14 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     return { fileId, size: body.length, mime }
   }
 
-  function readFile(userId: string, fileId: string) {
+  function readFile(userId: string, fileId: string): { mime: string; size: number; body: Buffer } {
     if (!FILE_ID_PATTERN.test(fileId)) throw badRequest('文件 id 不合法')
     const row = db.prepare('SELECT mime, size FROM sync_files WHERE user_id = ? AND id = ?').get(userId, fileId) as { mime: string; size: number } | undefined
+    if (!row) {
+      // 系统场景图由管理员上传，所有用户都能读
+      const scene = db.prepare('SELECT owner_id FROM scene_swap_scenes WHERE file_id = ? AND is_system = 1 LIMIT 1').get(fileId) as { owner_id: string } | undefined
+      if (scene && scene.owner_id !== userId) return readFile(scene.owner_id, fileId)
+    }
     const path = join(userDir(userId), fileId)
     if (!row || !existsSync(path)) throw new CloudError('NOT_FOUND', '文件不存在', 404)
     return { mime: row.mime, size: statSync(path).size, body: readFileSync(path) }
@@ -174,6 +179,11 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
           if (job.output_file_id) referenced.add(job.output_file_id)
           for (const match of String(job.input).match(HEX) || []) referenced.add(match)
         }
+      }
+      for (const row of db.prepare('SELECT file_id FROM scene_swap_scenes WHERE owner_id = ? AND (deleted = 0 OR is_system = 1)').all(userId) as Array<{ file_id: string }>) referenced.add(row.file_id)
+      for (const row of db.prepare("SELECT i.data, i.output_file_id FROM scene_swap_items i JOIN scene_swap_batches b ON b.id = i.batch_id WHERE i.user_id = ? AND b.status != 'deleted'").all(userId) as Array<{ data: string; output_file_id: string | null }>) {
+        if (row.output_file_id) referenced.add(row.output_file_id)
+        for (const match of row.data.match(HEX) || []) referenced.add(match)
       }
       for (const row of rows) {
         if (referenced.has(row.id)) continue

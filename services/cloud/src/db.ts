@@ -245,6 +245,49 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
     id: 7,
     sql: `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    // AI 修图 · 批量换景
+    id: 8,
+    sql: `
+      CREATE TABLE scene_swap_scenes (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL REFERENCES users(id),
+        is_system INTEGER NOT NULL DEFAULT 0,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        file_id TEXT NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_scene_swap_scenes_owner ON scene_swap_scenes(owner_id);
+      CREATE INDEX idx_scene_swap_scenes_file ON scene_swap_scenes(file_id);
+      CREATE TABLE scene_swap_batches (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        status TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_scene_swap_batches_user ON scene_swap_batches(user_id, created_at);
+      CREATE TABLE scene_swap_items (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL REFERENCES scene_swap_batches(id),
+        user_id TEXT NOT NULL REFERENCES users(id),
+        ord INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        trial INTEGER NOT NULL DEFAULT 0,
+        hold_id TEXT,
+        output_file_id TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        data TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_scene_swap_items_batch ON scene_swap_items(batch_id, ord);
+      CREATE INDEX idx_scene_swap_items_status ON scene_swap_items(status);
+      CREATE INDEX idx_scene_swap_items_user ON scene_swap_items(user_id, status);
+    `,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

@@ -118,6 +118,11 @@ const router = createRouter({
           component: () => import("@/ui/views/ProductImageMaterialsView.vue"),
         },
         {
+          path: "garment-studio",
+          name: "garment-studio",
+          component: () => import("@/ui/views/GarmentStudioView.vue"),
+        },
+        {
           path: "plugins/product-replacement",
           name: "plugin-product-replacement",
           component: () => import("@/ui/views/ProductReplacementView.vue"),

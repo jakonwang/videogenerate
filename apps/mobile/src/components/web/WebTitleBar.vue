@@ -5,6 +5,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import SectionTabs from '@desktop-src/ui/navigation/SectionTabs.vue'
 import { Activity, Inbox, Loader2, Search, Wand2 } from 'lucide-vue-next'
 import { MODULES } from '@/lib/modules'
 import { useGenerations } from '@/lib/generate'
@@ -80,6 +81,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
       <span class="vg-titlebar__subtitle">智能视频生产工作台</span>
     </router-link>
 
+    <SectionTabs v-if="!minimal" />
     <div class="vg-titlebar__drag"></div>
 
     <div v-if="!minimal" class="vg-titlebar__actions">
@@ -133,17 +135,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 </template>
 
 <style scoped>
-.vg-titlebar { position: relative; z-index: 100; display: flex; align-items: center; height: 48px; flex-shrink: 0; padding-left: 16px; background: var(--theme-sidebar); border-bottom: 1px solid var(--theme-border); color: var(--theme-text); user-select: none; }
+.vg-titlebar { position: relative; z-index: 100; display: flex; align-items: center; height: 44px; flex-shrink: 0; padding-left: 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--theme-accent) 6%, var(--theme-sidebar)), var(--theme-sidebar) 60%); border-bottom: 1px solid var(--theme-border); color: var(--theme-text); user-select: none; }
 .vg-titlebar__brand { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; }
 .vg-titlebar__logo { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; }
-.vg-titlebar__name { font-size: 14px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; }
+.vg-titlebar__name { font-size: 14px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
 .vg-titlebar__divider { width: 1px; height: 14px; background: var(--theme-border-control); }
 .vg-titlebar__subtitle { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vg-titlebar__drag { flex: 1; align-self: stretch; }
 .vg-titlebar__actions { display: flex; align-items: center; gap: 6px; padding-right: 14px; }
 
 .tb-search { position: relative; }
-.tb-search__btn { display: inline-flex; align-items: center; gap: 8px; height: 30px; min-width: 200px; padding: 0 8px 0 10px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 12.5px; cursor: pointer; }
+.tb-search__btn { display: inline-flex; align-items: center; gap: 8px; height: 30px; min-width: 200px; padding: 0 8px 0 10px; border: 1px solid var(--theme-border-control); border-radius: 9px; background: var(--theme-panel-soft); color: var(--theme-text-muted); font-size: 12.5px; cursor: pointer; }
 .tb-search__btn span { flex: 1; text-align: left; }
 .tb-search__btn:hover { border-color: var(--theme-border-control); color: var(--theme-text); }
 .tb-search__btn kbd { font-family: inherit; font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--theme-border); border-radius: 4px; background: var(--theme-panel); }

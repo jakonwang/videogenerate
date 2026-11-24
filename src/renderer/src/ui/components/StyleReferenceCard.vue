@@ -156,6 +156,12 @@ async function pickVideo() {
 <style scoped>
 .sr-card.is-on { border-color: var(--vg-accent-line, var(--theme-accent)); }
 .sr-bare { display: grid; gap: 10px; }
+.sr-bare .sr-drop { display: flex; gap: 14px; align-items: center; width: 100%; padding: 18px; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-panel-soft); color: var(--theme-text); text-align: left; cursor: pointer; }
+.sr-bare .sr-drop:hover { border-color: var(--theme-border-control); }
+.sr-bare .sr-drop .ts-dropzone__icon { display: inline-flex; color: var(--theme-text-muted); }
+.sr-bare .sr-drop .ts-dropzone__copy { display: flex; flex-direction: column; gap: 3px; }
+.sr-bare .sr-drop strong { font-size: 13px; font-weight: 600; }
+.sr-bare .sr-drop small { color: var(--theme-text-muted); font-size: 12px; }
 .sr-bare__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .sr-bare__head .ts-block__tools { display: flex; gap: 6px; }
 .sr-bare__title h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--theme-text); }
