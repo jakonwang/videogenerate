@@ -102,6 +102,8 @@ export type SyncProduct = {
   name: string
   type: SyncProductType
   remark?: string
+  /** 款号 */
+  code?: string
   tiktokProductIds?: string[]
   images: SyncFileRef[]
   coverFileId?: string

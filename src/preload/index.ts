@@ -18,6 +18,7 @@ import type {
 } from '../main/modules/dianxiaomi-inventory/types'
 import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
 import type { ShopProfit } from '../shared/shopProfit'
+import type { ProductCodeLink, ProductCodeOverview } from '../shared/productCode'
 import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
 import type { PcOverview } from '../shared/productCards'
 import type { ProductResearchFirewall, ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
@@ -842,6 +843,12 @@ const api = {
       >,
   },
 
+  productCodes: {
+    overview: () => ipcRenderer.invoke('productCodes:overview') as Promise<ProductCodeOverview>,
+    links: (code: string) => ipcRenderer.invoke('productCodes:links', code) as Promise<ProductCodeLink[]>,
+    next: (payload: { start: string; count?: number; reserved?: string[] }) => ipcRenderer.invoke('productCodes:next', payload) as Promise<string[]>,
+    applySuggestions: () => ipcRenderer.invoke('productCodes:applySuggestions') as Promise<{ applied: number; skipped: number }>,
+  },
   products: {
     list: () => ipcRenderer.invoke('products:list'),
     upsert: (payload: any) => ipcRenderer.invoke('products:upsert', payload),

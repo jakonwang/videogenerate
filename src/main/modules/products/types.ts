@@ -63,6 +63,8 @@ export type Product = {
   coverImagePath?: string
   livePhotoReferenceImagePath?: string
   remark?: string
+  /** 款号（统一写法，如 A-152）：和选品、店铺商品、订单、库存关联，见 src/shared/productCode.ts */
+  code?: string
   /** TikTok Shop product ids this library product is sold as. Joins ads (GMV Max) and creator data to the product. */
   tiktokProductIds?: string[]
   analysisBoardPath?: string

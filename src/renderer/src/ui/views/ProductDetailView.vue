@@ -28,6 +28,7 @@ import {
 } from 'lucide-vue-next'
 import { thumbnailUrl } from '@/lib/localMedia'
 import ProductSpacePanel from '../components/ai/ProductSpacePanel.vue'
+import ProductCodeCard from '../components/product/ProductCodeCard.vue'
 import { useAiProducerStore } from '@/stores/aiProducer'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
@@ -85,6 +86,7 @@ type Product = {
   id: string
   name: string
   type: ProductType
+  code?: string
   images?: ProductImageAsset[]
   coverImagePath?: string
   livePhotoReferenceImagePath?: string
@@ -557,6 +559,10 @@ async function removeImage(imageId: string) {
   }
 }
 
+async function saveCode(code: string) {
+  await saveProductPatch({ code })
+}
+
 async function saveRemark() {
   if (!selected.value) return
   savingRemark.value = true
@@ -922,6 +928,8 @@ watch(productId, () => {
               <span><b>{{ tr('autoUi.k_233a0e76b7b5') }}</b><br />{{ tr('autoUi.k_9f3fe6cd1003') }}</span>
             </div>
           </article>
+
+          <ProductCodeCard :code="selected.code" :save="saveCode" />
 
           <article class="vg-card">
             <div class="vg-card__head"><span class="vg-card__title"><NotebookPen :size="16" /> {{ tr('autoUi.k_5b4af310d47c') }}</span></div>

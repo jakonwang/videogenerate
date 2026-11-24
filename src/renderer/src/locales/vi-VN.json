@@ -2319,6 +2319,42 @@
     }
   },
   "productLibrary": {
+    "code": {
+      "title": "Mã mẫu",
+      "placeholder": "Ví dụ A-152",
+      "save": "Lưu",
+      "hint": "Sản phẩm, đơn hàng và tồn kho của shop sẽ được ghép theo mã này.",
+      "linked": "Sản phẩm shop của mẫu này ({count})",
+      "noLink": "Chưa có sản phẩm shop nào mang mã này.",
+      "price": "Giá",
+      "stock": "Tồn kho",
+      "shared": "dùng chung liên kết với mẫu khác",
+      "taken": "Mã này đã dùng cho \"{name}\"",
+      "invalid": "Mã cần có chữ và số, ví dụ A-152",
+      "check": "Kiểm tra mã",
+      "summary": "{matched}/{total} sản phẩm shop đã có mã",
+      "tabs": {
+        "suggestions": "Có thể điền",
+        "conflicts": "Tiêu đề và SKU khác nhau",
+        "duplicates": "Trùng mã",
+        "unmatched": "Shop chưa có mã",
+        "notListed": "Chưa đăng bán"
+      },
+      "tips": {
+        "suggestions": "Tên các sản phẩm này chính là mã, có thể điền một lần; mã trùng hãy mở để tự quyết định.",
+        "conflicts": "Mã trong tiêu đề khác SKU người bán. Hãy sửa trong trang người bán. Hiện tính theo tiêu đề.",
+        "duplicates": "Một mã dùng cho nhiều sản phẩm. Hãy mở và sửa.",
+        "unmatched": "Tiêu đề và SKU đều không có mã nên dữ liệu không thuộc mẫu nào. Liên kết chung cho livestream có thể bỏ qua.",
+        "notListed": "Có trong thư viện nhưng không thấy ở shop nào."
+      },
+      "repeat": "Trùng, cần xác nhận",
+      "inTitle": "tiêu đề",
+      "inSku": "SKU",
+      "apply": "Điền {count} mã",
+      "applied": "Đã điền {count} mã",
+      "empty": "Không có gì cần xử lý",
+      "optional": "Mã mẫu (không bắt buộc)"
+    },
     "title": "Thu vien san pham",
     "desc": "Quan ly anh, bang phan tich va du lieu co ban, dong thoi giu tai nguyen tao noi dung nhat quan.",
     "namePlaceholder": "Nhap ten san pham",

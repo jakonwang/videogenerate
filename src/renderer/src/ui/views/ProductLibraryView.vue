@@ -17,9 +17,12 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Tag,
   Trash2,
   X, Boxes
 } from 'lucide-vue-next'
+import ProductCodesDialog from '../components/product/ProductCodesDialog.vue'
+import { productCodeError } from '../components/product/productCodeText'
 
 type ProductType =
   | 'phone_case'
@@ -61,6 +64,7 @@ type Product = {
   id: string
   name: string
   type: ProductType
+  code?: string
   images?: ProductImageAsset[]
   coverImagePath?: string
   analysisBoardPath?: string
@@ -84,7 +88,10 @@ const statusFilter = ref<ProductStatusFilter>('all')
 const viewMode = ref<ViewMode>('grid')
 const currentPage = ref(1)
 const pageSize = ref(12)
-const creating = reactive({ name: '', type: 'phone_case' as ProductType })
+const creating = reactive({ name: '', code: '', type: 'phone_case' as ProductType })
+const createError = ref('')
+const codesOpen = ref(false)
+const hasCodes = Boolean(window.api.productCodes)
 const actionMenuOpenId = ref('')
 const createOpen = ref(false)
 const createNameInput = ref<HTMLInputElement | null>(null)
@@ -132,6 +139,7 @@ const filteredProducts = computed(() => {
     const hitQuery =
       !q ||
       String(item.name || '').toLowerCase().includes(q) ||
+      String(item.code || '').toLowerCase().includes(q) ||
       String(item.id || '').toLowerCase().includes(q) ||
       productTypeLabelV2(item.type).toLowerCase().includes(q) ||
       productBusinessStatusLabel(item).toLowerCase().includes(q)
@@ -341,13 +349,22 @@ async function rollbackPromptVersion() {
 
 async function createProduct() {
   const fallbackName = `${t('productLibrary.unnamed')}_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`
-  const name = creating.name.trim() || fallbackName
-  const created = (await window.api.products.upsert({
-    name,
-    type: creating.type,
-    images: [],
-    remark: '',
-  })) as Product
+  const name = creating.name.trim() || creating.code.trim() || fallbackName
+  createError.value = ''
+  let created: Product
+  try {
+    created = (await window.api.products.upsert({
+      name,
+      type: creating.type,
+      ...(creating.code.trim() ? { code: creating.code } : {}),
+      images: [],
+      remark: '',
+    })) as Product
+  } catch (error) {
+    createError.value = productCodeError(error, t)
+    return
+  }
+  creating.code = ''
   creating.name = ''
   creating.type = 'phone_case'
   createOpen.value = false
@@ -417,6 +434,9 @@ onBeforeUnmount(() => {
         <p>{{ t('productLibrary.desc') }}</p>
       </div>
       <div class="vg-page-head__actions">
+        <button v-if="hasCodes" class="vg-btn vg-btn--ghost" data-testid="product-codes-open" type="button" @click="codesOpen = true">
+          <Tag :size="15" /> {{ t('productLibrary.code.check') }}
+        </button>
         <button class="vg-btn vg-btn--ghost" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
           <SlidersHorizontal :size="15" /> {{ t('productLibrary.promptSettings.button') }}
         </button>
@@ -438,6 +458,11 @@ onBeforeUnmount(() => {
                 @keydown.esc="createOpen = false"
               />
             </label>
+            <label class="vg-field">
+              <span class="vg-field__label">{{ t('productLibrary.code.optional') }}</span>
+              <input v-model="creating.code" class="vg-input" type="text" maxlength="80" :placeholder="t('productLibrary.code.placeholder')" data-testid="product-create-code-input" />
+            </label>
+            <p v-if="createError" class="pl-create__error" role="alert">{{ createError }}</p>
             <label class="vg-field">
               <span class="vg-field__label">{{ t('productLibrary.productType') }}</span>
               <select v-model="creating.type" class="vg-select" data-testid="product-create-type-select">
@@ -522,6 +547,7 @@ onBeforeUnmount(() => {
         <div class="pl-card__body">
           <div class="pl-card__title">
             <strong :title="product.name">{{ product.name }}</strong>
+            <span v-if="product.code" class="pl-card__code vg-num">{{ product.code }}</span>
             <span class="pl-card__type">{{ productTypeLabelV2(product.type) }}</span>
           </div>
           <p class="pl-card__summary" :class="{ 'is-empty': !productAnalysisSummary(product) }" :title="productAnalysisSummary(product)">
@@ -579,6 +605,8 @@ onBeforeUnmount(() => {
       </div>
     </footer>
 
+    <ProductCodesDialog :open="codesOpen" @close="codesOpen = false" @changed="refresh" @open-product="codesOpen = false; openDetail($event)" />
+
     <Teleport to="body">
       <div v-if="promptDialogOpen" class="vg-scope vg-backdrop" data-testid="product-prompt-dialog" @click.self="promptDialogOpen = false">
         <section class="vg-dialog vg-dialog--wide" role="dialog" aria-modal="true" :aria-label="t('productLibrary.promptSettings.title')">
@@ -628,6 +656,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pl-card__code { flex: none; padding: 1px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; color: var(--vg-accent); background: var(--vg-accent-soft); }
+.pl-create__error { margin: 0; font-size: 12px; color: var(--theme-tone-red); }
 .pl { width: min(1440px, 100%); margin: 0 auto; gap: 16px; padding-top: 18px; }
 
 /* Header */

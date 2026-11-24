@@ -212,6 +212,7 @@ async function productToSync(session: Session, state: SyncStateFile, product: Pr
     name: product.name,
     type: PRODUCT_TYPES.has(product.type as SyncProductType) ? (product.type as SyncProductType) : 'general',
     remark: product.remark || '',
+    ...(product.code ? { code: product.code } : {}),
     tiktokProductIds: product.tiktokProductIds ?? [],
     images,
     coverFileId: cover && images.some((item) => item.fileId === cover.fileId) ? cover.fileId : images[0]?.fileId,
@@ -252,6 +253,8 @@ async function applyProduct(session: Session, state: SyncStateFile, data: SyncPr
     name: data.name || '未命名商品',
     type: PRODUCT_TYPES.has(data.type) ? data.type : 'general',
     remark: data.remark ?? '',
+    // 旧版本没有款号字段：没带就保留本机的
+    ...(data.code !== undefined ? { code: data.code } : {}),
     tiktokProductIds: data.tiktokProductIds ?? [],
     images,
     coverImagePath,
@@ -315,7 +318,7 @@ async function applyModel(session: Session, state: SyncStateFile, cloudId: strin
 
 /* ------------------------------------------------------------------ 同步主流程 */
 
-const OWN_PRODUCT_FIELDS = ['name', 'type', 'remark', 'tiktokProductIds', 'images', 'coverFileId', 'createdAt', 'desktop', 'desktopFiles']
+const OWN_PRODUCT_FIELDS = ['name', 'type', 'remark', 'code', 'tiktokProductIds', 'images', 'coverFileId', 'createdAt', 'desktop', 'desktopFiles']
 const OWN_MODEL_FIELDS = ['name', 'gender', 'ageRange', 'style', 'description', 'images', 'coverFileId', 'createdAt']
 
 function extraFields(data: Record<string, unknown> | null, own: string[]) {

@@ -6,7 +6,7 @@ import type { ProductResearchLiveTestRecord, ProductResearchProductEdit, Product
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrThumb from './PrThumb.vue'
 import { researchSourceOf } from '../../../../../shared/productResearch'
-import { CONCLUSIONS, conclusionMeta, downloadCsv, formatNumber, formatPercent, formatPrice, sourceLabel, marketOf, ratio, safeFileName, shortSku, type Conclusion } from './productResearchUtils'
+import { CONCLUSIONS, conclusionMeta, downloadCsv, formatNumber, formatPercent, formatPrice, sourceLabel, marketOf, ratio, safeFileName, type Conclusion } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
 const router = useRouter()
@@ -14,6 +14,8 @@ const { scheme, liveTestRecords, resultMap, productEdits } = ws
 
 const tab = ref<Conclusion>('excellent')
 const libraryNames = ref(new Set<string>())
+const libraryCodes = ref(new Set<string>())
+const inLibrary = (result?: ProductResearchResult) => Boolean(result) && (libraryNames.value.has(productName(result!.title)) || libraryCodes.value.has(editMap.value.get(result!.id)?.code || '-'))
 const adding = ref<string[]>([])
 const completing = ref(false)
 
@@ -57,9 +59,17 @@ function guessType(category = '', title = '') {
 
 async function loadLibrary() {
   try {
-    const products = await window.api.products.list() as { name: string }[]
+    const products = await window.api.products.list() as { name: string; code?: string }[]
+    libraryCodes.value = new Set(products.map((item) => item.code || '').filter(Boolean))
     libraryNames.value = new Set(products.map((item) => item.name))
   } catch { /* product library unavailable */ }
+}
+
+function codeError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const taken = /PRODUCT_CODE_TAKEN:(.*)$/.exec(message)
+  if (taken) return `款号已经用在「${taken[1]}」上`
+  return message.includes('PRODUCT_CODE_INVALID') ? '款号要同时有字母和数字' : message
 }
 
 function productName(title: string) {
@@ -69,7 +79,7 @@ function productName(title: string) {
 async function addToLibrary(resultIds: string[]) {
   const pending = resultIds.filter((id) => {
     const result = resultMap.value.get(id)
-    return result && !libraryNames.value.has(productName(result.title))
+    return result && !inLibrary(result)
   })
   if (!pending.length) { ws.notify('所选商品已全部在商品库中'); return }
   adding.value = pending
@@ -92,12 +102,14 @@ async function addToLibrary(resultIds: string[]) {
         name: productName(result.title),
         type: guessType(edit?.category, result.title),
         remark,
+        ...(edit?.code ? { code: edit.code } : {}),
         images: result.imagePath ? [{ id: `pr-${result.id}`, productId: '', filePath: result.imagePath, fileName: result.imagePath.split(/[\\/]/).pop() || 'cover.jpg', fileSize: 0, createdAt: now, updatedAt: now, isCover: true }] : [],
       })
       libraryNames.value.add(productName(result.title))
+      if (edit?.code) libraryCodes.value.add(edit.code)
       created += 1
     } catch (error) {
-      ws.notify(`「${result.title.slice(0, 20)}」加入商品库失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+      ws.notify(`「${result.title.slice(0, 20)}」加入商品库失败：${codeError(error)}`, 'error')
     }
   }
   adding.value = []
@@ -115,8 +127,8 @@ async function completeScheme() {
 function exportAll() {
   const list = CONCLUSIONS.flatMap((meta) => (tiers.value[meta.value] || []).map((item) => ({ ...item, meta })))
   if (!list.length) { ws.notify('暂无可导出的结果'); return }
-  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_爆款结果`, ['分层', '商品名称', 'SKU', '类目', `目标售价(${currency.value})`, '卖点', '测试场次', `成交金额(${currency.value})`, '点击率', '转化率', '退款率', '主播反馈', '推荐动作'],
-    list.map(({ record, result, edit, meta }) => [meta.tier, result?.title || record.resultId, result ? shortSku(result) : '', edit?.category || '', edit?.targetPrice || '', edit?.sellingPoint || '', record.sessions, record.revenue,
+  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_爆款结果`, ['分层', '商品名称', '款号', '类目', `目标售价(${currency.value})`, '卖点', '测试场次', `成交金额(${currency.value})`, '点击率', '转化率', '退款率', '主播反馈', '推荐动作'],
+    list.map(({ record, result, edit, meta }) => [meta.tier, result?.title || record.resultId, edit?.code || '', edit?.category || '', edit?.targetPrice || '', edit?.sellingPoint || '', record.sessions, record.revenue,
       formatPercent(ratio(record.clicks, record.views)), formatPercent(ratio(record.orders, record.clicks)), formatPercent(record.refundRate * 100), record.hostFeedback, adviceFor(meta.value, ratio(record.orders, record.clicks))]))
 }
 
@@ -157,7 +169,7 @@ onMounted(loadLibrary)
                   <PrThumb :result="result" />
                   <div class="prd-product__meta">
                     <span class="prd-product__name" :title="result?.title">{{ result?.title || '商品已删除' }}</span>
-                    <span class="prd-product__sub">SKU: {{ result ? shortSku(result) : '-' }}<template v-if="edit?.sellingPoint"> | {{ edit.sellingPoint }}</template></span>
+                    <span class="prd-product__sub">款号：{{ edit?.code || '未填' }}<template v-if="edit?.sellingPoint"> | {{ edit.sellingPoint }}</template></span>
                   </div>
                 </div>
               </td>
@@ -169,7 +181,7 @@ onMounted(loadLibrary)
               <td><span class="sw-advice">{{ adviceFor(record.conclusion as Conclusion, ratio(record.orders, record.clicks)) }}</span></td>
               <td class="center nowrap">
                 <template v-if="record.conclusion === 'excellent' || record.conclusion === 'potential'">
-                  <span v-if="result && libraryNames.has(result.title.trim().slice(0, 80))" class="prd-pill prd-pill--green"><Check :size="11" />已在商品库</span>
+                  <span v-if="inLibrary(result)" class="prd-pill prd-pill--green"><Check :size="11" />已在商品库</span>
                   <button v-else class="prd-btn prd-btn--xs prd-btn--soft" :disabled="adding.includes(record.resultId) || !result" @click="addToLibrary([record.resultId])">
                     <Loader2 v-if="adding.includes(record.resultId)" :size="11" class="prd-spin" /><PackagePlus v-else :size="11" />加入商品库
                   </button>

@@ -15,7 +15,7 @@ import PrPairingDialog from './PrPairingDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
 import {
   KEYWORD_STATUS_LABEL, TASK_STATUS_LABEL, downloadCsv, formatDate, formatDuration, formatNumber, formatPrice, marketOf, pickFile, priceOf,
-  currenciesOf, currencyName, ratingOf, sourceLabel, sourcesOf, readKeywordFile, safeFileName, schemeStatusLabel, shortSku, splitKeywords,
+  currenciesOf, currencyName, ratingOf, sourceLabel, sourcesOf, readKeywordFile, safeFileName, schemeStatusLabel, splitKeywords,
 } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
@@ -461,7 +461,7 @@ const market = computed(() => marketOf(scheme.value?.market))
                   <PrThumb :result="item" />
                   <div class="prd-product__meta">
                     <span class="prd-product__name" :title="item.title">{{ item.title }}</span>
-                    <span class="prd-product__sub">{{ item.keyword }} | SKU: {{ shortSku(item) }}<template v-if="item.shopName"> | {{ item.shopName }}</template></span>
+                    <span class="prd-product__sub">{{ item.keyword }}<template v-if="item.shopName"> | {{ item.shopName }}</template></span>
                   </div>
                 </div>
               </td>

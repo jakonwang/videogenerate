@@ -134,6 +134,8 @@ export type ProductResearchKeyword = {
 
 export type ProductResearchProductEdit = {
   resultId: string
+  /** 款号 */
+  code?: string
   kept: boolean
   category: string
   targetPrice: string

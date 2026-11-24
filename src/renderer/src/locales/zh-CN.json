@@ -3585,6 +3585,42 @@
     }
   },
   "productLibrary": {
+    "code": {
+      "title": "款号",
+      "placeholder": "例如 A-152",
+      "save": "保存",
+      "hint": "填上款号，店铺商品、订单、库存会自动对上这个款。",
+      "linked": "店铺里的这个款（{count}）",
+      "noLink": "两家店都还没有带这个款号的商品。",
+      "price": "售价",
+      "stock": "库存",
+      "shared": "与其他款共用链接",
+      "taken": "这个款号已经用在「{name}」上",
+      "invalid": "款号要同时有字母和数字，例如 A-152",
+      "check": "款号检查",
+      "summary": "店铺商品 {total} 个，已对上款号 {matched} 个",
+      "tabs": {
+        "suggestions": "可补款号",
+        "conflicts": "标题和 SKU 不一致",
+        "duplicates": "款号重复",
+        "unmatched": "店铺没有款号",
+        "notListed": "还没上架"
+      },
+      "tips": {
+        "suggestions": "这些商品的名称就是款号，可以一键补上；重复的请点进去自己定。",
+        "conflicts": "标题末尾的款号和商家 SKU 写的不一样，请到商家后台改正。目前按标题归款。",
+        "duplicates": "同一个款号用在了多个商品上，点进去改掉多余的。",
+        "unmatched": "标题和商家 SKU 都没有款号，这些商品的数据不会归到任何款。直播间通用链接可以忽略。",
+        "notListed": "商品库有款号，两家店都没有找到。"
+      },
+      "repeat": "重复，需人工确认",
+      "inTitle": "标题",
+      "inSku": "SKU",
+      "apply": "补上 {count} 个款号",
+      "applied": "已补上 {count} 个款号",
+      "empty": "没有需要处理的",
+      "optional": "款号（选填）"
+    },
     "title": "商品库",
     "desc": "集中管理商品图片、分析画板与基础资料，保持生成链路素材一致。",
     "namePlaceholder": "输入商品名称",

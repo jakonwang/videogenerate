@@ -14,6 +14,7 @@ const props = defineProps<{
   products: ProductRow[]
   records: ProductResearchLiveTestRecord[]
   currency: string
+  codes?: Map<string, string>
 }>()
 const emit = defineEmits<{ close: []; save: [draft: Draft] }>()
 
@@ -105,7 +106,7 @@ function save() {
               <PrThumb :result="product" />
               <select v-model="form.resultId" class="prd-select lt-product__select" :disabled="Boolean(record)">
                 <option value="">请选择商品（来自已保留商品）</option>
-                <option v-for="item in products" :key="item.id" :value="item.id">{{ item.title }}{{ records.some((r) => r.resultId === item.id) && item.id !== record?.resultId ? '（已有记录）' : '' }}</option>
+                <option v-for="item in products" :key="item.id" :value="item.id">{{ codes?.get(item.id) ? `${codes.get(item.id)} · ` : '' }}{{ item.title }}{{ records.some((r) => r.resultId === item.id) && item.id !== record?.resultId ? '（已有记录）' : '' }}</option>
               </select>
             </div>
           </div>

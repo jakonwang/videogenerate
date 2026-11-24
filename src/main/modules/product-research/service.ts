@@ -617,6 +617,12 @@ class ProductResearchService {
     return { tasks, results }
   }
 
+  /** 各方案里填过的款号 */
+  async listCodes(): Promise<string[]> {
+    await this.ensureLoaded()
+    return Object.values(this.state.schemeStates).flatMap((item) => (item.productEdits || []).map((edit) => edit.code || '')).filter(Boolean)
+  }
+
   async listSchemes(): Promise<ProductResearchScheme[]> {
     await this.ensureLoaded()
     return this.state.schemes.map((scheme) => {

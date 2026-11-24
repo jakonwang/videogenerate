@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ArrowDown, ArrowLeft, ArrowRight, Box, Check, CheckCircle2, Circle, Info, Layers, PenLine, Plus, Tag, Trash2 } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ArrowDown, ArrowLeft, ArrowRight, Box, Check, CheckCircle2, Circle, Hash, Info, Layers, PenLine, Plus, Tag, Trash2 } from 'lucide-vue-next'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
+import { isValidProductCode, normalizeProductCode, nextCodes, splitCode, type ProductCodeOverview } from '../../../../../shared/productCode'
 import PrPager from './PrPager.vue'
 import PrSource from './PrSource.vue'
 import PrThumb from './PrThumb.vue'
@@ -17,12 +18,57 @@ const filter = ref<'all' | 'kept' | 'pending'>('all')
 const salesDesc = ref(true)
 const page = ref(1)
 const pageSize = ref(20)
-const prompt = ref<null | 'category' | 'price' | 'selling' | 'customCategory'>(null)
+const prompt = ref<null | 'category' | 'price' | 'selling' | 'customCategory' | 'code'>(null)
 const confirmRemove = ref<string[] | null>(null)
 
 const currency = computed(() => marketOf(scheme.value?.market).currency || '本币')
 const editMap = computed(() => new Map(productEdits.value.map((item) => [item.resultId, item])))
 const edit = (id: string) => editMap.value.get(id) || ws.editFor(id)
+
+// ===== 款号 =====
+const codeOverview = ref<ProductCodeOverview | null>(null)
+onMounted(async () => { codeOverview.value = await window.api.productCodes?.overview().catch(() => null) ?? null })
+const codeCounts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const row of candidateRows.value) {
+    const code = edit(row.id).code
+    if (code) counts.set(code, (counts.get(code) || 0) + 1)
+  }
+  return counts
+})
+/** 方案一打开时就存在的款号来自别的商品；本方案自己填的不算占用 */
+const initialOwn = ref(new Set<string>())
+watch(codeOverview, () => { initialOwn.value = new Set(productEdits.value.map((item) => item.code || '').filter(Boolean)) })
+function codeProblem(id: string) {
+  const code = edit(id).code
+  if (!code) return ''
+  if (!isValidProductCode(code)) return '款号要同时有字母和数字'
+  if ((codeCounts.value.get(code) || 0) > 1) return '和本方案的其他商品重复'
+  if (codeOverview.value?.used.includes(code) && !initialOwn.value.has(code)) return '已有这个款号，会关联到现有的款'
+  return ''
+}
+function setCode(id: string, value: string) {
+  ws.setEdits([id], { code: normalizeProductCode(value) })
+}
+async function autoNumber(value: string) {
+  const start = normalizeProductCode(value)
+  if (!splitCode(start)) { ws.notify('起始款号要像 A-281 这样，字母加数字', 'error'); return }
+  const ids = rows.value.filter((item) => checked.value.includes(item.id) && !edit(item.id).code).map((item) => item.id)
+  if (!ids.length) { ws.notify('勾选的商品都已有款号'); return }
+  const reserved = productEdits.value.map((item) => item.code || '').filter(Boolean)
+  const codes = window.api.productCodes
+    ? await window.api.productCodes.next({ start, count: ids.length, reserved })
+    : nextCodes(start, ids.length, reserved)
+  ids.forEach((id, index) => ws.setEdits([id], { code: codes[index] }))
+  ws.notify(`已编号 ${codes[0]}${codes.length > 1 ? ` ~ ${codes[codes.length - 1]}` : ''}`, 'success')
+}
+const prefixHint = computed(() => (codeOverview.value?.prefixes || []).filter((item) => item.prefix.endsWith('-')).slice(0, 8).map((item) => `${item.prefix}${item.last}`).join('、'))
+const startCode = computed(() => {
+  const own = productEdits.value.map((item) => splitCode(item.code)).filter((item): item is NonNullable<typeof item> => Boolean(item))
+  const prefix = own[own.length - 1]?.prefix || codeOverview.value?.prefixes[0]?.prefix || 'A-'
+  const last = codeOverview.value?.prefixes.find((item) => item.prefix === prefix)?.last || 0
+  return `${prefix}${Math.max(last, ...own.filter((item) => item.prefix === prefix).map((item) => item.number)) + 1}`
+})
 
 const categories = computed(() => {
   const list = CATEGORY_PRESETS.map((item) => ({ ...item }))
@@ -63,7 +109,7 @@ function requireChecked() {
   return false
 }
 
-function openPrompt(kind: 'category' | 'price' | 'selling') {
+function openPrompt(kind: 'category' | 'price' | 'selling' | 'code') {
   if (requireChecked()) prompt.value = kind
 }
 
@@ -71,6 +117,11 @@ function applyPrompt(value: string) {
   if (prompt.value === 'category') ws.setEdits(targets.value, { category: value })
   if (prompt.value === 'price') ws.setEdits(targets.value, { targetPrice: value })
   if (prompt.value === 'selling') ws.setEdits(targets.value, { sellingPoint: value })
+  if (prompt.value === 'code') {
+    prompt.value = null
+    autoNumber(value).catch((error) => ws.notify(`编号失败：${error instanceof Error ? error.message : String(error)}`, 'error'))
+    return
+  }
   if (prompt.value === 'customCategory') {
     void pickCategory(value)
     prompt.value = null
@@ -114,6 +165,7 @@ const promptConfig = computed(() => {
     case 'category': return { title: '批量设置类目', label: `为 ${checked.value.length} 个商品设置类目`, kind: 'select' as const, options: categories.value.map((item) => ({ value: item.value, label: item.value })) }
     case 'price': return { title: '批量设置目标售价', label: `目标售价（${currency.value}）`, kind: 'input' as const, placeholder: '例如 89000' }
     case 'selling': return { title: '批量设置卖点', label: '商品卖点', kind: 'textarea' as const, placeholder: '例如：花朵设计、闪亮锆石、韩式简约' }
+    case 'code': return { title: '自动编号', label: `从哪个款号开始（给勾选里没款号的依次编，用过的号自动跳过）`, kind: 'input' as const, placeholder: '例如 A-281' }
     case 'customCategory': return { title: '自定义类目', label: '类目名称', kind: 'input' as const, placeholder: '例如：发饰 (Phụ kiện tóc)' }
     default: return { title: '', label: '', kind: 'input' as const }
   }
@@ -132,9 +184,10 @@ const promptConfig = computed(() => {
 
         <div class="scf-toolbar">
           <label class="scf-checked"><input type="checkbox" :checked="pageAllChecked" @change="togglePage" />已选 <b>{{ checked.length }}</b> 项</label>
-          <button class="prd-btn prd-btn--sm" @click="openPrompt('category')"><Layers :size="13" />批量设置类目</button>
-          <button class="prd-btn prd-btn--sm" @click="openPrompt('price')"><Tag :size="13" />批量设置目标售价</button>
-          <button class="prd-btn prd-btn--sm" @click="openPrompt('selling')"><PenLine :size="13" />批量设置卖点</button>
+          <button class="prd-btn prd-btn--sm" @click="openPrompt('code')"><Hash :size="13" />自动编号</button>
+          <button class="prd-btn prd-btn--sm" @click="openPrompt('category')"><Layers :size="13" />设类目</button>
+          <button class="prd-btn prd-btn--sm" @click="openPrompt('price')"><Tag :size="13" />设售价</button>
+          <button class="prd-btn prd-btn--sm" @click="openPrompt('selling')"><PenLine :size="13" />设卖点</button>
           <div class="prd-seg scf-filter">
             <button class="prd-seg__btn" :class="{ 'is-active': filter === 'all' }" @click="filter = 'all'">全部</button>
             <button class="prd-seg__btn" :class="{ 'is-active': filter === 'kept' }" @click="filter = 'kept'">已保留</button>
@@ -152,7 +205,7 @@ const promptConfig = computed(() => {
                 <th>#</th><th>商品图片</th><th>商品名称</th>
                 <th class="num">采集价</th>
                 <th class="num"><span class="prd-th-sort is-active" @click="salesDesc = !salesDesc">销量<ArrowDown :size="11" :style="{ transform: salesDesc ? '' : 'rotate(180deg)' }" /></span></th>
-                <th>类目</th><th>目标售价（{{ currency }}）</th><th>商品卖点</th><th class="center">匹配度</th><th class="center">操作</th>
+                <th>类目</th><th>售价（{{ currency }}）</th><th>商品卖点</th><th class="center">匹配度</th><th class="center">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -164,7 +217,8 @@ const promptConfig = computed(() => {
                 <td>
                   <div class="prd-product__meta">
                     <span class="prd-product__name scf-name" :title="item.title">{{ item.title }}</span>
-                    <span class="prd-product__chips"><PrSource :item="item" class="scf-source" /><span class="prd-chip">{{ item.keyword }}</span></span>
+                    <span class="prd-product__chips"><PrSource :item="item" class="scf-source" /><input class="prd-input prd-input--sm scf-code" :class="{ 'is-warn': codeProblem(item.id) }" :value="edit(item.id).code || ''" maxlength="80" placeholder="款号" aria-label="款号" :title="codeProblem(item.id) || `来源搜索词：${item.keyword}`" @change="setCode(item.id, ($event.target as HTMLInputElement).value)" /></span>
+                    <small v-if="codeProblem(item.id)" class="scf-code-tip">{{ codeProblem(item.id) }}</small>
                   </div>
                 </td>
                 <td class="num">{{ formatPrice(item) }}</td>
@@ -241,7 +295,8 @@ const promptConfig = computed(() => {
       :kind="promptConfig.kind"
       :options="'options' in promptConfig ? promptConfig.options : []"
       :placeholder="'placeholder' in promptConfig ? promptConfig.placeholder : ''"
-      :initial-value="prompt === 'category' ? scheme?.category || '' : ''"
+      :initial-value="prompt === 'category' ? scheme?.category || '' : prompt === 'code' ? startCode : ''"
+      :description="prompt === 'code' && prefixHint ? `目前用到：${prefixHint}` : undefined"
       @close="prompt = null"
       @confirm="applyPrompt"
     />
@@ -250,11 +305,16 @@ const promptConfig = computed(() => {
 </template>
 
 <style scoped>
+.scf-code { width: 92px; text-transform: uppercase; }
+.scf-code::placeholder { text-transform: none; }
+.scf-code.is-warn { border-color: var(--theme-tone-amber); }
+.scf-code-tip { font-size: 11px; color: var(--theme-tone-amber); }
 .scf-main .prd-table th:last-child, .scf-main .prd-table td:last-child { position: sticky; right: 0; background: var(--theme-panel); }
 .scf-main .prd-table th:last-child { z-index: 2; }
+.scf-main .prd-table th, .scf-main .prd-table td { padding-left: 7px; padding-right: 7px; }
 .scf-source { font-size: 12px; color: var(--theme-text-secondary); }
 .scf { display: flex; flex-direction: column; gap: 12px; }
-.scf-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; align-items: start; }
+.scf-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: start; }
 .scf-main { display: flex; flex-direction: column; gap: 12px; }
 .scf-counts { font-size: 13px; color: var(--theme-text-secondary); gap: 14px; }
 .scf-counts b { color: var(--theme-accent); }
@@ -264,9 +324,9 @@ const promptConfig = computed(() => {
 .scf-filter { margin-left: auto; }
 .scf-filter .prd-seg__btn { height: 28px; font-size: 12px; padding: 0 10px; }
 .scf-name { display: -webkit-box; min-width: 124px; max-width: 220px; }
-.scf-cat { width: 112px; }
-.scf-price { width: 84px; text-align: right; }
-.scf-selling { width: 110px; min-height: 34px; padding: 5px 8px; font-size: 12px; line-height: 1.4; resize: vertical; }
+.scf-cat { width: 104px; }
+.scf-price { width: 80px; text-align: right; }
+.scf-selling { width: 100px; min-height: 34px; padding: 5px 8px; font-size: 12px; line-height: 1.4; resize: vertical; }
 .scf-empty { border: 1px dashed var(--theme-border-control); border-radius: 10px; }
 .scf-side { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; }
 .scf-cats { display: flex; flex-direction: column; gap: 6px; }

@@ -3,6 +3,7 @@ import { copyFile, mkdir, stat } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import { normalizeProductCode } from '../../../shared/productCode'
 import { templatesRepo } from '../templates/repo'
 import type { MediaAsset, Product, ProductImageAsset, ProductType, SegmentKey } from './types'
 
@@ -332,6 +333,7 @@ export const productsRepo = {
           coverImagePath: nextCoverImagePath,
           livePhotoReferenceImagePath: nextLivePhotoReferenceImagePath,
           remark: hasOwn('remark') ? payload.remark : prev.remark,
+          code: hasOwn('code') && payload.code !== undefined ? normalizeProductCode(payload.code) || undefined : prev.code,
           analysisBoardPath:
             hasOwn('analysisBoardPath') ? payload.analysisBoardPath : prev.analysisBoardPath,
           analysisBoardStatus:
@@ -408,6 +410,7 @@ export const productsRepo = {
       coverImagePath: createdCoverImagePath,
       livePhotoReferenceImagePath: createdLivePhotoReferenceImagePath,
       remark: payload.remark ?? '',
+      code: normalizeProductCode(payload.code) || undefined,
       analysisBoardPath: payload.analysisBoardPath,
       analysisBoardStatus: payload.analysisBoardStatus ?? payload.canonicalSourceStatus ?? 'idle',
       analysisBoardPrompt: payload.analysisBoardPrompt,

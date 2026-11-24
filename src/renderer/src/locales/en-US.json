@@ -3598,6 +3598,42 @@
     }
   },
   "productLibrary": {
+    "code": {
+      "title": "Style code",
+      "placeholder": "e.g. A-152",
+      "save": "Save",
+      "hint": "Shop products, orders and stock are matched to this style by its code.",
+      "linked": "Shop products of this style ({count})",
+      "noLink": "No shop product carries this code yet.",
+      "price": "Price",
+      "stock": "Stock",
+      "shared": "listing shared with other styles",
+      "taken": "This code is already used by \"{name}\"",
+      "invalid": "A code needs letters and digits, e.g. A-152",
+      "check": "Code check",
+      "summary": "{matched} of {total} shop products have a code",
+      "tabs": {
+        "suggestions": "Can be filled",
+        "conflicts": "Title and SKU differ",
+        "duplicates": "Duplicates",
+        "unmatched": "No code in shop",
+        "notListed": "Not listed"
+      },
+      "tips": {
+        "suggestions": "These names are codes already and can be filled in one click; open repeated ones to decide.",
+        "conflicts": "The code in the title and the seller SKU differ. Fix it in the seller center. The title is used for now.",
+        "duplicates": "One code is used by several products. Open and change the extra ones.",
+        "unmatched": "Neither the title nor the seller SKU has a code, so this data belongs to no style. Generic live links can be ignored.",
+        "notListed": "In the library but not found in any shop."
+      },
+      "repeat": "Repeated, please decide",
+      "inTitle": "title",
+      "inSku": "SKU",
+      "apply": "Fill {count} codes",
+      "applied": "{count} codes filled",
+      "empty": "Nothing to do",
+      "optional": "Style code (optional)"
+    },
     "title": "Product Library",
     "desc": "Manage product images, analysis boards, and core data while keeping generation assets consistent.",
     "namePlaceholder": "Enter product name",

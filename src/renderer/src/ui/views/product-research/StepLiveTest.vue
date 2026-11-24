@@ -12,7 +12,7 @@ import PrThumb from './PrThumb.vue'
 import PrLiveTestDialog from './PrLiveTestDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
 import {
-  CONCLUSIONS, conclusionMeta, downloadCsv, formatDate, formatDay, formatNumber, formatPercent, marketOf, ratio, safeFileName, shortSku,
+  CONCLUSIONS, conclusionMeta, downloadCsv, formatDate, formatDay, formatNumber, formatPercent, marketOf, ratio, safeFileName,
 } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
@@ -37,6 +37,9 @@ const testableProducts = computed(() => {
   const keptRows = candidateRows.value.filter((item) => kept.has(item.id))
   return keptRows.length ? keptRows : candidateRows.value
 })
+
+const codes = computed(() => new Map(productEdits.value.map((item) => [item.resultId, item.code || ''])))
+const codeOf = (id: string) => codes.value.get(id) || ''
 
 const filtered = computed(() => {
   const from = filters.from ? new Date(`${filters.from}T00:00:00`).getTime() : 0
@@ -120,10 +123,10 @@ function doDelete() {
 
 function exportData() {
   if (!filtered.value.length) { ws.notify('没有可导出的测试数据'); return }
-  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_直播测试`, ['序号', '商品名称', 'SKU', '测试场次', '曝光人数', '点击人数', '成交订单', `成交金额(${currency.value})`, '点击率', '转化率', '退款/负反馈率', '主播反馈', '测试结论', '更新时间'],
+  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_直播测试`, ['序号', '商品名称', '款号', '测试场次', '曝光人数', '点击人数', '成交订单', `成交金额(${currency.value})`, '点击率', '转化率', '退款/负反馈率', '主播反馈', '测试结论', '更新时间'],
     filtered.value.map((item, index) => {
       const result = resultMap.value.get(item.resultId)
-      return [index + 1, result?.title || item.resultId, result ? shortSku(result) : '', item.sessions, item.views, item.clicks, item.orders, item.revenue,
+      return [index + 1, result?.title || item.resultId, codeOf(item.resultId), item.sessions, item.views, item.clicks, item.orders, item.revenue,
         formatPercent(ratio(item.clicks, item.views)), formatPercent(ratio(item.orders, item.clicks)), formatPercent(item.refundRate * 100), item.hostFeedback, conclusionMeta(item.conclusion)?.label || '未下结论', formatDate(item.updatedAt)]
     }))
 }
@@ -213,7 +216,7 @@ const today = formatDay(Date.now())
                     <PrThumb :result="resultMap.get(record.resultId)" />
                     <div class="prd-product__meta">
                       <span class="prd-product__name" :title="resultMap.get(record.resultId)?.title">{{ resultMap.get(record.resultId)?.title || '商品已删除' }}</span>
-                      <span class="prd-product__sub">SKU: {{ resultMap.get(record.resultId) ? shortSku(resultMap.get(record.resultId)!) : record.resultId.slice(0, 8) }}</span>
+                      <span class="prd-product__sub">款号：{{ codeOf(record.resultId) || '未填' }}</span>
                     </div>
                   </div>
                 </td>
@@ -295,7 +298,7 @@ const today = formatDay(Date.now())
       </div>
     </footer>
 
-    <PrLiveTestDialog :open="dialogOpen" :record="editing" :products="testableProducts" :records="liveTestRecords" :currency="currency" @close="dialogOpen = false" @save="saveRecord" />
+    <PrLiveTestDialog :open="dialogOpen" :record="editing" :products="testableProducts" :records="liveTestRecords" :currency="currency" :codes="codes" @close="dialogOpen = false" @save="saveRecord" />
     <PrConfirmDialog :open="Boolean(confirmDelete)" title="删除测试记录" :message="`确定删除 ${confirmDelete?.length || 0} 条测试记录吗？`" confirm-text="删除" @close="confirmDelete = null" @confirm="doDelete" />
   </div>
 </template>

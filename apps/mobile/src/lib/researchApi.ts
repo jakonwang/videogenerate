@@ -287,7 +287,7 @@ const products = {
     return (await listRecords<SyncProduct>(SYNC_COLLECTIONS.products)).filter((r) => r.data).map((r) => ({ id: r.id, ...(r.data as SyncProduct) }))
   },
   /** StepWinners 把爆款加进商品库：按标题找回采集结果，带上它的主图 */
-  async upsert(input: { name: string; type?: string; remark?: string; images?: unknown[] }) {
+  async upsert(input: { name: string; type?: string; remark?: string; code?: string; images?: unknown[] }) {
     const name = String(input.name || '').trim().slice(0, 80)
     const result = (await listRecords<SyncPrResult>(SYNC_COLLECTIONS.prResults)).find((r) => r.data && r.data.title.trim().slice(0, 80) === name)?.data
     const image: SyncFileRef | undefined = result?.imageFileId ? { fileId: result.imageFileId, mime: 'image/jpeg' } : undefined
@@ -296,6 +296,7 @@ const products = {
       name,
       type: TYPES.has(input.type as SyncProductType) ? (input.type as SyncProductType) : 'general',
       remark: input.remark,
+      ...(input.code ? { code: input.code } : {}),
       images: image ? [image] : [],
       coverFileId: image?.fileId,
       createdAt: Date.now(),

@@ -147,6 +147,8 @@ export type SpineReads = {
   channelProducts: () => Promise<ChannelProduct[]>
   /** 商品毛利率（GMV MAX 成本）；测试里可以换掉 */
   margins: (productIds: string[]) => Map<string, ProductMargin>
+  /** 款号 → 店铺商品 ID */
+  codeLinks: () => Promise<Map<string, string[]>>
 }
 
 function once<T>(read: () => T): () => T {
@@ -168,6 +170,13 @@ export function createSpineReads(): SpineReads {
     videos: once(() => safely(() => creatorHubRepo.listVideos(), [])),
     channelProducts: once(() => listChannelProducts(reads)),
     margins: (productIds) => readProductMargins(productIds),
+    codeLinks: once(async () => {
+      try {
+        return await (await import('../product-codes/service')).productCodesService.storeProductIds()
+      } catch {
+        return new Map<string, string[]>()
+      }
+    }),
   }
   return reads
 }
@@ -408,7 +417,8 @@ export const productSpine = {
   async build(productId: string, now = Date.now(), reads: SpineReads = createSpineReads()): Promise<ProductSpine> {
     const product = (await productsRepo.list()).find((item) => item.id === productId)
     const boundIds = uniqueIds(product?.tiktokProductIds || [])
-    const inferredIds = (await inferredIdsFromPublishing(productId, reads)).filter((id) => !boundIds.includes(id))
+    const codeIds = product?.code ? (await reads.codeLinks()).get(product.code) || [] : []
+    const inferredIds = uniqueIds([...codeIds, ...(await inferredIdsFromPublishing(productId, reads))]).filter((id) => !boundIds.includes(id))
     const tiktokProductIds = [...boundIds, ...inferredIds]
     const channelProducts = await reads.channelProducts()
     const idSet = new Set(tiktokProductIds)

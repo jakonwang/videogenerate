@@ -194,10 +194,6 @@ export function imageSrc(result?: Pick<ProductResearchResult, 'imagePath' | 'ima
   return result.imageDataUrl || ''
 }
 
-export function shortSku(result: ProductResearchResult) {
-  return result.productId || result.id.slice(0, 8).toUpperCase()
-}
-
 /** Splits a free-text keyword blob (one per line, or comma separated) into unique keywords. */
 export function splitKeywords(text: string) {
   const seen = new Set<string>()
