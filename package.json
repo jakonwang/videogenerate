@@ -66,6 +66,7 @@
     "preview": "electron-vite preview",
     "lint": "eslint .",
     "test:cloud-sync": "tsx test/cloud-sync.smoke.ts",
+    "test:cloud-dedupe": "tsx test/cloud-dedupe.smoke.ts",
     "test:cloud-desktop-sync": "tsx test/cloud-desktop-sync.smoke.ts",
     "test:cloud-ai": "tsx test/cloud-ai.smoke.ts",
     "test:scene-swap": "tsx test/scene-swap.smoke.ts",

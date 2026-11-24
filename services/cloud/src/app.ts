@@ -7,6 +7,7 @@ import { createCloudService } from './service'
 import { createSyncService } from './sync'
 import { createAiService } from './ai'
 import { createMatting, type Matting } from './sceneSwap/matting'
+import { dedupeUserFiles } from './dedupe'
 import { createSceneSwapService } from './sceneSwap/service'
 import { createGenerationService, type GenerationProviders } from './generate'
 import { createHash } from 'node:crypto'
@@ -109,6 +110,20 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
 
   // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.
   let cleanupTimer: NodeJS.Timeout | null = null
+  let dedupeTimer: NodeJS.Timeout | null = null
+  let deduping = false
+  async function runDedupe() {
+    if (deduping) return
+    deduping = true
+    try {
+      const result = await dedupeUserFiles(config.dataDir)
+      if (result.merged) console.log(`[videogen-cloud] 合并重复文件 ${result.merged} 个，释放 ${(result.bytes / 1024 / 1024).toFixed(1)} MB`)
+    } catch (error) {
+      console.warn('[videogen-cloud] 合并重复文件失败', error)
+    } finally {
+      deduping = false
+    }
+  }
   function runCleanup() {
     if (!config.orphanFileDays) return
     void sceneSwap.cleanupCache().catch(() => undefined)
@@ -139,6 +154,11 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
             cleanupTimer.unref()
             setTimeout(runCleanup, 60 * 60 * 1000).unref()
           }
+          if (!dedupeTimer) {
+            dedupeTimer = setInterval(() => void runDedupe(), 2 * 60 * 60 * 1000)
+            dedupeTimer.unref()
+            setTimeout(() => void runDedupe(), 10 * 60 * 1000).unref()
+          }
           const address = server.address()
           listenPort = typeof address === 'object' && address ? address.port : config.port
           sceneSwap.start()
@@ -149,6 +169,8 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
       new Promise<void>((resolve) => {
         if (cleanupTimer) clearInterval(cleanupTimer)
         cleanupTimer = null
+        if (dedupeTimer) clearInterval(dedupeTimer)
+        dedupeTimer = null
         cloneEngine.close()
         sceneSwap.close()
         server.close(() => {

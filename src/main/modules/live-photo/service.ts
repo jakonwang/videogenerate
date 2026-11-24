@@ -4,6 +4,7 @@ import { basename, extname, join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import PQueue from 'p-queue'
 import { runFfmpeg } from '../ffmpeg/runner'
+import { onCloudEngine, replaceWithLink } from './linkFile'
 import { getAppPaths } from '../../lib/paths'
 import { productsRepo } from '../products/repo'
 import { cloneRepo } from '../clone/repo'
@@ -3694,10 +3695,11 @@ async function ensureVideoCoverImage(videoPath?: string) {
 }
 
 async function copyMotionSourceVideo(input: { sourceVideoPath: string; outputPath: string }) {
-  await copyFile(input.sourceVideoPath, input.outputPath)
+  await replaceWithLink(input.sourceVideoPath, input.outputPath, livePhotoRoot(''))
 }
 
 async function writeLivePhotoVideoPreservingSource(input: { sourceVideoPath: string; outputPath: string }) {
+  if (onCloudEngine()) await rm(input.outputPath, { force: true })
   try {
     await livePhotoDeps.runFfmpeg({
       args: [
@@ -3959,7 +3961,7 @@ async function materializeItem(input: {
   const liveImagePath = join(root, 'live-photo.jpg')
   const liveVideoPath = join(root, 'live-photo.mov')
   const manifestPath = join(root, 'live-photo.json')
-  await copyFile(input.stillSourcePath, stillPath)
+  await replaceWithLink(input.stillSourcePath, stillPath, livePhotoRoot(''))
 
   let originalMotionVideoPath = String(input.videoSourcePath || '').trim()
   let motionVideoPath = input.videoSourcePath ? join(root, `motion${extname(input.videoSourcePath) || '.mp4'}`) : join(root, 'motion.mp4')
@@ -3979,7 +3981,7 @@ async function materializeItem(input: {
   }
 
   await renderPosterFromVideo({ videoPath: motionVideoPath, posterPath })
-  await copyFile(stillPath, liveImagePath)
+  await replaceWithLink(stillPath, liveImagePath, livePhotoRoot(''))
   await writeLivePhotoVideoPreservingSource({ sourceVideoPath: motionVideoPath, outputPath: liveVideoPath })
   await writeFile(
     manifestPath,
