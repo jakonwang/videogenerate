@@ -637,6 +637,9 @@
         }
       }
     },
+    "briefMore": "{count} more",
+    "briefCollapse": "Show less",
+    "projectCount": "{count} items",
     "pulse": {
       "title": "Business pulse",
       "range": "Last 7 days",
@@ -718,6 +721,12 @@
     "recent": "Recently used",
     "noMatch": "No matching tools",
     "back": "Back to toolbox",
+    "groupDesc": {
+      "source": "Find, slice and collect",
+      "image": "Swap products, add branding",
+      "video": "Subtitles and watermarks",
+      "operations": "Ads, listings, creators and stock in one place"
+    },
     "groups": {
       "source": "Sourcing",
       "image": "Image editing",

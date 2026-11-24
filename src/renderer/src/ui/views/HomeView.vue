@@ -92,6 +92,29 @@ function openSignal(signal: OverviewSignal) {
   void router.push(signal.route || '/insights')
 }
 
+// Both lower cards show the same number of rows so they end at the same height.
+const LOWER_ROWS = 6
+const LEVEL_RANK = { error: 0, warning: 1, ok: 2 }
+const briefExpanded = ref(false)
+const briefItems = computed(() => [...(brief.value?.items || [])].sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level]))
+const shownBriefItems = computed(() => briefExpanded.value ? briefItems.value : briefItems.value.slice(0, LOWER_ROWS))
+
+// A live-photo batch yields one project per photo; show one row per product and status, opening the newest.
+const projectRows = computed(() => {
+  const rows = new Map<string, { project: Project; count: number }>()
+  for (const project of projects.value) {
+    const key = project.line === 'livephoto' && project.productName ? `${project.line}:${project.productName}:${project.status}` : project.ref
+    const row = rows.get(key)
+    if (row) row.count += 1
+    else rows.set(key, { project, count: 1 })
+  }
+  return [...rows.values()].slice(0, LOWER_ROWS).map(({ project, count }) => ({
+    ...project,
+    count,
+    title: count > 1 ? project.productName || project.title : project.title,
+  }))
+})
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 6) return t('ai.home.greeting.night')
@@ -105,7 +128,7 @@ async function load() {
   try {
     const [briefs, recent, report] = await Promise.all([
       window.api.contentHub.latestBriefs(),
-      window.api.contentHub.recentProjects(8),
+      window.api.contentHub.recentProjects(60),
       window.api.contentHub.overview(7).catch(() => null),
     ])
     brief.value = (briefs as { daily: Brief | null }).daily
@@ -179,7 +202,7 @@ onBeforeUnmount(() => unsubscribe?.())
         <div class="home-pulse__kpis">
           <button v-for="kpi in pulseKpis" :key="kpi.key" type="button" class="home-pulse__kpi" @click="router.push(kpi.route)">
             <span class="home-pulse__label">{{ t(`ai.insights.overview.kpi.${kpi.key}`) }}</span>
-            <strong class="home-pulse__value vg-num">{{ formatKpi(kpi, locale) }}</strong>
+            <strong class="home-pulse__value vg-num" :title="formatKpi(kpi, locale)">{{ formatKpi(kpi, locale) }}</strong>
             <span v-if="kpiDeltaText(kpi, t)" class="vg-pill home-pulse__delta" :class="kpiDeltaTone(kpi) ? `vg-pill--${kpiDeltaTone(kpi)}` : ''">{{ kpiDeltaText(kpi, t) }}</span>
           </button>
         </div>
@@ -248,11 +271,11 @@ onBeforeUnmount(() => unsubscribe?.())
         </div>
         <p v-if="brief?.summary" class="home-brief__summary">{{ brief.summary }}</p>
         <div class="vg-list">
-          <button v-for="item in brief?.items || []" :key="item.kind + item.title" type="button" class="vg-list__item vg-list__item--button" @click="briefAction(item)">
+          <button v-for="item in shownBriefItems" :key="item.kind + item.title" type="button" class="vg-list__item vg-list__item--button" @click="briefAction(item)">
             <CheckCircle2 v-if="item.level === 'ok'" :size="16" class="home-brief__ok" />
             <AlertTriangle v-else-if="item.level === 'warning'" :size="16" class="home-brief__warn" />
             <XCircle v-else :size="16" class="home-brief__err" />
-            <span class="vg-list__main">
+            <span class="vg-list__main" :title="item.detail">
               <span class="vg-list__title">{{ item.title }}</span>
               <span class="vg-list__sub">{{ item.detail }}</span>
             </span>
@@ -261,6 +284,7 @@ onBeforeUnmount(() => unsubscribe?.())
           </button>
           <div v-if="!brief && loading" class="home-brief__loading"><Loader2 :size="16" class="vg-spin" /></div>
         </div>
+        <button v-if="briefItems.length > LOWER_ROWS" type="button" class="vg-link home-brief__more" data-testid="home-brief-more" @click="briefExpanded = !briefExpanded">{{ briefExpanded ? t('ai.home.briefCollapse') : t('ai.home.briefMore', { count: briefItems.length - LOWER_ROWS }) }}</button>
       </div>
 
       <div class="vg-card home-continue">
@@ -270,13 +294,13 @@ onBeforeUnmount(() => unsubscribe?.())
             <button type="button" class="vg-btn vg-btn--sm" @click="router.push('/inbox')">{{ t('ai.nav.inbox') }} <span v-if="ai.pendingReviews" class="vg-count">{{ ai.pendingReviews }}</span></button>
           </div>
         </div>
-        <div v-if="projects.length" class="vg-list">
-          <button v-for="project in projects" :key="project.ref" type="button" class="vg-list__item vg-list__item--button" @click="router.push(project.route)">
+        <div v-if="projectRows.length" class="vg-list">
+          <button v-for="project in projectRows" :key="project.ref" type="button" class="vg-list__item vg-list__item--button" @click="router.push(project.route)">
             <img v-if="project.previewPath" class="vg-thumb" :src="thumbnailUrl(project.previewPath, 88)" alt="" loading="lazy" />
             <span v-else class="vg-thumb"><Clapperboard :size="16" /></span>
             <span class="vg-list__main">
               <span class="vg-list__title">{{ project.title }}</span>
-              <span class="vg-list__sub">{{ t(`ai.line.${project.line}`) }}<template v-if="project.productName"> · {{ project.productName }}</template> · {{ formatTime(project.updatedAt) }}</span>
+              <span class="vg-list__sub">{{ t(`ai.line.${project.line}`) }}<template v-if="project.count > 1"> · {{ t('ai.home.projectCount', { count: project.count }) }}</template><template v-if="project.productName && project.productName !== project.title"> · {{ project.productName }}</template> · {{ formatTime(project.updatedAt) }}</span>
             </span>
             <span class="vg-pill vg-pill--dot" :class="{ 'vg-pill--green': project.status === 'ready', 'vg-pill--blue': project.status === 'running', 'vg-pill--red': project.status === 'failed' }">
               {{ t(`ai.contentStatus.${project.status}`) }}
@@ -352,8 +376,8 @@ onBeforeUnmount(() => unsubscribe?.())
 .home-auto__label small { font-size: 11.5px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .home-pulse__body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
-.home-pulse__kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.home-pulse__kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel-soft); color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s; }
+.home-pulse__kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }
+.home-pulse__kpi { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; min-width: 0; padding: 12px 16px; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background: var(--theme-panel-soft); color: var(--theme-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s; }
 .home-pulse__kpi:hover { border-color: var(--vg-accent-line); }
 .home-pulse__label { font-size: 12px; color: var(--theme-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .home-pulse__value { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -379,7 +403,9 @@ onBeforeUnmount(() => unsubscribe?.())
 .home-line__copy small { font-size: 12.5px; color: var(--theme-text-secondary); line-height: 1.55; }
 .home-line__actions { display: flex; gap: 8px; margin-top: auto; }
 
-.home-lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.home-lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.home-lower .vg-list__item { min-height: 65px; }
+.home-brief__more { margin-top: 8px; padding: 4px 12px; border: 0; background: none; font-size: 12px; cursor: pointer; }
 .home-brief__summary { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--vg-radius-sm); background: var(--vg-accent-soft); font-size: 13px; line-height: 1.6; }
 .home-brief__ok { color: var(--vg-green); flex-shrink: 0; }
 .home-brief__warn { color: var(--vg-amber); flex-shrink: 0; }
@@ -401,8 +427,8 @@ onBeforeUnmount(() => unsubscribe?.())
 .home-tool:hover .home-tool__arrow { color: var(--tone); transform: translateX(2px); }
 
 @media (max-width: 1120px) {
-  .home-lower { grid-template-columns: 1fr; }
-  .home-pulse__body { grid-template-columns: 1fr; }
+  .home-lower { grid-template-columns: minmax(0, 1fr); }
+  .home-pulse__body { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
   .home-auto__head { flex-wrap: wrap; }

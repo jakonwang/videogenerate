@@ -637,6 +637,9 @@
         }
       }
     },
+    "briefMore": "Còn {count} việc",
+    "briefCollapse": "Thu gọn",
+    "projectCount": "{count} mục",
     "pulse": {
       "title": "Tình hình kinh doanh",
       "range": "7 ngày qua",
@@ -718,6 +721,12 @@
     "recent": "Dùng gần đây",
     "noMatch": "Không có công cụ phù hợp",
     "back": "Về hộp công cụ",
+    "groupDesc": {
+      "source": "Tìm, cắt và gom tư liệu",
+      "image": "Đổi sản phẩm, thêm thương hiệu",
+      "video": "Phụ đề và watermark",
+      "operations": "Quảng cáo, đăng bán, KOC và tồn kho"
+    },
     "groups": {
       "source": "Lấy tư liệu",
       "image": "Xử lý ảnh",

@@ -109,22 +109,22 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
 
 <style scoped>
 .batch { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.batch__head { position: relative; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--gs-line); }
+.batch__head { position: relative; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 16px 20px 14px; border-bottom: 1px solid var(--gs-line); }
 .batch__title { flex: 1; min-width: 200px; }
-.batch__title h1 { font-size: 17px; font-weight: 600; line-height: 1.35; }
+.batch__title h1 { font-size: 20px; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; }
 .batch__title p { color: var(--theme-text-muted); font-size: 12.5px; }
 .batch__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .batch__bar { position: absolute; inset: auto 0 -1px; height: 2px; }
 .batch__bar span { display: block; height: 100%; background: var(--vg-accent); transition: width .4s; }
-.batch__notice { margin: 16px 24px 0; padding: 10px 14px; border-radius: 6px; background: var(--theme-danger-soft); color: var(--theme-danger-text); }
-.batch__tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; align-items: center; padding: 0 24px; }
-.batch__tabs button { display: flex; gap: 7px; padding: 15px 0 12px; border: 0; border-bottom: 1.5px solid transparent; background: none; color: var(--theme-text-muted); font-size: 13px; cursor: pointer; }
+.batch__notice { margin: 14px 20px 0; padding: 10px 14px; border-radius: 10px; background: var(--theme-danger-soft); color: var(--theme-danger-text); }
+.batch__tabs { display: flex; flex-wrap: wrap; gap: 0 26px; align-items: center; margin: 0 20px; border-bottom: 1px solid var(--theme-divider); }
+.batch__tabs button { display: flex; gap: 7px; align-items: center; height: 40px; margin-bottom: -1px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--theme-text-muted); font-size: 13.5px; font-weight: 500; cursor: pointer; }
 .batch__tabs button span { font-variant-numeric: tabular-nums; opacity: .7; }
 .batch__tabs button:hover { color: var(--theme-text); }
 .batch__tabs button.is-on { border-color: var(--vg-accent); color: var(--theme-text); font-weight: 600; }
 .batch__tabs small { margin-left: auto; color: var(--theme-text-muted); font-size: 12px; }
 .batch__empty { padding: 60px 24px; color: var(--theme-text-muted); text-align: center; }
-.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 26px 16px; padding: 14px 24px 32px; }
+.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 26px 16px; padding: 18px 20px 28px; }
 .shot { display: block; min-width: 0; padding: 0; border: 0; background: none; color: var(--theme-text); text-align: left; cursor: pointer; }
 .shot:disabled { cursor: default; }
 .shot__img { position: relative; display: block; overflow: hidden; border-radius: 6px; }
@@ -140,7 +140,7 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
 .dot.is-passed { background: var(--vg-green); }
 .dot.is-review { background: var(--vg-amber); }
 .dot.is-failed { background: var(--vg-red); }
-.trial { display: grid; flex: 1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 24px; min-height: 0; padding: 24px; }
+.trial { display: grid; flex: 1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 24px; min-height: 0; padding: 18px 20px; }
 .trial__item { display: flex; flex-direction: column; min-width: 0; }
 .trial__stage { flex: 1; height: 58vh; min-height: 340px; overflow: hidden; border-radius: 8px; background: var(--gs-well); }
 .trial__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; height: 100%; }
@@ -150,7 +150,7 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
 .trial__meta { display: flex; gap: 8px; align-items: center; padding-top: 12px; font-size: 13px; }
 .trial__name { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .trial__sub { margin-right: auto; color: var(--theme-text-muted); white-space: nowrap; }
-.batch__foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 24px; border-top: 1px solid var(--gs-line); background: var(--gs-bg); }
+.batch__foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--gs-line); background: var(--gs-bg); }
 .batch__foot div { display: flex; flex: 1; flex-direction: column; min-width: 160px; }
 .batch__foot strong { font-size: 14px; font-weight: 600; }
 .batch__foot span { color: var(--theme-text-muted); font-size: 12.5px; }

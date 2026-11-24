@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronDown, ImagePlus, LoaderCircle, X } from 'lucide-vue-next'
+import { ChevronDown, ImagePlus, Images, Layers, LoaderCircle, Plus, Shirt, X } from 'lucide-vue-next'
 import { SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, styleGroupOf, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapScene, type SceneSwapSize } from '../../../../shared/sceneSwap'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import BatchPanel from './garment-studio/BatchPanel.vue'
@@ -46,6 +46,7 @@ const ready = computed(() => sources.value.filter((source) => source.fileId))
 const total = computed(() => ready.value.length * picked.value.length)
 const pointsPerImage = computed(() => info.value?.pointsPerImage ?? 0)
 const go = (name: string) => router.push({ query: name ? { pane: name } : {} })
+const PANES = [{ name: '', icon: Plus }, { name: 'batches', icon: Layers }, { name: 'scenes', icon: Images }]
 const SIZES: SceneSwapSize[] = ['original', '3:4', '1:1', '9:16']
 const canStart = computed(() => total.value > 0 && !uploading.value && !busy.value)
 
@@ -236,19 +237,24 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 </script>
 
 <template>
-  <div class="vg-scope garment" data-testid="garment-studio">
+  <div class="vg-scope garment" :class="{ 'is-batch': batch }" data-testid="garment-studio">
     <div v-if="error" class="garment__alert is-error" role="alert"><span>{{ error }}</span><button v-if="needLogin" type="button" class="vg-btn vg-btn--sm" @click="router.push({ path: '/login', query: { next: '/garment-studio' } })">{{ t('cloud.login.submitLogin') }}</button><button v-else type="button" class="vg-icon-btn vg-icon-btn--sm" :aria-label="k('close')" @click="error = ''"><X :size="14" /></button></div>
     <div v-if="notice" class="garment__alert" role="status"><span>{{ notice }}</span><button type="button" class="vg-icon-btn vg-icon-btn--sm" :aria-label="k('close')" @click="notice = ''"><X :size="14" /></button></div>
 
     <BatchPanel v-if="batch" :batch="batch" :busy="busy" :points-per-image="pointsPerImage" @back="go('batches')" @action="act" @item="actItem" @remove="removeBatch" @again="again" @download="download" />
 
     <template v-else>
-      <header class="garment__head">
-        <h1>{{ k('title') }}</h1>
-        <nav :aria-label="k('title')">
-          <button v-for="name in ['', 'batches', 'scenes']" :key="name" type="button" :class="{ 'is-on': pane === name }" :aria-current="pane === name ? 'page' : undefined" @click="go(name)">{{ k(`pane.${name || 'new'}`) }}<span v-if="name === 'batches' && batches.length">{{ batches.length }}</span></button>
-        </nav>
+      <header class="vg-page-head">
+        <span class="vg-page-head__icon"><Shirt :size="20" /></span>
+        <div class="vg-page-head__text">
+          <h1>{{ k('title') }}</h1>
+          <p>{{ k('subtitle') }}</p>
+        </div>
       </header>
+
+      <nav class="gs-tabs" :aria-label="k('title')">
+        <button v-for="item in PANES" :key="item.name" type="button" class="gs-tab" :class="{ 'is-active': pane === item.name }" :aria-current="pane === item.name ? 'page' : undefined" @click="go(item.name)"><component :is="item.icon" :size="15" />{{ k(`pane.${item.name || 'new'}`) }}<span v-if="item.name === 'batches' && batches.length" class="vg-count">{{ batches.length }}</span></button>
+      </nav>
 
       <div v-if="pane === 'scenes'" class="garment__scroll">
         <p class="garment__lead">{{ k('sceneLibraryHint') }}</p>
@@ -270,7 +276,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
       <div v-else class="garment__work">
         <section class="stage" :class="{ 'is-drop': dragging }" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="drop">
           <div v-if="!sources.length" class="stage__empty">
-            <ImagePlus :size="30" :stroke-width="1.25" />
+            <span class="stage__art"><ImagePlus :size="38" :stroke-width="1.4" /></span>
             <h2>{{ k('emptyTitle') }}</h2>
             <p>{{ k('emptyHint', { max: SCENE_SWAP_MAX_IMAGES }) }}</p>
             <div class="stage__pick">
@@ -349,25 +355,20 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
   --gs-well: var(--theme-panel-soft);
   --gs-hover: var(--theme-control-hover);
   --gs-line: var(--theme-border);
-  display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: auto; background: radial-gradient(1100px 380px at 40% -140px, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 72%), var(--gs-bg); font-size: 13px; scrollbar-width: thin; scrollbar-color: var(--gs-hover) transparent;
+  display: flex; flex-direction: column; height: 100%; gap: 14px; min-height: 0; padding: 16px 20px 20px; overflow: auto; background: radial-gradient(1100px 380px at 40% -140px, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 72%), var(--gs-bg); font-size: 13px; scrollbar-width: thin; scrollbar-color: var(--gs-hover) transparent;
 }
+.garment.is-batch { gap: 0; padding: 0; }
 .garment :deep(*) { scrollbar-width: thin; scrollbar-color: var(--gs-hover) transparent; }
 .garment :deep(.vg-btn--primary:disabled) { border-color: transparent; background: var(--gs-hover); color: var(--theme-text-muted); opacity: 1; }
 .garment :deep(.vg-btn:not(.vg-btn--primary):hover:not(:disabled)) { border-color: var(--theme-text-muted); background: var(--gs-hover); color: var(--theme-text); }
 .garment :deep(.vg-btn--ghost:hover:not(:disabled)) { border-color: transparent; }
-.garment__alert { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 9px 24px; border-bottom: 1px solid var(--gs-line); background: var(--gs-well); }
+.garment__alert { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 9px 14px; border: 1px solid var(--gs-line); border-radius: 10px; background: var(--gs-well); }
+.garment.is-batch .garment__alert { margin: 12px 20px 0; }
 .garment__alert.is-error { background: var(--theme-danger-soft); color: var(--theme-danger-text); }
-.garment__head { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 36px; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--gs-line); }
-.garment__head h1 { padding: 12px 0; font-size: 16px; font-weight: 700; }
-.garment__head nav { display: flex; gap: 24px; align-self: stretch; }
-.garment__head nav button { display: flex; gap: 6px; align-items: center; margin-bottom: -1px; padding: 14px 0; border: 0; border-bottom: 1.5px solid transparent; background: none; color: var(--theme-text-muted); font-size: 13px; cursor: pointer; }
-.garment__head nav button:hover { color: var(--theme-text); }
-.garment__head nav button.is-on { border-color: var(--vg-accent); color: var(--theme-text); font-weight: 600; }
-.garment__head nav span { opacity: .65; font-variant-numeric: tabular-nums; }
-.garment__scroll { flex: 1; min-height: 0; overflow: auto; padding: 22px 24px 32px; }
+.garment__scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); }
 .garment__lead { margin-bottom: 18px; color: var(--theme-text-muted); }
 .garment__none { padding: 90px 0; color: var(--theme-text-muted); text-align: center; }
-.garment__use { position: sticky; bottom: -32px; display: flex; gap: 16px; align-items: center; justify-content: flex-end; margin: 24px -24px -32px; padding: 14px 24px; border-top: 1px solid var(--gs-line); background: var(--gs-bg); }
+.garment__use { position: sticky; bottom: -18px; display: flex; gap: 16px; align-items: center; justify-content: flex-end; margin: 24px -18px -18px; padding: 14px 18px; border-top: 1px solid var(--gs-line); background: var(--gs-panel); }
 .garment__batches { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 28px 20px; }
 .tile { min-width: 0; padding: 0; border: 0; background: none; color: var(--theme-text); text-align: left; cursor: pointer; }
 .tile__cover { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; overflow: hidden; border-radius: 8px; background: var(--gs-well); transition: opacity .15s; }
@@ -375,16 +376,18 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .tile strong { display: block; margin-top: 10px; overflow: hidden; font-size: 13.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .tile small { color: var(--theme-text-muted); font-size: 12px; }
 
-.garment__work { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
-.stage { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 24px 28px; transition: background .15s; }
-.stage.is-drop { background: var(--gs-well); }
-.stage__empty { display: flex; flex-direction: column; align-items: center; margin: auto; padding: 48px 16px 80px; color: var(--theme-text-muted); text-align: center; }
+.garment__work { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; min-height: 0; }
+.stage { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 18px 18px; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); transition: border-color .15s; }
+.stage.is-drop { border-color: var(--vg-accent); }
+.stage__empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; margin-top: 18px; padding: 36px 16px; border: 1px dashed color-mix(in srgb, var(--theme-accent) 30%, var(--theme-border)); border-radius: 12px; color: var(--theme-text-muted); text-align: center; transition: background .15s; }
+.stage.is-drop .stage__empty { border-color: var(--vg-accent); background: color-mix(in srgb, var(--theme-accent) 7%, transparent); }
+.stage__art { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 22px; background: radial-gradient(circle, color-mix(in srgb, var(--theme-accent) 22%, transparent), transparent 72%); color: var(--theme-accent); }
 .stage__empty h2 { margin: 16px 0 6px; color: var(--theme-text); font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
 .stage__empty p { max-width: 420px; font-size: 13.5px; line-height: 1.7; }
 .stage__pick { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 26px; }
 .stage__pick .vg-btn { height: 34px; padding: 0 16px; font-size: 13px; border-radius: 8px; }
 
-.stage__bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0; background: var(--gs-bg); }
+.stage__bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0; background: var(--gs-panel); }
 .stage__bar strong { font-weight: 600; }
 .stage__note { display: inline-flex; gap: 6px; align-items: center; color: var(--theme-text-muted); font-size: 12px; }
 .stage__gap { flex: 1; }
@@ -402,9 +405,10 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .photo button { position: absolute; top: 6px; right: 6px; display: grid; width: 24px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: rgba(0, 0, 0, .6); color: #fff; cursor: pointer; opacity: 0; }
 .photo:hover button, .photo button:focus-visible { opacity: 1; }
 
-.panel { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--gs-line); background: var(--gs-panel); }
+.panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); }
 .panel__scroll { flex: 1; min-height: 0; overflow: auto; }
-.panel section { padding: 18px 20px; border-bottom: 1px solid var(--gs-line); }
+.panel section { padding: 16px 18px; border-bottom: 1px solid var(--gs-line); }
+.panel section:last-child { border-bottom: 0; }
 .panel h2 { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
 .panel h2 span { color: var(--theme-text-muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .panel__hint { margin-top: 10px; color: var(--theme-text-muted); font-size: 12px; line-height: 1.6; }
@@ -419,11 +423,11 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .panel__more svg.is-open { transform: rotate(180deg); }
 .panel__options { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .panel__check { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 12.5px; cursor: pointer; color: var(--theme-text-secondary); }
-.panel__foot { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px 18px; border-top: 1px solid var(--gs-line); }
+.panel__foot { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px 16px; border-top: 1px solid var(--gs-line); }
 .panel__sum { display: flex; justify-content: space-between; color: var(--theme-text-muted); font-variant-numeric: tabular-nums; }
 .panel__sum strong { color: var(--theme-text); font-weight: 600; }
 .panel__go { width: 100%; height: 36px; margin-top: 4px; font-size: 13px; }
 .panel__foot small { color: var(--theme-text-muted); font-size: 12px; line-height: 1.6; }
 button:focus-visible { outline: 2px solid var(--vg-accent); outline-offset: 2px; }
-@media (max-width: 900px) { .garment__work { display: block; } .stage { overflow: visible; min-height: 320px; } .panel { border-top: 1px solid var(--gs-line); border-left: 0; } .panel__scroll { overflow: visible; } }
+@media (max-width: 900px) { .garment__work { display: block; } .stage { overflow: visible; min-height: 320px; } .panel { margin-top: 14px; } .panel__scroll { overflow: visible; } }
 </style>

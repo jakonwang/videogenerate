@@ -637,6 +637,9 @@
         }
       }
     },
+    "briefMore": "还有 {count} 件",
+    "briefCollapse": "收起",
+    "projectCount": "{count} 条",
     "pulse": {
       "title": "经营概览",
       "range": "近 7 天",
@@ -718,6 +721,12 @@
     "recent": "最近使用",
     "noMatch": "没有匹配的工具",
     "back": "返回工具箱",
+    "groupDesc": {
+      "source": "找视频、切片段、攒图片",
+      "image": "换商品、加品牌",
+      "video": "加字幕、加水印",
+      "operations": "投放、上架、达人与库存，一处打理"
+    },
     "groups": {
       "source": "素材获取",
       "image": "图片加工",
