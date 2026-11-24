@@ -1666,6 +1666,10 @@
     }
   },
   "productReplacement": {
+    "refresh": "Lam moi",
+    "close": "Dong",
+    "promptDirty": "Hay luu phien ban de ap dung thay doi",
+    "noFiltered": "Khong co ket qua phu hop",
     "backToPlugins": "Quay lai plugin",
     "eyebrow": "Chinh sua anh hang loat",
     "title": "Thay the san pham",

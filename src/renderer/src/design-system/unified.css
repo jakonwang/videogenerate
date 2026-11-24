@@ -9,7 +9,6 @@ html[data-app-theme] body #app :is(.vg-page, .ctl-page, .lp-main, .pm, .prd-page
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .inventory-page { max-width: none; margin: 0; padding: 16px 20px 28px; gap: 14px; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page { padding: 16px 20px 28px !important; background: transparent !important; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page .listing-shell { gap: 14px; padding: 0; border: 0; background: transparent; box-shadow: none; }
-html[data-app-theme] body #app :is(.app-shell, .web-shell) .replacement-page { padding: 16px 20px 28px !important; background: transparent !important; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .tiktok-page.ts-page { padding: 16px 20px 28px !important; gap: 14px !important; }
 
 /* ===== 2. 页面标题区 ===== */
@@ -38,7 +37,7 @@ html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .gs-tabs .gs-tab, .listing-
 html[data-app-theme] body #app :is(.pr-tabs .pr-tab, .gs-tabs .gs-tab, .pm-tabs > button) svg { width: 15px; height: 15px; }
 
 /* ===== 4. 卡片：内容卡平面，统计卡轻渐变 ===== */
-html[data-app-theme] body #app :is(.vg-card, .lp-card, .ts-card, .pm-card, .ls-card, .ctl-bench, .pr-panel, .listing-page .workspace-card, .replacement-page .content-card, .replacement-page .confirm-sticky, .inventory-page .inventory-panel):not(.is-active, .is-selected, .vg-card--soft) { border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); box-shadow: none; }
+html[data-app-theme] body #app :is(.vg-card, .lp-card, .ts-card, .pm-card, .ls-card, .ctl-bench, .pr-panel, .listing-page .workspace-card, .inventory-page .inventory-panel):not(.is-active, .is-selected, .vg-card--soft) { border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-panel); box-shadow: none; }
 html[data-app-theme] body #app :is(.vg-stat, .ctl-stat, .ml-stat, .listing-page .stat-card, .inventory-page .summary-card) { min-height: 76px; border: 1px solid var(--theme-border); border-radius: 12px; background: linear-gradient(160deg, color-mix(in srgb, var(--theme-text) 6%, var(--theme-panel)), var(--theme-panel) 62%); box-shadow: none; }
 html[data-app-theme] body #app :is(.ctl-stat, .ml-stat).is-active { border-color: color-mix(in srgb, var(--theme-accent) 60%, transparent); background: linear-gradient(150deg, color-mix(in srgb, var(--theme-accent) 15%, var(--theme-panel)), color-mix(in srgb, var(--theme-accent) 30%, var(--theme-panel))); box-shadow: inset 0 -2px 0 var(--theme-accent); }
 html[data-app-theme] body #app :is(.vg-stat__value, .ctl-stat__value, .listing-page .stat-card strong, .inventory-page .summary-card strong) { font-size: 20px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
@@ -48,11 +47,11 @@ html[data-app-theme] body #app .inventory-page .summary-card::after { display: n
 html[data-app-theme] body #app .listing-page .stat-card { padding: 12px 14px; }
 
 /* ===== 5. 按钮和输入：32 高、8 圆角 ===== */
-html[data-app-theme] body #app :is(.inventory-page :is(.primary-button, .ghost-button), .prd-page .prd-btn:not(.prd-btn--link), .listing-page :is(.hero-primary-button, .hero-ghost-button, .toolbar-button), .replacement-page :is(.secondary-button:not(.upload-product-button), .run-button)) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; height: 32px; padding: 0 13px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: none; white-space: nowrap; }
-html[data-app-theme] body #app :is(.inventory-page .primary-button, .prd-page .prd-btn--primary, .listing-page .hero-primary-button, .replacement-page .run-button) { border: 1px solid transparent; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 92%, #fff), color-mix(in srgb, var(--theme-accent) 76%, #003d31)); color: var(--theme-on-accent); font-weight: 600; }
-html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page :is(.hero-ghost-button, .toolbar-button), .replacement-page .secondary-button:not(.upload-product-button)) { border: 1px solid var(--theme-border-control); background: var(--theme-control); color: var(--theme-text); }
-html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page :is(.hero-ghost-button, .toolbar-button), .replacement-page .secondary-button:not(.upload-product-button)):hover:not(:disabled) { background: var(--theme-control-hover); }
-html[data-app-theme] body #app :is(.inventory-page, .prd-page, .listing-page, .replacement-page) button:disabled { opacity: .5; }
+html[data-app-theme] body #app :is(.inventory-page :is(.primary-button, .ghost-button), .prd-page .prd-btn:not(.prd-btn--link), .listing-page :is(.hero-primary-button, .hero-ghost-button, .toolbar-button)) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; height: 32px; padding: 0 13px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: none; white-space: nowrap; }
+html[data-app-theme] body #app :is(.inventory-page .primary-button, .prd-page .prd-btn--primary, .listing-page .hero-primary-button) { border: 1px solid transparent; background: linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 92%, #fff), color-mix(in srgb, var(--theme-accent) 76%, #003d31)); color: var(--theme-on-accent); font-weight: 600; }
+html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page.listing-page :is(.hero-ghost-button, .toolbar-button)) { border: 1px solid var(--theme-border-control); background: var(--theme-control); color: var(--theme-text); }
+html[data-app-theme] body #app :is(.inventory-page .ghost-button, .listing-page.listing-page :is(.hero-ghost-button, .toolbar-button)):hover:not(:disabled) { background: var(--theme-control-hover); }
+html[data-app-theme] body #app :is(.inventory-page, .prd-page, .listing-page) button:disabled { opacity: .5; }
 html[data-app-theme] body #app :is(.prd-page :is(.prd-input, .prd-select), .listing-page .field-shell) { min-height: 32px; height: 32px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-input); font-size: 13px; box-shadow: none; }
 html[data-app-theme] body #app .listing-page .field-shell :is(input, select) { height: 30px; min-height: 0; border: 0; background: transparent; font-size: 13px; }
 
@@ -70,7 +69,3 @@ html[data-app-theme] body #app .ls-drop { border: 1px solid var(--theme-border);
 html[data-app-theme] body #app .web-workspace > .vg-page-head { padding: 16px 20px 14px; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page .tab-bar .tab-button:is(.active, :hover) { background: none !important; box-shadow: none !important; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page :is(.empty-state, .empty-text, .table-empty, .empty) { color: var(--theme-text-muted) !important; }
-html[data-app-theme] body #app :is(.app-shell, .web-shell) .replacement-page.plugin-workspace-standard { max-width: none; margin: 0; gap: 14px; }
-html[data-app-theme] body #app .replacement-page :is(.step, .prompt-heading-icon, .history-icon) { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--theme-accent) 16%, var(--theme-panel)); color: var(--theme-accent); font-size: 12px; font-weight: 700; box-shadow: none; }
-html[data-app-theme] body #app .replacement-page .history-icon svg { width: 16px; height: 16px; }
-html[data-app-theme] body #app .replacement-page h2 { font-size: 15px; font-weight: 600; }

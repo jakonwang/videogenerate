@@ -26,7 +26,7 @@ const isDesktopFile = (importer?: string) => Boolean(importer && /[\/]src[\/]ren
  * keeps only the rules that target these legacy page roots (original order, `.app-shell` also matching `.web-shell`),
  * so the rules stay in one place and the desktop is untouched.
  */
-const LEGACY_PAGE_ROOTS = ['.live-photo-page', '.listing-page', '.replacement-page']
+const LEGACY_PAGE_ROOTS = ['.live-photo-page', '.listing-page']
 const PAGE_THEMES_ID = 'virtual:desktop-page-themes.css'
 function desktopPageThemes(): Plugin {
   const stylesPath = fileURLToPath(new URL('../../src/renderer/src/styles.css', import.meta.url))

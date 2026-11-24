@@ -2194,6 +2194,10 @@
     }
   },
   "productReplacement": {
+    "refresh": "Refresh",
+    "close": "Close",
+    "promptDirty": "Save the version for changes to take effect",
+    "noFiltered": "No matching results",
     "backToPlugins": "Back to plugins",
     "eyebrow": "Batch image editing",
     "title": "Product Replacement",

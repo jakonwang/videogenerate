@@ -2898,6 +2898,12 @@
     }
   },
   "productReplacement": {
+    "refresh": "刷新",
+    "close": "关闭",
+    "copy": "复制版本",
+    "rollback": "回滚到此版本",
+    "promptDirty": "修改后需保存版本才会生效",
+    "noFiltered": "没有符合条件的记录",
     "backToPlugins": "返回插件中心",
     "eyebrow": "批量图片编辑",
     "title": "商品替换",
