@@ -91,7 +91,7 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
         <button v-for="item in shown" :key="item.id" type="button" class="shot" :disabled="!item.outputFileId && item.status !== 'failed'" @click="openId = item.id">
           <span class="shot__img" :class="{ 'is-dim': !item.outputFileId }"><SwapImage :file-id="item.outputFileId || item.sourceFileId" :alt="item.sourceName" :width="260" /><LoaderCircle v-if="item.status === 'running'" :size="20" class="vg-spin shot__spin" /></span>
           <span class="shot__name">{{ item.sourceName.replace(/\.[^.]+$/, '') }}</span>
-          <span class="shot__meta"><span class="dot" :class="`is-${item.status}`" />{{ k(`status.${item.status}`) }}<span class="shot__scene">{{ item.sceneName }}</span></span>
+          <span class="shot__meta"><span class="dot" :class="`is-${item.status}`" /><span class="shot__status">{{ k(`status.${item.status}`) }}</span><span class="shot__scene">{{ item.sceneName }}</span></span>
         </button>
       </div>
       <p v-if="!shown.length" class="batch__empty">{{ k('nothingHere') }}</p>
@@ -134,7 +134,8 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
 .shot__spin { position: absolute; inset: 0; margin: auto; }
 .shot__name { display: block; margin-top: 9px; overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .shot__meta { display: flex; gap: 6px; align-items: center; margin-top: 2px; color: var(--theme-text-muted); font-size: 12px; }
-.shot__scene { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot__status { flex-shrink: 0; white-space: nowrap; }
+.shot__scene { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--theme-text-muted); }
 .dot.is-passed { background: var(--vg-green); }
 .dot.is-review { background: var(--vg-amber); }

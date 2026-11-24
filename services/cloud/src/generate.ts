@@ -46,6 +46,9 @@ type FileStore = {
   store: (userId: string, body: Buffer, mime: string) => { fileId: string }
 }
 
+/** Node 自带的 fetch 等响应头最多 300 秒，要比它短 */
+const SCENE_IMAGE_TIMEOUT_MS = 280_000
+
 export type GenerationProviders = {
   generateImage: typeof generateImage
   generateVideo: typeof generateVideo
@@ -223,7 +226,7 @@ export function createGenerationService(deps: {
     return settings
   }
 
-  type RenderInput = { userId: string; prompt: string; negativePrompt?: string; refs: Array<{ fileId: string; path: string }>; aspectRatio: '1:1' | '9:16' | '16:9'; size?: string; workDir: string }
+  type RenderInput = { userId: string; prompt: string; negativePrompt?: string; refs: Array<{ fileId: string; path: string }>; aspectRatio: '1:1' | '9:16' | '16:9'; size?: string; editTimeoutMs?: number; workDir: string }
 
   async function renderWith(credentials: ModelCredentials, input: RenderInput): Promise<string> {
     if (credentials.imageProviderPrimary === 'grsai') {
@@ -243,6 +246,7 @@ export function createGenerationService(deps: {
       capability: input.refs.length ? 'image_edit' : 'image_generate',
       imagePaths: input.refs.map((ref) => ref.path),
       ...(input.size ? { size: input.size } : {}),
+      ...(input.editTimeoutMs ? { editTimeoutMs: input.editTimeoutMs } : {}),
     })
     return result.outputPath
   }
@@ -251,7 +255,7 @@ export function createGenerationService(deps: {
   async function renderImage(input: { userId: string; prompt: string; refs: Array<{ fileId: string; path: string }>; width: number; height: number; workDir: string }) {
     const ratio = input.width / input.height
     const [aspectRatio, size] = ratio > 1.2 ? (['16:9', '1536x1024'] as const) : ratio > 0.83 ? (['1:1', '1024x1024'] as const) : (['9:16', '1024x1536'] as const)
-    return renderWith(credentialsFrom(assertConfigured('image')), { ...input, aspectRatio, size })
+    return renderWith(credentialsFrom(assertConfigured('image')), { ...input, aspectRatio, size, editTimeoutMs: SCENE_IMAGE_TIMEOUT_MS })
   }
 
   async function execute(row: JobRow) {

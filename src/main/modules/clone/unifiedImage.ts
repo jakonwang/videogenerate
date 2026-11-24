@@ -72,6 +72,8 @@ async function fetchWithRetry(input: {
   retries?: number
   timeoutMs?: number
   baseDelayMs?: number
+  /** 超时也重试；出图慢时重试只会从头再等，可关掉 */
+  retryOnTimeout?: boolean
 }) {
   const retries = Math.max(0, Number(input.retries ?? 2))
   const baseDelayMs = Math.max(300, Number(input.baseDelayMs ?? 1200))
@@ -81,6 +83,7 @@ async function fetchWithRetry(input: {
       return await fetchWithTimeout(input.url, input.init, input.timeoutMs)
     } catch (error) {
       lastError = error
+      if (input.retryOnTimeout === false && /^request timeout after/.test(String((error as any)?.message ?? ''))) break
       if (attempt >= retries || !isRetryableFetchError(error)) break
       console.warn('[clone-debug] unified-image-fetch-retry', {
         label: input.label,
@@ -221,6 +224,8 @@ async function generateImageUnmetered(input: {
   uploadFileNames?: string[]
   /** 图片编辑的出图尺寸，默认 1024x1536 */
   size?: string
+  /** 图片编辑单次请求最长等多久；设了就不再因超时重试，默认 120 秒、超时重试 2 次 */
+  editTimeoutMs?: number
 }) {
   const cfg = resolveApifoxHubCredentials(input.credentials, 'image')!
   const root = baseUrl(input.credentials)
@@ -316,7 +321,8 @@ async function generateImageUnmetered(input: {
     const res = await fetchWithRetry({
       url,
       label: 'vectorengine-image-edit',
-      timeoutMs: 120_000,
+      timeoutMs: input.editTimeoutMs ?? 120_000,
+      retryOnTimeout: input.editTimeoutMs === undefined,
       retries: 2,
       init: {
         method: 'POST',

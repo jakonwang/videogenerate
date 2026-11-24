@@ -49,9 +49,40 @@ export type RenderImage = (input: { userId: string; prompt: string; refs: Array<
 export type Inspect = (prompt: string, images: Buffer[]) => Promise<string>
 
 const MAX_ATTEMPTS = 6
+/** 一次出图的总时限：到点算失败并退点，不能一直占着队列 */
+const ATTEMPT_LIMIT_MS = 8 * 60_000
+/** 第一次已经很慢，就不再自动重做 */
+const AUTO_REDO_WITHIN_MS = 3 * 60_000
 const DAY_MS = 24 * 60 * 60 * 1000
 /** 重新生成背景可能解决的问题；抠图边缘、画面被切重做也没用 */
 const RETRYABLE: Array<SceneSwapCheck['key']> = ['light', 'face', 'pattern', 'color']
+
+/** 记录现在做到哪一步、每步多久：超时要说清卡在哪，日志也能查 */
+function createStages(id: string) {
+  let name = '准备'
+  let since = Date.now()
+  return {
+    current: () => name,
+    enter: (next: string) => {
+      console.log('[scene-swap]', id, `${name} ${Date.now() - since}ms → ${next}`)
+      name = next
+      since = Date.now()
+    },
+  }
+}
+type Stages = ReturnType<typeof createStages>
+
+async function withLimit<T>(work: Promise<T>, ms: number, stages: Stages): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${stages.current()}超时，没有扣点，请稍后重做`)), ms)
+  })
+  try {
+    return await Promise.race([work, limit])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 export function createSceneSwapService(deps: {
   db: CloudDb
@@ -68,7 +99,9 @@ export function createSceneSwapService(deps: {
   inspect: Inspect
   concurrency: number
   trialsPerDay: number
+  attemptLimitMs?: number
 }) {
+  const limitMs = deps.attemptLimitMs ?? ATTEMPT_LIMIT_MS
   const { db, now } = deps
   const cacheRoot = join(deps.dataDir, 'scene-swap-cache')
   let running = 0
@@ -374,10 +407,11 @@ export function createSceneSwapService(deps: {
     }
   }
 
-  async function attempt(row: ItemRow, batch: BatchData, workDir: string, reasons: string[]): Promise<{ output: string; checks: SceneSwapCheck[] }> {
+  async function attempt(row: ItemRow, batch: BatchData, workDir: string, reasons: string[], stages: Stages): Promise<{ output: string; checks: SceneSwapCheck[] }> {
     const data = parse<ItemData>(row.data)
     if (batch.mode === 'keep' && !deps.matting.available()) throw new Error('管理员还没有配置抠图服务')
     // 抠图按张收费，融合模式用不到就不抠
+    stages.enter(batch.mode === 'keep' ? '抠图' : '读取原图')
     const source = await prepareSource(row.user_id, data.sourceFileId, batch.mode === 'keep')
     const scenePath = join(workDir, 'scene.png')
     if (!existsSync(scenePath)) await normalizeSource(deps.sync.readFile(row.user_id, data.sceneFileId).body, scenePath)
@@ -389,6 +423,7 @@ export function createSceneSwapService(deps: {
       const stats: MaskStats = maskStats(mask, source.width, source.height)
       if (stats.coverage < 0.005) throw new Error('没有在图里找到人物或衣服，请换一张图')
       let plate = ''
+      stages.enter('AI 出图')
       let ok = false
       try {
         plate = await deps.renderImage({ userId: row.user_id, prompt: platePrompt({ stats, width: source.width, height: source.height, variation: row.ord, reasons }), refs: [scene], width: source.width, height: source.height, workDir })
@@ -396,14 +431,17 @@ export function createSceneSwapService(deps: {
       } finally {
         deps.quota.record(row.user_id, ok)
       }
+      stages.enter('合成')
       const composed = await composeKeep({ source: source.path, mask, plate, width: source.width, height: source.height, size: batch.size, matchLight: batch.matchLight, output })
       const base = checkKeep(composed.stats, composed.canvas, source.width, source.height)
+      stages.enter('质检')
       const seen = await vision('keep', source.path, output)
       const merged = base.map((check) => (seen.some((item) => item.key === check.key && item.level === 'warn') ? { ...check, level: 'warn' as const } : check))
       return { output, checks: [...merged, ...seen.filter((item) => !base.some((check) => check.key === item.key))] }
     }
 
     let rendered = ''
+    stages.enter('AI 出图')
     let ok = false
     try {
       rendered = await deps.renderImage({ userId: row.user_id, prompt: blendPrompt(reasons), refs: [{ fileId: data.sourceFileId, path: source.path }, scene], width: source.width, height: source.height, workDir })
@@ -412,6 +450,7 @@ export function createSceneSwapService(deps: {
       deps.quota.record(row.user_id, ok)
     }
     await sharp(rendered).rotate().flatten({ background: '#ffffff' }).jpeg({ quality: 95 }).toFile(output)
+    stages.enter('质检')
     return { output, checks: await vision('blend', source.path, output) }
   }
 
@@ -438,12 +477,14 @@ export function createSceneSwapService(deps: {
       }
       await mkdir(workDir, { recursive: true })
       const reasons = parse<ItemData>(row.data).reasons ?? []
-      let result = await attempt(row, batch, workDir, reasons)
+      const startedAt = Date.now()
+      const stages = createStages(row.id)
+      let result = await withLimit(attempt(row, batch, workDir, reasons, stages), limitMs, stages)
       let attempts = row.attempts + 1
       const retryable = result.checks.some((check) => check.level === 'warn' && RETRYABLE.includes(check.key))
-      if (retryable && batchOf().status !== 'deleted') {
+      if (retryable && Date.now() - startedAt < AUTO_REDO_WITHIN_MS && batchOf().status !== 'deleted') {
         // 自动重做一次；重做失败就用第一次的结果
-        const second = await attempt(row, batch, workDir, reasons).catch(() => null)
+        const second = await withLimit(attempt(row, batch, workDir, reasons, stages), limitMs, stages).catch(() => null)
         attempts += 1
         const warns = (checks: SceneSwapCheck[]) => checks.filter((check) => check.level === 'warn').length
         if (second && warns(second.checks) <= warns(result.checks)) result = second
@@ -452,6 +493,7 @@ export function createSceneSwapService(deps: {
         settle({ hold_id: hold }, false, '批次已删除')
         return
       }
+      stages.enter('保存')
       const stored = deps.sync.uploadFile(row.user_id, await readFile(result.output), 'image/jpeg')
       const review = needsReview(batch.mode, result.checks)
       setItem(row.id, { status: review ? 'review' : 'passed', output_file_id: stored.fileId, attempts }, { checks: result.checks, error: undefined })

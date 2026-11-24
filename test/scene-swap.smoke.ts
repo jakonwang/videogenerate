@@ -283,6 +283,26 @@ async function main() {
   await again.sceneSwap.idle()
   assert.equal(Number((again.db.prepare("SELECT COUNT(*) AS n FROM scene_swap_items WHERE status = 'running'").get() as any).n), 0)
   again.sceneSwap.close()
+  // ---- 出图一直不返回：到时限算失败并退点，不占着队列
+  again.db.prepare("UPDATE scene_swap_batches SET status = 'done'").run()
+  const stuck = again.db.prepare("SELECT id, batch_id, user_id FROM scene_swap_items WHERE batch_id IN (SELECT id FROM scene_swap_batches WHERE json_extract(data, '$.mode') = 'blend') LIMIT 1").get() as any
+  assert.ok(stuck)
+  again.db.prepare("UPDATE scene_swap_items SET status = 'queued', trial = 0, hold_id = NULL, attempts = 0 WHERE id = ?").run(stuck.id)
+  again.db.prepare("UPDATE scene_swap_batches SET status = 'running' WHERE id = ?").run(stuck.batch_id)
+  const balance = () => Number((again.db.prepare('SELECT credits FROM users WHERE id = ?').get(stuck.user_id) as any).credits)
+  again.db.prepare('UPDATE users SET credits = 1000 WHERE id = ?').run(stuck.user_id)
+  let editTimeoutMs = 0
+  const hung = createCloudApp(overrides, { ...options, sceneSwapAttemptLimitMs: 400, generationProviders: { generateImage: (input: any) => { editTimeoutMs = input.editTimeoutMs; return new Promise(() => undefined) } } } as any)
+  hung.sceneSwap.start()
+  await hung.sceneSwap.idle()
+  const row = hung.db.prepare('SELECT status, hold_id, data FROM scene_swap_items WHERE id = ?').get(stuck.id) as any
+  assert.equal(row.status, 'failed')
+  assert.equal(row.hold_id, null)
+  assert.match(row.data, /AI 出图超时/)
+  assert.equal(editTimeoutMs, 280_000)
+  assert.equal(balance(), 1000, 'timed-out image is refunded')
+  hung.sceneSwap.close()
+  hung.db.close()
   again.db.close()
   rmSync(dir, { recursive: true, force: true })
   console.log('scene-swap smoke ok')

@@ -18,7 +18,7 @@ import { applyManagedSettings, toProxiedManagedSettings } from '../../../src/sha
 import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
-export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders>; matting?: Matting; inspect?: (prompt: string, images: Buffer[]) => Promise<string> } = {}) {
+export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders>; matting?: Matting; inspect?: (prompt: string, images: Buffer[]) => Promise<string>; sceneSwapAttemptLimitMs?: number } = {}) {
   const config = { ...loadCloudConfig(), ...overrides }
   if (config.isProduction && config.mockPay) {
     throw new Error('生产环境禁止开启 CLOUD_PAY_MOCK')
@@ -75,6 +75,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     inspect: options.inspect ?? ai.inspect,
     concurrency: config.sceneSwapConcurrency,
     trialsPerDay: config.sceneSwapTrialsPerDay,
+    attemptLimitMs: options.sceneSwapAttemptLimitMs,
   })
   let listenPort = config.port
   const cloneEngine = createCloneEngine({
