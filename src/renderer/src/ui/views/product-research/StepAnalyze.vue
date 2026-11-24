@@ -7,13 +7,15 @@ import {
 import { useSchemeWorkspace, type ProductRow } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
 import PrThumb from './PrThumb.vue'
-import { formatNumber, marketOf, ratingOf } from './productResearchUtils'
+import PrSource from './PrSource.vue'
+import { researchCurrencyOf, researchSourceOf } from '../../../../../shared/productResearch'
+import { currenciesOf, currencyName, formatMoney, formatNumber, formatPrice, gmvOf, priceOf, ratingOf, sourceLabel, sourcesOf, sumByCurrency } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
-const { scheme, keywords, productRows, candidateIds, candidateSet } = ws
+const { keywords, productRows, candidateIds, candidateSet } = ws
 
 type SortKey = 'sales' | 'price' | 'gmv' | 'rating'
-const filters = reactive({ priceMin: '', priceMax: '', rating: '', keyword: '', q: '' })
+const filters = reactive({ priceMin: '', priceMax: '', rating: '', keyword: '', source: '', q: '' })
 const sort = reactive<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'sales', dir: 'desc' })
 const tab = ref<'all' | 'hot' | 'candidate'>('all')
 const view = ref<'table' | 'compare'>('table')
@@ -21,7 +23,16 @@ const page = ref(1)
 const pageSize = ref(50)
 const checked = ref<string[]>([])
 
-const currency = computed(() => marketOf(scheme.value?.market).currency || '本币')
+const sources = computed(() => sourcesOf(productRows.value))
+const currencies = computed(() => currenciesOf(filters.source ? productRows.value.filter((item) => researchSourceOf(item) === filters.source) : productRows.value))
+/** 多币种时价格不能互相比较，要先选平台 */
+const mixed = computed(() => currencies.value.length > 1)
+const currency = computed(() => (mixed.value ? '' : currencies.value[0] || ''))
+watch(mixed, (value) => {
+  if (!value) return
+  Object.assign(filters, { priceMin: '', priceMax: '' })
+  if (sort.key === 'price' || sort.key === 'gmv') Object.assign(sort, { key: 'sales', dir: 'desc' })
+})
 const hasRating = computed(() => productRows.value.some((item) => ratingOf(item) !== undefined))
 
 /** 高潜：销量位于全部商品前 20%，且销量不低于 100。 */
@@ -33,7 +44,7 @@ const hotThreshold = computed(() => {
 const isHot = (item: ProductRow) => (item.salesValue || 0) >= hotThreshold.value
 
 function sortValue(item: ProductRow, key: SortKey) {
-  if (key === 'price') return item.priceValue || 0
+  if (key === 'price') return priceOf(item) || 0
   if (key === 'gmv') return item.gmv
   if (key === 'rating') return ratingOf(item) || 0
   return item.salesValue || 0
@@ -45,9 +56,10 @@ const filtered = computed(() => {
   const minRating = Number(filters.rating) || 0
   const q = filters.q.trim().toLowerCase()
   const list = productRows.value.filter((item) => {
-    if (min && (item.priceValue || 0) < min) return false
-    if (max && (item.priceValue || 0) > max) return false
+    if (min && (priceOf(item) || 0) < min) return false
+    if (max && (priceOf(item) || 0) > max) return false
     if (minRating && (ratingOf(item) || 0) < minRating) return false
+    if (filters.source && researchSourceOf(item) !== filters.source) return false
     if (filters.keyword && item.keyword !== filters.keyword) return false
     if (q && !`${item.title} ${item.shopName}`.toLowerCase().includes(q)) return false
     return true
@@ -60,16 +72,17 @@ const candidateList = computed(() => filtered.value.filter((item) => candidateSe
 const display = computed(() => (tab.value === 'hot' ? hotList.value : tab.value === 'candidate' ? candidateList.value : filtered.value))
 const paged = computed(() => display.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 const pageAllChecked = computed(() => paged.value.length > 0 && paged.value.every((item) => checked.value.includes(item.id)))
-const hasFilters = computed(() => Boolean(filters.priceMin || filters.priceMax || filters.rating || filters.keyword || filters.q.trim()))
+const hasFilters = computed(() => Boolean(filters.priceMin || filters.priceMax || filters.rating || filters.keyword || filters.source || filters.q.trim()))
 
 const overview = computed(() => {
   const list = display.value
-  const priced = list.filter((item) => item.priceValue)
+  const counts = new Map<string, number>()
+  for (const item of list) if (priceOf(item)) counts.set(researchCurrencyOf(item), (counts.get(researchCurrencyOf(item)) || 0) + 1)
   return {
     count: list.length,
-    avgPrice: priced.length ? priced.reduce((sum, item) => sum + (item.priceValue || 0), 0) / priced.length : 0,
+    avgPrice: sumByCurrency(list, (item) => priceOf(item) || 0).map((row) => formatMoney(row.value / (counts.get(row.currency) || 1), row.currency)),
     totalSales: list.reduce((sum, item) => sum + (item.salesValue || 0), 0),
-    totalGmv: list.reduce((sum, item) => sum + item.gmv, 0),
+    totalGmv: sumByCurrency(list, (item) => gmvOf(item)).map((row) => formatMoney(row.value, row.currency)),
   }
 })
 
@@ -80,6 +93,7 @@ watch(productRows, (rows) => {
 })
 
 function setSort(key: SortKey) {
+  if (mixed.value && (key === 'price' || key === 'gmv')) { ws.notify('不同平台的币种不同，请先选择来源平台再按金额排序'); return }
   if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc'
   else { sort.key = key; sort.dir = key === 'price' ? 'asc' : 'desc' }
 }
@@ -89,7 +103,7 @@ const sortPreset = computed({
 })
 
 function resetFilters() {
-  Object.assign(filters, { priceMin: '', priceMax: '', rating: '', keyword: '', q: '' })
+  Object.assign(filters, { priceMin: '', priceMax: '', rating: '', keyword: '', source: '', q: '' })
 }
 
 function togglePage() {
@@ -119,15 +133,16 @@ const compareItems = computed(() => {
 })
 const compareBest = computed(() => {
   const items = compareItems.value
+  const sameCurrency = currenciesOf(items).length <= 1
   const best = (fn: (item: ProductRow) => number, low = false) => {
     const values = items.map(fn).filter((value) => value > 0)
     if (!values.length) return -1
     return low ? Math.min(...values) : Math.max(...values)
   }
   return {
-    price: best((item) => item.priceValue || 0, true),
+    price: sameCurrency ? best((item) => priceOf(item) || 0, true) : -1,
     sales: best((item) => item.salesValue || 0),
-    gmv: best((item) => item.gmv),
+    gmv: sameCurrency ? best((item) => item.gmv) : -1,
     rating: best((item) => ratingOf(item) || 0),
     match: best((item) => item.match),
   }
@@ -143,21 +158,24 @@ const compareBest = computed(() => {
       </div>
 
       <div class="sa-filters">
-        <label><span>销量排序</span>
+        <label><span>排序</span>
           <select v-model="sortPreset" class="prd-select">
             <option value="sales:desc">销量从高到低</option>
             <option value="sales:asc">销量从低到高</option>
-            <option value="gmv:desc">GMV 从高到低</option>
-            <option value="price:asc">价格从低到高</option>
-            <option value="price:desc">价格从高到低</option>
+            <option v-if="!mixed" value="gmv:desc">GMV 从高到低</option>
+            <option v-if="!mixed" value="price:asc">价格从低到高</option>
+            <option v-if="!mixed" value="price:desc">价格从高到低</option>
             <option v-if="hasRating" value="rating:desc">评分从高到低</option>
           </select>
         </label>
-        <label><span>价格区间（{{ currency }}）</span>
-          <span class="sa-range"><input v-model="filters.priceMin" type="number" min="0" class="prd-input" placeholder="最低价" /><i>–</i><input v-model="filters.priceMax" type="number" min="0" class="prd-input" placeholder="最高价" /></span>
+        <label v-if="sources.length > 1"><span>来源平台</span>
+          <select v-model="filters.source" class="prd-select"><option value="">全部</option><option v-for="value in sources" :key="value" :value="value">{{ sourceLabel(value) }}</option></select>
         </label>
-        <label><span>评分区间</span>
-          <select v-model="filters.rating" class="prd-select" :disabled="!hasRating" :title="hasRating ? '' : '当前采集数据不含评分'">
+        <label :title="mixed ? '不同平台币种不同，请先选择来源平台' : ''"><span>采集价（{{ mixed ? '请先选平台' : currencyName(currency) }}）</span>
+          <span class="sa-range"><input v-model="filters.priceMin" :disabled="mixed" type="number" min="0" class="prd-input" placeholder="最低价" /><i>–</i><input v-model="filters.priceMax" :disabled="mixed" type="number" min="0" class="prd-input" placeholder="最高价" /></span>
+        </label>
+        <label v-if="hasRating"><span>评分区间</span>
+          <select v-model="filters.rating" class="prd-select">
             <option value="">不限</option><option value="4">4.0 以上</option><option value="4.5">4.5 以上</option><option value="4.8">4.8 以上</option>
           </select>
         </label>
@@ -167,7 +185,7 @@ const compareBest = computed(() => {
         <label class="sa-filters__q"><span>商品关键词</span>
           <span class="prd-search"><Search :size="14" /><input v-model="filters.q" class="prd-input" placeholder="请输入关键词" /></span>
         </label>
-        <button class="prd-btn prd-btn--outline sa-filters__reset" :disabled="!hasFilters" @click="resetFilters"><RefreshCw :size="14" />重置筛选</button>
+        <button v-if="hasFilters" class="prd-btn prd-btn--outline sa-filters__reset" @click="resetFilters"><RefreshCw :size="14" />重置筛选</button>
       </div>
 
       <div class="sa-bar">
@@ -199,10 +217,10 @@ const compareBest = computed(() => {
                     <th>#</th>
                     <th>商品图片</th>
                     <th>商品名称</th>
-                    <th class="num"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'price' }" @click="setSort('price')">价格（{{ currency }}）<ArrowDownUp :size="11" /></span></th>
+                    <th class="num"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'price' }" @click="setSort('price')">采集价<ArrowDownUp :size="11" /></span></th>
                     <th class="num"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'sales' }" @click="setSort('sales')">销量<ArrowDownUp :size="11" /></span></th>
-                    <th class="num"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'gmv' }" @click="setSort('gmv')">GMV（{{ currency }}）<ArrowDownUp :size="11" /></span></th>
-                    <th><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'rating' }" @click="hasRating && setSort('rating')">评分<ArrowDownUp :size="11" /></span></th>
+                    <th class="num"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'gmv' }" @click="setSort('gmv')">预估 GMV<ArrowDownUp :size="11" /></span></th>
+                    <th v-if="hasRating"><span class="prd-th-sort" :class="{ 'is-active': sort.key === 'rating' }" @click="setSort('rating')">评分<ArrowDownUp :size="11" /></span></th>
                     <th>来源搜索词</th>
                     <th class="center">操作</th>
                   </tr>
@@ -221,16 +239,16 @@ const compareBest = computed(() => {
                       <div class="prd-product__meta">
                         <span class="prd-product__name" :title="item.title">{{ item.title }}</span>
                         <span class="prd-product__chips">
-                          <span class="prd-chip">{{ item.keyword }}</span>
+                          <PrSource :item="item" class="sa-source" />
                           <span v-if="isHot(item)" class="prd-chip sa-chip-hot"><TrendingUp :size="10" />高潜</span>
                           <span v-if="item.shopName" class="prd-chip">{{ item.shopName }}</span>
                         </span>
                       </div>
                     </td>
-                    <td class="num">{{ item.priceValue !== undefined ? formatNumber(item.priceValue) : item.priceText || '-' }}</td>
+                    <td class="num">{{ formatPrice(item) }}</td>
                     <td class="num prd-num-green">{{ item.salesValue !== undefined ? formatNumber(item.salesValue) : item.salesText || '-' }}</td>
-                    <td class="num">{{ item.gmv ? formatNumber(item.gmv) : '-' }}</td>
-                    <td class="nowrap"><template v-if="ratingOf(item) !== undefined"><span class="prd-star">★</span> {{ ratingOf(item)!.toFixed(1) }}</template><span v-else class="muted">-</span></td>
+                    <td class="num" title="采集价 × 销量">{{ item.gmv ? formatMoney(item.gmv, researchCurrencyOf(item)) : '-' }}</td>
+                    <td v-if="hasRating" class="nowrap"><template v-if="ratingOf(item) !== undefined"><span class="prd-star">★</span> {{ ratingOf(item)!.toFixed(1) }}</template><span v-else class="muted">-</span></td>
                     <td>{{ item.keyword }}</td>
                     <td class="center">
                       <button v-if="candidateSet.has(item.id)" class="prd-btn prd-btn--sm prd-btn--success sa-added" title="点击移出候选" @click="ws.toggleCandidate(item.id)"><Check :size="13" />已加入</button>
@@ -251,12 +269,14 @@ const compareBest = computed(() => {
                 <PrThumb :result="item" size="lg" />
                 <span class="prd-product__name" :title="item.title">{{ item.title }}</span>
               </div>
-              <div class="sa-compare__label">价格（{{ currency }}）</div>
-              <div v-for="item in compareItems" :key="`p-${item.id}`" :class="{ 'is-best': item.priceValue === compareBest.price }">{{ formatNumber(item.priceValue) }}</div>
+              <div class="sa-compare__label">采集价</div>
+              <div v-for="item in compareItems" :key="`p-${item.id}`" :class="{ 'is-best': priceOf(item) === compareBest.price }">{{ formatPrice(item) }}</div>
               <div class="sa-compare__label">销量</div>
               <div v-for="item in compareItems" :key="`s-${item.id}`" :class="{ 'is-best': item.salesValue === compareBest.sales }">{{ formatNumber(item.salesValue) }}</div>
-              <div class="sa-compare__label">GMV</div>
-              <div v-for="item in compareItems" :key="`g-${item.id}`" :class="{ 'is-best': item.gmv === compareBest.gmv }">{{ item.gmv ? formatNumber(item.gmv) : '-' }}</div>
+              <div class="sa-compare__label">预估 GMV</div>
+              <div v-for="item in compareItems" :key="`g-${item.id}`" :class="{ 'is-best': item.gmv === compareBest.gmv }">{{ item.gmv ? formatMoney(item.gmv, researchCurrencyOf(item)) : '-' }}</div>
+              <div class="sa-compare__label">来源平台</div>
+              <div v-for="item in compareItems" :key="`src-${item.id}`"><PrSource :item="item" /></div>
               <div class="sa-compare__label">评分</div>
               <div v-for="item in compareItems" :key="`r-${item.id}`" :class="{ 'is-best': ratingOf(item) === compareBest.rating }">{{ ratingOf(item)?.toFixed(1) ?? '-' }}</div>
               <div class="sa-compare__label">需求匹配度</div>
@@ -281,9 +301,9 @@ const compareBest = computed(() => {
             <div class="prd-card__title"><BarChart3 :size="15" />筛选概况</div>
             <dl class="sa-overview">
               <dt>商品数</dt><dd>{{ formatNumber(overview.count) }}</dd>
-              <dt>平均价格</dt><dd>{{ formatNumber(overview.avgPrice) }}</dd>
+              <dt>平均价格</dt><dd><span v-for="text in overview.avgPrice" :key="text" class="sa-money">{{ text }}</span><template v-if="!overview.avgPrice.length">-</template></dd>
               <dt>总销量</dt><dd class="prd-num-green">{{ formatNumber(overview.totalSales) }}</dd>
-              <dt>总 GMV</dt><dd>{{ formatNumber(overview.totalGmv) }}</dd>
+              <dt>预估总 GMV</dt><dd><span v-for="text in overview.totalGmv" :key="text" class="sa-money">{{ text }}</span><template v-if="!overview.totalGmv.length">-</template></dd>
             </dl>
           </div>
           <div v-if="!display.length" class="prd-card sa-side__card prd-empty">
@@ -316,7 +336,9 @@ const compareBest = computed(() => {
 .sa-filters { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--theme-border); background: var(--theme-panel-soft); }
 .sa-filters label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-text-secondary); white-space: nowrap; }
 .sa-filters label > span:first-child { font-weight: 600; }
-.sa-filters .prd-select { min-width: 130px; }
+.sa-filters .prd-select { min-width: 120px; }
+.sa-source { font-size: 12px; color: var(--theme-text-secondary); }
+.sa-money { display: block; }
 .sa-range { display: inline-flex; align-items: center; gap: 6px; }
 .sa-range .prd-input { width: 100px; }
 .sa-range i { font-style: normal; color: var(--theme-text-muted); }

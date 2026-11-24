@@ -4,16 +4,18 @@ import {
   AlertCircle, ArrowRight, Battery, CheckCircle2, ChevronDown, CircleDot, Clock3, Copy, Download, ExternalLink, Filter, Info,
   Layers, ListChecks, Loader2, Package, Pencil, Play, Plus, RefreshCw, Search, Settings2, Smartphone, Trash2, Upload, XCircle,
 } from 'lucide-vue-next'
-import type { ProductResearchTask } from '../../../../../shared/productResearch'
+import type { ProductResearchResult, ProductResearchTask } from '../../../../../shared/productResearch'
 import { translateError, useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
+import PrSource from './PrSource.vue'
+import { researchCurrencyOf, researchSourceOf } from '../../../../../shared/productResearch'
 import { vFloatMenu } from './floatMenu'
 import PrThumb from './PrThumb.vue'
 import PrPairingDialog from './PrPairingDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
 import {
-  KEYWORD_STATUS_LABEL, TASK_STATUS_LABEL, downloadCsv, formatDate, formatDuration, formatNumber, marketOf, pickFile,
-  platformLabel, ratingOf, readKeywordFile, safeFileName, schemeStatusLabel, shortSku, splitKeywords,
+  KEYWORD_STATUS_LABEL, TASK_STATUS_LABEL, downloadCsv, formatDate, formatDuration, formatNumber, formatPrice, marketOf, pickFile, priceOf,
+  currenciesOf, currencyName, ratingOf, sourceLabel, sourcesOf, readKeywordFile, safeFileName, schemeStatusLabel, shortSku, splitKeywords,
 } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
@@ -150,28 +152,49 @@ const pagedTasks = computed(() => tasks.value.slice((taskPage.value - 1) * taskP
 // ===== Results =====
 const resultQuery = ref('')
 const filterOpen = ref(false)
-const resultFilter = reactive({ keyword: '', min: '', max: '' })
+const resultFilter = reactive({ keyword: '', source: '', min: '', max: '' })
 const resultPage = ref(1)
 const resultPageSize = ref(10)
 const selectedResults = ref<string[]>([])
 const batchMenu = ref(false)
 const confirmDeleteResults = ref(false)
 
+const resultSources = computed(() => sourcesOf(results.value))
+const hasRating = computed(() => results.value.some((item) => ratingOf(item) !== undefined))
+/** 价格只有同一币种时才能按区间筛选 */
+const priceCurrency = computed(() => {
+  const list = currenciesOf(resultFilter.source ? results.value.filter((item) => researchSourceOf(item) === resultFilter.source) : results.value)
+  return list.length === 1 ? list[0] : ''
+})
+const priceMixed = computed(() => resultSources.value.length > 1 && !priceCurrency.value)
+watch(priceMixed, (mixed) => { if (mixed) Object.assign(resultFilter, { min: '', max: '' }) })
+/** 新的采集任务在前，同一任务内按平台的搜索排名 */
+const taskOrder = computed(() => {
+  const latest = new Map<string, number>()
+  for (const item of results.value) latest.set(item.taskId, Math.max(latest.get(item.taskId) || 0, item.capturedAt))
+  return latest
+})
+function byCollectOrder(a: ProductResearchResult, b: ProductResearchResult) {
+  if (a.taskId !== b.taskId) return (taskOrder.value.get(b.taskId) || 0) - (taskOrder.value.get(a.taskId) || 0) || a.taskId.localeCompare(b.taskId)
+  return a.rank - b.rank
+}
+
 const filteredResults = computed(() => {
   const q = resultQuery.value.trim().toLowerCase()
   const min = Number(resultFilter.min) || 0
   const max = Number(resultFilter.max) || 0
-  return results.value.filter((item) => {
+  return [...results.value].sort(byCollectOrder).filter((item) => {
+    if (resultFilter.source && researchSourceOf(item) !== resultFilter.source) return false
     if (q && !`${item.title} ${item.id} ${item.productId || ''} ${item.shopName}`.toLowerCase().includes(q)) return false
     if (resultFilter.keyword && item.keyword !== resultFilter.keyword) return false
-    if (min && (item.priceValue || 0) < min) return false
-    if (max && (item.priceValue || 0) > max) return false
+    if (min && (priceOf(item) || 0) < min) return false
+    if (max && (priceOf(item) || 0) > max) return false
     return true
   })
 })
 const pagedResults = computed(() => filteredResults.value.slice((resultPage.value - 1) * resultPageSize.value, resultPage.value * resultPageSize.value))
 const pageAllSelected = computed(() => pagedResults.value.length > 0 && pagedResults.value.every((item) => selectedResults.value.includes(item.id)))
-const activeFilterCount = computed(() => [resultFilter.keyword, resultFilter.min, resultFilter.max].filter(Boolean).length)
+const activeFilterCount = computed(() => [resultFilter.keyword, resultFilter.source, resultFilter.min, resultFilter.max].filter(Boolean).length)
 
 watch([resultQuery, resultFilter], () => { resultPage.value = 1 })
 watch(results, (list) => {
@@ -201,8 +224,8 @@ function exportResults(onlySelected = false) {
   batchMenu.value = false
   const list = onlySelected ? results.value.filter((item) => selectedResults.value.includes(item.id)) : filteredResults.value
   if (!list.length) { ws.notify('没有可导出的商品'); return }
-  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_采集结果`, ['序号', '商品名称', '搜索词', '店铺', '价格', '价格数值', '销量', '销量数值', '评分', '排名', '商品链接', '采集时间'],
-    list.map((item, index) => [index + 1, item.title, item.keyword, item.shopName, item.priceText, item.priceValue ?? '', item.salesText, item.salesValue ?? '', ratingOf(item) ?? '', item.rank, item.productUrl || '', formatDate(item.capturedAt)]))
+  downloadCsv(`${safeFileName(scheme.value?.name || '选品')}_采集结果`, ['序号', '平台', '商品名称', '搜索词', '店铺', '价格', '价格数值', '币种', '销量', '销量数值', '评分', '排名', '商品链接', '采集时间'],
+    list.map((item, index) => [index + 1, sourceLabel(researchSourceOf(item)), item.title, item.keyword, item.shopName, item.priceText, priceOf(item) ?? '', researchCurrencyOf(item), item.salesText, item.salesValue ?? '', ratingOf(item) ?? '', item.rank, item.productUrl || '', formatDate(item.capturedAt)]))
 }
 
 function openLink(url?: string) {
@@ -334,6 +357,7 @@ const market = computed(() => marketOf(scheme.value?.market))
         <div class="prd-card__head"><div class="prd-card__title"><Settings2 :size="17" />采集设置</div></div>
         <div class="sc-settings__grid">
           <div class="sc-settings__fields">
+            <div class="sc-field"><span>采集平台</span><PrSource :item="{ source: 'douyin' }" /></div>
             <label class="sc-field"><span>排序方式</span>
               <select v-model="settings.sort" class="prd-select"><option value="sales">销量排序</option><option value="comprehensive">综合排序</option></select>
             </label>
@@ -411,17 +435,20 @@ const market = computed(() => marketOf(scheme.value?.market))
         <label>来源搜索词
           <select v-model="resultFilter.keyword" class="prd-select prd-select--sm"><option value="">全部</option><option v-for="kw in keywords" :key="kw.id" :value="kw.value">{{ kw.value }}</option></select>
         </label>
-        <label>价格（{{ market.currency || '本币' }}）
-          <input v-model="resultFilter.min" type="number" class="prd-input prd-input--sm sc-price" placeholder="最低" />—<input v-model="resultFilter.max" type="number" class="prd-input prd-input--sm sc-price" placeholder="最高" />
+        <label v-if="resultSources.length > 1">来源平台
+          <select v-model="resultFilter.source" class="prd-select prd-select--sm"><option value="">全部</option><option v-for="value in resultSources" :key="value" :value="value">{{ sourceLabel(value) }}</option></select>
         </label>
-        <button class="prd-link" @click="Object.assign(resultFilter, { keyword: '', min: '', max: '' })">清除筛选</button>
+        <label :title="priceMixed ? '不同平台币种不同，请先选择来源平台' : ''">采集价（{{ priceMixed ? '请先选平台' : currencyName(priceCurrency) }}）
+          <input v-model="resultFilter.min" :disabled="priceMixed" type="number" class="prd-input prd-input--sm sc-price" placeholder="最低" />—<input v-model="resultFilter.max" :disabled="priceMixed" type="number" class="prd-input prd-input--sm sc-price" placeholder="最高" />
+        </label>
+        <button class="prd-link" @click="Object.assign(resultFilter, { keyword: '', source: '', min: '', max: '' })">清除筛选</button>
       </div>
       <div class="prd-table-wrap">
         <table class="prd-table">
           <thead>
             <tr>
               <th class="chk"><input type="checkbox" :checked="pageAllSelected" aria-label="全选本页" @change="togglePageResults" /></th>
-              <th>#</th><th>商品信息</th><th>平台</th><th class="num">价格（{{ market.currency || '-' }}）</th><th class="num">销量</th><th>评价</th><th class="center">商品链接</th><th>采集时间</th>
+              <th>#</th><th>商品信息</th><th>平台</th><th class="num">采集价</th><th class="num">销量</th><th v-if="hasRating">评价</th><th class="center">商品链接</th><th>采集时间</th>
             </tr>
           </thead>
           <tbody>
@@ -438,10 +465,10 @@ const market = computed(() => marketOf(scheme.value?.market))
                   </div>
                 </div>
               </td>
-              <td class="nowrap"><span class="sc-platform">♪</span>{{ platformLabel(scheme?.market) }}</td>
-              <td class="num">{{ item.priceValue !== undefined ? formatNumber(item.priceValue) : item.priceText || '-' }}</td>
+              <td class="nowrap"><PrSource :item="item" /></td>
+              <td class="num">{{ formatPrice(item) }}</td>
               <td class="num prd-num-green">{{ item.salesValue !== undefined ? formatNumber(item.salesValue) : item.salesText || '-' }}</td>
-              <td class="nowrap"><template v-if="ratingOf(item) !== undefined"><span class="prd-star">★</span> {{ ratingOf(item)!.toFixed(1) }}</template><span v-else class="muted">-</span></td>
+              <td v-if="hasRating" class="nowrap"><template v-if="ratingOf(item) !== undefined"><span class="prd-star">★</span> {{ ratingOf(item)!.toFixed(1) }}</template><span v-else class="muted">-</span></td>
               <td class="center">
                 <button v-if="item.productUrl" class="prd-icon-btn" title="打开商品链接" @click="openLink(item.productUrl)"><ExternalLink :size="14" /></button>
                 <button v-else class="prd-icon-btn" title="复制商品名称" @click="copyText(item.title, '商品名称已复制')"><Copy :size="14" /></button>
@@ -509,7 +536,7 @@ const market = computed(() => marketOf(scheme.value?.market))
 .sc-copy-field { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 32px; padding: 0 4px 0 10px; border-radius: 7px; background: var(--theme-input); border: 1px solid var(--theme-border); font-size: 12px; min-width: 0; }
 .sc-copy-field span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-phone__actions { display: inline-flex; gap: 8px; }
-.sc-devices { max-height: 150px; }
+.sc-devices { max-height: 186px; }
 .sc-device { display: inline-flex; align-items: center; gap: 7px; }
 .sc-device svg, .sc-battery svg { color: var(--theme-accent); }
 .sc-battery { display: inline-flex; align-items: center; gap: 5px; }
@@ -532,7 +559,6 @@ const market = computed(() => marketOf(scheme.value?.market))
 .sc-filter { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); font-size: 12px; color: var(--theme-text-secondary); }
 .sc-filter label { display: inline-flex; align-items: center; gap: 8px; }
 .sc-price { width: 100px; }
-.sc-platform { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 5px; background: #111; color: #fff; font-size: 11px; font-weight: 800; box-shadow: -1px -1px 0 #25f4ee, 1px 1px 0 #fe2c55; }
 @media (max-width: 1280px) {
   .sc-row--top, .sc-row--mid { grid-template-columns: 1fr; }
 }

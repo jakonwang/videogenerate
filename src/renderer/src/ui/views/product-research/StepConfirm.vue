@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { ArrowDown, ArrowLeft, ArrowRight, Box, Check, CheckCircle2, Circle, Info, Layers, PenLine, Plus, Tag, Trash2 } from 'lucide-vue-next'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
+import PrSource from './PrSource.vue'
 import PrThumb from './PrThumb.vue'
 import PrPromptDialog from './PrPromptDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
-import { CATEGORY_PRESETS, formatNumber, marketOf } from './productResearchUtils'
+import { CATEGORY_PRESETS, formatNumber, formatPrice, marketOf } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
 const { scheme, candidateRows, keptCount, productEdits } = ws
@@ -149,21 +150,25 @@ const promptConfig = computed(() => {
               <tr>
                 <th class="chk"><input type="checkbox" :checked="pageAllChecked" aria-label="全选本页" @change="togglePage" /></th>
                 <th>#</th><th>商品图片</th><th>商品名称</th>
-                <th class="num">价格（{{ currency }}）</th>
+                <th class="num">采集价</th>
                 <th class="num"><span class="prd-th-sort is-active" @click="salesDesc = !salesDesc">销量<ArrowDown :size="11" :style="{ transform: salesDesc ? '' : 'rotate(180deg)' }" /></span></th>
-                <th>来源搜索词</th><th>类目</th><th>目标售价（{{ currency }}）</th><th>商品卖点</th><th class="center">匹配度</th><th class="center">操作</th>
+                <th>类目</th><th>目标售价（{{ currency }}）</th><th>商品卖点</th><th class="center">匹配度</th><th class="center">操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!paged.length"><td colspan="12" class="prd-empty-cell">当前筛选下没有商品</td></tr>
+              <tr v-if="!paged.length"><td colspan="11" class="prd-empty-cell">当前筛选下没有商品</td></tr>
               <tr v-for="(item, index) in paged" :key="item.id" :class="{ 'is-selected': checked.includes(item.id) }">
                 <td class="chk"><input v-model="checked" type="checkbox" :value="item.id" /></td>
                 <td class="muted">{{ (page - 1) * pageSize + index + 1 }}</td>
                 <td><PrThumb :result="item" /></td>
-                <td><span class="prd-product__name scf-name" :title="item.title">{{ item.title }}</span></td>
-                <td class="num">{{ item.priceValue !== undefined ? formatNumber(item.priceValue) : item.priceText || '-' }}</td>
+                <td>
+                  <div class="prd-product__meta">
+                    <span class="prd-product__name scf-name" :title="item.title">{{ item.title }}</span>
+                    <span class="prd-product__chips"><PrSource :item="item" class="scf-source" /><span class="prd-chip">{{ item.keyword }}</span></span>
+                  </div>
+                </td>
+                <td class="num">{{ formatPrice(item) }}</td>
                 <td class="num prd-num-green">{{ item.salesValue !== undefined ? formatNumber(item.salesValue) : item.salesText || '-' }}</td>
-                <td><span class="prd-chip">{{ item.keyword }}</span></td>
                 <td>
                   <select class="prd-select prd-select--sm scf-cat" :value="edit(item.id).category" @change="ws.setEdits([item.id], { category: ($event.target as HTMLSelectElement).value })">
                     <option value="">请选择</option>
@@ -245,6 +250,9 @@ const promptConfig = computed(() => {
 </template>
 
 <style scoped>
+.scf-main .prd-table th:last-child, .scf-main .prd-table td:last-child { position: sticky; right: 0; background: var(--theme-panel); }
+.scf-main .prd-table th:last-child { z-index: 2; }
+.scf-source { font-size: 12px; color: var(--theme-text-secondary); }
 .scf { display: flex; flex-direction: column; gap: 12px; }
 .scf-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; align-items: start; }
 .scf-main { display: flex; flex-direction: column; gap: 12px; }
@@ -255,10 +263,10 @@ const promptConfig = computed(() => {
 .scf-checked b { color: var(--theme-accent); }
 .scf-filter { margin-left: auto; }
 .scf-filter .prd-seg__btn { height: 28px; font-size: 12px; padding: 0 10px; }
-.scf-name { display: -webkit-box; min-width: 150px; max-width: 220px; }
-.scf-cat { width: 132px; }
-.scf-price { width: 88px; text-align: right; }
-.scf-selling { width: 140px; min-height: 34px; padding: 5px 8px; font-size: 12px; line-height: 1.4; resize: vertical; }
+.scf-name { display: -webkit-box; min-width: 124px; max-width: 220px; }
+.scf-cat { width: 112px; }
+.scf-price { width: 84px; text-align: right; }
+.scf-selling { width: 110px; min-height: 34px; padding: 5px 8px; font-size: 12px; line-height: 1.4; resize: vertical; }
 .scf-empty { border: 1px dashed var(--theme-border-control); border-radius: 10px; }
 .scf-side { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; }
 .scf-cats { display: flex; flex-direction: column; gap: 6px; }

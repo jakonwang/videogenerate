@@ -1,3 +1,4 @@
+import { normalizeResearchSource } from '../../../shared/productResearch'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
@@ -401,6 +402,8 @@ async function importResearch(session: Session, state: SyncStateFile, changes: S
         id: change.id,
         taskId: data.taskId,
         keyword: data.keyword,
+        source: normalizeResearchSource(data.source),
+        currency: data.currency,
         title: data.title,
         priceText: data.priceText || '',
         priceValue: data.priceValue,

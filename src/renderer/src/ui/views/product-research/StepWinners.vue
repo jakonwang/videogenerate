@@ -5,7 +5,8 @@ import { useRouter } from 'vue-router'
 import type { ProductResearchLiveTestRecord, ProductResearchProductEdit, ProductResearchResult } from '../../../../../shared/productResearch'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrThumb from './PrThumb.vue'
-import { CONCLUSIONS, conclusionMeta, downloadCsv, formatNumber, formatPercent, marketOf, ratio, safeFileName, shortSku, type Conclusion } from './productResearchUtils'
+import { researchSourceOf } from '../../../../../shared/productResearch'
+import { CONCLUSIONS, conclusionMeta, downloadCsv, formatNumber, formatPercent, formatPrice, sourceLabel, marketOf, ratio, safeFileName, shortSku, type Conclusion } from './productResearchUtils'
 
 const ws = useSchemeWorkspace()
 const router = useRouter()
@@ -84,7 +85,7 @@ async function addToLibrary(resultIds: string[]) {
       edit?.targetPrice ? `目标售价：${edit.targetPrice} ${currency.value}` : '',
       edit?.sellingPoint ? `卖点：${edit.sellingPoint}` : '',
       record ? `直播测试：${record.sessions} 场，成交 ${formatNumber(record.revenue)} ${currency.value}，转化率 ${formatPercent(ratio(record.orders, record.clicks))}` : '',
-      `采集价格：${result.priceText || '-'}，销量：${result.salesText || '-'}`,
+      `采集价格：${formatPrice(result)}（${sourceLabel(researchSourceOf(result))}），销量：${result.salesText || '-'}`,
     ].filter(Boolean).join('\n')
     try {
       await window.api.products.upsert({

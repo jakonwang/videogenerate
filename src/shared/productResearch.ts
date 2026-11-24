@@ -9,12 +9,46 @@ export type ProductResearchDevice = {
   lastSeenAt: number
 }
 
+/** 商品数据的来源平台。新增平台只需在这里登记，各页面会按来源显示平台名和币种。 */
+export const PRODUCT_RESEARCH_SOURCES = {
+  douyin: { label: '抖音', currency: 'CNY', color: '#111111', mark: '抖' },
+  taobao: { label: '淘宝', currency: 'CNY', color: '#ff5000', mark: '淘' },
+  xiaohongshu: { label: '小红书', currency: 'CNY', color: '#ff2442', mark: '书' },
+  kuaishou: { label: '快手', currency: 'CNY', color: '#ff4906', mark: '快' },
+  pinduoduo: { label: '拼多多', currency: 'CNY', color: '#e02e24', mark: '拼' },
+  '1688': { label: '1688', currency: 'CNY', color: '#ff6a00', mark: '16' },
+  // 跨境平台各站点币种不同，采集时必须写入 currency
+  tiktok: { label: 'TikTok Shop', currency: '', color: '#111111', mark: '♪' },
+  shopee: { label: 'Shopee', currency: '', color: '#ee4d2d', mark: 'S' },
+} as const
+
+export type ProductResearchSource = keyof typeof PRODUCT_RESEARCH_SOURCES
+
+export const DEFAULT_PRODUCT_RESEARCH_SOURCE: ProductResearchSource = 'douyin'
+
+export function normalizeResearchSource(value: unknown): ProductResearchSource | undefined {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PRODUCT_RESEARCH_SOURCES, value)
+    ? (value as ProductResearchSource)
+    : undefined
+}
+
+export function researchSourceOf(item: { source?: string }): ProductResearchSource {
+  return normalizeResearchSource(item.source) || DEFAULT_PRODUCT_RESEARCH_SOURCE
+}
+
+/** 价格币种；空字符串表示未知，界面不显示货币符号。 */
+export function researchCurrencyOf(item: { source?: string; currency?: string }): string {
+  return (item.currency || '').toUpperCase() || PRODUCT_RESEARCH_SOURCES[researchSourceOf(item)].currency
+}
+
 export type ProductResearchTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export type ProductResearchTask = {
   id: string
   schemeId?: string
   keyword: string
+  /** 采集平台，缺省为抖音（旧数据） */
+  source?: ProductResearchSource
   sort: 'comprehensive' | 'sales'
   targetCount: number
   status: ProductResearchTaskStatus
@@ -32,6 +66,10 @@ export type ProductResearchResult = {
   taskId: string
   schemeId?: string
   keyword: string
+  /** 来源平台，缺省为抖音（旧数据） */
+  source?: ProductResearchSource
+  /** 价格币种（ISO 代码），缺省取来源平台的币种；与方案的目标市场无关 */
+  currency?: string
   title: string
   priceText: string
   priceValue?: number

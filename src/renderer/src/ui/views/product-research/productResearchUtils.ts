@@ -1,3 +1,9 @@
+import {
+  PRODUCT_RESEARCH_SOURCES,
+  researchCurrencyOf,
+  researchSourceOf,
+  type ProductResearchSource,
+} from '../../../../../shared/productResearch'
 import type {
   ProductResearchLiveTestRecord,
   ProductResearchResult,
@@ -19,10 +25,6 @@ export const MARKET_OPTIONS: MarketOption[] = [
 
 export function marketOf(code?: string): MarketOption {
   return MARKET_OPTIONS.find((item) => item.value === code) || { value: code || '', label: code || '-', flag: '🌐', currency: '' }
-}
-
-export function platformLabel(code?: string) {
-  return `TikTok Shop ${marketOf(code).label}`
 }
 
 export const SOP_STEPS = [
@@ -125,8 +127,61 @@ export function ratio(numerator: number, denominator: number) {
   return denominator > 0 ? (numerator / denominator) * 100 : 0
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = { CNY: '¥', USD: '$', VND: '₫', THB: '฿', PHP: '₱', MYR: 'RM', IDR: 'Rp', SGD: 'S$' }
+const NO_DECIMALS = new Set(['VND', 'IDR'])
+const CURRENCY_NAMES: Record<string, string> = { CNY: '人民币', USD: '美元', VND: '越南盾', THB: '泰铢', PHP: '比索', MYR: '林吉特', IDR: '印尼盾', SGD: '新加坡元' }
+
+/** 带货币符号的金额；保留分（¥5.9），越南盾等没有小数的币种取整。 */
+export function formatMoney(value: number | undefined, currency: string) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return '-'
+  const text = value.toLocaleString('en-US', { maximumFractionDigits: NO_DECIMALS.has(currency) || Math.abs(value) >= 10000 ? 0 : 2 })
+  const symbol = CURRENCY_SYMBOLS[currency]
+  if (symbol) return currency === 'VND' ? `${text}${symbol}` : `${symbol}${text}`
+  return currency ? `${text} ${currency}` : text
+}
+
+export function currencyName(currency: string) {
+  return currency ? CURRENCY_NAMES[currency] || currency : '币种未知'
+}
+
+/** 价格数值：没识别出数值时从文字里取（手机有时只采到 "39"）。 */
+export function priceOf(result: Pick<ProductResearchResult, 'priceValue' | 'priceText'>) {
+  if (typeof result.priceValue === 'number' && Number.isFinite(result.priceValue)) return result.priceValue
+  const match = /^\s*[¥￥]?\s*(\d+(?:\.\d+)?)\s*$/.exec((result.priceText || '').replace(/,/g, ''))
+  return match ? Number(match[1]) : undefined
+}
+
+export function formatPrice(result: ProductResearchResult) {
+  const value = priceOf(result)
+  return value !== undefined ? formatMoney(value, researchCurrencyOf(result)) : result.priceText || '-'
+}
+
 export function gmvOf(result: ProductResearchResult) {
-  return result.priceValue && result.salesValue ? result.priceValue * result.salesValue : 0
+  const price = priceOf(result)
+  return price && result.salesValue ? price * result.salesValue : 0
+}
+
+export function sourceLabel(source: ProductResearchSource) {
+  return PRODUCT_RESEARCH_SOURCES[source].label
+}
+
+/** 商品里出现过的来源平台 / 币种（保持出现顺序） */
+export function sourcesOf(results: ProductResearchResult[]) {
+  return [...new Set(results.map((item) => researchSourceOf(item)))]
+}
+
+export function currenciesOf(results: ProductResearchResult[]) {
+  return [...new Set(results.map((item) => researchCurrencyOf(item)))]
+}
+
+/** 不同币种的金额不能相加：按币种分别合计，"¥1,200 + 35,000₫" 分行展示。 */
+export function sumByCurrency(results: ProductResearchResult[], pick: (item: ProductResearchResult) => number) {
+  const totals = new Map<string, number>()
+  for (const item of results) {
+    const value = pick(item)
+    if (value) totals.set(researchCurrencyOf(item), (totals.get(researchCurrencyOf(item)) || 0) + value)
+  }
+  return [...totals].map(([currency, value]) => ({ currency, value }))
 }
 
 export function ratingOf(result: ProductResearchResult) {

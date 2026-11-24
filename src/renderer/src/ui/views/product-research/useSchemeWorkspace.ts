@@ -8,7 +8,7 @@ import type {
   ProductResearchScheme,
   ProductResearchTask,
 } from '../../../../../shared/productResearch'
-import { matchScore } from './productResearchUtils'
+import { gmvOf, matchScore } from './productResearchUtils'
 
 export type ToastTone = 'info' | 'success' | 'error'
 export type ProductRow = ProductResearchResult & { gmv: number; match: number }
@@ -75,7 +75,7 @@ export function createSchemeWorkspace(schemeId: Ref<string>) {
     const need = scheme.value?.need || ''
     return results.value.map((item) => ({
       ...item,
-      gmv: item.priceValue && item.salesValue ? item.priceValue * item.salesValue : 0,
+      gmv: gmvOf(item),
       match: matchScore(item.title, item.keyword, need, item.salesValue || 0, item.rank || 0),
     }))
   })

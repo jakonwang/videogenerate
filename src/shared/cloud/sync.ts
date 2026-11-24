@@ -141,6 +141,9 @@ export type SyncResearchTask = {
 export type SyncResearchResult = {
   taskId: string
   keyword: string
+  /** 来源平台与价格币种，缺省为抖音 / 人民币 */
+  source?: string
+  currency?: string
   title: string
   priceText?: string
   priceValue?: number

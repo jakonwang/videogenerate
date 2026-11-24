@@ -1,3 +1,4 @@
+import { DEFAULT_PRODUCT_RESEARCH_SOURCE, normalizeResearchSource, researchSourceOf } from '../../../shared/productResearch'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { execFile } from 'node:child_process'
@@ -11,7 +12,7 @@ import type {
   ProductResearchDevice,
   ProductResearchFirewall,
   ProductResearchPairing,
-  ProductResearchResult,
+  ProductResearchResult, ProductResearchSource,
   ProductResearchSnapshot,
   ProductResearchTask,
   ProductResearchScheme,
@@ -295,6 +296,8 @@ class ProductResearchService {
             taskId: task.id,
             schemeId: task.schemeId,
             keyword: task.keyword,
+            source: normalizeResearchSource(partial.source) || researchSourceOf(task),
+            currency: partial.currency ? String(partial.currency).toUpperCase() : undefined,
             title: String(partial.title || ''),
             priceText: String(partial.priceText || ''),
             priceValue: typeof partial.priceValue === 'number' ? partial.priceValue : undefined,
@@ -436,7 +439,7 @@ class ProductResearchService {
     }
   }
 
-  async createTask(input: { keyword: string; schemeId?: string; sort?: 'comprehensive' | 'sales'; targetCount?: number }) {
+  async createTask(input: { keyword: string; schemeId?: string; source?: ProductResearchSource; sort?: 'comprehensive' | 'sales'; targetCount?: number }) {
     await this.ensureServer()
     const keyword = String(input.keyword || '').trim()
     if (!keyword) throw new Error('Keyword is required.')
@@ -445,6 +448,7 @@ class ProductResearchService {
       id: randomUUID(),
       schemeId: input.schemeId,
       keyword,
+      source: normalizeResearchSource(input.source) || DEFAULT_PRODUCT_RESEARCH_SOURCE,
       sort: input.sort === 'comprehensive' ? 'comprehensive' : 'sales',
       targetCount: Math.min(1000, Math.max(1, Number(input.targetCount || 100))),
       status: 'queued',
@@ -604,7 +608,7 @@ class ProductResearchService {
     let results = 0
     for (const item of input.results) {
       if (this.state.results.some((result) => result.id === item.id)) continue
-      this.state.results.push({ ...item, schemeId: MOBILE_SCHEME_ID, shopName: '', confidence: 0.88 })
+      this.state.results.push({ ...item, source: researchSourceOf(item), schemeId: MOBILE_SCHEME_ID, shopName: '', confidence: 0.88 })
       results += 1
     }
     scheme.keywordCount = schemeState.keywords.length
