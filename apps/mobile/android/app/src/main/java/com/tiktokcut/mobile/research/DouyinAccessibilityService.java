@@ -6,7 +6,6 @@ import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
@@ -27,8 +26,12 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,10 +40,16 @@ import org.json.JSONObject;
 public final class DouyinAccessibilityService extends AccessibilityService {
     private static final String DOUYIN_PACKAGE = "com.ss.android.ugc.aweme";
     private static final String TAG = "ProductResearch";
-    private static final int MAX_IMAGE_WAIT_ATTEMPTS = 6;
-    private static final long IMAGE_WAIT_MS = 700;
-    private static final int CARD_TEXT_MAX_HEIGHT = 420;
-    private static final float MIN_VISIBLE_IMAGE_RATIO = 0.45f;
+    private static final int MAX_IMAGE_WAIT_ATTEMPTS = 8;
+    /** Enough screenshots to tell a still-sharpening preview from a video that simply keeps moving. */
+    private static final int MAX_SETTLE_ATTEMPTS = 3;
+    private static final int MAX_DEFERRALS = 3;
+    private static final long IMAGE_WAIT_MS = 1100; // Android 11 allows one screenshot per second
+    private static final float MIN_VISIBLE_IMAGE_RATIO = 0.7f;
+    /** Height, relative to screen width, of the floating back-to-top buttons at the bottom right. */
+    private static final float FLOATING_BUTTONS_RATIO = 0.28f;
+    /** Text of the card above; finding it inside an image area means the area starts too high. */
+    private static final Pattern CARD_TEXT_PATTERN = Pattern.compile("已售\\s*\\d|回头客\\s*\\d|[月周]上新|店铺销量|旗舰店.?$|进店.?$");
     private static final Pattern ZERO_WIDTH = Pattern.compile("[\\u200B-\\u200D\\uFEFF]");
     private static final Pattern SALES_PATTERN = Pattern.compile(
         "(?:\\u5df2\\u552e|\\u9500\\u91cf)?\\s*(\\d+(?:\\.\\d+)?)(\\u4e07)?\\+?(?:\\u4ef6|\\u4eba\\u4ed8\\u6b3e|\\u5df2\\u552e)"
@@ -48,10 +57,13 @@ public final class DouyinAccessibilityService extends AccessibilityService {
     private static final Pattern PRICE_PATTERN = Pattern.compile("(?:[\\u00a5\\uffe5])?\\s*(\\d+(?:\\.\\d{1,2})?)");
     private static final Pattern OCR_PRICE_PATTERN = Pattern.compile("[\\u00a5\\uffe5]\\s*(\\d+(?:\\.\\d{1,2})?)");
     private static final Pattern OCR_PRICE_NUMBER_PATTERN = Pattern.compile("(?<!\\d)(\\d+(?:\\.\\d{1,2})?)(?!\\d)");
+    private static final Pattern SALES_NUMBER = Pattern.compile("\\d+(?:\\.\\d+)?");
     private static DouyinAccessibilityService instance;
     private static JSONObject pendingTask;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Set<String> emittedTitles = new HashSet<>();
+    private final Map<String, PendingProduct> pending = new LinkedHashMap<>();
+    private final Map<String, Double> lastSharpness = new HashMap<>();
     private final TextRecognizer textRecognizer = TextRecognition.getClient(
         new ChineseTextRecognizerOptions.Builder().build()
     );
@@ -136,6 +148,8 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         unchangedPageCount = 0;
         cancelled = false;
         emittedTitles.clear();
+        pending.clear();
+        lastSharpness.clear();
         ConnectionService.sendTaskEvent("task_started", taskId, null, null);
         Log.i(TAG, "Task " + taskId + " started, keyword=" + keyword);
 
@@ -236,6 +250,7 @@ public final class DouyinAccessibilityService extends AccessibilityService {
     }
 
     private void collectPage() {
+        lastSharpness.clear();
         collectPage(0);
     }
 
@@ -245,7 +260,7 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         List<TextEntry> entries = new ArrayList<>();
         collectText(getRootInActiveWindow(), entries);
         List<ProductCandidate> candidates = extractCandidates(entries);
-        Log.i(TAG, "Page " + scrollCount + " attempt " + attempt + ": " + entries.size() + " text nodes, " + candidates.size() + " new products");
+        Log.i(TAG, "Page " + scrollCount + " attempt " + attempt + ": " + entries.size() + " text nodes, " + candidates.size() + " new products" + ", " + pending.size() + " pending");
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             emitProducts(candidates, null, null);
             finishCollectionPass();
@@ -266,12 +281,13 @@ public final class DouyinAccessibilityService extends AccessibilityService {
                 }
                 Bitmap bitmap = hardwareBitmap.copy(Bitmap.Config.ARGB_8888, false);
                 screenshot.getHardwareBuffer().close();
-                int unloaded = 0;
+                for (ProductCandidate candidate : candidates) locateImageTop(candidate, bitmap);
+                int waiting = 0;
                 for (ProductCandidate candidate : candidates) {
-                    if (looksUnloaded(bitmap, candidate.imageBounds)) unloaded += 1;
+                    if (fitsScreen(candidate, bitmap) && !imageSettled(candidate, bitmap, attempt)) waiting += 1;
                 }
-                if (unloaded > 0 && attempt < MAX_IMAGE_WAIT_ATTEMPTS) {
-                    Log.i(TAG, unloaded + " product image(s) not loaded yet, waiting");
+                if (waiting > 0 && attempt < MAX_IMAGE_WAIT_ATTEMPTS) {
+                    Log.i(TAG, waiting + " product image(s) still loading, waiting");
                     bitmap.recycle();
                     handler.postDelayed(() -> collectPage(attempt + 1), IMAGE_WAIT_MS);
                     return;
@@ -291,6 +307,11 @@ public final class DouyinAccessibilityService extends AccessibilityService {
 
             @Override
             public void onFailure(int errorCode) {
+                // Usually the screenshot rate limit; giving up at once would lose every image on the page.
+                if (attempt < MAX_IMAGE_WAIT_ATTEMPTS) {
+                    handler.postDelayed(() -> collectPage(attempt + 1), IMAGE_WAIT_MS);
+                    return;
+                }
                 emitProducts(candidates, null, null);
                 finishCollectionPass();
             }
@@ -304,34 +325,33 @@ public final class DouyinAccessibilityService extends AccessibilityService {
             TextEntry salesEntry = entries.get(index);
             String salesText = salesEntry.value;
             Matcher salesMatcher = SALES_PATTERN.matcher(salesText);
-            if (!salesMatcher.find()) continue;
-            String title = findTitle(entries, index, salesEntry.bounds);
-            if (title.isEmpty() || emittedTitles.contains(title)) continue;
+            if (!isSalesText(salesText) || !salesMatcher.find()) continue;
+            TextEntry titleEntry = findTitle(entries, index, salesEntry.bounds);
+            if (titleEntry == null) continue;
+            String title = titleEntry.value.trim();
+            if (emittedTitles.contains(title)) continue;
             double salesValue = Double.parseDouble(salesMatcher.group(1));
             if (salesMatcher.group(2) != null) salesValue *= 10000;
             String priceText = findPrice(entries, index, salesEntry.bounds);
-            Rect imageBounds = productImageBounds(entries, salesEntry.bounds, viewportTop);
-            candidates.add(new ProductCandidate(title, salesText, Math.round(salesValue), priceText, salesEntry.bounds, imageBounds));
+            Rect imageBounds = productImageBounds(titleEntry.bounds, viewportTop);
+            candidates.add(new ProductCandidate(
+                title, salesText, Math.round(salesValue), priceText, salesEntry.bounds, imageBounds, viewportTop
+            ));
         }
         return candidates;
     }
 
     /**
-     * The product image is the square directly above the card's text block (title, tags, price, sales).
-     * The text block's top is the highest same-column text within a card-text height above the sales line.
+     * The product image is directly above the card's title; a square until locateImageTop measures it. Other
+     * texts are no guide: nodes of hidden tabs can lie over the image.
      */
-    private Rect productImageBounds(List<TextEntry> entries, Rect salesBounds, int viewportTop) {
+    private Rect productImageBounds(Rect titleBounds, int viewportTop) {
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int columnWidth = screenWidth / 2;
-        boolean leftColumn = salesBounds.centerX() < columnWidth;
+        boolean leftColumn = titleBounds.centerX() < columnWidth;
         int left = leftColumn ? 12 : columnWidth + 12;
         int right = leftColumn ? columnWidth - 12 : screenWidth - 12;
-        int textTop = salesBounds.top;
-        for (TextEntry entry : entries) {
-            if (!sameColumn(entry.bounds, salesBounds)) continue;
-            if (entry.bounds.bottom > salesBounds.top || entry.bounds.top < salesBounds.top - CARD_TEXT_MAX_HEIGHT) continue;
-            textTop = Math.min(textTop, entry.bounds.top);
-        }
+        int textTop = titleBounds.top;
         int bottom = Math.max(1, textTop - 8);
         int top = Math.max(0, bottom - (right - left));
         // Cards scrolled partly under the sticky search/tab/filter bar: keep only the visible part of
@@ -396,84 +416,196 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         return value.equals("月销过万") || value.equals("好评多") || value.equals("筛选");
     }
 
-    /**
-     * Douyin draws product images lazily; until loaded the image area is a flat placeholder.
-     * Treat the area as not loaded when almost every sampled pixel has the same color.
-     */
-    private static boolean looksUnloaded(Bitmap bitmap, Rect area) {
-        // Sample only the lower 70% and inset the sides: the top can sit under the sticky filter bar and
-        // the edges can touch the gray gap between cards, both of which would mask a blank placeholder.
-        int insetX = area.width() / 12;
-        Rect clipped = new Rect(area.left + insetX, area.bottom - area.height() * 7 / 10, area.right - insetX, area.bottom);
-        if (!clipped.intersect(0, 0, bitmap.getWidth(), bitmap.getHeight()) || clipped.width() < 24 || clipped.height() < 24) {
+    /** Images are square or 3:4 portrait; the gap between cards tells where this one starts. */
+    private void locateImageTop(ProductCandidate candidate, Bitmap screenshot) {
+        Rect image = candidate.imageBounds;
+        if (image.isEmpty()) return;
+        int bottom = Math.min(image.bottom, screenshot.getHeight());
+        int from = Math.max(candidate.viewportTop, image.bottom - image.width() * 3 / 2);
+        int to = Math.min(bottom, image.bottom - image.width() * 9 / 10);
+        if (to - from < 12) return;
+        // The gutter between the two columns has the same color as the gap between cards.
+        Rect gutter = onScreen(new Rect(screenshot.getWidth() / 2, from, screenshot.getWidth() / 2 + 1, bottom), screenshot);
+        int top = ProductImageCheck.findTopAbove(
+            pixels(screenshot, new Rect(image.left, from, image.right, to)), image.width(), to - from,
+            ProductImageCheck.mostCommon(pixels(screenshot, gutter))
+        );
+        if (top < 0 && scrollCount == 0 && from == candidate.viewportTop) {
+            // First row of an unscrolled list: no card above, the image follows the filter bar.
+            top = ProductImageCheck.skipUniformRows(pixels(screenshot, new Rect(image.left, from, image.right, to)), image.width(), to - from);
+        }
+        if (top < 0) return;
+        image.top = from + top;
+        candidate.topKnown = true;
+    }
+
+    /** The floating buttons at the bottom right are drawn over this area. */
+    private static boolean underButtons(Rect area, Bitmap screenshot) {
+        return area.centerX() >= screenshot.getWidth() / 2
+            && area.bottom > screenshot.getHeight() - screenshot.getWidth() * FLOATING_BUTTONS_RATIO;
+    }
+
+    /** True when the whole image and the sold line below it are on screen and nothing floats over them. */
+    private static boolean fitsScreen(ProductCandidate candidate, Bitmap screenshot) {
+        Rect image = candidate.imageBounds;
+        if (image.isEmpty() || image.height() < image.width() * 0.98f) return false;
+        if (candidate.salesBounds.isEmpty()
+            || candidate.salesBounds.bottom > screenshot.getHeight() - screenshot.getWidth() / 40) return false;
+        return !underButtons(image, screenshot);
+    }
+
+    /** Loaded, and no longer getting sharper since the previous screenshot of this page. */
+    private boolean imageSettled(ProductCandidate candidate, Bitmap screenshot, int attempt) {
+        Rect area = onScreen(candidate.imageBounds, screenshot);
+        if (area.isEmpty()) return true;
+        int[] pixels = pixels(screenshot, area);
+        if (ProductImageCheck.isBlank(pixels, area.width(), area.height())) {
+            lastSharpness.remove(candidate.title);
             return false;
         }
-        int steps = 24;
-        int reference = bitmap.getPixel(clipped.centerX(), clipped.centerY());
-        int[] colors = new int[steps * steps];
-        int count = 0;
-        for (int row = 0; row < steps; row += 1) {
-            int y = clipped.top + (clipped.height() - 1) * row / (steps - 1);
-            for (int column = 0; column < steps; column += 1) {
-                int x = clipped.left + (clipped.width() - 1) * column / (steps - 1);
-                colors[count++] = bitmap.getPixel(x, y);
-            }
-        }
-        // Use the most common sampled color as the placeholder candidate.
-        int bestMatches = 0;
-        for (int index = 0; index < count; index += 8) {
-            int candidate = colors[index];
-            int matches = 0;
-            for (int other = 0; other < count; other += 1) if (similarColor(candidate, colors[other])) matches += 1;
-            if (matches > bestMatches) {
-                bestMatches = matches;
-                reference = candidate;
-            }
-        }
-        return bestMatches >= count * 0.97;
+        double sharpness = ProductImageCheck.sharpness(pixels, area.width(), area.height());
+        Double previous = lastSharpness.put(candidate.title, sharpness);
+        if (previous == null) return false;
+        return attempt >= MAX_SETTLE_ATTEMPTS || sharpness <= previous * 1.08;
     }
 
-    private static boolean similarColor(int first, int second) {
-        return Math.abs(Color.red(first) - Color.red(second)) <= 8
-            && Math.abs(Color.green(first) - Color.green(second)) <= 8
-            && Math.abs(Color.blue(first) - Color.blue(second)) <= 8;
+    private static Rect onScreen(Rect bounds, Bitmap screenshot) {
+        Rect area = new Rect(bounds);
+        return area.intersect(0, 0, screenshot.getWidth(), screenshot.getHeight()) ? area : new Rect();
     }
 
+    private static int[] pixels(Bitmap bitmap, Rect area) {
+        int[] result = new int[area.width() * area.height()];
+        bitmap.getPixels(result, 0, area.width(), area.left, area.top, area.width(), area.height());
+        return result;
+    }
+
+    /** Moves an area that starts inside the card above down to where the image really begins. */
+    private static Rect alignImage(ProductCandidate candidate, Bitmap screenshot, Text recognizedText) {
+        Rect area = onScreen(candidate.imageBounds, screenshot);
+        if (area.isEmpty() || recognizedText == null) return area;
+        int textBottom = -1;
+        for (Text.TextBlock block : recognizedText.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Rect bounds = line.getBoundingBox();
+                if (bounds == null || !area.contains(bounds.centerX(), bounds.centerY())) continue;
+                if (bounds.centerY() > area.top + area.height() * 0.6f) continue;
+                if (CARD_TEXT_PATTERN.matcher(line.getText().replace(" ", "")).find()) textBottom = Math.max(textBottom, bounds.bottom);
+            }
+        }
+        if (textBottom < 0) return area;
+        int top = ProductImageCheck.findImageTop(
+            pixels(screenshot, area), area.width(), area.height(), textBottom - area.top, area.width() / 4
+        );
+        // No card gap below the text: it is printed on the product photo itself.
+        if (top < 0) return area;
+        top += area.top;
+        int bottom = top + candidate.imageBounds.width();
+        if (bottom > candidate.salesBounds.top || bottom > screenshot.getHeight()) return new Rect();
+        return new Rect(area.left, top, area.right, bottom);
+    }
+
+    /**
+     * Emits products whose image is complete. The others wait for a later page, where the same card sits
+     * higher on screen (and its video, if any, may have stopped on the cover); once gone they go out as they are.
+     */
     private void emitProducts(List<ProductCandidate> candidates, Bitmap screenshot, Text recognizedText) {
         int emittedBefore = emittedCount;
+        Set<String> visible = new HashSet<>();
+        for (ProductCandidate candidate : candidates) visible.add(candidate.title);
+        flushPending(visible);
         for (ProductCandidate candidate : candidates) {
-            if (!emittedTitles.add(candidate.title)) continue;
+            if (emittedCount >= targetCount) return;
+            if (emittedTitles.contains(candidate.title)) continue;
             String priceText = candidate.priceText;
             if (priceText.isEmpty() && recognizedText != null && screenshot != null) {
                 priceText = findOcrPrice(recognizedText, candidate.salesBounds, screenshot.getWidth());
             }
-            try {
-                JSONObject result = new JSONObject();
-                result.put("title", candidate.title);
-                result.put("priceText", priceText);
-                if (!priceText.isEmpty()) {
-                    Matcher priceMatcher = OCR_PRICE_PATTERN.matcher(priceText);
-                    if (priceMatcher.find()) result.put("priceValue", Double.parseDouble(priceMatcher.group(1)));
+            PendingProduct product = pending.get(candidate.title);
+            if (product == null) product = new PendingProduct(candidate);
+            if (!priceText.isEmpty()) product.priceText = priceText;
+            if (recognizedText == null || showsSales(recognizedText, candidate)) product.seen = true;
+            boolean complete = Build.VERSION.SDK_INT < Build.VERSION_CODES.R;
+            if (screenshot != null) {
+                Rect area = alignImage(candidate, screenshot, recognizedText);
+                // A part hidden by the floating buttons, cut off or blank is worse than no image.
+                boolean usable = !area.isEmpty()
+                    && !underButtons(area, screenshot)
+                    && area.height() >= candidate.imageBounds.width() * MIN_VISIBLE_IMAGE_RATIO
+                    && !ProductImageCheck.isBlank(pixels(screenshot, area), area.width(), area.height());
+                complete = usable && product.seen && candidate.topKnown && fitsScreen(candidate, screenshot);
+                if (usable && (complete || area.height() >= product.imageHeight)) {
+                    product.imageDataUrl = cropProductImage(screenshot, area);
+                    product.imageHeight = area.height();
                 }
-                result.put("salesText", candidate.salesText);
-                result.put("salesValue", candidate.salesValue);
-                result.put("rank", emittedCount + 1);
-                result.put("capturedAt", System.currentTimeMillis());
-                result.put("confidence", priceText.isEmpty() ? 0.68 : 0.88);
-                if (screenshot != null && !looksUnloaded(screenshot, candidate.imageBounds)) {
-                    String imageDataUrl = cropProductImage(screenshot, candidate.imageBounds);
-                    if (!imageDataUrl.isEmpty()) result.put("imageDataUrl", imageDataUrl);
-                }
-                ConnectionService.sendTaskEvent("result", taskId, null, result);
-                emittedCount += 1;
-                if (emittedCount >= targetCount) return;
-            } catch (Exception ignored) {
+            }
+            product.deferrals += 1;
+            if (complete || product.deferrals > MAX_DEFERRALS) {
+                pending.remove(candidate.title);
+                emitProduct(product);
+            } else {
+                pending.put(candidate.title, product);
             }
         }
         unchangedPageCount = emittedCount == emittedBefore ? unchangedPageCount + 1 : 0;
     }
 
-    private String findTitle(List<TextEntry> entries, int salesIndex, Rect salesBounds) {
+    /** The node tree also holds cards of other, hidden tabs: the sold count must really be drawn at its place. */
+    private static boolean showsSales(Text recognizedText, ProductCandidate candidate) {
+        Matcher expected = SALES_NUMBER.matcher(candidate.salesText);
+        if (!expected.find()) return true;
+        Rect sales = candidate.salesBounds;
+        for (Text.TextBlock block : recognizedText.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Rect bounds = line.getBoundingBox();
+                if (bounds == null || Math.abs(bounds.centerY() - sales.centerY()) > 40) continue;
+                if (bounds.right < sales.left || bounds.left > sales.right) continue;
+                Matcher shown = SALES_NUMBER.matcher(line.getText().replace(" ", ""));
+                while (shown.find()) if (shown.group().equals(expected.group())) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Emits waiting products that are no longer on screen. */
+    private void flushPending(Set<String> visible) {
+        Iterator<Map.Entry<String, PendingProduct>> iterator = pending.entrySet().iterator();
+        while (iterator.hasNext() && emittedCount < targetCount) {
+            Map.Entry<String, PendingProduct> entry = iterator.next();
+            if (visible.contains(entry.getKey())) continue;
+            iterator.remove();
+            emitProduct(entry.getValue());
+        }
+    }
+
+    private void emitProduct(PendingProduct product) {
+        if (!product.seen) {
+            Log.i(TAG, "Dropped, never visible on screen: " + product.candidate.title);
+            return;
+        }
+        if (!emittedTitles.add(product.candidate.title)) return;
+        String priceText = product.priceText;
+        try {
+            JSONObject result = new JSONObject();
+            result.put("title", product.candidate.title);
+            result.put("priceText", priceText);
+            if (!priceText.isEmpty()) {
+                Matcher priceMatcher = OCR_PRICE_PATTERN.matcher(priceText);
+                if (priceMatcher.find()) result.put("priceValue", Double.parseDouble(priceMatcher.group(1)));
+            }
+            result.put("salesText", product.candidate.salesText);
+            result.put("salesValue", product.candidate.salesValue);
+            result.put("rank", emittedCount + 1);
+            result.put("capturedAt", System.currentTimeMillis());
+            result.put("confidence", priceText.isEmpty() ? 0.68 : 0.88);
+            if (!product.imageDataUrl.isEmpty()) result.put("imageDataUrl", product.imageDataUrl);
+            ConnectionService.sendTaskEvent("result", taskId, null, result);
+            emittedCount += 1;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private TextEntry findTitle(List<TextEntry> entries, int salesIndex, Rect salesBounds) {
         for (int index = salesIndex - 1; index >= Math.max(0, salesIndex - 12); index -= 1) {
             TextEntry entry = entries.get(index);
             String value = entry.value.trim();
@@ -481,12 +613,13 @@ public final class DouyinAccessibilityService extends AccessibilityService {
                 && entry.bounds.bottom <= salesBounds.top
                 && value.length() >= 5
                 && value.length() <= 120
+                && !isSalesText(value)
                 && !PRICE_PATTERN.matcher(value).matches()
                 && !isNavigationText(value)) {
-                return value;
+                return entry;
             }
         }
-        return "";
+        return null;
     }
 
     private String findPrice(List<TextEntry> entries, int salesIndex, Rect salesBounds) {
@@ -524,17 +657,13 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         return numberFallback;
     }
 
-    private String cropProductImage(Bitmap screenshot, Rect imageBounds) {
-        Rect area = new Rect(imageBounds);
-        if (!area.intersect(0, 0, screenshot.getWidth(), screenshot.getHeight())) return "";
-        int left = area.left;
-        int top = area.top;
-        int right = area.right;
-        int bottom = area.bottom;
-        if (right <= left || bottom <= top) return "";
-        Bitmap crop = Bitmap.createBitmap(screenshot, left, top, right - left, bottom - top);
+    private String cropProductImage(Bitmap screenshot, Rect area) {
+        int[] content = ProductImageCheck.trim(pixels(screenshot, area), area.width(), area.height());
+        Bitmap crop = Bitmap.createBitmap(
+            screenshot, area.left + content[0], area.top + content[1], content[2] - content[0], content[3] - content[1]
+        );
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        crop.compress(Bitmap.CompressFormat.JPEG, 72, output);
+        crop.compress(Bitmap.CompressFormat.JPEG, 90, output);
         crop.recycle();
         return "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
     }
@@ -550,12 +679,23 @@ public final class DouyinAccessibilityService extends AccessibilityService {
             complete();
             return;
         }
-        if (scrollCount >= 200 || unchangedPageCount >= 12) {
+        if (scrollCount >= 400 || unchangedPageCount >= 12) {
+            flushPending(new HashSet<>());
+            if (emittedCount >= targetCount) {
+                complete();
+                return;
+            }
             fail("The product list ended before the requested quantity was collected.");
             return;
         }
         scrollCount += 1;
         scrollDown();
+    }
+
+    /** Sold-count line; "月上新20件" and "满3件送赠品" also contain a count but are shop / promotion labels. */
+    private static boolean isSalesText(String value) {
+        return value.length() <= 24 && (value.contains("已售") || value.contains("销量") || value.contains("人付款"))
+            && SALES_PATTERN.matcher(value).find();
     }
 
     private boolean isNavigationText(String value) {
@@ -567,10 +707,13 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         Path path = new Path();
         float width = getResources().getDisplayMetrics().widthPixels;
         float height = getResources().getDisplayMetrics().heightPixels;
-        path.moveTo(width * 0.5f, height * 0.78f);
-        path.lineTo(width * 0.5f, height * 0.28f);
+        // Shorter than a screen minus one card, so that a card cut off at the bottom of this page is complete
+        // on the next one. The sideways tail leaves no vertical speed on release; otherwise the list flings on.
+        path.moveTo(width * 0.4f, height * 0.74f);
+        path.lineTo(width * 0.4f, height * 0.42f);
+        path.lineTo(width * 0.65f, height * 0.42f);
         GestureDescription gesture = new GestureDescription.Builder()
-            .addStroke(new GestureDescription.StrokeDescription(path, 0, 420))
+            .addStroke(new GestureDescription.StrokeDescription(path, 0, 1300))
             .build();
         dispatchGesture(gesture, new GestureResultCallback() {
             @Override
@@ -709,6 +852,19 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         }
     }
 
+    private static final class PendingProduct {
+        private final ProductCandidate candidate;
+        private String priceText = "";
+        private String imageDataUrl = "";
+        private int imageHeight;
+        private int deferrals;
+        private boolean seen;
+
+        private PendingProduct(ProductCandidate candidate) {
+            this.candidate = candidate;
+        }
+    }
+
     private static final class ProductCandidate {
         private final String title;
         private final String salesText;
@@ -716,8 +872,11 @@ public final class DouyinAccessibilityService extends AccessibilityService {
         private final String priceText;
         private final Rect salesBounds;
         private final Rect imageBounds;
+        private final int viewportTop;
+        private boolean topKnown;
 
-        private ProductCandidate(String title, String salesText, long salesValue, String priceText, Rect salesBounds, Rect imageBounds) {
+        private ProductCandidate(String title, String salesText, long salesValue, String priceText, Rect salesBounds, Rect imageBounds, int viewportTop) {
+            this.viewportTop = viewportTop;
             this.imageBounds = new Rect(imageBounds);
             this.title = title;
             this.salesText = salesText;
