@@ -232,9 +232,9 @@ const productResearch = {
   async createTask(input: { keyword: string; schemeId?: string; sort?: 'comprehensive' | 'sales'; targetCount?: number }) {
     const keyword = String(input.keyword || '').trim()
     if (!keyword) throw new Error('Keyword is required.')
-    const { record, online } = await status()
+    const { online } = await status()
     if (!online) throw new Error('电脑端不在线：采集任务要由电脑派发给连接的手机，请打开电脑上的 Klipmill')
-    if (!record?.devices.some((device) => device.connected)) throw new Error('No paired phone is online.')
+    // 手机不在线也能提交：电脑端先排队，手机连上后按顺序自动开始
     const id = await sendRequest({ action: 'createTask', keyword, schemeId: input.schemeId, sort: input.sort, targetCount: input.targetCount })
     return { id: `req:${id}`, schemeId: input.schemeId, keyword, sort: input.sort ?? 'sales', targetCount: input.targetCount ?? 100, status: 'queued', collectedCount: 0, createdAt: Date.now() } as ProductResearchTask
   },
@@ -265,6 +265,14 @@ const productResearch = {
       await deleteRecord(SYNC_COLLECTIONS.researchResults, id).catch(() => undefined)
     }
     return ids.length
+  },
+
+  async firewallStatus() {
+    return { supported: false, allowed: true }
+  },
+
+  async allowFirewall() {
+    return { supported: false, allowed: true }
   },
 
   async createPairing(): Promise<never> {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { CheckCircle2, Copy, Loader2, RefreshCw, Smartphone, X } from 'lucide-vue-next'
-import type { ProductResearchPairing } from '../../../../../shared/productResearch'
+import { CheckCircle2, Copy, Loader2, RefreshCw, ShieldAlert, ShieldCheck, Smartphone, X } from 'lucide-vue-next'
+import type { ProductResearchFirewall, ProductResearchPairing } from '../../../../../shared/productResearch'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; paired: [deviceName: string] }>()
@@ -11,12 +11,34 @@ const loading = ref(false)
 const error = ref('')
 const now = ref(Date.now())
 const pairedName = ref('')
+const firewall = ref<ProductResearchFirewall | null>(null)
+const firewallBusy = ref(false)
+const otherEndpoints = computed(() => (pairing.value?.endpoints || []).filter((item) => item !== pairing.value?.endpoint))
 let knownDevices = new Set<string>()
 let timer: ReturnType<typeof setInterval> | null = null
 
 const remaining = computed(() => Math.max(0, Math.floor(((pairing.value?.expiresAt || 0) - now.value) / 1000)))
 const expired = computed(() => Boolean(pairing.value) && remaining.value <= 0)
 const remainingText = computed(() => `${Math.floor(remaining.value / 60)}:${String(remaining.value % 60).padStart(2, '0')}`)
+
+async function checkFirewall() {
+  try {
+    firewall.value = await window.api.productResearch.firewallStatus()
+  } catch {
+    firewall.value = null
+  }
+}
+
+async function allowFirewall() {
+  firewallBusy.value = true
+  try {
+    firewall.value = await window.api.productResearch.allowFirewall()
+  } catch {
+    /* 用户在管理员确认框点了「否」 */
+  } finally {
+    firewallBusy.value = false
+  }
+}
 
 async function generate() {
   loading.value = true
@@ -63,7 +85,7 @@ function copy(text: string) {
 }
 
 watch(() => props.open, (open) => {
-  if (open) void generate()
+  if (open) { void generate(); void checkFirewall() }
   else { stopWatch(); pairing.value = null }
 }, { immediate: true })
 
@@ -79,11 +101,19 @@ onBeforeUnmount(stopWatch)
             <span class="prd-dialog__title-icon"><Smartphone :size="20" /></span>
             <div>
               <h2>连接采集手机</h2>
-              <p>手机与电脑连接同一 WiFi，打开 Klipmill 手机 App，进入「选品 → 连接电脑」扫描下方二维码。</p>
+              <p>手机和电脑连同一个 WiFi，打开 Klipmill 手机 App，进入「选品 → 连接电脑」扫描下方二维码。只需配对一次，以后打开 App 会自动连上。</p>
             </div>
           </div>
           <button class="prd-icon-btn" aria-label="关闭" @click="emit('close')"><X :size="16" /></button>
         </div>
+        <div v-if="firewall?.supported && !firewall.allowed" class="pair-firewall">
+          <ShieldAlert :size="16" />
+          <span>电脑防火墙还没放行手机连接，手机可能连不上。</span>
+          <button class="prd-btn prd-btn--primary prd-btn--sm" :disabled="firewallBusy" @click="allowFirewall">
+            <Loader2 v-if="firewallBusy" :size="13" class="prd-spin" />一键放行
+          </button>
+        </div>
+        <div v-else-if="firewall?.supported && firewall.allowed" class="pair-firewall pair-firewall--ok"><ShieldCheck :size="16" /><span>防火墙已放行手机连接</span></div>
         <div class="prd-dialog__body pair-body">
           <div class="pair-qr">
             <div v-if="loading" class="pair-qr__state"><Loader2 :size="26" class="prd-spin" /><span>正在生成二维码…</span></div>
@@ -105,6 +135,10 @@ onBeforeUnmount(stopWatch)
               <code>{{ pairing?.endpoint || '-' }}</code>
               <button v-if="pairing" class="prd-icon-btn" title="复制服务地址" @click="copy(pairing.endpoint)"><Copy :size="13" /></button>
             </div>
+            <div v-if="otherEndpoints.length" class="pair-row pair-row--sub">
+              <span>备用地址</span>
+              <small>{{ otherEndpoints.join('、') }}（扫码时手机会自动挨个尝试）</small>
+            </div>
             <div class="pair-row">
               <span>有效期</span>
               <span :class="expired ? 'prd-num-red' : 'prd-num-green'">{{ pairing ? (expired ? '已过期' : remainingText) : '-' }}</span>
@@ -112,13 +146,13 @@ onBeforeUnmount(stopWatch)
             <ol class="pair-steps">
               <li>手机打开 Klipmill App，进入「选品 → 连接电脑」，按提示开启无障碍服务。</li>
               <li>点击「扫描电脑二维码」扫描左侧二维码；无法扫码时点「手动输入配对码」填写服务地址和配对码。</li>
-              <li>配对成功后此窗口会自动关闭，设备出现在「手机连接状态」列表中。</li>
+              <li>配对成功后此窗口会自动关闭。之后电脑换了 IP，手机也会自动重新找到电脑，不用再扫码。</li>
             </ol>
             <div v-if="!pairedName && pairing && !expired" class="pair-waiting"><Loader2 :size="13" class="prd-spin" />等待手机扫码…</div>
           </div>
         </div>
         <div class="prd-dialog__foot">
-          <span class="prd-dialog__tip">若长时间无响应，请检查电脑防火墙是否放行 41688 端口。</span>
+          <span class="prd-dialog__tip">扫码后一直连不上：确认手机没开「移动数据优先」、电脑没开 VPN 全局模式，再点上方「一键放行」。</span>
           <div class="prd-dialog__foot-actions"><button class="prd-btn prd-btn--outline" @click="emit('close')">关闭</button></div>
         </div>
       </div>
@@ -142,6 +176,10 @@ onBeforeUnmount(stopWatch)
 .pair-row code { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pair-code { font-size: 22px; letter-spacing: 4px; color: var(--theme-accent); font-variant-numeric: tabular-nums; }
 .pair-steps { margin: 4px 0 0; padding-left: 18px; color: var(--theme-text-secondary); font-size: 12px; line-height: 1.7; }
+.pair-row--sub small { color: var(--theme-text-muted); font-size: 11px; line-height: 1.5; }
+.pair-firewall { display: flex; align-items: center; gap: 8px; margin: 0 20px; padding: 8px 12px; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: 12px; }
+.pair-firewall span { flex: 1; }
+.pair-firewall--ok { background: #ecfdf5; color: #047857; }
 .pair-waiting { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--theme-accent); }
 @media (max-width: 620px) { .pair-body { flex-direction: column; align-items: center; } }
 </style>

@@ -311,6 +311,9 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
         </div>
         <h2>{{ research.paired ? (research.connection === 'connected' ? '已连接电脑' : '正在连接电脑…') : '连接电脑采集' }}</h2>
         <p v-if="research.paired" class="mono">{{ research.endpoint.replace(/^https?:\/\//, '') }}</p>
+        <p v-if="research.paired && research.connection === 'searching'" class="hint">电脑可能换了网络地址，正在同一 WiFi 里自动找它，不用重新扫码。</p>
+        <p v-else-if="research.paired && research.connection === 'desktop_not_found'" class="hint">没找到电脑：确认电脑上的 Klipmill 已打开、和手机连的是同一个 WiFi。找到后会自动连上。</p>
+        <p v-else-if="research.paired && research.connection === 'pair_invalid'" class="hint">电脑上已删除这台手机，请点下方「重新扫码配对」。</p>
         <p v-else>在电脑端「选品」页点「连接手机」，扫描弹出的二维码。连接后电脑下发的采集任务会自动在这台手机上执行，结果回传电脑。</p>
       </section>
 

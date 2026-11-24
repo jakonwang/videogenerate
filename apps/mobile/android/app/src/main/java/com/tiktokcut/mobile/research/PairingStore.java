@@ -2,11 +2,16 @@ package com.tiktokcut.mobile.research;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.UUID;
 
 public final class PairingStore {
     private static final String FILE_NAME = "pairing";
     private static final String ENDPOINT = "endpoint";
+    private static final String ENDPOINTS = "endpoints";
+    private static final String SERVER_ID = "server_id";
     private static final String TOKEN = "token";
     private static final String DEVICE_ID = "device_id";
     private static final String INSTALL_FILE_NAME = "install";
@@ -22,8 +27,36 @@ public final class PairingStore {
             .apply();
     }
 
+    /** 电脑的固定标识和它所有局域网地址：电脑换 IP 后手机靠这些自动重新找到电脑 */
+    public static void saveServer(Context context, String serverId, List<String> endpoints) {
+        SharedPreferences.Editor editor = preferences(context).edit();
+        if (serverId != null && !serverId.isEmpty()) editor.putString(SERVER_ID, serverId);
+        if (endpoints != null && !endpoints.isEmpty()) editor.putString(ENDPOINTS, String.join("\n", endpoints));
+        editor.apply();
+    }
+
+    /** 换到新地址（自动重新找到电脑后） */
+    public static void updateEndpoint(Context context, String endpoint) {
+        preferences(context).edit().putString(ENDPOINT, endpoint).apply();
+    }
+
     public static String endpoint(Context context) {
         return preferences(context).getString(ENDPOINT, "");
+    }
+
+    /** 当前地址在前，其后是配对时电脑报的其他地址 */
+    public static List<String> endpoints(Context context) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        String current = endpoint(context);
+        if (!current.isEmpty()) values.add(current);
+        for (String item : preferences(context).getString(ENDPOINTS, "").split("\n")) {
+            if (!item.trim().isEmpty()) values.add(item.trim());
+        }
+        return new ArrayList<>(values);
+    }
+
+    public static String serverId(Context context) {
+        return preferences(context).getString(SERVER_ID, "");
     }
 
     public static String token(Context context) {

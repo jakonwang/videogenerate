@@ -17,8 +17,18 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error)
 }
 
-function translateError(message: string) {
+export function translateError(message: string) {
   if (/No paired phone is online/i.test(message)) return '没有在线的采集手机，请先连接手机'
+  if (/Another task is already running/i.test(message)) return '手机上已有任务在采集'
+  if (/Douyin is not installed/i.test(message)) return '手机上没有安装抖音'
+  if (/Search entry was not found/i.test(message)) return '没找到抖音的搜索入口，请把抖音更新到最新版后重试'
+  if (/Search input was not found/i.test(message)) return '没找到抖音的搜索框，请重试'
+  if (/Search submit button was not found/i.test(message)) return '没找到抖音的搜索按钮，请重试'
+  if (/Product tab was not found/i.test(message)) return '搜索结果里没有「商品」分类，换个搜索词试试'
+  if (/Sales sort was not found/i.test(message)) return '没找到「销量」排序，请重试'
+  if (/product list ended/i.test(message)) return '商品已全部采完，没有达到目标数量'
+  if (/Accessibility service was interrupted/i.test(message)) return '手机无障碍服务被系统关闭了，请在手机上重新开启'
+  if (/^cancelled$/i.test(message)) return '已取消'
   if (/Keyword is required/i.test(message)) return '搜索词不能为空'
   return message
 }
@@ -233,8 +243,8 @@ export function createSchemeWorkspace(schemeId: Ref<string>) {
   }
 
   async function startCollection(options: { keywordIds: string[]; sort: 'sales' | 'comprehensive'; targetCount: number; supplementOnly: boolean }) {
-    if (!connectedDevices.value.length) {
-      notify('没有在线的采集手机，请先连接手机', 'error')
+    if (!devices.value.length) {
+      notify('还没有连接过采集手机，请先连接手机', 'error')
       return 0
     }
     const running = new Set(activeTasks.value.map((item) => item.keyword))
@@ -258,7 +268,9 @@ export function createSchemeWorkspace(schemeId: Ref<string>) {
       }
     }
     if (created) {
-      notify(`已创建 ${created} 个采集任务`, 'success')
+      notify(connectedDevices.value.length
+        ? `已创建 ${created} 个采集任务，手机会按顺序逐个采集`
+        : `已排队 ${created} 个采集任务，手机连上电脑后会自动开始`, 'success')
       if (scheme.value?.status === 'draft') await updateScheme({ status: 'active' })
     }
     await refreshSnapshot()

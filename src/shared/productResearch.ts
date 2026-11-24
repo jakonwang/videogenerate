@@ -51,13 +51,19 @@ export type ProductResearchResult = {
 export type ProductResearchPairing = {
   qrDataUrl: string
   endpoint: string
+  /** 电脑所有局域网地址（多网卡 / 开了 VPN 时手机挨个试），第一个与 endpoint 相同 */
+  endpoints?: string[]
   pairingCode: string
   expiresAt: number
 }
 
+/** Windows 防火墙是否放行了手机连接端口 */
+export type ProductResearchFirewall = { supported: boolean; allowed: boolean }
+
 export type ProductResearchSnapshot = {
   serverRunning: boolean
   endpoint: string
+  endpoints?: string[]
   devices: ProductResearchDevice[]
   tasks: ProductResearchTask[]
   results: ProductResearchResult[]

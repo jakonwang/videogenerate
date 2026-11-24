@@ -214,6 +214,9 @@ export function connectionLabel(state: ConnectionState): { label: string; tone: 
   if (state === 'not_paired') return { label: '未配对', tone: 'muted' }
   if (state === 'pairing') return { label: '配对中', tone: 'blue' }
   if (state === 'disconnected') return { label: '重连中', tone: 'amber' }
+  if (state === 'searching') return { label: '找电脑中', tone: 'amber' }
+  if (state === 'desktop_not_found') return { label: '没找到电脑', tone: 'red' }
+  if (state === 'pair_invalid') return { label: '需重新配对', tone: 'red' }
   if (state === 'pair_failed' || state === 'protocol_error') return { label: '配对失败', tone: 'red' }
   if (state.startsWith('connection_failed')) return { label: '连接失败', tone: 'red' }
   return { label: '连接中', tone: 'blue' }

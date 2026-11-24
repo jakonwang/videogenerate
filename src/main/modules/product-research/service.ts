@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { execFile } from 'node:child_process'
 import { networkInterfaces } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
@@ -8,6 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { getAppPaths } from '../../lib/paths'
 import type {
   ProductResearchDevice,
+  ProductResearchFirewall,
   ProductResearchPairing,
   ProductResearchResult,
   ProductResearchSnapshot,
@@ -19,6 +21,8 @@ import type {
 } from '../../../shared/productResearch'
 
 type PersistedState = {
+  /** 这台电脑的固定标识：手机或电脑换了 IP 后，手机靠它在局域网里重新找到电脑 */
+  serverId?: string
   devices: ProductResearchDevice[]
   deviceTokens: Record<string, string>
   tasks: ProductResearchTask[]
@@ -42,19 +46,36 @@ type SocketMessage = {
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const PAIRING_TTL_MS = 5 * 60 * 1000
-const PRODUCT_RESEARCH_PORT = 41688
+/** 手机连接端口；测试时可用环境变量换一个，避免和正在运行的软件冲突 */
+const PRODUCT_RESEARCH_PORT = Number(process.env.KLIPMILL_RESEARCH_PORT) || 41688
 /** 手机 App 采集结果统一归入的方案 */
 const MOBILE_SCHEME_ID = 'mobile-collect'
 
-function localIpv4Address() {
-  const interfaces = Object.entries(networkInterfaces())
-  const physical = interfaces.filter(([name]) => !/(virtual|vmware|vethernet|virtualbox|tailscale|loopback)/i.test(name))
-  for (const [, rows] of [...physical, ...interfaces]) {
+const FIREWALL_RULE_NAME = 'Klipmill Product Research'
+const VIRTUAL_ADAPTER = /(virtual|vmware|vethernet|virtualbox|tailscale|zerotier|wireguard|tap|tun|clash|meta|vpn|loopback|docker|wsl|hyper-v|bluetooth)/i
+/** 手机回传的「已有任务在跑」：断线重连后电脑重发了手机上正在跑的同一个任务，不算失败 */
+const PHONE_BUSY_ERROR = /Another task is already running/i
+
+/** 电脑所有局域网 IPv4，真实网卡在前（VPN、虚拟网卡放后面），手机会挨个试 */
+function localIpv4Addresses() {
+  const physical: string[] = []
+  const others: string[] = []
+  for (const [name, rows] of Object.entries(networkInterfaces())) {
     for (const row of rows || []) {
-      if (row.family === 'IPv4' && !row.internal && isPrivateIpv4(row.address)) return row.address
+      if (row.family !== 'IPv4' || row.internal || !isPrivateIpv4(row.address)) continue
+      ;(VIRTUAL_ADAPTER.test(name) ? others : physical).push(row.address)
     }
   }
-  return '127.0.0.1'
+  // 家用路由器最常见的 192.168.x 排最前
+  physical.sort((a, b) => Number(!a.startsWith('192.168.')) - Number(!b.startsWith('192.168.')))
+  const all = [...new Set([...physical, ...others])]
+  return all.length ? all : ['127.0.0.1']
+}
+
+function runCommand(file: string, args: string[]) {
+  return new Promise<string>((resolve) => {
+    execFile(file, args, { windowsHide: true }, (_error, stdout) => resolve(String(stdout || '')))
+  })
 }
 
 function isPrivateIpv4(address: string) {
@@ -111,6 +132,7 @@ class ProductResearchService {
     try {
       const parsed = JSON.parse(await readFile(this.stateFile, 'utf8')) as Partial<PersistedState>
       this.state = {
+        serverId: typeof parsed.serverId === 'string' && parsed.serverId ? parsed.serverId : undefined,
         devices: Array.isArray(parsed.devices) ? parsed.devices.map((item) => ({ ...item, connected: false })) : [],
         deviceTokens: parsed.deviceTokens && typeof parsed.deviceTokens === 'object' ? parsed.deviceTokens : {},
         tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
@@ -122,6 +144,36 @@ class ProductResearchService {
     } catch {
       this.state = { devices: [], deviceTokens: {}, tasks: [], results: [], schemes: [], schemeStates: {} }
     }
+    if (!this.state.serverId) this.state.serverId = randomUUID()
+    // 上次关软件时没跑完的任务：放回排队，手机连上后接着采
+    for (const task of this.state.tasks) {
+      if (task.status === 'running' || (task.status === 'queued' && task.dispatchedAt)) {
+        task.status = 'queued'
+        task.dispatchedAt = undefined
+        task.startedAt = undefined
+      }
+    }
+  }
+
+  /** 这台手机手上是否已有任务（已下发、还没结束） */
+  private deviceBusy(deviceId: string) {
+    return this.state.tasks.some((item) => item.deviceId === deviceId && (item.status === 'running' || (item.status === 'queued' && Boolean(item.dispatchedAt))))
+  }
+
+  /**
+   * 手机一次只能跑一个任务：每台在线且空闲的手机领最早排队的一个。
+   * 新建任务、任务结束 / 取消、手机连上时都会调一次。
+   */
+  private pump() {
+    const waiting = this.state.tasks.filter((item) => item.status === 'queued' && !item.dispatchedAt).sort((a, b) => a.createdAt - b.createdAt)
+    let dispatched = false
+    for (const deviceId of this.sockets.keys()) {
+      if (this.deviceBusy(deviceId)) continue
+      const next = waiting.find((item) => !item.dispatchedAt && (!item.deviceId || item.deviceId === deviceId || !this.sockets.has(item.deviceId)))
+      if (next && this.dispatchTask(next, deviceId)) dispatched = true
+    }
+    if (dispatched) this.schedulePersist()
+    return dispatched
   }
 
   private async persist() {
@@ -170,8 +222,12 @@ class ProductResearchService {
     if (modified) await this.persist()
   }
 
+  private endpoints() {
+    return this.port ? localIpv4Addresses().map((address) => `http://${address}:${this.port}`) : []
+  }
+
   private endpoint() {
-    return this.port ? `http://${localIpv4Address()}:${this.port}` : ''
+    return this.endpoints()[0] || ''
   }
 
   private handleDeviceRequest(request: IncomingMessage, response: ServerResponse) {
@@ -199,7 +255,7 @@ class ProductResearchService {
           }
           this.pairing = null
           await this.persist()
-          return json(response, 200, { token })
+          return json(response, 200, { token, serverId: this.state.serverId, endpoints: this.endpoints() })
         }
         const deviceId = String(body.deviceId || '').trim()
         const token = String(body.token || '').trim()
@@ -210,7 +266,7 @@ class ProductResearchService {
           if (device && typeof body.batteryLevel === 'number') device.batteryLevel = Math.max(0, Math.min(100, Math.round(body.batteryLevel)))
           if (device && typeof body.model === 'string' && body.model.trim()) device.model = body.model.trim()
           this.schedulePersist()
-          return json(response, 200, { ok: true })
+          return json(response, 200, { ok: true, serverId: this.state.serverId, endpoints: this.endpoints() })
         }
         return json(response, 400, { error: 'Unknown action.' })
       } catch (error) {
@@ -262,19 +318,22 @@ class ProductResearchService {
           await this.persist()
         } else if (message.type === 'task_complete') {
           const task = this.state.tasks.find((item) => item.id === message.taskId)
-          if (task && task.deviceId === deviceId) {
+          if (task && task.deviceId === deviceId && task.status !== 'cancelled') {
             task.status = 'completed'
             task.completedAt = Date.now()
-            await this.persist()
           }
+          this.pump()
+          await this.persist()
         } else if (message.type === 'task_error') {
           const task = this.state.tasks.find((item) => item.id === message.taskId)
-          if (task && task.deviceId === deviceId) {
+          if (task && PHONE_BUSY_ERROR.test(String(message.error || ''))) return
+          if (task && task.deviceId === deviceId && task.status !== 'cancelled') {
             task.status = 'failed'
             task.error = String(message.error || 'Unknown error')
             task.completedAt = Date.now()
-            await this.persist()
           }
+          this.pump()
+          await this.persist()
         }
       } catch {
         /* Ignore malformed messages. */
@@ -287,6 +346,8 @@ class ProductResearchService {
     await this.ensureLoaded()
     this.server = createServer((request, response) => {
       if (request.method === 'POST' && request.url === '/device') return this.handleDeviceRequest(request, response)
+      // 手机或电脑换了 IP 后，手机扫局域网靠这个认出配对过的电脑
+      if (request.method === 'GET' && request.url === '/hello') return json(response, 200, { app: 'klipmill-research', serverId: this.state.serverId })
       json(response, 404, { error: 'Not found.' })
     })
     this.socketServer = new WebSocketServer({ server: this.server })
@@ -295,6 +356,8 @@ class ProductResearchService {
       const deviceId = url.searchParams.get('deviceId') || ''
       const token = url.searchParams.get('token') || ''
       if (!deviceId || !token || this.state.deviceTokens[deviceId] !== token) return socket.close(4003, 'Invalid credentials')
+      const previous = this.sockets.get(deviceId)
+      if (previous && previous !== socket) previous.terminate()
       this.sockets.set(deviceId, socket)
       const device = this.state.devices.find((item) => item.id === deviceId)
       if (device) {
@@ -310,12 +373,15 @@ class ProductResearchService {
         }
       })
       socket.on('close', () => {
+        if (this.sockets.get(deviceId) !== socket) return
         this.sockets.delete(deviceId)
         const device = this.state.devices.find((item) => item.id === deviceId)
         if (device) device.connected = false
       })
-      const pending = this.state.tasks.filter((item) => item.status === 'queued' && item.deviceId === deviceId)
-      for (const task of pending) this.dispatchTask(task, deviceId)
+      // 断线前手上的任务重新下发（手机还在跑同一个任务时会忽略），然后接着领排队的任务
+      const inFlight = this.state.tasks.filter((item) => item.deviceId === deviceId && (item.status === 'running' || (item.status === 'queued' && item.dispatchedAt)))
+      for (const task of inFlight) this.dispatchTask(task, deviceId)
+      this.pump()
     })
     await new Promise<void>((resolve) => {
       this.server!.listen(PRODUCT_RESEARCH_PORT, '0.0.0.0', () => resolve())
@@ -330,9 +396,29 @@ class ProductResearchService {
     const pairingCode = String(Math.floor(100000 + Math.random() * 900000))
     const expiresAt = Date.now() + PAIRING_TTL_MS
     this.pairing = { code: pairingCode, expiresAt }
-    const value = JSON.stringify({ version: 1, endpoint, pairingCode, expiresAt })
+    const endpoints = this.endpoints()
+    // endpoints：电脑有多块网卡（VPN、虚拟机）时手机挨个试；旧版 App 只读 endpoint
+    const value = JSON.stringify({ version: 2, endpoint, endpoints, serverId: this.state.serverId, pairingCode, expiresAt })
     const qrDataUrl = await QRCode.toDataURL(value, { width: 320, margin: 1 })
-    return { qrDataUrl, endpoint, pairingCode, expiresAt }
+    return { qrDataUrl, endpoint, endpoints, pairingCode, expiresAt }
+  }
+
+  /** Windows 防火墙是否已放行手机连接端口（非 Windows 视为已放行） */
+  async firewallStatus(): Promise<ProductResearchFirewall> {
+    if (process.platform !== 'win32') return { supported: false, allowed: true }
+    const output = await runCommand('netsh', ['advfirewall', 'firewall', 'show', 'rule', `name=${FIREWALL_RULE_NAME}`])
+    return { supported: true, allowed: output.includes(String(PRODUCT_RESEARCH_PORT)) }
+  }
+
+  /** 弹出 Windows 管理员确认，添加放行连接端口的入站规则（专用和公用网络都放行） */
+  async allowFirewall(): Promise<ProductResearchFirewall> {
+    if (process.platform !== 'win32') return { supported: false, allowed: true }
+    const current = await this.firewallStatus()
+    if (current.allowed) return current
+    const args = `advfirewall firewall add rule name="${FIREWALL_RULE_NAME}" dir=in action=allow protocol=TCP localport=${PRODUCT_RESEARCH_PORT} profile=private,public`
+    const script = `Start-Process -FilePath netsh -ArgumentList '${args}' -Verb RunAs -WindowStyle Hidden -Wait`
+    await runCommand('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script])
+    return this.firewallStatus()
   }
 
   async snapshot(schemeId?: string): Promise<ProductResearchSnapshot> {
@@ -343,6 +429,7 @@ class ProductResearchService {
     return {
       serverRunning: Boolean(this.server),
       endpoint: this.endpoint(),
+      endpoints: this.endpoints(),
       devices: [...this.state.devices].sort((a, b) => b.lastSeenAt - a.lastSeenAt),
       tasks: [...this.state.tasks].filter((item) => !schemeId || item.schemeId === schemeId).sort((a, b) => b.createdAt - a.createdAt),
       results: [...this.state.results].filter((item) => !schemeId || item.schemeId === schemeId).sort((a, b) => b.capturedAt - a.capturedAt),
@@ -353,10 +440,7 @@ class ProductResearchService {
     await this.ensureServer()
     const keyword = String(input.keyword || '').trim()
     if (!keyword) throw new Error('Keyword is required.')
-    const device = this.state.devices
-      .filter((item) => item.connected && this.sockets.has(item.id))
-      .sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0]
-    if (!device) throw new Error('No paired phone is online.')
+    // 没有手机在线也先排队：手机连上后按顺序自动开始
     const task: ProductResearchTask = {
       id: randomUUID(),
       schemeId: input.schemeId,
@@ -364,12 +448,11 @@ class ProductResearchService {
       sort: input.sort === 'comprehensive' ? 'comprehensive' : 'sales',
       targetCount: Math.min(1000, Math.max(1, Number(input.targetCount || 100))),
       status: 'queued',
-      deviceId: device.id,
       collectedCount: 0,
       createdAt: Date.now(),
     }
     this.state.tasks.push(task)
-    this.dispatchTask(task, device.id)
+    this.pump()
     await this.persist()
     return task
   }
@@ -389,7 +472,8 @@ class ProductResearchService {
     if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return task
     task.status = 'cancelled'
     task.completedAt = Date.now()
-    if (task.deviceId) this.sockets.get(task.deviceId)?.send(JSON.stringify({ type: 'cancel_task', taskId }))
+    if (task.deviceId && task.dispatchedAt) this.sockets.get(task.deviceId)?.send(JSON.stringify({ type: 'cancel_task', taskId }))
+    this.pump()
     await this.persist()
     return task
   }

@@ -5,7 +5,7 @@ import {
   Layers, ListChecks, Loader2, Package, Pencil, Play, Plus, RefreshCw, Search, Settings2, Smartphone, Trash2, Upload, XCircle,
 } from 'lucide-vue-next'
 import type { ProductResearchTask } from '../../../../../shared/productResearch'
-import { useSchemeWorkspace } from './useSchemeWorkspace'
+import { translateError, useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
 import PrThumb from './PrThumb.vue'
 import PrPairingDialog from './PrPairingDialog.vue'
@@ -106,7 +106,7 @@ const collectTargets = computed(() => {
 const collectBlocker = computed(() => {
   if (!keywords.value.length) return '请先添加搜索词'
   if (!selectedKw.value.length) return '请勾选要采集的搜索词'
-  if (!connectedDevices.value.length) return '没有在线的采集手机'
+  if (!devices.value.length) return '还没有连接过采集手机'
   if (!collectTargets.value.length) return settings.mode === 'supplement' ? '所选搜索词无需补采' : '所选搜索词已采集或采集中'
   return ''
 })
@@ -114,7 +114,7 @@ const collectBlocker = computed(() => {
 async function startCollect() {
   if (collectBlocker.value) {
     ws.notify(collectBlocker.value, 'error')
-    if (!connectedDevices.value.length) pairingOpen.value = true
+    if (!devices.value.length) pairingOpen.value = true
     return
   }
   starting.value = true
@@ -382,7 +382,7 @@ const market = computed(() => marketOf(scheme.value?.market))
               <td class="num">{{ task.collectedCount }}</td>
               <td class="nowrap muted">{{ formatDate(task.startedAt || task.dispatchedAt) }}</td>
               <td class="nowrap">{{ task.startedAt ? formatDuration((task.completedAt || Date.now()) - task.startedAt) : '-' }}</td>
-              <td><span v-if="task.error" class="prd-num-red sc-err" :title="task.error">{{ task.error }}</span><span v-else class="muted">-</span></td>
+              <td><span v-if="task.error" class="prd-num-red sc-err" :title="task.error">{{ translateError(task.error) }}</span><span v-else class="muted">-</span></td>
               <td class="center nowrap">
                 <button v-if="task.collectedCount > 0" class="prd-btn prd-btn--xs" @click="resultFilter.keyword = task.keyword; filterOpen = true">查看结果</button>
                 <button v-if="task.status === 'queued' || task.status === 'running'" class="prd-btn prd-btn--xs prd-btn--danger" @click="ws.cancelTask(task.id)">取消</button>

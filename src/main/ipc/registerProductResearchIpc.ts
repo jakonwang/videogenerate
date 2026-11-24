@@ -4,6 +4,8 @@ import { productResearchService } from '../modules/product-research/service'
 export function registerProductResearchIpc(ipcMain: IpcMain) {
   ipcMain.handle('productResearch:snapshot', (_event, schemeId?: string) => productResearchService.snapshot(schemeId))
   ipcMain.handle('productResearch:createPairing', () => productResearchService.createPairing())
+  ipcMain.handle('productResearch:firewallStatus', () => productResearchService.firewallStatus())
+  ipcMain.handle('productResearch:allowFirewall', () => productResearchService.allowFirewall())
   ipcMain.handle('productResearch:createTask', (_event, payload) => productResearchService.createTask(payload))
   ipcMain.handle('productResearch:cancelTask', (_event, taskId: string) => productResearchService.cancelTask(taskId))
   ipcMain.handle('productResearch:removeTask', (_event, taskId: string) => productResearchService.removeTask(taskId))

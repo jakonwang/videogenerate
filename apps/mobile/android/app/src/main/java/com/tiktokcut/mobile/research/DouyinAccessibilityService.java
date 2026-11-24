@@ -121,6 +121,8 @@ public final class DouyinAccessibilityService extends AccessibilityService {
     }
 
     private void startTask(JSONObject value) {
+        // 断线重连后电脑会重发手上的任务：同一个任务还在跑就继续跑，不报错
+        if (task != null && taskId.equals(value.optString("id"))) return;
         if (task != null) {
             ConnectionService.sendTaskEvent("task_failed", value.optString("id"), "Another task is already running.", null);
             return;

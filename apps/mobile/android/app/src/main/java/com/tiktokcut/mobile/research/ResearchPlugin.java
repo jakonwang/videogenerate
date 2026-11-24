@@ -15,16 +15,17 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.journeyapps.barcodescanner.ScanContract;
 import com.journeyapps.barcodescanner.ScanIntentResult;
 import com.journeyapps.barcodescanner.ScanOptions;
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
-import okhttp3.Call;
-import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -33,7 +34,10 @@ import org.json.JSONObject;
 @CapacitorPlugin(name = "ProductResearch")
 public class ResearchPlugin extends Plugin {
     private static final String DOUYIN_PACKAGE = "com.ss.android.ugc.aweme";
-    private final OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = new OkHttpClient.Builder()
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build();
 
     @Override
     public void load() {
@@ -103,7 +107,13 @@ public class ResearchPlugin extends Plugin {
         }
         try {
             JSONObject qr = new JSONObject(scan.getContents());
-            pair(call, qr.getString("endpoint"), qr.getString("pairingCode"));
+            // 新版二维码带电脑的所有网卡地址（开了 VPN / 虚拟机时第一个不一定通），挨个试
+            LinkedHashSet<String> endpoints = new LinkedHashSet<>();
+            endpoints.add(qr.getString("endpoint"));
+            JSONArray more = qr.optJSONArray("endpoints");
+            if (more != null) for (int i = 0; i < more.length(); i++) endpoints.add(more.optString(i));
+            endpoints.remove("");
+            pair(call, new ArrayList<>(endpoints), qr.getString("pairingCode"));
         } catch (Exception error) {
             call.reject("不是 Klipmill 的配对二维码", "INVALID_QR");
         }
@@ -121,33 +131,29 @@ public class ResearchPlugin extends Plugin {
             call.reject("请输入配对码", "INVALID_INPUT");
             return;
         }
-        pair(call, endpoint, code);
+        List<String> endpoints = new ArrayList<>();
+        endpoints.add(endpoint);
+        pair(call, endpoints, code);
     }
 
-    private void pair(PluginCall call, String endpoint, String code) {
-        try {
-            String deviceId = PairingStore.installId(getContext());
-            JSONObject payload = new JSONObject()
-                .put("action", "pair")
-                .put("pairingCode", code)
-                .put("deviceId", deviceId)
-                .put("deviceName", Build.MANUFACTURER + " " + Build.MODEL)
-                .put("model", Build.MODEL);
-            Request request = new Request.Builder()
-                .url(endpoint + "/device")
-                .post(RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8")))
-                .build();
-            ResearchEvents.state("pairing");
-            client.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(Call httpCall, IOException error) {
-                    ResearchEvents.state("pair_failed");
-                    call.reject("连不上电脑，请确认手机和电脑在同一 Wi-Fi", "NETWORK");
-                }
-
-                @Override
-                public void onResponse(Call httpCall, Response response) throws IOException {
-                    try (response) {
+    private void pair(PluginCall call, List<String> endpoints, String code) {
+        ResearchEvents.state("pairing");
+        new Thread(() -> {
+            String networkError = null;
+            for (String endpoint : endpoints) {
+                try {
+                    String deviceId = PairingStore.installId(getContext());
+                    JSONObject payload = new JSONObject()
+                        .put("action", "pair")
+                        .put("pairingCode", code)
+                        .put("deviceId", deviceId)
+                        .put("deviceName", Build.MANUFACTURER + " " + Build.MODEL)
+                        .put("model", Build.MODEL);
+                    Request request = new Request.Builder()
+                        .url(endpoint + "/device")
+                        .post(RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8")))
+                        .build();
+                    try (Response response = client.newCall(request).execute()) {
                         String body = response.body() == null ? "" : response.body().string();
                         if (!response.isSuccessful()) {
                             String detail = "HTTP " + response.code();
@@ -157,24 +163,39 @@ public class ResearchPlugin extends Plugin {
                             } catch (Exception ignored) {
                             }
                             ResearchEvents.state("pair_failed");
-                            call.reject("配对失败：" + detail, "PAIR_FAILED");
+                            call.reject("配对失败：" + pairErrorText(detail), "PAIR_FAILED");
                             return;
                         }
                         JSONObject value = new JSONObject(body);
                         PairingStore.save(getContext(), endpoint, value.getString("token"), deviceId);
+                        List<String> known = new ArrayList<>(endpoints);
+                        JSONArray reported = value.optJSONArray("endpoints");
+                        if (reported != null) for (int i = 0; i < reported.length(); i++) if (!known.contains(reported.optString(i))) known.add(reported.optString(i));
+                        PairingStore.saveServer(getContext(), value.optString("serverId"), known);
                         startConnection(true);
                         JSObject result = new JSObject();
                         result.put("endpoint", endpoint);
                         call.resolve(result);
-                    } catch (Exception error) {
-                        ResearchEvents.state("pair_failed");
-                        call.reject("配对失败：" + error.getMessage(), "PAIR_FAILED");
+                        return;
                     }
+                } catch (java.io.IOException error) {
+                    networkError = error.getMessage();
+                } catch (Exception error) {
+                    ResearchEvents.state("pair_failed");
+                    call.reject("配对失败：" + error.getMessage(), "PAIR_FAILED");
+                    return;
                 }
-            });
-        } catch (Exception error) {
-            call.reject("配对失败：" + error.getMessage(), "PAIR_FAILED");
-        }
+            }
+            ResearchEvents.state("pair_failed");
+            call.reject("连不上电脑：请确认手机和电脑连的是同一个 WiFi，手机没开移动数据优先 / VPN，电脑配对窗口里点过「一键放行」"
+                + (networkError == null ? "" : "（" + networkError + "）"), "NETWORK");
+        }, "klipmill-pair").start();
+    }
+
+    private static String pairErrorText(String detail) {
+        if (detail.contains("No active pairing session")) return "二维码已过期，请在电脑上重新生成";
+        if (detail.contains("Invalid pairing code")) return "配对码不对，请核对电脑上显示的 6 位数字";
+        return detail;
     }
 
     @PluginMethod

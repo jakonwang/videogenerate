@@ -26,8 +26,12 @@ public final class ConnectionService extends Service {
         .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build();
+    /** 电脑认不出这台手机（电脑上删了设备 / 换了电脑）：别再重连，要重新扫码 */
+    private static final int CLOSE_INVALID_CREDENTIALS = 4003;
     private WebSocket socket;
     private boolean stopping;
+    private boolean searching;
+    private int failures;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -35,26 +39,41 @@ public final class ConnectionService extends Service {
         super.onCreate();
         ServiceHolder.instance = this;
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL_ID)
+        startForeground(NOTIFICATION_ID, buildNotification("正在连接电脑…"));
+    }
+
+    private android.app.Notification buildNotification(String text) {
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("Klipmill 选品连接")
-            .setContentText("已连接电脑，等待采集任务")
+            .setContentText(text)
             .setOngoing(true)
-            .build());
+            .setOnlyAlertOnce(true)
+            .build();
+    }
+
+    private void updateNotification(String text) {
+        try {
+            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, buildNotification(text));
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_RECONNECT.equals(intent.getAction()) && socket != null) {
-            socket.cancel();
-            socket = null;
+        if (intent != null && ACTION_RECONNECT.equals(intent.getAction())) {
+            failures = 0;
+            if (socket != null) {
+                socket.cancel();
+                socket = null;
+            }
         }
         connect();
         return START_STICKY;
     }
 
     private void connect() {
-        if (!PairingStore.isPaired(this) || socket != null) return;
+        if (!PairingStore.isPaired(this) || socket != null || searching) return;
         String endpoint = PairingStore.endpoint(this).replaceFirst("^http", "ws");
         String url = endpoint + "/ws?deviceId=" + Uri.encode(PairingStore.deviceId(this))
             + "&token=" + Uri.encode(PairingStore.token(this));
@@ -62,7 +81,9 @@ public final class ConnectionService extends Service {
         socket = client.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(WebSocket webSocket, Response response) {
+                failures = 0;
                 broadcastState("connected");
+                updateNotification("已连接电脑，等待采集任务");
             }
 
             @Override
@@ -77,13 +98,19 @@ public final class ConnectionService extends Service {
 
             @Override
             public void onClosed(WebSocket webSocket, int code, String reason) {
-                socket = null;
+                if (socket == webSocket) socket = null;
+                if (code == CLOSE_INVALID_CREDENTIALS) {
+                    broadcastState("pair_invalid");
+                    updateNotification("电脑已不认这台手机，请在 App 里重新扫码配对");
+                    return;
+                }
                 broadcastState("disconnected");
                 reconnectLater();
             }
 
             @Override
             public void onFailure(WebSocket webSocket, Throwable error, Response response) {
+                if (socket != webSocket && socket != null) return;
                 socket = null;
                 String detail = error.getMessage() == null ? "unknown" : error.getMessage();
                 broadcastState("connection_failed:" + detail);
@@ -136,8 +163,47 @@ public final class ConnectionService extends Service {
         }
     }
 
+    /**
+     * 连不上时：头两次直接重试（电脑刚重启、WiFi 抖一下）；之后在局域网里重新找电脑
+     * （电脑或手机换了 IP 也能自己连回去），间隔逐步拉长到 30 秒。
+     */
     private void reconnectLater() {
-        if (!stopping) handler.postDelayed(this::connect, 3000);
+        if (stopping) return;
+        failures++;
+        updateNotification("和电脑断开了，正在重新连接…");
+        long delay = Math.min(30_000L, 3_000L * failures);
+        if (failures < 2) {
+            handler.postDelayed(this::connect, delay);
+            return;
+        }
+        handler.postDelayed(this::searchDesktop, delay);
+    }
+
+    private void searchDesktop() {
+        if (stopping || searching || socket != null || !PairingStore.isPaired(this)) return;
+        searching = true;
+        broadcastState("searching");
+        updateNotification("正在局域网里找电脑…");
+        new Thread(() -> {
+            String found = null;
+            try {
+                found = DesktopFinder.find(getApplicationContext());
+            } catch (Exception ignored) {
+            }
+            String endpoint = found;
+            handler.post(() -> {
+                searching = false;
+                if (stopping) return;
+                if (endpoint != null) {
+                    if (!endpoint.equals(PairingStore.endpoint(this))) PairingStore.updateEndpoint(this, endpoint);
+                    connect();
+                } else {
+                    broadcastState("desktop_not_found");
+                    updateNotification("没找到电脑：请确认电脑上的 Klipmill 已打开，并和手机连同一个 WiFi");
+                    reconnectLater();
+                }
+            });
+        }, "klipmill-desktop-finder").start();
     }
 
     private void broadcastState(String state) {

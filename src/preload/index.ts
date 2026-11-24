@@ -20,7 +20,7 @@ import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
 import type { ShopProfit } from '../shared/shopProfit'
 import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
 import type { PcOverview } from '../shared/productCards'
-import type { ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
+import type { ProductResearchFirewall, ProductResearchPairing, ProductResearchSnapshot, ProductResearchTask, ProductResearchScheme, ProductResearchSchemeState } from '../shared/productResearch'
 import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
 import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
 import type { CloudDevice, CloudMeResponse, CloudOrder, CloudPage, CloudPayChannel, CloudPlansResponse } from '../shared/cloud/types'
@@ -50,6 +50,8 @@ const api = {
   productResearch: {
     snapshot: (schemeId?: string) => ipcRenderer.invoke('productResearch:snapshot', schemeId) as Promise<ProductResearchSnapshot>,
     createPairing: () => ipcRenderer.invoke('productResearch:createPairing') as Promise<ProductResearchPairing>,
+    firewallStatus: () => ipcRenderer.invoke('productResearch:firewallStatus') as Promise<ProductResearchFirewall>,
+    allowFirewall: () => ipcRenderer.invoke('productResearch:allowFirewall') as Promise<ProductResearchFirewall>,
     createTask: (payload: { keyword: string; schemeId?: string; sort: 'comprehensive' | 'sales'; targetCount: number }) =>
       ipcRenderer.invoke('productResearch:createTask', payload) as Promise<ProductResearchTask>,
     cancelTask: (taskId: string) => ipcRenderer.invoke('productResearch:cancelTask', taskId) as Promise<ProductResearchTask | undefined>,
