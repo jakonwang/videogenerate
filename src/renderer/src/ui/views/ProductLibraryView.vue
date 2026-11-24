@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  Download,
   Dna,
   FileImage,
   FolderOpen,
@@ -19,8 +20,11 @@ import {
   SlidersHorizontal,
   Tag,
   Trash2,
+  Upload,
   X, Boxes
 } from 'lucide-vue-next'
+import type { CodeImportPreview, CodeStats } from '../../../../shared/productCodeStats'
+import ProductCodeImportDialog from '../components/product/ProductCodeImportDialog.vue'
 import ProductCodesDialog from '../components/product/ProductCodesDialog.vue'
 import { productCodeError } from '../components/product/productCodeText'
 
@@ -37,7 +41,7 @@ type ProductType =
   | 'general'
 type ProductStatusFilter = 'all' | 'pending' | 'processing' | 'done' | 'failed'
 type ViewMode = 'grid' | 'list'
-type SortMode = 'updated_desc' | 'name_asc' | 'analysis_board_status'
+type SortMode = 'updated_desc' | 'sales_desc' | 'name_asc' | 'analysis_board_status'
 
 type PromptVersion = {
   id: string
@@ -65,6 +69,7 @@ type Product = {
   name: string
   type: ProductType
   code?: string
+  hotType?: string
   images?: ProductImageAsset[]
   coverImagePath?: string
   analysisBoardPath?: string
@@ -91,6 +96,39 @@ const pageSize = ref(12)
 const creating = reactive({ name: '', code: '', type: 'phone_case' as ProductType })
 const createError = ref('')
 const codesOpen = ref(false)
+const codeMenuOpen = ref(false)
+const codeMessage = ref('')
+const importPreview = ref<CodeImportPreview | null>(null)
+const hotFilter = ref('all')
+const codeStats = ref(new Map<string, CodeStats>())
+const statOf = (product: Product) => (product.code ? codeStats.value.get(product.code) : undefined)
+const hotOf = (product: Product) => product.hotType || statOf(product)?.suggestion || ''
+const hotTypes = computed(() => [...new Set(list.value.map(hotOf).filter(Boolean))])
+
+async function loadCodeStats() {
+  if (!window.api.productCodes || !list.value.some((item) => item.code)) return
+  const result = await window.api.productCodes.stats().catch(() => null)
+  if (result) codeStats.value = new Map(result.items.map((item) => [item.code, item]))
+}
+async function runCodeAction(action: () => Promise<string>) {
+  codeMenuOpen.value = false
+  codeMessage.value = ''
+  try {
+    codeMessage.value = await action()
+  } catch (error) {
+    codeMessage.value = error instanceof Error ? error.message : String(error)
+  }
+  if (codeMessage.value) window.setTimeout(() => { codeMessage.value = '' }, 6000)
+}
+const pickImport = () => runCodeAction(async () => {
+  importPreview.value = await window.api.productCodes.importPreview()
+  return ''
+})
+const exportSheet = () => runCodeAction(async () => {
+  const result = await window.api.productCodes.exportSheet()
+  if (!result.count) return t('productLibrary.sheet.nothing')
+  return result.path ? t('productLibrary.sheet.exported', { count: result.count }) : ''
+})
 const hasCodes = Boolean(window.api.productCodes)
 const actionMenuOpenId = ref('')
 const createOpen = ref(false)
@@ -145,10 +183,12 @@ const filteredProducts = computed(() => {
       productBusinessStatusLabel(item).toLowerCase().includes(q)
     const hitType = typeFilter.value === 'all' || item.type === typeFilter.value
     const hitStatus = statusFilter.value === 'all' || matchStatusFilter(item, statusFilter.value)
-    return hitQuery && hitType && hitStatus
+    const hitHot = hotFilter.value === 'all' || hotOf(item) === hotFilter.value
+    return hitQuery && hitType && hitStatus && hitHot
   })
 
   return filtered.sort((a, b) => {
+    if (sortMode.value === 'sales_desc') return (statOf(b)?.units7 || 0) - (statOf(a)?.units7 || 0) || (statOf(b)?.units30 || 0) - (statOf(a)?.units30 || 0)
     if (sortMode.value === 'name_asc') {
       return String(a.name || '').localeCompare(String(b.name || ''), locale.value)
     }
@@ -187,7 +227,7 @@ const visiblePages = computed(() => {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index)
 })
 
-watch([query, sortMode, typeFilter, statusFilter, pageSize], () => {
+watch([query, sortMode, typeFilter, hotFilter, statusFilter, pageSize], () => {
   currentPage.value = 1
 })
 
@@ -272,6 +312,7 @@ function productUpdatedAt(product: Product) {
 
 async function refresh() {
   list.value = (await window.api.products.list()) as Product[]
+  void loadCodeStats()
 }
 
 function selectPromptVersion() {
@@ -410,6 +451,7 @@ function handleDocumentClick(event: MouseEvent) {
   if (!target?.closest('.pl-create')) createOpen.value = false
   if (target?.closest('.pl-card__more')) return
   actionMenuOpenId.value = ''
+  codeMenuOpen.value = false
 }
 
 onMounted(() => {
@@ -434,9 +476,14 @@ onBeforeUnmount(() => {
         <p>{{ t('productLibrary.desc') }}</p>
       </div>
       <div class="vg-page-head__actions">
-        <button v-if="hasCodes" class="vg-btn vg-btn--ghost" data-testid="product-codes-open" type="button" @click="codesOpen = true">
-          <Tag :size="15" /> {{ t('productLibrary.code.check') }}
-        </button>
+        <div v-if="hasCodes" class="vg-menu-wrap pl-codes" @click.stop>
+          <button class="vg-btn vg-btn--ghost" data-testid="product-codes-menu" type="button" :aria-expanded="codeMenuOpen" @click="codeMenuOpen = !codeMenuOpen"><Tag :size="15" /> {{ t('productLibrary.sheet.menu') }}</button>
+          <div v-if="codeMenuOpen" class="vg-menu">
+            <button type="button" data-testid="product-codes-open" @click="codeMenuOpen = false; codesOpen = true"><Tag :size="14" /> {{ t('productLibrary.code.check') }}</button>
+            <button type="button" data-testid="product-codes-import" @click="pickImport"><Upload :size="14" /> {{ t('productLibrary.sheet.import') }}</button>
+            <button type="button" data-testid="product-codes-export" @click="exportSheet"><Download :size="14" /> {{ t('productLibrary.sheet.export') }}</button>
+          </div>
+        </div>
         <button class="vg-btn vg-btn--ghost" data-testid="product-prompt-settings" type="button" @click="openPromptDialog">
           <SlidersHorizontal :size="15" /> {{ t('productLibrary.promptSettings.button') }}
         </button>
@@ -503,8 +550,13 @@ onBeforeUnmount(() => {
         <option value="all">{{ t('productLibrary.allTypes') }}</option>
         <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
       </select>
+      <select v-if="hotTypes.length" v-model="hotFilter" class="vg-select vg-select--sm" :title="t('productLibrary.hot.label')" data-testid="product-library-hot-filter">
+        <option value="all">{{ t('productLibrary.hot.all') }}</option>
+        <option v-for="item in hotTypes" :key="item" :value="item">{{ item }}</option>
+      </select>
       <select v-model="sortMode" class="vg-select vg-select--sm" data-testid="product-library-sort-select">
         <option value="updated_desc">{{ t('productLibrary.sort.updated') }}</option>
+        <option v-if="codeStats.size" value="sales_desc">{{ t('productLibrary.hot.sales') }}</option>
         <option value="name_asc">{{ t('productLibrary.sort.name') }}</option>
         <option value="analysis_board_status">{{ t('productLibrary.sort.analysis') }}</option>
       </select>
@@ -550,6 +602,10 @@ onBeforeUnmount(() => {
             <span v-if="product.code" class="pl-card__code vg-num">{{ product.code }}</span>
             <span class="pl-card__type">{{ productTypeLabelV2(product.type) }}</span>
           </div>
+          <p v-if="hotOf(product) || statOf(product)" class="pl-card__sales">
+            <span v-if="hotOf(product)" class="pl-card__hot" :class="{ 'is-suggested': !product.hotType }" :title="product.hotType ? '' : statOf(product)?.reason">{{ hotOf(product) }}</span>
+            <template v-if="statOf(product)"><span class="vg-num">{{ t('productLibrary.style.units7') }} {{ statOf(product)!.units7 }}</span><span v-if="statOf(product)!.stock !== undefined" class="vg-num">{{ t('productLibrary.style.stock') }} {{ statOf(product)!.stock }}</span></template>
+          </p>
           <p class="pl-card__summary" :class="{ 'is-empty': !productAnalysisSummary(product) }" :title="productAnalysisSummary(product)">
             {{ productAnalysisSummary(product) || t('productLibrary.dna.pending') }}
           </p>
@@ -605,6 +661,8 @@ onBeforeUnmount(() => {
       </div>
     </footer>
 
+    <p v-if="codeMessage" class="pl-toast" role="status">{{ codeMessage }}</p>
+    <ProductCodeImportDialog :preview="importPreview" @close="importPreview = null" @done="refresh" />
     <ProductCodesDialog :open="codesOpen" @close="codesOpen = false" @changed="refresh" @open-product="codesOpen = false; openDetail($event)" />
 
     <Teleport to="body">
@@ -656,6 +714,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pl-card__sales { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12px; color: var(--theme-text-secondary); }
+.pl-card__hot { flex: none; padding: 1px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; color: #1b1206; background: #ffc48a; }
+.pl-card__hot.is-suggested { color: var(--theme-tone-amber); background: transparent; box-shadow: inset 0 0 0 1px var(--theme-tone-amber); }
+.pl-toast { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 2000; margin: 0; padding: 10px 18px; border-radius: 9px; font-size: 13px; background: var(--theme-panel); border: 1px solid var(--vg-accent-line); box-shadow: var(--theme-shadow-float, 0 10px 30px rgba(0, 0, 0, .35)); }
 .pl-card__code { flex: none; padding: 1px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; color: var(--vg-accent); background: var(--vg-accent-soft); }
 .pl-create__error { margin: 0; font-size: 12px; color: var(--theme-tone-red); }
 .pl { width: min(1440px, 100%); margin: 0 auto; gap: 16px; padding-top: 18px; }

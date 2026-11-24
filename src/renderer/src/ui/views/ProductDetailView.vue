@@ -28,6 +28,7 @@ import {
 } from 'lucide-vue-next'
 import { thumbnailUrl } from '@/lib/localMedia'
 import ProductSpacePanel from '../components/ai/ProductSpacePanel.vue'
+import ProductStyleStats from '../components/product/ProductStyleStats.vue'
 import ProductCodeCard from '../components/product/ProductCodeCard.vue'
 import { useAiProducerStore } from '@/stores/aiProducer'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
@@ -87,6 +88,7 @@ type Product = {
   name: string
   type: ProductType
   code?: string
+  hotType?: string
   images?: ProductImageAsset[]
   coverImagePath?: string
   livePhotoReferenceImagePath?: string
@@ -563,6 +565,12 @@ async function saveCode(code: string) {
   await saveProductPatch({ code })
 }
 
+async function saveHotType(value: string) {
+  await saveProductPatch({ hotType: value })
+}
+
+const hasCodeStats = Boolean(window.api.productCodes)
+
 async function saveRemark() {
   if (!selected.value) return
   savingRemark.value = true
@@ -718,6 +726,7 @@ watch(productId, () => {
         <button type="button" class="vg-tabs__btn" :class="{ 'is-active': spaceTab === 'profile' }" data-testid="product-tab-profile" @click="spaceTab = 'profile'">{{ tr('ai.space.profileTab') }}</button>
       </div>
 
+      <ProductStyleStats v-if="spaceTab === 'space' && selected.code && hasCodeStats" :code="selected.code" />
       <ProductSpacePanel v-if="spaceTab === 'space'" :product-id="selected.id" :product-name="selected.name" />
 
       <div v-show="spaceTab === 'profile'" class="pd-profile">
@@ -929,7 +938,7 @@ watch(productId, () => {
             </div>
           </article>
 
-          <ProductCodeCard :code="selected.code" :save="saveCode" />
+          <ProductCodeCard :code="selected.code" :hot-type="selected.hotType" :save="saveCode" :save-hot-type="saveHotType" />
 
           <article class="vg-card">
             <div class="vg-card__head"><span class="vg-card__title"><NotebookPen :size="16" /> {{ tr('autoUi.k_5b4af310d47c') }}</span></div>

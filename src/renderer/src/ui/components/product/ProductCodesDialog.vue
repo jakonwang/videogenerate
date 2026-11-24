@@ -3,21 +3,24 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Tag, X } from 'lucide-vue-next'
 import type { ProductCodeOverview } from '../../../../../shared/productCode'
+import type { CodeGap } from '../../../../../shared/productCodeStats'
 
 /** 款号检查：旧商品一键补款号，以及需要人工确认的清单。只列问题，不自动改店铺数据。 */
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; changed: []; openProduct: [id: string] }>()
 const { t } = useI18n()
 const data = ref<ProductCodeOverview | null>(null)
+const gaps = ref<CodeGap[]>([])
 const busy = ref(false)
 const message = ref('')
-type Tab = 'suggestions' | 'conflicts' | 'duplicates' | 'unmatched' | 'notListed'
+type Tab = 'gaps' | 'suggestions' | 'conflicts' | 'duplicates' | 'unmatched' | 'notListed'
 const tab = ref<Tab>('suggestions')
 
 async function load() {
   busy.value = true
   try {
     data.value = await window.api.productCodes.overview()
+    gaps.value = (await window.api.productCodes.stats().catch(() => null))?.gaps || []
   } catch (error) {
     message.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -33,7 +36,7 @@ watch(() => props.open, async (open) => {
   tab.value = first?.key || 'suggestions'
 })
 
-const tabs = computed(() => (['suggestions', 'conflicts', 'duplicates', 'unmatched', 'notListed'] as Tab[]).map((key) => ({ key, count: data.value?.[key].length || 0 })))
+const tabs = computed(() => (['suggestions', 'conflicts', 'duplicates', 'gaps', 'unmatched', 'notListed'] as Tab[]).map((key) => ({ key, count: key === 'gaps' ? gaps.value.length : data.value?.[key].length || 0 })))
 const ready = computed(() => data.value?.suggestions.filter((item) => !item.duplicate).length || 0)
 
 async function apply() {
@@ -88,6 +91,13 @@ async function apply() {
                 <button v-for="item in group.products" :key="item.id" type="button" class="pcd-row" @click="emit('openProduct', item.id)"><b>{{ group.code }}</b><span>{{ item.name }}</span></button>
               </template>
             </template>
+            <template v-else-if="tab === 'gaps'">
+              <div v-for="item in gaps" :key="item.code" class="pcd-row">
+                <img v-if="item.image" :src="item.image" alt="" loading="lazy" /><b>{{ item.code }}</b>
+                <span :title="item.name">{{ item.name }}<small>{{ t('productLibrary.code.gapLine', { units: item.units30, sold: item.soldIn, missing: item.missingIn }) }}</small></span>
+                <em v-if="item.suggestion">{{ item.suggestion }}</em>
+              </div>
+            </template>
             <template v-else-if="tab === 'unmatched'">
               <div v-for="item in data.unmatched" :key="item.productId" class="pcd-row">
                 <img v-if="item.image" :src="item.image" alt="" loading="lazy" /><span :title="item.title">{{ item.title }}<small>{{ item.shopName }}</small></span>
@@ -96,7 +106,7 @@ async function apply() {
             <template v-else>
               <div v-for="code in data.notListed" :key="code" class="pcd-row"><b>{{ code }}</b></div>
             </template>
-            <p v-if="!data[tab].length" class="pcd-empty">{{ t('productLibrary.code.empty') }}</p>
+            <p v-if="!tabs.find((item) => item.key === tab)?.count" class="pcd-empty">{{ t('productLibrary.code.empty') }}</p>
           </div>
         </div>
         <footer class="vg-dialog__foot">

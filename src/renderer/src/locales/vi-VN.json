@@ -2319,7 +2319,66 @@
     }
   },
   "productLibrary": {
+    "sheet": {
+      "menu": "Mã mẫu",
+      "import": "Nhập bảng mã",
+      "export": "Xuất bảng mã",
+      "importTitle": "Nhập bảng mã",
+      "noSheet": "Không thấy cột mã",
+      "total": "Mã trong bảng",
+      "create": "Tạo mới",
+      "update": "Cập nhật",
+      "withImage": "Có ảnh",
+      "inShop": "Đã có trên shop",
+      "hotTypes": "Loại",
+      "reserved": "Số để trống (không nhập)",
+      "skipped": "Mã không đọc được, bỏ qua",
+      "tip": "Sản phẩm đã có chỉ được bổ sung ảnh và cập nhật loại, không đổi tên hay ảnh cũ. Thư viện được sao lưu trước.",
+      "apply": "Bắt đầu nhập",
+      "importing": "Đang nhập…",
+      "result": "Tạo {created}, cập nhật {updated}, lỗi {failed}",
+      "exported": "Đã xuất {count} mã",
+      "nothing": "Chưa có sản phẩm nào có mã"
+    },
+    "hot": {
+      "label": "Loại bán chạy",
+      "none": "Chưa đặt",
+      "suggest": "Gợi ý: {type}",
+      "use": "Dùng",
+      "all": "Tất cả loại",
+      "sales": "Bán 7 ngày"
+    },
+    "style": {
+      "title": "{code} bán thế nào",
+      "rank": "Hạng {rank} trong 30 ngày, {share}",
+      "loading": "Đang tổng hợp…",
+      "empty": "Gần đây chưa có số bán và tồn kho.",
+      "error": "Không đọc được dữ liệu, hãy đồng bộ shop.",
+      "units7": "7 ngày",
+      "units30": "30 ngày",
+      "amount30": "Doanh số 30 ngày",
+      "stock": "Tồn kho",
+      "daysLeft": "còn {days} ngày",
+      "profit": "Lãi gộp 30 ngày",
+      "profitHint": "Doanh số trừ phí sàn và giá vốn, chưa trừ quảng cáo",
+      "noCost": "Chưa có giá vốn",
+      "noFee": "Chưa có tỷ lệ phí",
+      "trend": "Số bán từng ngày, 30 ngày",
+      "byShop": "Theo shop",
+      "shop": "Shop",
+      "notListed": "chưa đăng",
+      "funnel": "Thẻ sản phẩm 30 ngày",
+      "noFunnel": "Không có dữ liệu thẻ riêng của mẫu này.",
+      "steps": {
+        "viewers": "Xem",
+        "clicks": "Nhấp",
+        "cart": "Giỏ",
+        "buyers": "Mua"
+      },
+      "restock": "Tồn kho thấp, nên nhập {qty}"
+    },
     "code": {
+      "gapLine": "{units} trong 30 ngày · {sold} đang bán, {missing} chưa có",
       "title": "Mã mẫu",
       "placeholder": "Ví dụ A-152",
       "save": "Lưu",
@@ -2334,6 +2393,7 @@
       "check": "Kiểm tra mã",
       "summary": "{matched}/{total} sản phẩm shop đã có mã",
       "tabs": {
+        "gaps": "Có thể đăng thêm",
         "suggestions": "Có thể điền",
         "conflicts": "Tiêu đề và SKU khác nhau",
         "duplicates": "Trùng mã",
@@ -2341,6 +2401,7 @@
         "notListed": "Chưa đăng bán"
       },
       "tips": {
+        "gaps": "Bán tốt ở một shop trong 30 ngày nhưng shop kia chưa có.",
         "suggestions": "Tên các sản phẩm này chính là mã, có thể điền một lần; mã trùng hãy mở để tự quyết định.",
         "conflicts": "Mã trong tiêu đề khác SKU người bán. Hãy sửa trong trang người bán. Hiện tính theo tiêu đề.",
         "duplicates": "Một mã dùng cho nhiều sản phẩm. Hãy mở và sửa.",

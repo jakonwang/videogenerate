@@ -334,6 +334,7 @@ export const productsRepo = {
           livePhotoReferenceImagePath: nextLivePhotoReferenceImagePath,
           remark: hasOwn('remark') ? payload.remark : prev.remark,
           code: hasOwn('code') && payload.code !== undefined ? normalizeProductCode(payload.code) || undefined : prev.code,
+          hotType: hasOwn('hotType') && payload.hotType !== undefined ? String(payload.hotType).trim().slice(0, 12) || undefined : prev.hotType,
           analysisBoardPath:
             hasOwn('analysisBoardPath') ? payload.analysisBoardPath : prev.analysisBoardPath,
           analysisBoardStatus:
@@ -411,6 +412,7 @@ export const productsRepo = {
       livePhotoReferenceImagePath: createdLivePhotoReferenceImagePath,
       remark: payload.remark ?? '',
       code: normalizeProductCode(payload.code) || undefined,
+      hotType: String(payload.hotType ?? '').trim().slice(0, 12) || undefined,
       analysisBoardPath: payload.analysisBoardPath,
       analysisBoardStatus: payload.analysisBoardStatus ?? payload.canonicalSourceStatus ?? 'idle',
       analysisBoardPrompt: payload.analysisBoardPrompt,

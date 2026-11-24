@@ -3598,7 +3598,66 @@
     }
   },
   "productLibrary": {
+    "sheet": {
+      "menu": "Style codes",
+      "import": "Import code sheet",
+      "export": "Export code sheet",
+      "importTitle": "Import code sheet",
+      "noSheet": "No code column found",
+      "total": "Codes in the sheet",
+      "create": "New products",
+      "update": "Existing products",
+      "withImage": "With picture",
+      "inShop": "Already in a shop",
+      "hotTypes": "Type",
+      "reserved": "Reserved numbers (not imported)",
+      "skipped": "Unreadable codes, skipped",
+      "tip": "Existing products only get a missing picture and the type; names and pictures are kept. The library is backed up first.",
+      "apply": "Import",
+      "importing": "Importing…",
+      "result": "{created} created, {updated} updated, {failed} failed",
+      "exported": "{count} codes exported",
+      "nothing": "No product has a code yet"
+    },
+    "hot": {
+      "label": "Type",
+      "none": "Not set",
+      "suggest": "Suggested: {type}",
+      "use": "Use",
+      "all": "All types",
+      "sales": "7-day sales"
+    },
+    "style": {
+      "title": "How {code} sells",
+      "rank": "No. {rank} in 30 days, {share}",
+      "loading": "Loading…",
+      "empty": "No recent sales or stock for this style.",
+      "error": "Could not read the data. Sync the shops first.",
+      "units7": "7 days",
+      "units30": "30 days",
+      "amount30": "30-day sales",
+      "stock": "Stock",
+      "daysLeft": "{days} days left",
+      "profit": "30-day margin",
+      "profitHint": "Sales less platform fees and cost, before ads",
+      "noCost": "No cost set",
+      "noFee": "Fee rate unknown",
+      "trend": "Daily units, 30 days",
+      "byShop": "By shop",
+      "shop": "Shop",
+      "notListed": "not listed",
+      "funnel": "Product card, 30 days",
+      "noFunnel": "No product card data of this style alone.",
+      "steps": {
+        "viewers": "Views",
+        "clicks": "Clicks",
+        "cart": "Cart",
+        "buyers": "Buyers"
+      },
+      "restock": "Low stock, reorder {qty}"
+    },
     "code": {
+      "gapLine": "{units} in 30 days · sold in {sold}, missing in {missing}",
       "title": "Style code",
       "placeholder": "e.g. A-152",
       "save": "Save",
@@ -3613,6 +3672,7 @@
       "check": "Code check",
       "summary": "{matched} of {total} shop products have a code",
       "tabs": {
+        "gaps": "Could be listed",
         "suggestions": "Can be filled",
         "conflicts": "Title and SKU differ",
         "duplicates": "Duplicates",
@@ -3620,6 +3680,7 @@
         "notListed": "Not listed"
       },
       "tips": {
+        "gaps": "Sells well in one shop in 30 days but is missing in the other.",
         "suggestions": "These names are codes already and can be filled in one click; open repeated ones to decide.",
         "conflicts": "The code in the title and the seller SKU differ. Fix it in the seller center. The title is used for now.",
         "duplicates": "One code is used by several products. Open and change the extra ones.",

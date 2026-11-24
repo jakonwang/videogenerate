@@ -3585,7 +3585,66 @@
     }
   },
   "productLibrary": {
+    "sheet": {
+      "menu": "款号",
+      "import": "导入款号表格",
+      "export": "导出款号表格",
+      "importTitle": "导入款号表格",
+      "noSheet": "没有找到「编号」列",
+      "total": "表格里的款号",
+      "create": "新建商品",
+      "update": "更新已有商品",
+      "withImage": "带图片",
+      "inShop": "店铺里已有",
+      "hotTypes": "爆款类型",
+      "reserved": "空号（没图没类型，不导入）",
+      "skipped": "编号看不懂，跳过",
+      "tip": "已有商品只补图片和更新爆款类型，不会改名字、换掉已有的图。导入前会自动备份商品库。",
+      "apply": "开始导入",
+      "importing": "导入中…",
+      "result": "新建 {created} 个，更新 {updated} 个，失败 {failed} 个",
+      "exported": "已导出 {count} 个款号",
+      "nothing": "商品库还没有填款号的商品"
+    },
+    "hot": {
+      "label": "爆款类型",
+      "none": "未设置",
+      "suggest": "系统建议：{type}",
+      "use": "采用",
+      "all": "全部爆款类型",
+      "sales": "7 天销量"
+    },
+    "style": {
+      "title": "{code} 卖得怎么样",
+      "rank": "近 30 天第 {rank} 名，占 {share}",
+      "loading": "正在汇总…",
+      "empty": "最近没有这个款的销量和库存数据。",
+      "error": "数据读取失败，请到店铺页同步后再看。",
+      "units7": "近 7 天",
+      "units30": "近 30 天",
+      "amount30": "30 天销售额",
+      "stock": "库存",
+      "daysLeft": "可卖 {days} 天",
+      "profit": "30 天毛利",
+      "profitHint": "销售额扣平台费和成本，未扣广告",
+      "noCost": "未填成本",
+      "noFee": "还没算出平台费率",
+      "trend": "近 30 天每日销量",
+      "byShop": "各店铺",
+      "shop": "店铺",
+      "notListed": "未上架",
+      "funnel": "商品卡 30 天转化",
+      "noFunnel": "没有这个款单独的商品卡数据。",
+      "steps": {
+        "viewers": "浏览",
+        "clicks": "点击",
+        "cart": "加购",
+        "buyers": "成交"
+      },
+      "restock": "库存偏少，建议补 {qty} 件"
+    },
     "code": {
+      "gapLine": "近 30 天 {units} 件 · {sold} 在卖，{missing} 没有",
       "title": "款号",
       "placeholder": "例如 A-152",
       "save": "保存",
@@ -3600,6 +3659,7 @@
       "check": "款号检查",
       "summary": "店铺商品 {total} 个，已对上款号 {matched} 个",
       "tabs": {
+        "gaps": "可补上架",
         "suggestions": "可补款号",
         "conflicts": "标题和 SKU 不一致",
         "duplicates": "款号重复",
@@ -3607,6 +3667,7 @@
         "notListed": "还没上架"
       },
       "tips": {
+        "gaps": "近 30 天在一家店卖得好，另一家店没有这个款。",
         "suggestions": "这些商品的名称就是款号，可以一键补上；重复的请点进去自己定。",
         "conflicts": "标题末尾的款号和商家 SKU 写的不一样，请到商家后台改正。目前按标题归款。",
         "duplicates": "同一个款号用在了多个商品上，点进去改掉多余的。",

@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FileImage, Tag } from 'lucide-vue-next'
 import { normalizeProductCode, type ProductCodeLink } from '../../../../../shared/productCode'
+import { HOT_TYPES } from '../../../../../shared/productCodeStats'
 import { productCodeError } from './productCodeText'
 
 /** 商品详情里的款号：填写，并列出两家店用这个款号的商品。 */
-const props = defineProps<{ code?: string; save: (code: string) => Promise<void> }>()
+const props = defineProps<{ code?: string; hotType?: string; save: (code: string) => Promise<void>; saveHotType: (value: string) => Promise<void> }>()
 const { t } = useI18n()
 const draft = ref('')
 const saving = ref(false)
@@ -14,12 +15,18 @@ const error = ref('')
 const links = ref<ProductCodeLink[] | null>(null)
 const changed = computed(() => normalizeProductCode(draft.value) !== normalizeProductCode(props.code))
 
+const suggestion = ref<{ type: string; reason: string } | null>(null)
+const hotOptions = computed(() => [...new Set([...HOT_TYPES, ...(props.hotType ? [props.hotType] : [])])])
+
 let request = 0
 async function loadLinks() {
   const id = ++request
   const api = window.api.productCodes
   const next = props.code && api ? await api.links(props.code).catch(() => null) : null
-  if (id === request) links.value = next
+  if (id !== request) return
+  links.value = next
+  const detail = props.code && api ? await api.detail(props.code).catch(() => null) : null
+  if (id === request) suggestion.value = detail?.suggestion ? { type: detail.suggestion, reason: detail.reason || '' } : null
 }
 
 watch(() => props.code, (value) => {
@@ -55,6 +62,15 @@ function price(value?: number) {
     </form>
     <p v-if="error" class="pcode-error" role="alert">{{ error }}</p>
     <p v-else class="pcode-hint">{{ t('productLibrary.code.hint') }}</p>
+    <div class="pcode-hot">
+      <label>{{ t('productLibrary.hot.label') }}
+        <select class="vg-select vg-select--sm" :value="hotType || ''" data-testid="product-hot-type" @change="saveHotType(($event.target as HTMLSelectElement).value)">
+          <option value="">{{ t('productLibrary.hot.none') }}</option>
+          <option v-for="item in hotOptions" :key="item" :value="item">{{ item }}</option>
+        </select>
+      </label>
+      <span v-if="suggestion && suggestion.type !== hotType" :title="suggestion.reason">{{ t('productLibrary.hot.suggest', { type: suggestion.type }) }}<small>{{ suggestion.reason }}</small> <button class="vg-btn vg-btn--xs" type="button" @click="saveHotType(suggestion.type)">{{ t('productLibrary.hot.use') }}</button></span>
+    </div>
     <template v-if="code && links">
       <h4 class="pcode-sub">{{ t('productLibrary.code.linked', { count: links.length }) }}</h4>
       <p v-if="!links.length" class="pcode-hint">{{ t('productLibrary.code.noLink') }}</p>
@@ -72,6 +88,9 @@ function price(value?: number) {
 </template>
 
 <style scoped>
+.pcode-hot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; font-size: 12px; color: var(--theme-text-secondary); }
+.pcode-hot label, .pcode-hot span { display: inline-flex; align-items: center; gap: 8px; }
+.pcode-hot small { color: var(--theme-text-muted); }
 .pcode-form { display: flex; gap: 8px; align-items: center; }
 .pcode-form .vg-input { flex: 1; min-width: 0; text-transform: uppercase; }
 .pcode-form .vg-input::placeholder { text-transform: none; }

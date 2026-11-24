@@ -18,6 +18,7 @@ import type {
 } from '../main/modules/dianxiaomi-inventory/types'
 import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
 import type { ShopProfit } from '../shared/shopProfit'
+import type { CodeImportPreview, CodeStatsDetail, CodeStatsOverview } from '../shared/productCodeStats'
 import type { ProductCodeLink, ProductCodeOverview } from '../shared/productCode'
 import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
 import type { PcOverview } from '../shared/productCards'
@@ -847,6 +848,11 @@ const api = {
     overview: () => ipcRenderer.invoke('productCodes:overview') as Promise<ProductCodeOverview>,
     links: (code: string) => ipcRenderer.invoke('productCodes:links', code) as Promise<ProductCodeLink[]>,
     next: (payload: { start: string; count?: number; reserved?: string[] }) => ipcRenderer.invoke('productCodes:next', payload) as Promise<string[]>,
+    stats: () => ipcRenderer.invoke('productCodes:stats') as Promise<CodeStatsOverview>,
+    detail: (code: string) => ipcRenderer.invoke('productCodes:detail', code) as Promise<CodeStatsDetail | null>,
+    importPreview: () => ipcRenderer.invoke('productCodes:importPreview') as Promise<CodeImportPreview | null>,
+    importApply: (token: string) => ipcRenderer.invoke('productCodes:importApply', token) as Promise<{ created: number; updated: number; failed: number }>,
+    exportSheet: () => ipcRenderer.invoke('productCodes:export') as Promise<{ count: number; path?: string; canceled?: boolean }>,
     applySuggestions: () => ipcRenderer.invoke('productCodes:applySuggestions') as Promise<{ applied: number; skipped: number }>,
   },
   products: {

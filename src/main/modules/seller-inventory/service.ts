@@ -18,6 +18,7 @@ import {
   type SiDailyRow,
   type SiMappingRow,
   type SiSettings,
+  type SiDashboard,
   type SiShop,
   type SiShopState,
   type SiStockMove,
@@ -667,6 +668,26 @@ export const sellerInventoryService = {
         settings,
       })
     })
+  },
+
+  /** Dashboards grouped by the given SKU -> code map (style codes): all shops together, and each shop. */
+  getCodeDashboards(mappings: Map<string, string>): { all: SiDashboard; byShop: Map<string, SiDashboard> } {
+    const allShops = deps.listShops()
+    const settings = repo.getSettings()
+    const today = zonedDate(deps.now(), businessTimeZone(allShops))
+    const build = (shops: ShopRecord[]) =>
+      buildDashboard({
+        today,
+        days: Math.min(settings.historyDays, 31),
+        shops: shops.map(toShop),
+        platformSkus: repo.listPlatformSkus(shops.map((shop) => shop.id)),
+        daily: dailyRows(shops, today, settings),
+        mappings,
+        moves: repo.listMoves(),
+        skuSettings: repo.listSkuSettings(),
+        settings,
+      })
+    return { all: build(allShops), byShop: new Map(allShops.map((shop) => [shop.id, build([shop])])) }
   },
 
   /** 店铺 page: one card per shop with today, yesterday, 7-day trend and alerts. */

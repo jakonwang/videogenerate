@@ -12,12 +12,19 @@ import {
 import type { SiPlatformSku } from '../../../shared/sellerInventory'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
+import type { CodeStatsDetail, CodeStatsOverview } from '../../../shared/productCodeStats'
+import { buildCodeDetail, buildCodeStats, type StatsInput } from './stats'
 import { productsRepo } from '../products/repo'
 
-type StoreData = { skus: SiPlatformSku[]; mappings: Map<string, string>; shopNames: Map<string, string> }
+export type StoreData = { skus: SiPlatformSku[]; mappings: Map<string, string>; shopNames: Map<string, string> }
+
+type StatsSource = Pick<StatsInput, 'all' | 'byShop' | 'cards' | 'currency'> & { feeRates: Map<string, number> }
 
 type Deps = {
   store: () => Promise<StoreData>
+  /** 按 SKU → 款号归好的销量、商品卡漏斗和平台费率 */
+  stats: (skuCodes: Map<string, string>) => Promise<StatsSource>
+  dataVersion: () => Promise<number>
   researchCodes: () => Promise<string[]>
 }
 
@@ -31,11 +38,26 @@ const defaultDeps: Deps = {
       shopNames: new Map(sellerInventoryService.listShops().map((shop) => [shop.shopKey, shop.name])),
     }
   },
+  async stats(skuCodes) {
+    const { sellerInventoryService } = await import('../seller-inventory/service')
+    const shops = sellerInventoryService.listShops()
+    const feeRates = new Map<string, number>()
+    for (const shop of shops) {
+      const rate = sellerInventoryService.getShopProfit({ shopKey: shop.shopKey, days: 30 }).feeRate
+      if (rate !== undefined) feeRates.set(shop.shopKey, rate)
+    }
+    const currencies = new Set(shops.map((shop) => REGION_CURRENCY[shop.region.toUpperCase()] || ''))
+    return { ...sellerInventoryService.getCodeDashboards(skuCodes), cards: sellerInventoryService.getProductCards({ days: 30 }).products, currency: currencies.size === 1 ? [...currencies][0] : '', feeRates }
+  },
+  async dataVersion() {
+    return (await import('../seller-inventory/repo')).sellerInventoryRepo.version()
+  },
   async researchCodes() {
     const { productResearchService } = await import('../product-research/service')
     return productResearchService.listCodes()
   },
 }
+const REGION_CURRENCY: Record<string, string> = { VN: 'VND', TH: 'THB', MY: 'MYR', PH: 'PHP', ID: 'IDR', SG: 'SGD', US: 'USD', GB: 'GBP' }
 let deps: Deps = defaultDeps
 export function setProductCodesTestDependencies(next?: Partial<Deps>) {
   deps = { ...defaultDeps, ...next }
@@ -70,6 +92,18 @@ async function safeResearchCodes() {
 }
 
 type Matched = { links: Map<string, ProductCodeLink[]>; conflicts: ProductCodeOverview['conflicts']; unmatched: ProductCodeOverview['unmatched']; products: number; matched: number }
+
+/** 店铺每个规格 → 款号 */
+export function matchSkuCodes(store: StoreData, known: ReadonlySet<string>): Map<string, string> {
+  const sizes = new Map<string, number>()
+  for (const sku of store.skus) sizes.set(`${sku.shopKey}:${sku.productId}`, (sizes.get(`${sku.shopKey}:${sku.productId}`) || 0) + 1)
+  const out = new Map(store.mappings)
+  for (const sku of store.skus) {
+    const { code } = matchStoreSku({ title: sku.productName, sellerSku: sku.sellerSku, singleSku: sizes.get(`${sku.shopKey}:${sku.productId}`) === 1, manual: store.mappings.get(sku.id), known })
+    if (code) out.set(sku.id, code)
+  }
+  return out
+}
 
 export function matchStore(store: StoreData, known: ReadonlySet<string>): Matched {
   const byProduct = new Map<string, SiPlatformSku[]>()
@@ -124,7 +158,34 @@ async function load() {
   return { products, store, research, library, match: matchStore(store, new Set([...library, ...research])) }
 }
 
+let statsCache: { key: string; at: number; input: StatsInput & { feeRates: Map<string, number> } } | null = null
+async function statsInput() {
+  const { store, library, research } = await load()
+  const known = new Set([...library, ...research])
+  const key = `${await deps.dataVersion()}|${[...known].sort().join(',')}`
+  // 数据没变就复用；一分钟后重算，跨天也不会用旧的
+  if (statsCache?.key === key && Date.now() - statsCache.at < 60_000) return statsCache.input
+  const input = { store, known, ...(await deps.stats(matchSkuCodes(store, known))) }
+  statsCache = { key, at: Date.now(), input }
+  return input
+}
+
 export const productCodesService = {
+  /** 款号看板：每个款的销量、库存、爆款建议，以及跨店补位 */
+  async stats(): Promise<CodeStatsOverview> {
+    return buildCodeStats(await statsInput())
+  },
+
+  async detail(code: string): Promise<CodeStatsDetail | null> {
+    return buildCodeDetail({ ...(await statsInput()), code })
+  },
+
+  /** 款号 → 店铺标题（判断商品类型用） */
+  async storeTitles(): Promise<{ titles: Map<string, string> }> {
+    const { match } = await load()
+    return { titles: new Map([...match.links].map(([code, list]) => [code, list[0]?.title || ''])) }
+  },
+
   async overview(): Promise<ProductCodeOverview> {
     const { products, research, library, match } = await load()
     const used = [...new Set([...library, ...research, ...match.links.keys(), ...(await readHistory())])].sort(compareCodes)
