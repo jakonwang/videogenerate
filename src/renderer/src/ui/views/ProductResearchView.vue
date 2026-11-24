@@ -13,6 +13,7 @@ import type {
   ProductResearchTask,
 } from '../../../../shared/productResearch'
 import PrPager from './product-research/PrPager.vue'
+import { vFloatMenu } from './product-research/floatMenu'
 import CompetitorRadarPanel from '../components/ai/CompetitorRadarPanel.vue'
 import PrToast from './product-research/PrToast.vue'
 import PrConfirmDialog from './product-research/PrConfirmDialog.vue'
@@ -497,7 +498,7 @@ onBeforeUnmount(() => {
                       <button class="prd-icon-btn" title="归档" :disabled="scheme.status === 'completed'" @click="setStatus([scheme.id], 'completed')"><Archive :size="15" /></button>
                       <div class="prd-menu-wrap" @click.stop>
                         <button class="prd-icon-btn" title="更多" @click="menuFor = menuFor === scheme.id ? '' : scheme.id"><MoreHorizontal :size="15" /></button>
-                        <div v-if="menuFor === scheme.id" class="prd-menu">
+                        <div v-if="menuFor === scheme.id" v-float-menu class="prd-menu">
                           <button @click="openEdit(scheme)"><Pencil :size="13" />编辑方案</button>
                           <button @click="toggleStar(scheme); menuFor = ''"><Star :size="13" />{{ scheme.starred ? '取消星标' : '星标置顶' }}</button>
                           <button v-if="scheme.status === 'completed'" @click="setStatus([scheme.id], 'active')"><FolderOpen :size="13" />取消归档</button>

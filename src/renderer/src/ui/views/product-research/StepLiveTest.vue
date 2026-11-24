@@ -7,6 +7,7 @@ import {
 import type { ProductResearchLiveTestRecord } from '../../../../../shared/productResearch'
 import { useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
+import { vFloatMenu } from './floatMenu'
 import PrThumb from './PrThumb.vue'
 import PrLiveTestDialog from './PrLiveTestDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
@@ -237,7 +238,7 @@ const today = formatDay(Date.now())
                   <button class="prd-icon-btn" title="编辑" @click="openEdit(record)"><Pencil :size="14" /></button>
                   <div class="prd-menu-wrap">
                     <button class="prd-icon-btn" title="更多" @click="rowMenu = rowMenu === record.id ? '' : record.id"><MoreHorizontal :size="14" /></button>
-                    <div v-if="rowMenu === record.id" class="prd-menu">
+                    <div v-if="rowMenu === record.id" v-float-menu class="prd-menu">
                       <button v-for="item in CONCLUSIONS" :key="item.value" :disabled="record.conclusion === item.value" @click="setConclusion([record.id], item.value)">{{ item.icon }} 设为{{ item.label }}</button>
                       <button class="danger" @click="rowMenu = ''; confirmDelete = [record.id]"><Trash2 :size="13" />删除记录</button>
                     </div>
@@ -253,7 +254,7 @@ const today = formatDay(Date.now())
             <span>已选择 <b class="prd-num-green">{{ checked.length }}</b> 个商品</span>
             <div class="prd-menu-wrap">
               <button class="prd-btn prd-btn--sm" :disabled="!checked.length" @click="batchMenu = !batchMenu">批量设置结论<ChevronDown :size="13" /></button>
-              <div v-if="batchMenu" class="prd-menu prd-menu--up prd-menu--left">
+              <div v-if="batchMenu" v-float-menu class="prd-menu prd-menu--up prd-menu--left">
                 <button v-for="item in CONCLUSIONS" :key="item.value" @click="setConclusion(checked, item.value)">{{ item.icon }} {{ item.label }}</button>
                 <button @click="setConclusion(checked, '')">清除结论</button>
               </div>

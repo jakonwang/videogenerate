@@ -7,6 +7,7 @@ import {
 import type { ProductResearchTask } from '../../../../../shared/productResearch'
 import { translateError, useSchemeWorkspace } from './useSchemeWorkspace'
 import PrPager from './PrPager.vue'
+import { vFloatMenu } from './floatMenu'
 import PrThumb from './PrThumb.vue'
 import PrPairingDialog from './PrPairingDialog.vue'
 import PrConfirmDialog from './PrConfirmDialog.vue'
@@ -266,7 +267,7 @@ const market = computed(() => marketOf(scheme.value?.market))
                 <td class="center">
                   <div class="prd-menu-wrap">
                     <button class="prd-icon-btn" title="更多" @click="deviceMenu = deviceMenu === device.id ? '' : device.id"><ChevronDown :size="14" /></button>
-                    <div v-if="deviceMenu === device.id" class="prd-menu" @click="deviceMenu = ''">
+                    <div v-if="deviceMenu === device.id" v-float-menu class="prd-menu" @click="deviceMenu = ''">
                       <button @click="copyText(device.id, '设备 ID 已复制')"><Copy :size="13" />复制设备 ID</button>
                       <button @click="pairingOpen = true"><RefreshCw :size="13" />重新配对</button>
                     </div>
@@ -455,7 +456,7 @@ const market = computed(() => marketOf(scheme.value?.market))
           <span>已选择 <b class="prd-num-green">{{ selectedResults.length }}</b> 个商品</span>
           <div class="prd-menu-wrap">
             <button class="prd-btn prd-btn--sm" :disabled="!selectedResults.length" @click="batchMenu = !batchMenu">批量操作<ChevronDown :size="13" /></button>
-            <div v-if="batchMenu" class="prd-menu prd-menu--up prd-menu--left">
+            <div v-if="batchMenu" v-float-menu class="prd-menu prd-menu--up prd-menu--left">
               <button @click="addSelectedToCandidates"><Plus :size="13" />加入候选</button>
               <button @click="exportResults(true)"><Download :size="13" />导出选中</button>
               <button class="danger" @click="batchMenu = false; confirmDeleteResults = true"><Trash2 :size="13" />删除选中</button>
