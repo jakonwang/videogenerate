@@ -65,7 +65,7 @@ export function buildCodeStats(input: StatsInput): CodeStatsOverview {
         cost: item.cost,
         shops: shops.map((shop) => {
           const own = perShop.get(shop.shopKey)?.get(item.key)
-          return { shopKey: shop.shopKey, shopName: shop.name, listed: listed.get(item.key)?.has(shop.shopKey) || false, units7: own?.units7 || 0, units30: own?.units30 || 0, amount30: own?.amount30 || 0 }
+          return { shopKey: shop.shopKey, shopName: shop.name, listed: listed.get(item.key)?.has(shop.shopKey) || false, stock: own && own.stockSource !== 'none' ? own.platformStock : undefined, units7: own?.units7 || 0, units30: own?.units30 || 0, amount30: own?.amount30 || 0 }
         }),
         verdict,
         ...suggestHotType({ units30: item.units30, units7: item.units7, unitsPrev7: item.unitsPrev7, activeDays30, share30, verdict }),

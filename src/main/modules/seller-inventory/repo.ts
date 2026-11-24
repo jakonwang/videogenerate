@@ -153,6 +153,16 @@ export const sellerInventoryRepo = {
     })
   },
 
+  /** 这些规格（`shopKey:skuId`）在一段时间内的有效订单行 */
+  listOrderLinesBySkus(skuKeys: string[], from: number, to: number): SiOrderLine[] {
+    const keys = new Set(skuKeys)
+    return db()
+      .prepare('SELECT payload FROM si_order_lines WHERE created_at >= ? AND created_at <= ?')
+      .all(from, to)
+      .map((row) => parse<SiOrderLine>(row))
+      .filter((row) => keys.has(`${row.shopKey}:${row.skuId}`) && isCountedStatus(row.status))
+  },
+
   listPlatformSkus(shopKeys?: string[]): SiPlatformSku[] {
     const rows = db().prepare('SELECT payload FROM si_platform_skus').all().map((row) => parse<SiPlatformSku>(row))
     return shopKeys ? rows.filter((row) => shopKeys.includes(row.shopKey)) : rows

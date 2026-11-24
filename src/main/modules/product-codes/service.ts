@@ -180,6 +180,12 @@ export const productCodesService = {
     return buildCodeDetail({ ...(await statsInput()), code })
   },
 
+  /** 店铺商品和已知款号，给直播数据归款用 */
+  async matchContext() {
+    const { store, library, research } = await load()
+    return { store, known: new Set([...library, ...research]) as ReadonlySet<string> }
+  },
+
   /** 款号 → 店铺标题（判断商品类型用） */
   async storeTitles(): Promise<{ titles: Map<string, string> }> {
     const { match } = await load()

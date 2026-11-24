@@ -100,6 +100,45 @@ function openEdit(record: ProductResearchLiveTestRecord) {
   editing.value = record
   dialogOpen.value = true
 }
+// ===== 直播后台回填 =====
+const hasLive = Boolean(window.api.liveAccounts)
+const filling = ref(false)
+/** 按款号把方案创建以后的直播数据填进测试记录；人工改过的项不动 */
+async function fillFromLive() {
+  filling.value = true
+  try {
+    const live = await window.api.liveAccounts.overview({ since: scheme.value?.createdAt || 0 })
+    if (!live.accounts.length) { ws.notify('请先在「店铺 → 账号」添加直播账号', 'error'); return }
+    const byCode = new Map(live.codes.filter((item) => item.currency === currency.value).map((item) => [item.code, item]))
+    let added = 0
+    let updated = 0
+    let kept = 0
+    for (const product of testableProducts.value) {
+      const data = byCode.get(codeOf(product.id))
+      if (!data) continue
+      const next = { sessions: data.sessions, views: data.exposures, clicks: data.clicks, orders: data.orders, revenue: Math.round(data.gmv) }
+      const record = liveTestRecords.value.find((item) => item.resultId === product.id)
+      if (!record) {
+        ws.upsertTestRecord({ resultId: product.id, ...next, refundRate: 0, hostFeedback: '', conclusion: '', auto: { ...next, at: Date.now() } })
+        added += 1
+        continue
+      }
+      if (!record.auto) { kept += 1; continue }
+      const patch: Partial<typeof next> = {}
+      for (const key of Object.keys(next) as Array<keyof typeof next>) if (record[key] === record.auto[key]) patch[key] = next[key]
+      const { schemeId: _scheme, updatedAt: _time, ...rest } = record
+      ws.upsertTestRecord({ ...rest, ...patch, auto: { ...record.auto, ...next, at: Date.now() } })
+      updated += 1
+    }
+    if (!added && !updated && !kept) ws.notify(testableProducts.value.some((item) => codeOf(item.id)) ? '方案创建后的直播里还没有这些款号的成交或曝光' : '这些商品还没填款号，请先在「确定商品」填写')
+    else ws.notify(`已填入：新增 ${added} 条，更新 ${updated} 条${kept ? `，${kept} 条是手工记录没有动` : ''}`, 'success')
+  } catch (error) {
+    ws.notify(`读取直播数据失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+  } finally {
+    filling.value = false
+  }
+}
+
 function saveRecord(draft: Parameters<typeof ws.upsertTestRecord>[0]) {
   ws.upsertTestRecord(draft)
   dialogOpen.value = false
@@ -164,6 +203,7 @@ const today = formatDay(Date.now())
             <input v-model="filters.to" type="date" class="prd-input prd-input--sm" :min="filters.from" :max="today" />
             <button v-if="filters.from || filters.to" class="prd-icon-btn" title="清除日期" @click="filters.from = ''; filters.to = ''"><RotateCcw :size="12" /></button>
           </label>
+          <button v-if="hasLive" class="prd-btn prd-btn--outline" :disabled="filling" title="按款号读取直播后台的场次数据" @click="fillFromLive"><Tv :size="14" />{{ filling ? '读取中…' : '填入直播数据' }}</button>
           <button class="prd-btn prd-btn--primary" @click="openNew"><Plus :size="15" />新增测试记录</button>
           <button class="prd-btn prd-btn--outline" @click="exportData"><Download :size="14" />导出数据</button>
         </div>

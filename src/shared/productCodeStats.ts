@@ -6,7 +6,7 @@ import type { SiRisk } from './sellerInventory'
 /** 爆款类型：表格里怎么写就怎么存，这几个是常用的 */
 export const HOT_TYPES = ['大爆款', '畅销款', '潜力款', '清仓款'] as const
 
-export type CodeShopStats = { shopKey: string; shopName: string; listed: boolean; units7: number; units30: number; amount30: number }
+export type CodeShopStats = { shopKey: string; shopName: string; listed: boolean; stock?: number; units7: number; units30: number; amount30: number }
 
 export type CodeStats = {
   code: string

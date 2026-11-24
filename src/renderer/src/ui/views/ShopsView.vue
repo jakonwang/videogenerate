@@ -5,6 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Building2, CheckCircle2, ChevronRight, LoaderCircle, RefreshCcw } from 'lucide-vue-next'
 import type { ShopCard, ShopsOverview, SiSyncProgress, SiSyncStage } from '../../../../shared/sellerInventory'
 import ShopAccountsPanel from './shops/ShopAccountsPanel.vue'
+import LiveAccountsSection from './shops/LiveAccountsSection.vue'
+import LiveSessionsPanel from './shops/LiveSessionsPanel.vue'
 import ProductCardsPanel from './shops/ProductCardsPanel.vue'
 import { findingText } from '../../../../shared/shopReportText'
 import ShopReportDialog from './shops/ShopReportDialog.vue'
@@ -16,9 +18,11 @@ import { freshnessText, friendlyStageError, friendlySyncError } from '../../../.
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
-type ShopsTab = 'business' | 'products' | 'accounts'
+/** 直播账号的登录在电脑上，网页版没有 */
+const hasLive = Boolean(window.api.liveAccounts)
+type ShopsTab = 'business' | 'products' | 'live' | 'accounts'
 function tabOf(value: unknown): ShopsTab {
-  return value === 'accounts' || value === 'products' ? value : 'business'
+  return value === 'accounts' || value === 'products' || (value === 'live' && hasLive) ? value : 'business'
 }
 const tab = ref<ShopsTab>(tabOf(route.query.tab))
 const overview = ref<ShopsOverview | null>(null)
@@ -163,10 +167,15 @@ onBeforeUnmount(() => clearInterval(clock))
     <nav class="vg-tabs shops-view__tabs">
       <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'business' }" data-testid="shops-tab-business" @click="tab = 'business'">{{ t('shops.tabBusiness') }}</button>
       <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'products' }" data-testid="shops-tab-products" @click="tab = 'products'">{{ t('shops.tabProducts') }}</button>
+      <button v-if="hasLive" type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'live' }" data-testid="shops-tab-live" @click="tab = 'live'">{{ t('shops.live.tab') }}</button>
       <button type="button" class="vg-tabs__btn" :class="{ 'is-active': tab === 'accounts' }" data-testid="shops-tab-accounts" @click="tab = 'accounts'">{{ t('shops.tabAccounts') }}</button>
     </nav>
 
-    <ShopAccountsPanel v-if="tab === 'accounts'" />
+    <template v-if="tab === 'accounts'">
+      <ShopAccountsPanel />
+      <LiveAccountsSection v-if="hasLive" />
+    </template>
+    <LiveSessionsPanel v-else-if="tab === 'live'" @accounts="tab = 'accounts'" />
     <ProductCardsPanel v-else-if="tab === 'products'" :shops="(overview?.cards || []).map((card) => ({ shopKey: card.shop.shopKey, name: card.shop.name, region: card.shop.region }))" @sync="syncAll" />
 
     <template v-else>

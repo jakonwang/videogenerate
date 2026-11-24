@@ -19,6 +19,7 @@ import type {
 import type { MorningReport, ReportSettings } from '../shared/shopAnalysis'
 import type { ShopProfit } from '../shared/shopProfit'
 import type { CodeImportPreview, CodeStatsDetail, CodeStatsOverview } from '../shared/productCodeStats'
+import type { LiveAccount, LiveOverview, LiveSyncState } from '../shared/liveAccounts'
 import type { ProductCodeLink, ProductCodeOverview } from '../shared/productCode'
 import type { ShopReport, ShopsOverview, SiAddMoveInput, SiDashboard, SiMappingRow, SiSettings, SiShop, SiStockMove, SiSyncProgress, SiSkuSettings } from '../shared/sellerInventory'
 import type { PcOverview } from '../shared/productCards'
@@ -958,6 +959,17 @@ const api = {
     getAuthStatus: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:getAuthStatus'),
     openLogin: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:openLogin'),
     logout: () => ipcRenderer.invoke('plugin:dianxiaomiInventory:logout'),
+  },
+  liveAccounts: {
+    list: () => ipcRenderer.invoke('plugin:liveAccounts:list') as Promise<LiveAccount[]>,
+    importCookies: (payload: { cookieJson: string; accountId?: string; name?: string }) => ipcRenderer.invoke('plugin:liveAccounts:importCookies', payload) as Promise<{ account: LiveAccount; merged: boolean }>,
+    verify: (id: string) => ipcRenderer.invoke('plugin:liveAccounts:verify', id) as Promise<LiveAccount>,
+    rename: (payload: { id: string; name: string }) => ipcRenderer.invoke('plugin:liveAccounts:rename', payload) as Promise<LiveAccount>,
+    remove: (id: string) => ipcRenderer.invoke('plugin:liveAccounts:remove', id) as Promise<{ ok: true }>,
+    openBackend: (id: string) => ipcRenderer.invoke('plugin:liveAccounts:openBackend', id) as Promise<{ loggedIn: boolean }>,
+    sync: (payload?: { accountId?: string }) => ipcRenderer.invoke('plugin:liveAccounts:sync', payload) as Promise<{ started: true }>,
+    getProgress: () => ipcRenderer.invoke('plugin:liveAccounts:getProgress') as Promise<LiveSyncState[]>,
+    overview: (payload?: { since?: number }) => ipcRenderer.invoke('plugin:liveAccounts:overview', payload) as Promise<LiveOverview>,
   },
   sellerInventory: {
     listShops: () => ipcRenderer.invoke('plugin:sellerInventory:listShops') as Promise<SiShop[]>,

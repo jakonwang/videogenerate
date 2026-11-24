@@ -154,6 +154,8 @@ export type ProductResearchLiveTestRecord = {
   refundRate: number
   hostFeedback: string
   conclusion: 'excellent' | 'potential' | 'observe' | 'eliminate' | ''
+  /** 上次从直播后台自动填的值；某一项和它不同就是人工改过，不再覆盖 */
+  auto?: { sessions: number; views: number; clicks: number; orders: number; revenue: number; at: number }
   updatedAt: number
 }
 

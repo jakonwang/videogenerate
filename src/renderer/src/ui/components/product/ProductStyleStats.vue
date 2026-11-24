@@ -71,9 +71,9 @@ const low = computed(() => data.value && (data.value.risk === 'out' || data.valu
         <section>
           <h4>{{ t('productLibrary.style.byShop') }}</h4>
           <table class="pss-table">
-            <thead><tr><th>{{ t('productLibrary.style.shop') }}</th><th>{{ t('productLibrary.style.units7') }}</th><th>{{ t('productLibrary.style.units30') }}</th><th>{{ t('productLibrary.style.amount30') }}</th></tr></thead>
+            <thead><tr><th>{{ t('productLibrary.style.shop') }}</th><th>{{ t('productLibrary.style.units7') }}</th><th>{{ t('productLibrary.style.units30') }}</th><th>{{ t('productLibrary.style.amount30') }}</th><th>{{ t('productLibrary.style.stock') }}</th></tr></thead>
             <tbody>
-              <tr v-for="shop in data.shops" :key="shop.shopKey"><td>{{ shop.shopName }}<em v-if="!shop.listed">{{ t('productLibrary.style.notListed') }}</em></td><td>{{ num(shop.units7) }}</td><td>{{ num(shop.units30) }}</td><td>{{ money(shop.amount30) }}</td></tr>
+              <tr v-for="shop in data.shops" :key="shop.shopKey"><td>{{ shop.shopName }}<em v-if="!shop.listed">{{ t('productLibrary.style.notListed') }}</em></td><td>{{ num(shop.units7) }}</td><td>{{ num(shop.units30) }}</td><td>{{ money(shop.amount30) }}</td><td>{{ num(shop.stock) }}</td></tr>
             </tbody>
           </table>
         </section>
