@@ -12,7 +12,7 @@ const route = useRoute()
 const current = computed(() => sectionForPath(route.path))
 const label = (key: string, zh: string) => props.translate?.(key, zh) ?? zh
 
-const tabs = computed(() => current.value?.group.tabs.filter((tab) => !tab.devOnly || (import.meta.env.DEV && props.translate)) ?? [])
+const tabs = computed(() => current.value?.group.tabs.filter((tab) => !tab.desktopOnly || props.translate) ?? [])
 
 // 这些页面共用一套边距（见下方全局样式），用根节点标记
 watch(

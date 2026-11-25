@@ -41,7 +41,7 @@ async function main() {
   ] }))
   let { app, page } = await launch()
   try {
-    assert.equal(await page.locator('[data-testid="section-tab-muse"]').count(), 0, 'tab hidden in packaged builds')
+    assert.equal(await page.locator('[data-testid="section-tab-muse"]').count(), 1, 'tab shown in packaged builds')
     await page.screenshot({ path: join(shots, '01-empty.png') })
 
     await page.screenshot({ path: join(shots, '04-create.png') })

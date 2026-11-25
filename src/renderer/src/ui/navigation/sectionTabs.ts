@@ -16,8 +16,8 @@ export type SectionTab = {
   zh: string
   icon: Component
   match: (path: string) => boolean
-  /** 还没做完的页面：只在电脑端开发环境显示标签 */
-  devOnly?: boolean
+  /** 要用电脑上的账号：网页不显示标签（网页在 tk创意室里，电脑有账号时另给入口） */
+  desktopOnly?: boolean
 }
 
 export type SectionGroup = {
@@ -42,7 +42,7 @@ export const SECTION_GROUPS: SectionGroup[] = [
     tabs: [
       { key: 'clone', to: '/clone', labelKey: 'ai.nav.tabs.clone', zh: '爆款复刻', icon: CopyPlus, match: exact('/clone', '/clone/cloud') },
       { key: 'creative', to: '/plugins/tiktok-creative-studio', labelKey: 'ai.nav.tabs.creative', zh: 'tk创意室', icon: Wand2, match: under('/plugins/tiktok-creative-studio', '/creative') },
-      { key: 'muse', to: '/plugins/muse-creative-studio', labelKey: 'ai.nav.tabs.muse', zh: 'Muse创意室', icon: Sparkles, match: under('/plugins/muse-creative-studio'), devOnly: true },
+      { key: 'muse', to: '/plugins/muse-creative-studio', labelKey: 'ai.nav.tabs.muse', zh: 'Muse创意室', icon: Sparkles, match: under('/plugins/muse-creative-studio'), desktopOnly: true },
       { key: 'livePhoto', to: '/plugins/live-photo-generator', labelKey: 'ai.nav.tabs.livePhoto', zh: '图生视频', icon: PlaySquare, match: under('/plugins/live-photo-generator', '/image-to-video') },
     ],
   },
