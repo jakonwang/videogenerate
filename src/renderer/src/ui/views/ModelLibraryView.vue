@@ -1666,7 +1666,7 @@ watch([activeTab, statusFilter, search], () => {
 .ml-pager { padding-top: 14px; border-top: 1px solid var(--theme-divider); }
 
 /* Detail */
-.ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; scrollbar-width: thin; }
+.ml-detail { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-panel); max-height: calc(100vh - var(--app-titlebar-height) - 40px); overflow-y: auto; }
 .ml-detail > * { flex-shrink: 0; }
 .ml-detail__hero { position: relative; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; background: var(--theme-panel-soft); }
 .ml-detail__hero img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }

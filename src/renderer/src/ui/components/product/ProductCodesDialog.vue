@@ -126,7 +126,7 @@ async function apply() {
 .pcd-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
 .pcd-tip, .pcd-message { margin: 0; font-size: 12px; color: var(--theme-text-muted); }
 .pcd-message { color: var(--vg-accent); }
-.pcd-list { display: flex; flex-direction: column; max-height: 46vh; overflow: auto; scrollbar-width: thin; border: 1px solid var(--theme-border); border-radius: 8px; }
+.pcd-list { display: flex; flex-direction: column; max-height: 46vh; overflow: auto; border: 1px solid var(--theme-border); border-radius: 8px; }
 .pcd-row { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 6px 12px; border: 0; border-bottom: 1px solid var(--theme-divider); background: transparent; color: var(--theme-text); font: inherit; font-size: 13px; text-align: left; }
 button.pcd-row { cursor: pointer; }
 button.pcd-row:hover { background: var(--theme-panel-soft); }

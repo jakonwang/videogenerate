@@ -101,7 +101,7 @@
 .prd-stage b { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 50%; background: var(--prd-green-soft); color: var(--prd-green); font-size: 11px; }
 
 /* ===== Table ===== */
-.prd-table-wrap { overflow: auto; border: 1px solid var(--theme-border); border-radius: 8px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--theme-text-muted) 45%, transparent) transparent; }
+.prd-table-wrap { overflow: auto; border: 1px solid var(--theme-border); border-radius: 8px; }
 .prd-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .prd-table th { position: sticky; top: 0; z-index: 1; padding: 9px 10px; text-align: left; font-size: 12px; font-weight: 600; color: var(--theme-text-muted); background: var(--theme-panel-soft); border-bottom: 1px solid var(--theme-border); white-space: nowrap; }
 .prd-table td { padding: 9px 10px; border-bottom: 1px solid color-mix(in srgb, var(--theme-divider) 70%, transparent); vertical-align: middle; }

@@ -147,7 +147,7 @@ const backupRate = computed(() => (props.library.count ? Math.round((props.libra
 </template>
 
 <style scoped>
-.inspector { display: flex; flex-direction: column; gap: 16px; min-height: 0; padding: 14px; overflow-y: auto; scrollbar-width: thin; }
+.inspector { display: flex; flex-direction: column; gap: 16px; min-height: 0; padding: 14px; overflow-y: auto; }
 .inspector > * { flex-shrink: 0; }
 .inspector__media { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid var(--theme-border); border-radius: var(--vg-radius); background:
   repeating-conic-gradient(color-mix(in srgb, var(--theme-text) 5%, transparent) 0 25%, transparent 0 50%) 0 0 / 16px 16px, var(--theme-panel-soft); }

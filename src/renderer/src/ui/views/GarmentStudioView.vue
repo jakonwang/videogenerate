@@ -472,10 +472,9 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
   --gs-well: var(--theme-panel-soft);
   --gs-hover: var(--theme-control-hover);
   --gs-line: var(--theme-border);
-  display: flex; flex-direction: column; height: 100%; gap: 14px; min-height: 0; padding: 16px 20px 20px; overflow: auto; background: radial-gradient(1100px 380px at 40% -140px, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 72%), var(--gs-bg); font-size: 13px; scrollbar-width: thin; scrollbar-color: var(--gs-hover) transparent;
+  display: flex; flex-direction: column; height: 100%; gap: 14px; min-height: 0; padding: 16px 20px 20px; overflow: auto; background: radial-gradient(1100px 380px at 40% -140px, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 72%), var(--gs-bg); font-size: 13px;
 }
 .garment.is-batch { gap: 0; padding: 0; }
-.garment :deep(*) { scrollbar-width: thin; scrollbar-color: var(--gs-hover) transparent; }
 .garment :deep(.vg-btn--primary:disabled) { border-color: transparent; background: var(--gs-hover); color: var(--theme-text-muted); opacity: 1; }
 .garment :deep(.vg-btn:not(.vg-btn--primary):hover:not(:disabled)) { border-color: var(--theme-text-muted); background: var(--gs-hover); color: var(--theme-text); }
 .garment :deep(.vg-btn--ghost:hover:not(:disabled)) { border-color: transparent; }

@@ -112,7 +112,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .lrd__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 16px; border-bottom: 1px solid var(--theme-divider); }
 .lrd__head h2 { margin: 0; font-size: 18px; font-weight: 650; }
 .lrd__head p { margin: 4px 0 0; font-size: 12px; color: var(--theme-text-muted); font-variant-numeric: tabular-nums; }
-.lrd__body { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px 30px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--theme-text-muted) 40%, transparent) transparent; }
+.lrd__body { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px 30px; }
 .lrd__hero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .lrd__hero small { width: 100%; font-size: 12px; color: var(--theme-text-muted); }
 .lrd__hero strong { font-size: 32px; font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; }

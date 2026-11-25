@@ -97,7 +97,7 @@ function price(value?: number) {
 .pcode-hint, .pcode-error { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--theme-text-muted); }
 .pcode-error { color: var(--theme-tone-red); }
 .pcode-sub { margin: 14px 0 8px; font-size: 12px; font-weight: 700; color: var(--theme-text-secondary); }
-.pcode-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow: auto; scrollbar-width: thin; }
+.pcode-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow: auto; }
 .pcode-links li { display: flex; gap: 10px; align-items: center; min-width: 0; }
 .pcode-links img, .pcode-links__ph { width: 40px; height: 40px; flex: none; border-radius: 6px; object-fit: cover; background: var(--theme-panel-soft); display: grid; place-items: center; color: var(--theme-text-muted); }
 .pcode-links div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }

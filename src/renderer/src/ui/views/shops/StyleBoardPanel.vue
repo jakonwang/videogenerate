@@ -197,7 +197,7 @@ const coverage = computed(() => {
 .sb-list__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .sb-list__filter { font-size: 12px; color: var(--vg-accent); }
 .sb-list__head .vg-search { margin-left: auto; width: 220px; }
-.sb-scroll { overflow-x: auto; scrollbar-width: thin; }
+.sb-scroll { overflow-x: auto; }
 .sb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .sb-table th { padding: 7px 9px; text-align: left; font-size: 12px; font-weight: 500; color: var(--theme-text-muted); white-space: nowrap; }
 .sb-groups th { padding-bottom: 0; font-size: 11px; text-align: center; opacity: .8; }

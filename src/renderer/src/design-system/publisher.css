@@ -65,9 +65,9 @@
 
 /* table */
 .pub-table { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--theme-divider); }
-.pub-table__body { flex: 1; min-height: 0; overflow-y: auto; }
-.pub-row { display: grid; grid-template-columns: 44px minmax(190px, 1.35fr) minmax(160px, 1.25fr) minmax(150px, 1fr) 132px 92px 76px; align-items: center; gap: 12px; padding: 10px 16px 10px 4px; border-bottom: 1px solid color-mix(in srgb, var(--theme-divider) 70%, transparent); transition: background .12s; }
-.pub-row--head { padding-top: 0; padding-bottom: 0; height: 38px; background: var(--theme-panel-soft); border-bottom-color: var(--theme-border); font-size: 12px; font-weight: 600; color: var(--theme-text-muted); white-space: nowrap; flex: none; }
+.pub-table__body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.pub-row { display: grid; grid-template-columns: 44px minmax(150px, 1.35fr) minmax(110px, 1.25fr) minmax(130px, 1fr) 132px 92px 76px; align-items: center; gap: 12px; padding: 10px 16px 10px 4px; border-bottom: 1px solid color-mix(in srgb, var(--theme-divider) 70%, transparent); transition: background .12s; }
+.pub-row--head { padding-top: 0; padding-bottom: 0; padding-right: 26px; height: 38px; background: var(--theme-panel-soft); border-bottom-color: var(--theme-border); font-size: 12px; font-weight: 600; color: var(--theme-text-muted); white-space: nowrap; flex: none; }
 .pub-table__body .pub-row:hover { background: color-mix(in srgb, var(--theme-panel-soft) 60%, transparent); }
 .pub-table__body .pub-row.is-selected { background: color-mix(in srgb, var(--vg-accent) 6%, transparent); }
 .pub-row.is-locked .pub-video__meta strong,
@@ -176,7 +176,7 @@
 
 @media (max-width: 1360px) {
   .pub-body { grid-template-columns: minmax(0, 1fr) 300px; }
-  .pub-row { grid-template-columns: 40px minmax(170px, 1.3fr) minmax(130px, 1.1fr) minmax(130px, 1fr) 118px 84px 68px; gap: 10px; }
+  .pub-row { grid-template-columns: 40px minmax(140px, 1.3fr) minmax(100px, 1.1fr) minmax(120px, 1fr) 118px 84px 68px; gap: 10px; }
   .pub-head__text p { display: none; }
 }
 @media (max-width: 1100px) {

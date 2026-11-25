@@ -374,7 +374,7 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
 .lv-kpi__value { font-size: 21px; font-weight: 620; line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lv-chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lv-two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; }
-.lv-slots { list-style: none; margin: 0; padding: 0 4px 0 0; display: flex; flex-direction: column; gap: 9px; max-height: 210px; overflow-y: auto; scrollbar-width: thin; }
+.lv-slots { list-style: none; margin: 0; padding: 0 4px 0 0; display: flex; flex-direction: column; gap: 9px; max-height: 210px; overflow-y: auto; }
 .lv-slots li { display: grid; grid-template-columns: 46px 1fr 74px 48px; align-items: center; gap: 10px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--theme-text-secondary); }
 .lv-slots div { height: 8px; border-radius: 4px; background: var(--theme-panel-soft); overflow: hidden; }
 .lv-slots i { display: block; height: 100%; border-radius: 4px; background: color-mix(in srgb, var(--vg-accent) 45%, transparent); }
@@ -448,7 +448,7 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
 .lv-prod b.is-plain { font-weight: 500; }
 .lv-prod b, .lv-prod small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-prod small { font-size: 11.5px; color: var(--theme-text-muted); }
-.lv-scroll { overflow-x: auto; scrollbar-width: thin; }
+.lv-scroll { overflow-x: auto; }
 .lv-table--styles .lv-prod > span:last-child { max-width: 190px; }
 .lv-sort { cursor: pointer; user-select: none; }
 .lv-sort span { display: inline-flex; align-items: center; gap: 3px; }

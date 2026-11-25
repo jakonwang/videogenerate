@@ -638,7 +638,7 @@ const KIND_ICON = { video: Film, image: ImageIcon, audio: Music }
 .lib-side { display: flex; flex-direction: column; gap: 4px; min-height: 0; padding: 12px 10px; border-right: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--theme-panel-soft) 45%, var(--theme-panel)); }
 .lib-side__group { display: flex; flex-direction: column; gap: 2px; }
 .lib-side__label { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--theme-text-muted); }
-.lib-side__tree { display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 60px; overflow-y: auto; scrollbar-width: thin; }
+.lib-side__tree { display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 60px; overflow-y: auto; }
 .lib-side__item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--theme-text-secondary); font-size: 13px; text-align: left; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .lib-side__item > svg { flex-shrink: 0; color: var(--theme-text-muted); }
 .lib-side__item > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

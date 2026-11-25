@@ -175,7 +175,6 @@ function itemActive(item: GmvMaxNavItem) {
   align-content: start;
   gap: 3px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 .gmv-v2-nav button { color: inherit; font: inherit; border: 0; cursor: pointer; }
 .gmv-v2-nav__item,

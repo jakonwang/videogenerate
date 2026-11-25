@@ -69,3 +69,13 @@ html[data-app-theme] body #app .ls-drop { border: 1px solid var(--theme-border);
 html[data-app-theme] body #app .web-workspace > .vg-page-head { padding: 16px 20px 14px; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page .tab-bar .tab-button:is(.active, :hover) { background: none !important; box-shadow: none !important; }
 html[data-app-theme] body #app :is(.app-shell, .web-shell) .listing-page :is(.empty-state, .empty-text, .table-empty, .empty) { color: var(--theme-text-muted) !important; }
+
+/* ===== 滚动条：全软件一种，细、不抢眼，鼠标放上去才变明显 =====
+ * 不要再写 scrollbar-width: thin / scrollbar-color，写了浏览器就改用系统自带的粗滚动条。 */
+html[data-app-theme] *::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+html[data-app-theme] *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+html[data-app-theme] *::-webkit-scrollbar-track, html[data-app-theme] *::-webkit-scrollbar-corner { border: 0; background: transparent; }
+html[data-app-theme] *::-webkit-scrollbar-thumb { min-width: 36px; min-height: 36px; border: 3px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--theme-text-muted) 38%, transparent) padding-box; }
+html[data-app-theme] *::-webkit-scrollbar-thumb:hover { border-width: 2px; background: color-mix(in srgb, var(--theme-text-muted) 66%, transparent) padding-box; }
+html[data-app-theme] *::-webkit-scrollbar-thumb:active { border-width: 2px; background: var(--theme-accent) padding-box; }
+html[data-app-theme] *::-webkit-resizer { background: linear-gradient(135deg, transparent 55%, color-mix(in srgb, var(--theme-text-muted) 60%, transparent) 55% 62%, transparent 62% 74%, color-mix(in srgb, var(--theme-text-muted) 60%, transparent) 74% 81%, transparent 81%); }

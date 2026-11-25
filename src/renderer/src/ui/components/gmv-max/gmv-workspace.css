@@ -408,7 +408,6 @@
   grid-auto-flow: column;
   gap: 5px;
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 :root .gmv-decision-store-tabs button {
   min-width: 0;
@@ -4194,7 +4193,6 @@
   gap: 4px;
   overflow-x: auto;
   border-bottom: 1px solid var(--theme-border, var(--theme-border));
-  scrollbar-width: thin;
 }
 :root .gmv-context-tabs button {
   min-height: 40px;
@@ -9388,7 +9386,6 @@
   border: 1px solid var(--theme-border-control);
   border-radius: 6px;
   background: var(--theme-panel-soft);
-  scrollbar-width: thin;
 }
 :root .gmv-cockpit-scopebar__segments button,
 :root .gmv-cockpit-scopebar__lifecycle button {
@@ -9717,7 +9714,6 @@
   overflow-x: auto;
   border-bottom: 1px solid var(--theme-border-control);
   background: var(--theme-panel-soft);
-  scrollbar-width: thin;
 }
 :root .gmv-command-drawer__tabs button {
   min-height: 46px;

@@ -1402,7 +1402,7 @@ html[data-app-theme='dark-teal'] .asset-head::before { content: ''; position: ab
 .lib-side { display: flex; flex-direction: column; gap: 4px; min-height: 0; padding: 12px 10px; border-right: 1px solid var(--theme-divider); background: color-mix(in srgb, var(--theme-panel-soft) 45%, var(--theme-panel)); }
 .lib-side__group { display: flex; flex-direction: column; gap: 2px; }
 .lib-side__label { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--theme-text-muted); }
-.lib-side__tree { display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 60px; overflow-y: auto; scrollbar-width: thin; }
+.lib-side__tree { display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 60px; overflow-y: auto; }
 .lib-side__item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--theme-text-secondary); font-size: 13px; text-align: left; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .lib-side__item > svg { flex-shrink: 0; color: var(--theme-text-muted); }
 .lib-side__item > span:not(.lib-side__twisty) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1462,7 +1462,7 @@ html[data-app-theme='dark-teal'] .asset-head::before { content: ''; position: ab
 .asset-zoom { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px; color: var(--theme-text-muted); }
 .asset-zoom input { width: 96px; accent-color: var(--vg-accent); cursor: pointer; }
 
-.lib-scroll { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 14px 14px 0; overflow-y: auto; scrollbar-width: thin; }
+.lib-scroll { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 14px 14px 0; overflow-y: auto; }
 .lib-scroll > .asset-grid, .lib-scroll > .asset-list, .lib-scroll > .asset-empty { flex: 1 0 auto; }
 .lib-scroll > .asset-grid, .lib-scroll > .asset-list { padding-bottom: 84px; }
 .lib-scroll > .asset-empty { padding-bottom: 60px; }

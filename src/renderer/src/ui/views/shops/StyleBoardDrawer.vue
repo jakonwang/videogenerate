@@ -119,7 +119,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .sbd__head div { flex: 1; min-width: 0; }
 .sbd__head h2 { margin: 0; font-size: 19px; font-weight: 650; }
 .sbd__head p { margin: 3px 0 0; font-size: 12px; color: var(--theme-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sbd__body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px 30px; display: flex; flex-direction: column; gap: 16px; scrollbar-width: thin; }
+.sbd__body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px 30px; display: flex; flex-direction: column; gap: 16px; }
 .sbd__acts { list-style: none; margin: 0; padding: 4px 16px; border: 1px solid color-mix(in srgb, var(--vg-accent) 30%, var(--theme-border)); border-radius: 10px; background: color-mix(in srgb, var(--vg-accent) 6%, transparent); }
 .sbd__acts li { display: flex; gap: 14px; padding: 10px 0; font-size: 13px; line-height: 1.55; }
 .sbd__acts li + li { border-top: 1px solid var(--theme-divider); }

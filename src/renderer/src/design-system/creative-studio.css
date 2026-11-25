@@ -238,7 +238,7 @@ html[data-app-theme='dark-teal'] .ts-head::before { content: ''; position: absol
 .ts-acct__toolbar { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--theme-divider); }
 .ts-acct__search { flex: 0 1 260px; min-width: 160px; }
 .ts-acct__spacer { flex: 1; }
-.ts-acct__rows { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; scrollbar-width: thin; }
+.ts-acct__rows { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
 .ts-acct-row { display: grid; grid-template-columns: 30px 36px minmax(0, 1fr) 64px minmax(150px, .9fr) auto; align-items: center; gap: 12px; min-height: 66px; padding: 8px 10px; border: 1px solid transparent; border-radius: 12px; transition: background .12s, border-color .12s; }
 .ts-acct-row + .ts-acct-row { margin-top: 2px; }
 .ts-acct-row:hover { background: var(--theme-panel-soft); }
