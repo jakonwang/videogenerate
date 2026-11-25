@@ -46,7 +46,7 @@ async function main() {
   try {
     // 1. Every new intent resolves to a registered capability and every built-in employee that owns it may use it.
     const newIntents = [
-      'Intent.SystemHealthCheck', 'Intent.AssetSearch', 'Intent.AssetArchive', 'Intent.CloneShotsSend', 'Intent.CreativeFromImages',
+      'Intent.SystemHealthCheck', 'Intent.AssetSearch', 'Intent.AssetArchive', 'Intent.CloneShotsSend', 'Intent.CreativeFromImages', 'Intent.MuseFromImages',
       'Intent.LivePhotoFromVideo', 'Intent.ReviewSubmit', 'Intent.ProductImportFromLink', 'Intent.ProductResearchPromote',
       'Intent.PublishDraft', 'Intent.InsightsRead',
     ] as const
@@ -118,6 +118,36 @@ async function main() {
     assert.ok(finished.artifacts.some((artifact: any) => artifact.uri === 'content-hub://health'))
     assert.ok(finished.artifacts.some((artifact: any) => artifact.uri === 'content-hub://insights'))
 
+    // 7b. Muse: refused without an account; otherwise queued with a picture review first (queue paused, nothing is sent or paid).
+    const { getAppPaths } = await import('../src/main/lib/paths')
+    const { museCreativeStudioService } = await import('../src/main/modules/muse-creative-studio/service')
+    const museScene = path.join(getAppPaths().dataDir, 'scene.png')
+    await writeFile(museScene, 'png')
+    const runMuse = async () => {
+      const sent = await agentOsService.sendMessage({
+        conversationId: conversation.id,
+        content: 'Use Muse for this picture',
+        context: { productId: product.id, referenceImagePaths: [museScene] },
+        plan: { intents: ['Intent.MuseFromImages'], summary: 'Muse' },
+      })
+      const version = sent.run!.revisions[0]
+      await agentOsService.approveRun({ runId: sent.run!.id, revision: version.version, planHash: version.hash })
+      return await waitForRun(agentOsService, sent.run!.id, ['completed', 'failed', 'paused'])
+    }
+    assert.notEqual((await runMuse()).run.status, 'completed')
+    assert.equal((await museCreativeStudioService.listJobs()).jobs.length, 0)
+    await writeFile(path.join(getAppPaths().dbDir, 'muse-creative-studio-accounts.json'), JSON.stringify({ accounts: [{ id: 'm', name: 'm', enabled: true, priority: 0, state: 'ready', updatedAt: Date.now() }] }))
+    await museCreativeStudioService.setQueuePaused(true)
+    const museRun = await runMuse()
+    assert.equal(museRun.run.status, 'completed', JSON.stringify(museRun.steps.map((step: any) => [step.title, step.status, step.error])))
+    const museJobs = (await museCreativeStudioService.listJobs()).jobs
+    assert.deepEqual(museJobs.map((item) => [item.status, item.productId, item.image?.review, item.image?.submitting ?? false]), [['swapping', product.id, true, false]])
+    // Later checks count this product's content.
+    await museCreativeStudioService.cancelJob(museJobs[0].id)
+    await museCreativeStudioService.removeJobs([museJobs[0].id])
+    await museCreativeStudioService.stopJobs()
+    ;(await import('../src/main/modules/content-hub/contentIndex')).contentIndex.invalidate()
+
     // 8. Dangerous step pauses at execution time until confirmed.
     const dangerous = await agentOsService.sendMessage({
       conversationId: conversation.id,
@@ -143,7 +173,7 @@ async function main() {
     const edge = await lineage.record({ fromRef: 'clone:p1', toRef: 'livephoto:l1', relation: 'sent_to', productId: product.id })
     const again = await lineage.record({ fromRef: 'clone:p1', toRef: 'livephoto:l1', relation: 'sent_to', productId: product.id })
     assert.equal(edge?.id, again?.id, 'lineage edges are idempotent')
-    assert.equal((await lineage.listByProduct(product.id)).length, 1)
+    assert.equal((await lineage.listByProduct(product.id)).filter((item: any) => !item.toRef.startsWith('muse:')).length, 1)
     const insights = await buildInsights(7)
     assert.equal(insights.lines.length, 4)
     assert.ok(insights.recommendations.length >= 1)

@@ -52,6 +52,18 @@ const LOCAL: Partial<Record<RelayNamespace, Record<string, (...args: any[]) => u
       },
     ]),
   ),
+  museCreative: {
+    // The computer only hands out accounts without their proxy.
+    listAccounts: async () => ({ ...(await cloud.relay.call<{ accounts: unknown[] }>('museCreative', 'listAccountSummaries', [])), encryptionAvailable: true, remote: true }),
+    ...Object.fromEntries(
+      ['createAccount', 'updateAccount', 'testAccount', 'removeAccount', 'setEnabled', 'acceptExit', 'login', 'cancelLogin', 'importCookies', 'moveAccount', 'queryQuota'].map((method) => [
+        method,
+        async () => {
+          throw new Error('Muse 账号和代理要在电脑端操作（代理和登录信息只保存在电脑上）')
+        },
+      ]),
+    ),
+  },
   tiktokCreatorHub: {
     openBackend: async () => {
       throw new Error('店铺后台带着电脑上的登录，只能在电脑端打开')

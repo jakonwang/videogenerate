@@ -8,6 +8,7 @@ const UNIT_COST: Record<string, { modelCalls: number; accountCredits: number; mi
   'Intent.LivePhotoCreate': { modelCalls: 3, accountCredits: 0, minutes: 6, unit: '个图生视频' },
   'Intent.LivePhotoFromVideo': { modelCalls: 0, accountCredits: 0, minutes: 1, unit: '个 Live Photo（仅打包）' },
   'Intent.CreativeFromImages': { modelCalls: 2, accountCredits: 1, minutes: 6, unit: '条创意短视频' },
+  'Intent.MuseFromImages': { modelCalls: 2, accountCredits: 1, minutes: 5, unit: '条 Muse 短视频' },
   'Intent.TiktokCreativeManage': { modelCalls: 2, accountCredits: 1, minutes: 6, unit: '条创意短视频' },
   'Intent.CloneShotsSend': { modelCalls: 3, accountCredits: 0, minutes: 6, unit: '个分镜' },
   'Intent.SubtitleGenerate': { modelCalls: 1, accountCredits: 0, minutes: 2, unit: '条字幕' },

@@ -204,6 +204,10 @@ export function registerCloneIpc(ipcMain: CloneIpcHost) {
     const { sendCloneProjectToCreative } = await import('../modules/clone/crossLineShots')
     return await sendCloneProjectToCreative(payload)
   })
+  ipcMain.handle('clone:sendShotToMuse', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
+    const { sendCloneShotsToMuse } = await import('../modules/clone/crossLineShots')
+    return await sendCloneShotsToMuse({ cloneProjectId: payload.cloneProjectId, shotIds: [payload.shotId], autoReplace: true })
+  })
   ipcMain.handle('clone:sendShotToCreative', async (_e, payload: { cloneProjectId: string; shotId: string }) => {
     const { sendCloneShotToCreative } = await import('../modules/clone/crossLineShots')
     return await sendCloneShotToCreative(payload)

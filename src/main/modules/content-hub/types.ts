@@ -5,7 +5,7 @@
  * let the AI producer organise the whole system.
  */
 
-export type ContentLine = 'clone' | 'creative' | 'livephoto' | 'production' | 'publish'
+export type ContentLine = 'clone' | 'creative' | 'muse' | 'livephoto' | 'production' | 'publish'
 
 /** `clone:<projectId>`, `creative:<taskId>:<shotId>`, `livephoto:<itemId>`, `production:<taskId>`, `publish:<taskId>`, `product:<id>`, `asset:<id>` */
 export type ContentRef = string

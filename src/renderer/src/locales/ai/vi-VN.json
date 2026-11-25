@@ -54,6 +54,7 @@
     "tabs": {
       "clone": "Nhân bản video hot",
       "creative": "TK Creative",
+      "muse": "Muse Creative",
       "livePhoto": "Ảnh thành video",
       "mix": "Bàn ghép video",
       "pool": "Kho cảnh quay",
@@ -66,6 +67,7 @@
     "library": "Thư viện tư liệu"
   },
   "line": {
+    "muse": "Muse Creative",
     "clone": "Nhân bản",
     "creative": "Creative Studio",
     "livephoto": "Live Photo",
@@ -90,6 +92,7 @@
     "cancelled": "Đã hủy"
   },
   "intent": {
+    "MuseFromImages": "Muse Creative: thay sản phẩm vào ảnh cảnh",
     "ProductInspect": "Xem sản phẩm",
     "ProductSave": "Lưu sản phẩm",
     "ProductManage": "Quản lý sản phẩm (có thể xóa)",
@@ -187,6 +190,8 @@
       "summary": "Nhân bản {count} video, gửi khung hình sang dây chuyền khác, vào hộp duyệt"
     },
     "scene": {
+      "promptMuse": "Dùng Muse Creative thay sản phẩm này vào {count} ảnh cảnh và tạo video",
+      "summaryMuse": "Muse Creative: {count} ảnh cảnh (bạn duyệt từng ảnh)",
       "title": "Ảnh cảnh thành video hàng loạt",
       "desc": "Thay sản phẩm của bạn vào ảnh cảnh đẹp và tạo video ngắn / Live Photo hàng loạt",
       "output": "Kết quả: mỗi ảnh một video ngắn hoặc Live Photo",
@@ -234,6 +239,7 @@
     }
   },
   "fields": {
+    "engineMuse": "Muse Creative (tốn hạn mức Muse)",
     "product": "Sản phẩm",
     "productOptional": "Sản phẩm (tùy chọn, để trống là tất cả)",
     "products": "Sản phẩm (chọn nhiều)",
@@ -575,6 +581,7 @@
     "openWorkspace": "Mở không gian làm việc",
     "letAi": "Để AI làm",
     "lines": {
+      "muse": {"title":"Muse Creative","desc":"Thay sản phẩm vào ảnh mẫu và tạo video ngắn bằng tài khoản Muse"},
       "clone": {
         "title": "Nhân bản",
         "desc": "Theo cấu trúc video viral để làm thành phẩm với sản phẩm của bạn"
@@ -828,6 +835,11 @@
     "productResearch": "Nghiên cứu sản phẩm"
   },
   "cloneShot": {
+    "lineMuse": "Muse Creative",
+    "sendMuse": "Làm lại cảnh này bằng Muse Creative",
+    "sendMuseConfirm": "Xác nhận (tốn hạn mức Muse)",
+    "sendMuseHint": "Tạo từ ảnh phân cảnh của cảnh này và tự thay vào khi xong (tốn hạn mức Muse)",
+    "runningMuse": "Muse Creative đang tạo, xong sẽ tự thay vào",
     "replace": "Thay video",
     "fromDisk": "Chọn từ máy tính…",
     "madeElsewhere": "Dùng kết quả đã có",

@@ -229,7 +229,7 @@ export const contentPerformance = {
   },
 }
 
-const LINE_NAME: Record<ContentLine, string> = { clone: 'viral clone', creative: 'creative studio', livephoto: 'Live Photo', production: 'batch mix', publish: 'publish' }
+const LINE_NAME: Record<ContentLine, string> = { clone: 'viral clone', creative: 'creative studio', muse: 'Muse studio', livephoto: 'Live Photo', production: 'batch mix', publish: 'publish' }
 
 /** Sales proof as plain planning guidance for the AI producer. Empty when nothing is measured yet. */
 export function buildPerformanceGuidance(items: ContentItem[], performance: ProductPerformance): string {

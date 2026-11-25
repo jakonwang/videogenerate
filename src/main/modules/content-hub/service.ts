@@ -204,7 +204,7 @@ export const contentHubService = {
     const items = await contentIndex.list({ productId, limit: 1000 })
     const records = await reviewInbox.records()
     const byRef = new Map(records.map((record) => [record.ref, record]))
-    const lines: ContentLine[] = ['clone', 'creative', 'livephoto', 'production', 'publish']
+    const lines: ContentLine[] = ['clone', 'creative', 'muse', 'livephoto', 'production', 'publish']
     const stats = Object.fromEntries(lines.map((line) => {
       const rows = items.filter((item) => item.line === line)
       return [line, {

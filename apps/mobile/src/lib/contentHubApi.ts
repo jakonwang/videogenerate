@@ -52,7 +52,7 @@ function lineOf(purpose: string): ReportLine {
   // 商品图、商品替换、水印、AI 模特等图片类结果归到「图生视频」这条线（电脑端同一类工具），视频工具 / 混剪归「批量混剪」
   return ['product-image', 'product-replace', 'product-watermark', 'model'].includes(purpose) ? 'livephoto' : 'production'
 }
-const ROUTE_OF: Record<ReportLine, string> = { clone: '/clone', creative: '/creative', livephoto: '/image-to-video', production: '/production', publish: '/publish' }
+const ROUTE_OF: Record<ReportLine, string> = { clone: '/clone', creative: '/creative', muse: '/muse', livephoto: '/image-to-video', production: '/production', publish: '/publish' }
 const STATUS_OF: Record<string, Item['status']> = { queued: 'running', running: 'running', succeeded: 'ready', failed: 'failed' }
 
 type Snapshot = { items: Item[]; generations: Map<string, GenerationItem>; reviews: Record<string, ReportReview & { reason?: string; note?: string; firstSeenAt: number; productId?: string }> }

@@ -161,6 +161,34 @@ async function main() {
     assert.equal(cross.videoFingerprint(kept.shotVideoOutputs.find((item: any) => item.shotId === 'shot_1')?.videoPath), cross.videoFingerprint(creativeVideo), 'manual choice kept')
     assert.equal((await tiktokCreativeStudioRepo.get(manual.id))!.shots[0].cloneBackfill?.status, 'skipped')
 
+    // 4b. Muse创意室: listed per shot, swapped in once when finished, a manual change is kept.
+    const museVideo = clip('muse.mp4', 'orange')
+    const museDb = join(process.env.VIDEOGENERATE_DATA_DIR!, 'db', 'muse-creative-studio-jobs.json')
+    const museJob = (id: string, extra: Record<string, unknown>) => ({ id, accountId: 'a', imagePath: frame, prompt: 'p', sentPrompt: 'p', durationSec: 5, aspect: '9:16', status: 'completed', stage: 'downloading', submitted: true, result: { videoPath: museVideo, width: 720, height: 1280, durationSec: 3, bytes: 1 }, posterPath: frame, createdAt: now, updatedAt: now, ...extra })
+    await writeFile(museDb, JSON.stringify({ jobs: [
+      museJob('mu1', { clone: { projectId, shotId: 'shot_2', autoReplace: true, status: 'waiting', baseline: cross.videoFingerprint(creativeVideo) } }),
+      museJob('mu2', { clone: { projectId, shotId: 'shot_1', autoReplace: true, status: 'waiting', baseline: cross.videoFingerprint(original) } }),
+      museJob('mu3', { status: 'needs_review', result: undefined, clone: { projectId, shotId: 'shot_1', autoReplace: true, status: 'waiting', baseline: '' } }),
+      museJob('mu4', { productId: 'p9' }),
+    ] }))
+    const museList = (await cross.listCloneShotAlternatives({ cloneProjectId: projectId })).filter((item) => item.line === 'muse')
+    assert.deepEqual(museList.map((item) => [item.ref, item.status]).sort(), [['muse:mu1', 'ready'], ['muse:mu2', 'ready'], ['muse:mu3', 'running']])
+    assert.equal(await cross.sweepCloneShotBackfills(), 1)
+    const withMuse: any = await cloneRepo.getProject(projectId)
+    assert.equal(cross.videoFingerprint(withMuse.shotVideoOutputs.find((item: any) => item.shotId === 'shot_2')?.videoPath), cross.videoFingerprint(museVideo))
+    assert.equal(cross.videoFingerprint(withMuse.shotVideoOutputs.find((item: any) => item.shotId === 'shot_1')?.videoPath), cross.videoFingerprint(creativeVideo), 'manual choice kept')
+    const { museCreativeStudioService } = await import('../src/main/modules/muse-creative-studio/service')
+    const museState = async (id: string) => (await museCreativeStudioService.getJob(id)).clone?.status
+    assert.deepEqual([await museState('mu1'), await museState('mu2'), await museState('mu3')], ['done', 'skipped', 'waiting'])
+    assert.equal(await cross.sweepCloneShotBackfills(), 0)
+    await assert.rejects(cross.sendCloneShotsToMuse({ cloneProjectId: projectId, shotIds: ['shot_1'] }), /绑定商品/)
+
+    const { contentIndex } = await import('../src/main/modules/content-hub/contentIndex')
+    contentIndex.invalidate()
+    const museItems = await contentIndex.list({ line: 'muse' })
+    assert.deepEqual(museItems.map((item) => [item.ref, item.status]).sort(), [['muse:mu1', 'ready'], ['muse:mu2', 'ready'], ['muse:mu3', 'running'], ['muse:mu4', 'ready']])
+    assert.ok(museItems.find((item) => item.ref === 'muse:mu1')?.mediaPath)
+
     // 5. Tagging a multi-frame task maps shots by order.
     const multi = await tiktokCreativeStudioRepo.create({
       productName: 'p', status: 'running', logs: [],

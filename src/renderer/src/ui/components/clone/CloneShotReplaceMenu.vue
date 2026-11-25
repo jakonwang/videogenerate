@@ -5,12 +5,12 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, FolderOpen, Loader2, Play, Replace, Wand2 } from 'lucide-vue-next'
+import { ChevronDown, FolderOpen, Loader2, Play, Replace, Sparkles, Wand2 } from 'lucide-vue-next'
 import VideoPreviewModal from '../VideoPreviewModal.vue'
 
 type Alternative = {
   ref: string
-  line: 'creative' | 'livephoto'
+  line: 'creative' | 'muse' | 'livephoto'
   shotId: string
   status: 'ready' | 'running' | 'failed'
   videoPath?: string
@@ -35,12 +35,16 @@ const busy = ref(false)
 const all = ref<Alternative[]>([])
 const preview = ref<Alternative | null>(null)
 const menuError = ref('')
+const museReady = ref(false)
+const museAsking = ref(false)
 const root = ref<HTMLElement | null>(null)
 let timer: number | null = null
 
 const forShot = computed(() => all.value.filter((item) => item.shotId === props.shotId))
 const ready = computed(() => forShot.value.filter((item) => item.status === 'ready'))
 const running = computed(() => forShot.value.find((item) => item.line === 'creative' && item.status === 'running'))
+const museRunning = computed(() => forShot.value.find((item) => item.line === 'muse' && item.status === 'running'))
+const museFailed = computed(() => forShot.value.find((item) => item.line === 'muse' && item.status === 'failed'))
 const lastFailed = computed(() => forShot.value.find((item) => item.line === 'creative' && item.status === 'failed'))
 
 function fileUrl(path?: string) {
@@ -62,6 +66,7 @@ async function load() {
 }
 
 function lineLabel(item: Alternative) {
+  if (item.line === 'muse') return t('ai.cloneShot.lineMuse')
   return item.line === 'creative' ? t('ai.cloneShot.lineCreative') : t('ai.cloneShot.lineLivePhoto')
 }
 
@@ -95,6 +100,21 @@ async function sendToCreative() {
   }
 }
 
+async function sendToMuse() {
+  busy.value = true
+  menuError.value = ''
+  museAsking.value = false
+  try {
+    await window.api.clone.sendShotToMuse({ cloneProjectId: props.cloneProjectId, shotId: props.shotId })
+    await load()
+  } catch (error) {
+    menuError.value = errorText(error)
+    emit('error', menuError.value)
+  } finally {
+    busy.value = false
+  }
+}
+
 function pickFile() {
   open.value = false
   emit('pick-file')
@@ -106,7 +126,7 @@ function onDocClick(event: MouseEvent) {
 
 // A video may be swapped in while the page is open (tk创意室 finished): tell the parent to reload.
 watch(
-  () => forShot.value.filter((item) => item.inUse && item.line === 'creative').map((item) => item.ref).join(','),
+  () => forShot.value.filter((item) => item.inUse && item.line !== 'livephoto').map((item) => item.ref).join(','),
   (next, prev) => {
     if (prev !== undefined && next && next !== prev) emit('replaced', null)
   },
@@ -115,6 +135,9 @@ watch(() => [props.cloneProjectId, props.shotId], () => void load())
 watch(open, (value) => {
   if (!value) return
   menuError.value = ''
+  museAsking.value = false
+  // Optional line: offered only once a Muse account is set up (and never on the web, where the API is missing).
+  void window.api.museCreative?.listAccounts?.().then((result) => { museReady.value = result.accounts.some((account) => account.enabled) }).catch(() => undefined)
   void load()
 })
 
@@ -122,7 +145,7 @@ onMounted(() => {
   void load()
   document.addEventListener('mousedown', onDocClick)
   timer = window.setInterval(() => {
-    if (running.value || open.value) void load()
+    if (running.value || museRunning.value || open.value) void load()
   }, 15_000)
 })
 onBeforeUnmount(() => {
@@ -167,6 +190,13 @@ onBeforeUnmount(() => {
         <small class="csr__hint">{{ running ? t('ai.cloneShot.running') : t('ai.cloneShot.sendCreativeHint') }}</small>
         <small v-if="menuError" class="csr__error" data-testid="clone-shot-replace-error">{{ menuError }}</small>
         <small v-else-if="!running && lastFailed?.error" class="csr__error">{{ t('ai.cloneShot.lastFailed', { error: lastFailed.error }) }}</small>
+      </div>
+
+      <div v-if="museReady || museRunning" class="csr__section">
+        <button v-if="!museAsking" type="button" :disabled="busy || Boolean(museRunning)" data-testid="clone-shot-send-muse" @click="museAsking = true"><Sparkles :size="14" /> {{ t('ai.cloneShot.sendMuse') }}</button>
+        <button v-else type="button" :disabled="busy" data-testid="clone-shot-send-muse-confirm" @click="sendToMuse"><Sparkles :size="14" /> {{ t('ai.cloneShot.sendMuseConfirm') }}</button>
+        <small class="csr__hint">{{ museRunning ? t('ai.cloneShot.runningMuse') : t('ai.cloneShot.sendMuseHint') }}</small>
+        <small v-if="!museRunning && museFailed?.error" class="csr__error">{{ t('ai.cloneShot.lastFailed', { error: museFailed.error }) }}</small>
       </div>
     </div>
     <VideoPreviewModal :open="Boolean(preview)" :src="fileUrl(preview?.videoPath)" :poster="fileUrl(preview?.posterPath)" :title="preview ? lineLabel(preview) : ''" @close="preview = null" />

@@ -54,6 +54,7 @@
     "tabs": {
       "clone": "爆款复刻",
       "creative": "tk创意室",
+      "muse": "Muse创意室",
       "livePhoto": "图生视频",
       "mix": "混剪工作台",
       "pool": "素材池",
@@ -66,6 +67,7 @@
     "library": "素材库"
   },
   "line": {
+    "muse": "Muse创意室",
     "clone": "复刻",
     "creative": "tk创意室",
     "livephoto": "图生视频",
@@ -90,6 +92,7 @@
     "cancelled": "已取消"
   },
   "intent": {
+    "MuseFromImages": "Muse创意室：场景图换品出片",
     "ProductInspect": "查看商品资料",
     "ProductSave": "保存商品",
     "ProductManage": "管理商品（可能删除）",
@@ -187,6 +190,8 @@
       "summary": "复刻 {count} 条参考视频 → 分镜送去其他生产线 → 进入审核收件箱"
     },
     "scene": {
+      "promptMuse": "用Muse创意室把 {count} 张场景图换成这个商品并出片",
+      "summaryMuse": "Muse创意室处理 {count} 张场景图（换图后由你确认）",
       "title": "场景图批量出片",
       "desc": "把好看的场景图换成你的商品，用 TikTok 创意账号或模型批量出短视频 / 图生视频",
       "output": "产出：每张图一条短视频或图生视频",
@@ -234,6 +239,7 @@
     }
   },
   "fields": {
+    "engineMuse": "Muse创意室（消耗 Muse 额度）",
     "product": "商品",
     "productOptional": "商品（可选，不选则包含全部商品）",
     "products": "商品（可多选）",
@@ -575,6 +581,7 @@
     "openWorkspace": "打开工作台",
     "letAi": "让 AI 来做",
     "lines": {
+      "muse": {"title":"Muse创意室","desc":"参考图换上你的商品，用 Muse 账号批量出短视频"},
       "clone": {
         "title": "复刻",
         "desc": "照着爆款视频的结构，做一条带你商品的完整成片"
@@ -828,6 +835,11 @@
     "productResearch": "选品中心"
   },
   "cloneShot": {
+    "lineMuse": "Muse创意室",
+    "sendMuse": "交给 Muse创意室 重做这个镜头",
+    "sendMuseConfirm": "确定发送（消耗 Muse 额度）",
+    "sendMuseHint": "用这个镜头的分镜图出片，完成后自动换上（会消耗 Muse 额度）",
+    "runningMuse": "Muse创意室出片中，完成后自动换上",
     "replace": "替换视频",
     "fromDisk": "从电脑选择…",
     "madeElsewhere": "用已出的结果",

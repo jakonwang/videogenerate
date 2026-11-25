@@ -44,6 +44,11 @@ async function main() {
     await assert.rejects(web.relay.call('tiktokGmvMax', 'getAlerts', []), (error: any) => error instanceof CloudClientError && /电脑端不在线/.test(error.message))
     assert.equal((await web.relay.status()).online, false)
 
+    // Muse accounts (proxy, login) stay on the computer; new account methods are closed by default.
+    const { relayAllows } = await import('../src/shared/cloud/relay')
+    for (const method of ['listAccounts', 'createAccount', 'updateAccount', 'importCookies', 'login', 'testAccount', 'queryQuota', 'exportJobs', 'anythingNew']) assert.equal(relayAllows('museCreative', method), false, method)
+    for (const method of ['listAccountSummaries', 'listJobs', 'createJobs', 'approveImages', 'redoImage']) assert.equal(relayAllows('museCreative', method), true, method)
+
     // the computer's handlers: same functions the desktop page calls over IPC
     const seen: unknown[] = []
     worker.registerRelayHandlerForTest('plugin:tiktokGmvMax:getAlerts', async (_event, ...args) => {

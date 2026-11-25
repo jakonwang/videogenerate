@@ -49,7 +49,7 @@ watch(
   { immediate: true },
 )
 
-const LINE_LABEL: Record<string, string> = { clone: '复刻', creative: 'tk创意室', livephoto: '图生视频', production: '批量混剪', publish: '发布' }
+const LINE_LABEL: Record<string, string> = { clone: '复刻', creative: 'tk创意室', muse: 'Muse创意室', livephoto: '图生视频', production: '批量混剪', publish: '发布' }
 const CREATIVE_STATUS: Record<string, { label: string; tone: string }> = {
   draft: { label: '草稿', tone: 'muted' },
   running: { label: '生成中', tone: 'blue' },

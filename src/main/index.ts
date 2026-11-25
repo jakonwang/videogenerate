@@ -36,6 +36,7 @@ import { registerLivePhotoIpc } from './ipc/registerLivePhotoIpc'
 import { registerStyleReferenceIpc } from './ipc/registerStyleReferenceIpc'
 import { registerProductImageMaterialsIpc } from './ipc/registerProductImageMaterialsIpc'
 import { registerTiktokCreativeStudioIpc } from './ipc/registerTiktokCreativeStudioIpc'
+import { registerMuseCreativeStudioIpc } from './ipc/registerMuseCreativeStudioIpc'
 import { registerTiktokListingIpc } from './ipc/registerTiktokListingIpc'
 import { registerTemplatesTasksIpc } from './ipc/registerTemplatesTasksIpc'
 import { registerVideoParserDownloadIpc } from './ipc/registerVideoParserDownloadIpc'
@@ -70,6 +71,8 @@ import { tiktokListingRepo } from './modules/tiktok-listing/repo'
 import { tiktokCreativeStudioRepo } from './modules/tiktok-creative-studio/repo'
 import { tiktokCreativeStudioService } from './modules/tiktok-creative-studio/service'
 import { closeTiktokOfficialBrowser } from './modules/tiktok-creative-studio/officialClient'
+import { closeMuseBrowsers } from './modules/muse-creative-studio/browser'
+import { museCreativeStudioService } from './modules/muse-creative-studio/service'
 import { livePhotoRepo } from './modules/live-photo/repo'
 import { videoParserDownloadService } from './modules/video-parser-download/service'
 import { extractLegacyCapabilityPlatform, mapPlatformToStoredProvider, normalizeCapabilityProfileState } from '../shared/platformSettings'
@@ -818,6 +821,7 @@ function wireIpc() {
   registerStyleReferenceIpc(ipcMain)
   registerProductImageMaterialsIpc(ipcMain)
   registerTiktokCreativeStudioIpc(recordIpcHandlers(ipcMain), () => mainWindow)
+  registerMuseCreativeStudioIpc(ipcMain)
   registerTiktokListingIpc(ipcMain)
   registerTemplatesTasksIpc(ipcMain, () => mainWindow)
   registerMixPoolIpc(ipcMain, () => mainWindow)
@@ -928,6 +932,11 @@ app.whenReady().then(async () => {
           console.error('[tiktok-creative] startup resume failed', error)
           markStartupStage('tiktok-creative-auto-resume-failed')
         }
+        try {
+          markStartupStage('muse-creative-auto-resume-complete', await museCreativeStudioService.resumeJobs())
+        } catch (error) {
+          console.error('[muse-creative] startup resume failed', error)
+        }
         // Background synchronization must be started explicitly by the user.
         markStartupStage('background-initialization-complete')
       } catch (error: any) {
@@ -950,10 +959,29 @@ app.on('window-all-closed', () => {
   if (isAppQuitting && process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  const museJobs = museCreativeStudioService.activeJobs()
+  if (museJobs > 0) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'warning',
+      buttons: ['继续等待', '仍要退出'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Muse 创意室还有 ${museJobs} 条任务在运行`,
+      detail: '现在退出可能找不回正在生成的视频，额度也可能已经扣除。',
+    })
+    if (choice === 0) {
+      event.preventDefault()
+      isAppQuitting = false
+      return
+    }
+  }
   isAppQuitting = true
   stopEventLoopMonitoring()
   void closeTiktokOfficialBrowser()
+  void closeMuseBrowsers()
+  void museCreativeStudioService.stopJobs()
   void stopPreviewHttpServer()
   void stopWebApiServer()
   void productResearchService.stop()

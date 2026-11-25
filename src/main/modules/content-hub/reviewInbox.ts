@@ -4,13 +4,14 @@ import { brandMemoryStore, lineage, reviewStore } from './stores'
 import type { ContentItem, ContentLine, ReviewDecision, ReviewItem, ReviewRecord } from './types'
 
 /** Lines whose finished outputs land in the review inbox. */
-const REVIEW_LINES: ContentLine[] = ['clone', 'creative', 'livephoto']
+const REVIEW_LINES: ContentLine[] = ['clone', 'creative', 'muse', 'livephoto']
 /** Outputs finished long before the inbox existed are not pulled in. */
 const BACKFILL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 const ARCHIVE_ROOT = 'AI 成片'
 const ARCHIVE_FOLDER: Record<string, string> = {
   clone: '复刻成片',
   creative: 'tk创意室',
+  muse: 'Muse创意室',
   livephoto: '图生视频',
 }
 

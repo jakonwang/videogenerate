@@ -14,6 +14,7 @@ import WebStep from '@/components/web/WebStep.vue'
 import { CREATIVE_REQUEST_MAX_IMAGES, CREATIVE_STATE_LABEL, submitCreativeOrder, useCreativeOrders } from '@/lib/creative'
 import { useAssets } from '@/lib/assets'
 import { uploadImage } from '@/lib/files'
+import { useMuseAvailable } from '@/lib/muse'
 import { relativeTime, type ProductItem } from '@/lib/library'
 import { errorMessage } from '@/lib/session'
 import { toast } from '@/lib/toast'
@@ -25,6 +26,7 @@ const product = ref<ProductItem | null>(null)
 const scenes = ref<string[]>([])
 const mode = ref<'reference_to_video' | 'image_to_video'>('reference_to_video')
 const picking = ref(false)
+const museAvailable = useMuseAvailable()
 const uploading = ref(0)
 const submitting = ref(false)
 const input = ref<HTMLInputElement>()
@@ -68,6 +70,7 @@ async function submit() {
 <template>
   <PageHeader title="tk创意室" back="/create" description="场景图换上你的商品，用 TikTok 创意账号批量出短视频。由你的电脑执行（需开着 Klipmill 并已登录同一账号）。">
     <template #actions>
+      <button v-if="museAvailable" type="button" class="vg-btn" data-testid="muse-entry" @click="router.push('/muse')"><Wand2 :size="14" /> Muse创意室</button>
       <button type="button" class="vg-btn" @click="router.push('/business?tab=creative')"><Monitor :size="14" /> 电脑端任务进度</button>
       <button type="button" class="vg-btn" @click="router.push('/review')"><Inbox :size="14" /> 审核收件箱</button>
     </template>

@@ -146,6 +146,37 @@ async function creativeItems(names: Map<string, string>): Promise<ContentItem[]>
   return out
 }
 
+async function museItems(names: Map<string, string>): Promise<ContentItem[]> {
+  try {
+    const { museCreativeStudioService } = await import('../muse-creative-studio/service')
+    return (await museCreativeStudioService.listJobs()).jobs.flatMap((job): ContentItem[] => {
+      if (job.status === 'cancelled') return []
+      const mediaPath = firstExisting(job.subtitleVideoPath, job.result?.videoPath)
+      const status: ContentStatus = job.status === 'completed' && mediaPath ? 'ready' : job.status === 'failed' ? 'failed' : 'running'
+      return [{
+        ref: `muse:${job.id}`,
+        line: 'muse',
+        projectRef: `muse:${job.id}`,
+        productId: job.productId,
+        productName: job.productId ? names.get(job.productId) || job.productName : undefined,
+        title: job.productName || job.prompt.slice(0, 40),
+        status,
+        stage: job.status === 'needs_review' ? '等待人工处理' : job.status === 'image_review' ? '等待确认换图' : undefined,
+        error: status === 'failed' ? job.error : undefined,
+        mediaPath: mediaPath || undefined,
+        mediaType: 'video',
+        previewPath: firstExisting(job.subtitleCoverPath, job.posterPath, job.preparedImagePath, job.imagePath) || undefined,
+        route: `/plugins/muse-creative-studio?job=${encodeURIComponent(job.id)}`,
+        sourceRef: job.clone ? `clone:${job.clone.projectId}` : undefined,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      }]
+    })
+  } catch {
+    return []
+  }
+}
+
 function productionItems(names: Map<string, string>): ContentItem[] {
   let tasks: any[] = []
   try {
@@ -227,6 +258,7 @@ export const contentIndex = {
     const groups = await Promise.all([
       cloneItems(names),
       creativeItems(names),
+      museItems(names),
       livePhotoItems(names),
       Promise.resolve(productionItems(names)),
       publishItems(names),

@@ -41,7 +41,7 @@ export const ROLE_LABEL: Record<ClipRole, string> = {
   broll: '空镜',
 }
 export const ORIGIN_LABEL: Record<ClipOrigin, string> = { real: '实拍', ai: 'AI', unknown: '未标注' }
-export const SOURCE_KIND_LABEL: Record<string, string> = { creative_studio: 'tk创意室', live_photo: '图生视频', product_asset: '商品素材', clone_output: 'AI 复刻成片', import: '导入' }
+export const SOURCE_KIND_LABEL: Record<string, string> = { creative_studio: 'tk创意室', muse_studio: 'Muse创意室', live_photo: '图生视频', product_asset: '商品素材', clone_output: 'AI 复刻成片', import: '导入' }
 export const SOURCE_STATUS_LABEL: Record<string, string> = { pending: '待处理', splitting: '切分中', ready: '已就绪', failed: '失败' }
 export const LANGUAGE_LABEL: Record<MixLanguage, string> = { 'vi-VN': '越南语', 'zh-CN': '中文', 'en-US': '英语', 'th-TH': '泰语', 'id-ID': '印尼语' }
 export const FORMULA_SOURCE_LABEL: Record<MixFormula['source'], string> = { builtin: '内置', reference: '参考视频', custom: '自定义' }

@@ -194,6 +194,7 @@ export const AI_RECIPES: Recipe[] = [
         defaultValue: 'creative',
         options: [
           { value: 'creative', labelKey: 'ai.fields.engineCreative' },
+          ...(import.meta.env?.DEV ? [{ value: 'muse', labelKey: 'ai.fields.engineMuse' }] : []),
           { value: 'livephoto', labelKey: 'ai.fields.engineLivePhoto' },
         ],
       },
@@ -201,6 +202,13 @@ export const AI_RECIPES: Recipe[] = [
     build: (values, t) => {
       const images = paths(values.sceneImages)
       const creative = values.engine !== 'livephoto'
+      if (values.engine === 'muse') {
+        return {
+          prompt: t('ai.recipes.scene.promptMuse', { count: images.length }),
+          context: { productId: values.productId, referenceImagePaths: images, imagePaths: images, quantity: images.length },
+          plan: { intents: ['Intent.MuseFromImages', 'Intent.ReviewSubmit'], summary: t('ai.recipes.scene.summaryMuse', { count: images.length }) },
+        }
+      }
       return {
         prompt: t(creative ? 'ai.recipes.scene.promptCreative' : 'ai.recipes.scene.promptLivePhoto', { count: images.length }),
         context: { productId: values.productId, referenceImagePaths: images, imagePaths: images, quantity: images.length },

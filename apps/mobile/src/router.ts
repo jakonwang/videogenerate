@@ -40,6 +40,7 @@ const DESKTOP_PATHS: Array<[string, string]> = [
   ['/live-slicer', '/tools/slice'],
   ['/plugins/live-photo-generator', '/image-to-video'],
   ['/plugins/tiktok-creative-studio', '/creative'],
+  ['/plugins/muse-creative-studio', '/muse'],
   ['/plugins/product-image-materials', '/product-images'],
   ['/plugins/product-replacement', '/product-replace'],
   ['/plugins/product-watermark', '/product-watermark'],
@@ -167,6 +168,7 @@ export const router = createRouter({
     { path: '/toolbox', component: () => import('./views/web/WebToolbox.vue'), meta: { tabs: false } },
     // Web: the desktop tk创意室 page through the computer when it is online (the web order form when it is not).
     { path: '/creative', component: isWeb ? () => import('./views/web/WebCreativeStudio.vue') : () => import('./views/CreativeView.vue'), meta: { tabs: false } },
+    { path: '/muse', component: isWeb ? () => import('./views/web/WebMuseStudio.vue') : () => import('./views/MuseView.vue'), meta: { tabs: false } },
     { path: '/tasks', component: () => import('./views/TasksView.vue'), meta: { tabs: false } },
     isWeb ? { path: '/membership', ...desktopPage(() => import('@desktop-views/BillingView.vue')), meta: { tabs: false } } : { path: '/membership', component: () => import('./views/MembershipView.vue'), meta: { tabs: false } },
     { path: '/product-research', name: 'product-research', component: () => import('@desktop-views/ProductResearchView.vue').then((m) => m.default as Component), meta: { tabs: false } },

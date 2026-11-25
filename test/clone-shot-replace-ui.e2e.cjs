@@ -5,7 +5,7 @@
  */
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { mkdtemp, mkdir } = require('node:fs/promises')
+const { mkdtemp, mkdir, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { _electron: electron } = require('playwright')
@@ -20,6 +20,8 @@ async function main() {
   assert.equal(seed.status, 0, seed.stderr)
   const { projectId } = JSON.parse(seed.stdout.trim().split('\n').pop())
 
+  // An enabled Muse account makes the Muse option appear; the project has no product, so nothing can be sent.
+  await writeFile(join(dataDir, 'db', 'muse-creative-studio-accounts.json'), JSON.stringify({ accounts: [{ id: 'm', name: 'm', enabled: true, priority: 0, state: 'ready', updatedAt: Date.now() }] }))
   const errors = []
   const app = await electron.launch({ args: ['.'], cwd: join(__dirname, '..'), env })
   try {
@@ -62,6 +64,11 @@ async function main() {
     await error.waitFor()
     assert.ok((await error.innerText()).includes('绑定商品'), 'explains in the menu that a product must be bound')
     await page.screenshot({ path: join(shots, '03-send-needs-product.png') })
+
+    await menu.locator('[data-testid="clone-shot-send-muse"]').click()
+    await menu.locator('[data-testid="clone-shot-send-muse-confirm"]').click()
+    await page.waitForFunction(() => document.querySelector('[data-testid="clone-shot-replace-error"]')?.textContent.includes('Muse创意室'))
+    await page.screenshot({ path: join(shots, '04-send-muse.png') })
 
     assert.deepEqual(errors, [], `renderer errors: ${errors.join('\n')}`)
     console.log(`clone-shot-replace-ui e2e: ok (screenshots in ${shots})`)

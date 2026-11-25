@@ -69,7 +69,7 @@ const topUserPlan = computed(() => {
 const isToolRoute = computed(() =>
   route.path === '/plugins' ||
   route.path === '/live-slicer' ||
-  (route.path.startsWith('/plugins/') && !route.path.startsWith('/plugins/tiktok-creative-studio') && !route.path.startsWith('/plugins/live-photo-generator')),
+  (route.path.startsWith('/plugins/') && !route.path.startsWith('/plugins/tiktok-creative-studio') && !route.path.startsWith('/plugins/muse-creative-studio') && !route.path.startsWith('/plugins/live-photo-generator')),
 )
 
 const allNavItems = computed(() => [

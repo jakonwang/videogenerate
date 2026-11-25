@@ -1934,8 +1934,8 @@
       "runtimeLogTitle": "Nhat Ky Chay",
       "primaryImage": "Anh Chinh Live Photo",
       "primaryImageRequired": "San pham chua co anh chinh Live Photo nen khong the tao tac vu thay the.",
-      "qualityGateTitle": "Kiem Tra Chat Luong Va Phien Ban Prompt",
-      "qualityGateDesc": "Tac vu dung phien ban dang kich hoat va chi tao video sau khi anh dat yeu cau.",
+      "qualityGateTitle": "Phien ban prompt",
+      "qualityGateDesc": "Tac vu dung phien ban dang kich hoat va tao video sau khi thay anh xong.",
       "passRate": "Ty Le Dat",
       "averageScore": "Diem Trung Binh",
       "retryCount": "So Lan Thu Lai",
@@ -2736,6 +2736,7 @@
       },
       "sourceKind": {
         "creative_studio": "TikTok Creative Studio",
+        "muse_studio": "Muse Creative",
         "live_photo": "Live Photo",
         "product_asset": "Tư liệu sản phẩm",
         "clone_output": "Video nhân bản AI",

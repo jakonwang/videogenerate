@@ -334,7 +334,16 @@ const publisherPrecheckEnabled = ref(false);
 const publisherPickerOpen = ref(false);
 const publisherPickerProduct = ref("");
 const publisherPickerSelected = ref<string[]>([]);
-const publisherPickerSource = ref<"clone" | "live-photo" | "creative">("clone");
+const publisherPickerSource = ref<"clone" | "live-photo" | "creative" | "muse">("clone");
+const publisherMuseItems = ref<any[]>([]);
+async function loadPublisherMuseVideos() {
+  try {
+    const queue = await window.api.museCreative?.listJobs?.();
+    publisherMuseItems.value = (queue?.jobs || []).filter((job: any) => job.status === "completed" && job.result);
+  } catch {
+    publisherMuseItems.value = [];
+  }
+}
 const publisherLivePhotoItems = ref<any[]>([]);
 const publisherCloneItems = ref<any[]>([]);
 const publisherPickerLoading = ref(false);
@@ -759,6 +768,17 @@ const publisherSourceItems = computed(() => {
       posterPath: shot.posterPath || shot.imagePath || "",
       productId: task.productId || "",
       createdAt: shot.createdAt,
+    }));
+  }
+  if (publisherPickerSource.value === "muse") {
+    return publisherMuseItems.value.map((job) => ({
+      key: `muse:${job.id}`,
+      title: job.productName || "Muse",
+      filePath: job.subtitleVideoPath || job.result?.videoPath || "",
+      posterPath: job.posterPath || job.imagePath || "",
+      productId: job.productId || "",
+      sourceRef: `muse:${job.id}`,
+      createdAt: job.createdAt,
     }));
   }
   if (publisherPickerSource.value === "live-photo") {
@@ -2552,7 +2572,7 @@ async function pickPublisherVideos() {
   publisherPickerSource.value = "clone";
   publisherPickerPage.value = 1;
   publisherPickerOpen.value = true;
-  await Promise.all([loadPublisherLivePhotos(), loadPublisherCloneVideos()]);
+  await Promise.all([loadPublisherLivePhotos(), loadPublisherCloneVideos(), loadPublisherMuseVideos()]);
 }
 async function loadPublisherCloneVideos() {
   publisherPickerLoading.value = true;
@@ -2648,16 +2668,18 @@ async function confirmPublisherPicker() {
       .filter(Boolean);
     if (!paths.length) return;
     try {
-      const created = await window.api.tiktokPublisher.createDraftsFromPaths({
-        paths,
-        defaults: {
-          connectionUid: publisherConnection.value || undefined,
-          productId: publisherProduct.value || undefined,
-          videoTitle: publisherTitle.value || undefined,
-          scheduleAt: publisherSchedule.value || undefined,
-          music: toPlainPublisherMusic(publisherSelectedMusic.value),
-        },
-      });
+      const picked: any[] = publisherSourceItems.value.filter((item) => publisherPickerSelected.value.includes(item.key) && item.filePath);
+      const defaults = {
+        connectionUid: publisherConnection.value || undefined,
+        productId: publisherProduct.value || undefined,
+        videoTitle: publisherTitle.value || undefined,
+        scheduleAt: publisherSchedule.value || undefined,
+        music: toPlainPublisherMusic(publisherSelectedMusic.value),
+      };
+      // Muse drafts keep a link to their video, so they are marked as published later.
+      const created: any[] = publisherPickerSource.value === "muse"
+        ? (await Promise.all(picked.map((item) => window.api.tiktokPublisher.createDraftsFromPaths({ paths: [item.filePath], defaults: { ...defaults, sourceRef: item.sourceRef } })))).flat()
+        : await window.api.tiktokPublisher.createDraftsFromPaths({ paths, defaults });
       publisherTasks.value = [...publisherTasks.value, ...created];
       publisherRowSelection.value = created.map((item: any) => item.id);
       publisherPickerOpen.value = false;
@@ -5288,6 +5310,18 @@ onBeforeUnmount(() => {
             "
           >
             tk创意室
+          </button>
+          <button
+            v-if="publisherMuseItems.length"
+            type="button"
+            :class="{ active: publisherPickerSource === 'muse' }"
+            @click="
+              publisherPickerSource = 'muse';
+              publisherPickerSelected = [];
+              publisherPickerPage = 1;
+            "
+          >
+            Muse创意室
           </button>
         </div>
         <div class="publisher-picker-filter">

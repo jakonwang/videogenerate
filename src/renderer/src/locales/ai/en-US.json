@@ -54,6 +54,7 @@
     "tabs": {
       "clone": "Clone a hit",
       "creative": "TK Creative",
+      "muse": "Muse Creative",
       "livePhoto": "Image to video",
       "mix": "Mix studio",
       "pool": "Clip pool",
@@ -66,6 +67,7 @@
     "library": "Asset library"
   },
   "line": {
+    "muse": "Muse Creative",
     "clone": "Clone",
     "creative": "Creative Studio",
     "livephoto": "Live Photo",
@@ -90,6 +92,7 @@
     "cancelled": "Cancelled"
   },
   "intent": {
+    "MuseFromImages": "Muse Creative: swap product into scenes",
     "ProductInspect": "Inspect product",
     "ProductSave": "Save product",
     "ProductManage": "Manage product (may delete)",
@@ -187,6 +190,8 @@
       "summary": "Clone {count} reference videos, send frames to other lines, then to the review inbox"
     },
     "scene": {
+      "promptMuse": "Use Muse Creative to swap this product into {count} scene images and render videos",
+      "summaryMuse": "Muse Creative: {count} scene images (you approve each swap)",
       "title": "Scene images to videos",
       "desc": "Swap your product into nice scene images and render shorts / Live Photos in bulk",
       "output": "Output: one short or Live Photo per image",
@@ -234,6 +239,7 @@
     }
   },
   "fields": {
+    "engineMuse": "Muse Creative (uses Muse quota)",
     "product": "Product",
     "productOptional": "Product (optional, all products if empty)",
     "products": "Products (multiple)",
@@ -575,6 +581,7 @@
     "openWorkspace": "Open workspace",
     "letAi": "Let AI do it",
     "lines": {
+      "muse": {"title":"Muse Creative","desc":"Swap your product into reference images and render shorts with Muse accounts"},
       "clone": {
         "title": "Clone",
         "desc": "Follow a viral video's structure to make a full cut with your product"
@@ -828,6 +835,11 @@
     "productResearch": "Product research"
   },
   "cloneShot": {
+    "lineMuse": "Muse Creative",
+    "sendMuse": "Remake this shot in Muse Creative",
+    "sendMuseConfirm": "Confirm (uses Muse quota)",
+    "sendMuseHint": "Generates from this shot's storyboard frame and swaps it in when done (uses Muse quota)",
+    "runningMuse": "Muse Creative is rendering; it will be swapped in when done",
     "replace": "Replace video",
     "fromDisk": "Choose from computer…",
     "madeElsewhere": "Use a finished result",

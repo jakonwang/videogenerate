@@ -73,6 +73,24 @@ export async function runHealthCheck(): Promise<HealthReport> {
   }
 
   try {
+    const { museCreativeStudioService } = await import('../muse-creative-studio/service')
+    const { accounts } = await museCreativeStudioService.list()
+    // Not set up is not a problem: the line is optional.
+    if (accounts.length) {
+      const enabled = accounts.filter((account) => account.enabled)
+      const ready = enabled.filter((account) => account.state === 'ready')
+      const resting = ready.filter((account) => Number(account.quotaUntil) > Date.now())
+      const usable = ready.length - resting.length
+      const detail = !enabled.length
+        ? '没有启用的 Muse 账号'
+        : `${usable} 个可用，${resting.length} 个额度不足，${enabled.length - ready.length} 个代理或登录异常`
+      items.push({ key: 'muse.accounts', level: !enabled.length ? 'warning' : !usable ? 'error' : usable < enabled.length ? 'warning' : 'ok', title: 'Muse 账号', detail, route: '/plugins/muse-creative-studio' })
+    }
+  } catch {
+    items.push({ key: 'muse.accounts', level: 'warning', title: 'Muse 账号', detail: '无法读取账号状态', route: '/plugins/muse-creative-studio' })
+  }
+
+  try {
     const status = await creatokPublisherService.credentialStatus()
     items.push({
       key: 'publish.credential',

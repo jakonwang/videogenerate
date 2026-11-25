@@ -158,6 +158,11 @@ const router = createRouter({
           component: () => import("@/ui/views/TiktokCreativeStudioView.vue"),
         },
         {
+          path: "plugins/muse-creative-studio",
+          name: "plugin-muse-creative-studio",
+          component: () => import("@/ui/views/MuseCreativeStudioView.vue"),
+        },
+        {
           path: "plugins/tiktok-creator-hub",
           name: "plugin-tiktok-creator-hub",
           component: () => import("@/ui/views/TiktokCreatorHubView.vue"),

@@ -3,7 +3,7 @@
  * 输入是各条生产线的内容、审核记录和重做反馈，输出与电脑端 InsightsReport / Brief 相同的结构。
  */
 
-export type ReportLine = 'clone' | 'creative' | 'livephoto' | 'production' | 'publish'
+export type ReportLine = 'clone' | 'creative' | 'muse' | 'livephoto' | 'production' | 'publish'
 export type ReportStatus = 'running' | 'failed' | 'ready' | 'draft'
 export type ReportLevel = 'ok' | 'warning' | 'error'
 
@@ -32,7 +32,7 @@ export type BriefItem = {
 }
 export type Brief = { id: string; kind: 'daily' | 'weekly'; periodKey: string; createdAt: number; headline: string; metrics?: string; items: BriefItem[]; insights?: InsightsReport; summary?: string }
 
-export const LINE_LABEL: Record<ReportLine, string> = { clone: '复刻', creative: 'tk创意室', livephoto: '图生视频', production: '批量混剪', publish: '发布' }
+export const LINE_LABEL: Record<ReportLine, string> = { clone: '复刻', creative: 'tk创意室', muse: 'Muse创意室', livephoto: '图生视频', production: '批量混剪', publish: '发布' }
 
 export const REDO_REASON_LABEL: Record<string, string> = {
   product_mismatch: '商品不像',
@@ -55,7 +55,8 @@ export function computeInsights(input: { items: ReportItem[]; reviews: Record<st
   const since = now - rangeDays * 24 * 60 * 60 * 1000
   const items = input.items
   const records = Object.values(input.reviews)
-  const lines: ReportLine[] = ['clone', 'creative', 'livephoto', 'production']
+  // Optional line: only reported once it has been used.
+  const lines: ReportLine[] = ['clone', 'creative', ...(items.some((item) => item.line === 'muse') ? ['muse' as const] : []), 'livephoto', 'production']
   const publishItems = items.filter((item) => item.line === 'publish' && item.updatedAt >= since)
   const publishedSources = new Set(publishItems.filter((item) => item.status === 'ready').map((item) => item.sourceRef).filter(Boolean))
 

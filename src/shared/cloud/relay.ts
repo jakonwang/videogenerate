@@ -26,6 +26,18 @@ export const RELAY_MODULES = {
    * 只能在电脑上做；导出由网页自己下载（不写电脑上的文件夹）。
    */
   tiktokCreative: { channel: 'plugin:tiktokCreative:', blocked: ['importAccount', 'updateAccount', 'testAccount', 'removeAccount', 'exportItems'] },
+  /**
+   * Muse创意室：网页 / 手机经电脑代办，用电脑上的 Muse 账号和代理执行。账号、代理、登录只能在电脑上看和改
+   * （网页只拿不含代理的 listAccountSummaries）；导出由网页自己下载。
+   */
+  museCreative: {
+    channel: 'plugin:museCreative:',
+    only: [
+      'listAccountSummaries', 'listJobs', 'getJob', 'createJobs', 'retryJob', 'dismissJob', 'collectJob', 'cancelJob', 'cancelQueuedJobs', 'removeJobs',
+      'approveImages', 'redoImage', 'setQueuePaused', 'setQueueConcurrency', 'saveSettings', 'addSubtitles', 'revertSubtitles',
+      'listPrompts', 'updatePrompt', 'copyPrompt', 'activatePrompt', 'rollbackPrompt',
+    ],
+  },
   /** tk创意室「同款参考视频」：在电脑上分析参考视频（网页上传的视频由电脑先下载） */
   styleReference: { channel: 'plugin:styleReference:', only: ['analyze', 'list'] },
   /** 发布中心（CreatOK）：电脑上的发布凭证和店铺连接；网页选的云端视频由电脑先下载再建草稿（见 CLOUD_FILE_PREFIX） */

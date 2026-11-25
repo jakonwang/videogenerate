@@ -14,10 +14,12 @@ import { onTiktokCreativeTaskChanged, tiktokCreativeStudioRepo } from '../tiktok
 import { tiktokCreativeStudioService } from '../tiktok-creative-studio/service'
 import type { TiktokCreativeShotTask, TiktokCreativeTask } from '../tiktok-creative-studio/types'
 import { lineage } from '../content-hub/stores'
+import { museCreativeStudioService } from '../muse-creative-studio/service'
+import type { MuseJob } from '../muse-creative-studio/types'
 
 export type CloneShotAlternative = {
   ref: string
-  line: 'creative' | 'livephoto'
+  line: 'creative' | 'muse' | 'livephoto'
   shotId: string
   status: 'ready' | 'running' | 'failed'
   videoPath?: string
@@ -111,6 +113,12 @@ function creativeStatus(shot: TiktokCreativeShotTask): CloneShotAlternative['sta
   return 'running'
 }
 
+/** An unclear Muse result still waits for a person, so it counts as running. */
+function museStatus(job: MuseJob): CloneShotAlternative['status'] {
+  if (job.status === 'completed') return fileExists(job.result?.videoPath) ? 'ready' : 'failed'
+  return job.status === 'failed' ? 'failed' : 'running'
+}
+
 export async function listCloneShotAlternatives(input: { cloneProjectId: string }): Promise<CloneShotAlternative[]> {
   const project = await loadProject(input.cloneProjectId)
   const result: CloneShotAlternative[] = []
@@ -135,6 +143,24 @@ export async function listCloneShotAlternatives(input: { cloneProjectId: string 
         createdAt: shot.createdAt || task.createdAt,
       })
     }
+  }
+  for (const job of (await museCreativeStudioService.listJobs()).jobs) {
+    if (job.clone?.projectId !== project.id || job.status === 'cancelled') continue
+    const status = museStatus(job)
+    const videoPath = status === 'ready' ? text(job.result?.videoPath) : undefined
+    result.push({
+      ref: `muse:${job.id}`,
+      line: 'muse',
+      shotId: job.clone.shotId,
+      status,
+      videoPath,
+      posterPath: fileExists(job.posterPath) ? text(job.posterPath) : undefined,
+      durationSec: job.result ? Math.round(job.result.durationSec) : job.durationSec,
+      error: status === 'failed' ? job.error : undefined,
+      autoReplace: job.clone.status === 'waiting',
+      inUse: Boolean(videoPath) && videoFingerprint(videoPath) === currentShotFingerprint(project, job.clone.shotId),
+      createdAt: job.createdAt,
+    })
   }
   const livePhotos = (await livePhotoRepo.list()).filter((item) => item.sourceProjectId === project.id && text(item.sourceShotId))
   for (const item of livePhotos) {
@@ -196,6 +222,67 @@ export async function sendCloneShotToCreative(input: { cloneProjectId: string; s
     await lineage.record({ fromRef: `clone:${project.id}`, toRef: `creative:${saved.id}:${shot.shotId}`, relation: 'sent_to', productId, meta: { shotId } }).catch(() => null)
   }
   return { taskId: saved.id }
+}
+
+/** One shot (swapped in when finished) or, without shotIds, every frame of the project (kept as options). */
+export async function sendCloneShotsToMuse(input: { cloneProjectId: string; shotIds?: string[]; autoReplace?: boolean }) {
+  const project = await loadProject(input.cloneProjectId)
+  const productId = text(project.productId)
+  if (!productId) throw new Error('这个复刻项目还没有绑定商品，绑定后才能交给 Muse创意室')
+  if (!(await museCreativeStudioService.list()).accounts.some((account) => account.enabled)) throw new Error('还没有启用的 Muse 账号')
+  const wanted = new Set((input.shotIds || []).map(text))
+  const frames = (project.storyboardFrames || []).filter((frame) => text(frame.shotId) && fileExists(frame.imagePath) && (!wanted.size || wanted.has(text(frame.shotId))))
+  if (!frames.length) throw new Error('这个镜头还没有分镜图，请先完成分镜设计')
+  const busy = (await listCloneShotAlternatives({ cloneProjectId: project.id })).filter((item) => item.line === 'muse' && item.status === 'running').map((item) => item.shotId)
+  const free = frames.filter((frame) => !busy.includes(text(frame.shotId)))
+  if (!free.length) throw new Error('这个镜头已经在 Muse创意室出片中')
+  const jobs = await museCreativeStudioService.createFromClone({
+    projectId: project.id,
+    productId,
+    frames: free.map((frame) => ({
+      imagePath: text(frame.imagePath),
+      shotId: text(frame.shotId),
+      autoReplace: Boolean(input.autoReplace),
+      baseline: currentShotFingerprint(project, text(frame.shotId)),
+    })),
+  })
+  for (const job of jobs) await lineage.record({ fromRef: `clone:${project.id}`, toRef: `muse:${job.id}`, relation: 'sent_to', productId, meta: { shotId: job.clone?.shotId } }).catch(() => null)
+  return { jobIds: jobs.map((job) => job.id) }
+}
+
+/** Swaps a finished Muse video into its clone shot. Safe to call repeatedly. */
+export async function runMuseShotBackfill(job: MuseJob) {
+  const link = job.clone
+  if (link?.status !== 'waiting') return false
+  const status = museStatus(job)
+  const key = `muse:${job.id}`
+  if ((status === 'running' && job.status !== 'cancelled') || backfillInFlight.has(key)) return false
+  backfillInFlight.add(key)
+  try {
+    const set = (next: 'done' | 'skipped' | 'failed', error?: string) => museCreativeStudioService.patchClone(job.id, { status: next, error })
+    if (job.status === 'cancelled') { await set('skipped', '任务已取消'); return false }
+    if (status === 'failed') { await set('failed', job.error || 'Muse 出片失败'); return false }
+    const project = (await cloneRepo.getProject(link.projectId)) as ProjectLike | null
+    if (!project) { await set('skipped', '复刻项目已删除'); return false }
+    const label = `「${text(project.title) || '复刻项目'}」镜头 ${shotNumber(project, link.shotId) || '?'}`
+    if (text(link.baseline) !== currentShotFingerprint(project, link.shotId)) {
+      await set('skipped', '镜头视频已被手动更换')
+      notify('Muse创意室出片完成', `${label} 已有新视频，未自动替换，可在替换视频里选用`)
+      return false
+    }
+    try {
+      await cloneService.replaceShotVideoForProject({ cloneProjectId: project.id, shotId: link.shotId, videoPath: text(job.result?.videoPath) })
+    } catch (error) {
+      await set('failed', error instanceof Error ? error.message : String(error))
+      return false
+    }
+    await set('done')
+    await lineage.record({ fromRef: key, toRef: `clone:${project.id}`, relation: 'derived_from', productId: text(project.productId) || undefined, meta: { shotId: link.shotId, use: 'shot_video' } }).catch(() => null)
+    notify('Muse创意室出片完成', `已换上${label}，可以重新合成成片`)
+    return true
+  } finally {
+    backfillInFlight.delete(key)
+  }
 }
 
 /** Sends every storyboard frame of a project to tk创意室 (no auto-swap; results show up under 替换视频). */
@@ -293,6 +380,7 @@ export async function sweepCloneShotBackfills() {
   for (const task of await tiktokCreativeStudioRepo.list()) {
     if (task.shots.some((shot) => shot.cloneBackfill?.status === 'waiting')) swapped += await runCloneShotBackfill(task)
   }
+  for (const job of (await museCreativeStudioService.listJobs()).jobs) if (await runMuseShotBackfill(job)) swapped += 1
   return swapped
 }
 
@@ -305,6 +393,7 @@ export function startCloneShotBackfillWatcher() {
       console.warn('[clone] shot backfill failed', error)
     })
   })
+  museCreativeStudioService.onJobStatus((job) => void runMuseShotBackfill(job).catch((error) => console.warn('[clone] Muse backfill failed', error)))
   // Finishes that happened while the app was closed.
   setTimeout(() => void sweepCloneShotBackfills().catch(() => undefined), 15_000)
 }

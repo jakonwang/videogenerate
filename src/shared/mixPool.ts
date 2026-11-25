@@ -26,7 +26,7 @@ export const CORE_CLIP_ROLES: ClipRole[] = ['hook', 'demo', 'detail', 'proof', '
 /** real = shot by a camera; ai = model generated; unknown = not stated. */
 export type ClipOrigin = 'real' | 'ai' | 'unknown'
 
-export type PoolSourceKind = 'product_asset' | 'clone_output' | 'creative_studio' | 'live_photo' | 'import'
+export type PoolSourceKind = 'product_asset' | 'clone_output' | 'creative_studio' | 'muse_studio' | 'live_photo' | 'import'
 
 export type PoolSourceStatus = 'pending' | 'splitting' | 'ready' | 'failed'
 

@@ -9,7 +9,7 @@ import ProductChainPanel, { type ProductSpine } from './ProductChainPanel.vue'
 import ProductPerformancePanel, { type ContentPerformance, type ProductPerformance } from './ProductPerformancePanel.vue'
 import CreativeGenesPanel from './CreativeGenesPanel.vue'
 
-type Line = 'clone' | 'creative' | 'livephoto' | 'production' | 'publish'
+type Line = 'clone' | 'creative' | 'muse' | 'livephoto' | 'production' | 'publish'
 type Item = {
   ref: string
   line: Line
@@ -46,7 +46,7 @@ const memorySaved = ref(false)
 const savingMemory = ref(false)
 let unsubscribe: (() => void) | null = null
 
-const lineIcon = { clone: Clapperboard, creative: Wand2, livephoto: PlaySquare, production: Images, publish: Send }
+const lineIcon = { clone: Clapperboard, creative: Wand2, muse: Wand2, livephoto: PlaySquare, production: Images, publish: Send }
 const items = computed(() => (overview.value?.items || []).filter((item) => !lineFilter.value || item.line === lineFilter.value))
 const pendingReview = computed(() => (overview.value?.items || []).filter((item) => item.review?.decision === 'pending').length)
 const approvedUnpublished = computed(() => {
@@ -219,7 +219,7 @@ defineExpose({ makeContent })
     />
 
     <section class="vg-stats ps__stats">
-      <button v-for="line in (['clone', 'creative', 'livephoto', 'publish'] as Line[])" :key="line" type="button" class="vg-stat ps__stat" :class="{ 'is-active': lineFilter === line }" @click="lineFilter = lineFilter === line ? '' : line">
+      <button v-for="line in ((overview?.stats.muse?.total ? ['clone', 'creative', 'muse', 'livephoto', 'publish'] : ['clone', 'creative', 'livephoto', 'publish']) as Line[])" :key="line" type="button" class="vg-stat ps__stat" :class="{ 'is-active': lineFilter === line }" @click="lineFilter = lineFilter === line ? '' : line">
         <span class="vg-stat__icon"><component :is="lineIcon[line]" :size="17" /></span>
         <span class="vg-stat__body">
           <span class="vg-stat__label">{{ t(`ai.line.${line}`) }}</span>

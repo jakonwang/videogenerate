@@ -1,3 +1,4 @@
+import type { MuseAccount, MuseCreateInput, MuseJob, MusePromptKind, MusePromptVersion, MuseQueue, MuseSettings } from '../main/modules/muse-creative-studio/types'
 import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene, SwapModel } from '../shared/sceneSwap'
 import type { MatrixAccountSettings } from '../shared/publishMatrix'
 import type { PublishProfitReport } from '../shared/publishProfit'
@@ -349,6 +350,7 @@ const api = {
     useShotAlternative: (payload: { cloneProjectId: string; shotId: string; ref: string }) => ipcRenderer.invoke('clone:useShotAlternative', payload),
     sendProjectToCreative: (payload: { cloneProjectId: string }) => ipcRenderer.invoke('clone:sendProjectToCreative', payload),
     sendShotToCreative: (payload: { cloneProjectId: string; shotId: string }) => ipcRenderer.invoke('clone:sendShotToCreative', payload),
+    sendShotToMuse: (payload: { cloneProjectId: string; shotId: string }) => ipcRenderer.invoke('clone:sendShotToMuse', payload),
     composeCloneVideo: (payload: {
       cloneProjectId: string
       outputDir?: string
@@ -1147,6 +1149,43 @@ const api = {
   styleReference: {
     analyze: (payload: { videoPath: string }) => ipcRenderer.invoke('plugin:styleReference:analyze', payload),
     list: () => ipcRenderer.invoke('plugin:styleReference:list'),
+  },
+  museCreative: {
+    /** `remote`: shown on the web, where accounts cannot be changed. */
+    listAccounts: (): Promise<{ encryptionAvailable: boolean; accounts: MuseAccount[]; remote?: boolean }> => ipcRenderer.invoke('plugin:museCreative:listAccounts'),
+    createAccount: (payload: { name: string; proxy: string }): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:createAccount', payload),
+    updateAccount: (payload: { id: string; name?: string; proxy?: string }): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:updateAccount', payload),
+    setEnabled: (payload: { id: string; enabled: boolean }): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:setEnabled', payload),
+    acceptExit: (id: string): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:acceptExit', id),
+    testAccount: (id: string): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:testAccount', id),
+    login: (id: string): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:login', id),
+    cancelLogin: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:cancelLogin', id),
+    importCookies: (payload: { id: string; cookieJson: string }): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:importCookies', payload),
+    removeAccount: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugin:museCreative:removeAccount', id),
+    listJobs: (): Promise<MuseQueue> => ipcRenderer.invoke('plugin:museCreative:listJobs'),
+    createJobs: (payload: MuseCreateInput): Promise<MuseJob[]> => ipcRenderer.invoke('plugin:museCreative:createJobs', payload),
+    retryJob: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:retryJob', id),
+    dismissJob: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:dismissJob', id),
+    approveImages: (ids: string[]): Promise<{ done: number }> => ipcRenderer.invoke('plugin:museCreative:approveImages', ids),
+    redoImage: (payload: { id: string; region?: { x: number; y: number; width: number; height: number }; closing?: boolean }): Promise<void> => ipcRenderer.invoke('plugin:museCreative:redoImage', payload),
+    saveSettings: (payload: Partial<MuseSettings>): Promise<MuseSettings> => ipcRenderer.invoke('plugin:museCreative:saveSettings', payload),
+    listPrompts: (kind: MusePromptKind): Promise<MusePromptVersion[]> => ipcRenderer.invoke('plugin:museCreative:listPrompts', kind),
+    updatePrompt: (payload: { id: string; name?: string; prompt: string }): Promise<MusePromptVersion> => ipcRenderer.invoke('plugin:museCreative:updatePrompt', payload),
+    copyPrompt: (payload: { kind: MusePromptKind; name?: string; prompt: string }): Promise<MusePromptVersion> => ipcRenderer.invoke('plugin:museCreative:copyPrompt', payload),
+    activatePrompt: (id: string): Promise<MusePromptVersion> => ipcRenderer.invoke('plugin:museCreative:activatePrompt', id),
+    rollbackPrompt: (id: string): Promise<MusePromptVersion> => ipcRenderer.invoke('plugin:museCreative:rollbackPrompt', id),
+    moveAccount: (payload: { id: string; step: -1 | 1 }): Promise<void> => ipcRenderer.invoke('plugin:museCreative:moveAccount', payload),
+    queryQuota: (id: string): Promise<MuseAccount> => ipcRenderer.invoke('plugin:museCreative:queryQuota', id),
+    getJob: (id: string): Promise<MuseJob> => ipcRenderer.invoke('plugin:museCreative:getJob', id),
+    removeJobs: (ids: string[]): Promise<{ done: number; skipped: number }> => ipcRenderer.invoke('plugin:museCreative:removeJobs', ids),
+    addSubtitles: (payload: { ids: string[]; titleConfig: { strategy?: 'single_for_all' | 'random_pool'; singleText?: string; titlePool?: string[] }; captionStyle?: Record<string, unknown>; layoutPolicy?: Record<string, unknown> }): Promise<{ done: number; failed: number }> => ipcRenderer.invoke('plugin:museCreative:addSubtitles', payload),
+    revertSubtitles: (ids: string[]): Promise<{ done: number }> => ipcRenderer.invoke('plugin:museCreative:revertSubtitles', ids),
+    exportJobs: (payload: { ids: string[]; outputDir: string }): Promise<{ done: number; outputDir: string }> => ipcRenderer.invoke('plugin:museCreative:exportJobs', payload),
+    cancelQueuedJobs: (): Promise<number> => ipcRenderer.invoke('plugin:museCreative:cancelQueuedJobs'),
+    setQueuePaused: (paused: boolean): Promise<void> => ipcRenderer.invoke('plugin:museCreative:setQueuePaused', paused),
+    setQueueConcurrency: (value: number): Promise<void> => ipcRenderer.invoke('plugin:museCreative:setQueueConcurrency', value),
+    collectJob: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:collectJob', id),
+    cancelJob: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:cancelJob', id),
   },
   tiktokCreative: {
     list: () => ipcRenderer.invoke('plugin:tiktokCreative:list'),

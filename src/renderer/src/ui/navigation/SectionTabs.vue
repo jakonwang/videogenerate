@@ -12,6 +12,8 @@ const route = useRoute()
 const current = computed(() => sectionForPath(route.path))
 const label = (key: string, zh: string) => props.translate?.(key, zh) ?? zh
 
+const tabs = computed(() => current.value?.group.tabs.filter((tab) => !tab.devOnly || (import.meta.env.DEV && props.translate)) ?? [])
+
 // 这些页面共用一套边距（见下方全局样式），用根节点标记
 watch(
   () => current.value?.group.key,
@@ -28,7 +30,7 @@ watch(() => route.path, (path) => rememberSectionTab(path), { immediate: true })
 <template>
   <nav v-if="current" class="section-tabs" data-testid="section-tabs" :aria-label="label(current.group.labelKey, current.group.zh)">
     <RouterLink
-      v-for="tab in current.group.tabs"
+      v-for="tab in tabs"
       :key="tab.key"
       :to="tab.to"
       class="section-tabs__item"

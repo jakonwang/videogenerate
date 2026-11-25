@@ -268,6 +268,19 @@ const cloneSendShotsBinding: AgentCapabilityBinding = {
       }))
       logs.push(`Queued ${(task.shots || []).length} creative studio shots from clone frames`)
     }
+    if (targets.includes('muse')) {
+      const { sendCloneShotsToMuse } = await import('../clone/crossLineShots')
+      try {
+        const { jobIds } = await sendCloneShotsToMuse({ cloneProjectId: projectId, shotIds })
+        for (const jobId of jobIds) {
+          artifactIds.push(context.registerArtifact({ kind: 'task', name: 'Muse创意室 · 分镜', uri: `muse://${jobId}`, metadata: { museJobId: jobId, cloneProjectId: projectId }, sourceArtifactIds: [], lifecycle: 'referenced' }))
+        }
+        logs.push(`Queued ${jobIds.length} Muse videos from clone frames`)
+      } catch (error) {
+        if (!artifactIds.length) return failed('muse_unavailable', error instanceof Error ? error.message : String(error))
+        logs.push(`Muse skipped: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
     contentIndex.invalidate()
     return completed({ status: 'accepted', artifactIds, logs, externalRefs: { cloneProjectId: projectId } })
   },
@@ -302,6 +315,42 @@ const creativeFromImagesBinding: AgentCapabilityBinding = {
       lifecycle: 'referenced',
     })
     return completed({ status: 'accepted', artifactIds: [artifactId], logs: [`Queued ${(task.shots || []).length} creative studio shots`], externalRefs: { creativeTaskId: task.id } })
+  },
+}
+
+// ------------------------------------------------------------------ MuseStudio.CreateFromImages
+const museFromImagesBinding: AgentCapabilityBinding = {
+  ...base('binding.muse.from-images.local.v1', 'MuseStudio.CreateFromImages', 'write', 'Product'),
+  estimateCost: async (input) => ({ quantity: Math.max(1, strings(input.imagePaths).length), unit: 'muse_video' }),
+  execute: async (input, context) => {
+    const { museCreativeStudioService } = await import('../muse-creative-studio/service')
+    if (!(await museCreativeStudioService.list()).accounts.some((account) => account.enabled)) return failed('muse_not_configured', '还没有启用的 Muse 账号，请先在 Muse创意室添加。')
+    const productId = await resolveProductId(input)
+    if (!productId) return failed('missing_product', '请先选择要换上的商品。')
+    const images = Array.from(new Set([...collectPaths(input, context.dependencyArtifacts, 'image'), ...(await assetIdsToPaths(input))])).slice(0, 50)
+    if (!images.length) return failed('missing_reference_images', '请提供至少一张参考场景图（上传或从素材库选择）。')
+    const prompt = text(input.prompt) || (await museCreativeStudioService.listPrompts('video')).find((item) => item.active)?.prompt || ''
+    // The user always checks the swapped picture before any Muse quota is spent.
+    const jobs = await museCreativeStudioService.createJobs({
+      imagePaths: images,
+      prompt,
+      durationSec: Number(input.durationSec) || 10,
+      aspect: text(input.aspect) || '9:16',
+      productId,
+      swapProduct: true,
+      reviewImage: true,
+    })
+    for (const job of jobs) await lineage.record({ fromRef: `product:${productId}`, toRef: `muse:${job.id}`, relation: 'product_of', productId, meta: { runId: context.run.id } })
+    contentIndex.invalidate()
+    const artifactIds = jobs.map((job) => context.registerArtifact({
+      kind: 'task',
+      name: `Muse创意室 · ${job.productName || '商品'}`,
+      uri: `muse://${job.id}`,
+      metadata: { museJobId: job.id, productId },
+      sourceArtifactIds: context.dependencyArtifacts.map((artifact) => artifact.id),
+      lifecycle: 'referenced',
+    }))
+    return completed({ status: 'accepted', artifactIds, logs: [`Queued ${jobs.length} Muse videos; swapped pictures wait for the user's approval`], externalRefs: { museJobIds: jobs.map((job) => job.id).join(',') } })
   },
 }
 
@@ -788,6 +837,7 @@ export const contentHubIntentCapabilities: Partial<Record<AgentIntentType, Agent
   'Intent.AssetArchive': 'Asset.Archive',
   'Intent.CloneShotsSend': 'Clone.SendShots',
   'Intent.CreativeFromImages': 'CreativeStudio.CreateFromImages',
+  'Intent.MuseFromImages': 'MuseStudio.CreateFromImages',
   'Intent.LivePhotoFromVideo': 'LivePhoto.FromVideo',
   'Intent.ReviewSubmit': 'Review.Submit',
   'Intent.ProductImportFromLink': 'Product.ImportFromLink',
@@ -804,6 +854,7 @@ export const contentHubCapabilityDefinitions: AgentCapabilityDefinition[] = [
   { id: 'Asset.Archive', version: 1, title: 'Archive to asset library', description: 'Save produced media into the asset library.', intentType: 'Intent.AssetArchive', expectedArtifacts: ['image', 'video'], bindings: [assetArchiveBinding] },
   { id: 'Clone.SendShots', version: 1, title: 'Send clone shots to Live Photo / Creative Studio', description: 'Reuse clone storyboard frames in other production lines.', intentType: 'Intent.CloneShotsSend', expectedArtifacts: ['task'], bindings: [cloneSendShotsBinding] },
   { id: 'CreativeStudio.CreateFromImages', version: 1, title: 'Creative Studio from scene images', description: 'Swap the product into scene images and render short videos with TikTok creative accounts.', intentType: 'Intent.CreativeFromImages', expectedArtifacts: ['task'], bindings: [creativeFromImagesBinding] },
+  { id: 'MuseStudio.CreateFromImages', version: 1, title: 'Muse from scene images', description: 'Swap the product into scene images and, after the user approves each picture, render short videos with Muse accounts.', intentType: 'Intent.MuseFromImages', expectedArtifacts: ['task'], bindings: [museFromImagesBinding] },
   { id: 'LivePhoto.FromVideo', version: 1, title: 'Live Photo from video', description: 'Package an existing video into an Apple Live Photo.', intentType: 'Intent.LivePhotoFromVideo', expectedArtifacts: ['video'], bindings: [livePhotoFromVideoBinding] },
   { id: 'Review.Submit', version: 1, title: 'Send outputs to review', description: 'Collect finished outputs into the review inbox.', intentType: 'Intent.ReviewSubmit', expectedArtifacts: ['report'], bindings: [reviewSubmitBinding] },
   { id: 'Product.ImportFromLink', version: 1, title: 'Create product from link', description: 'Create a product from a shop link.', intentType: 'Intent.ProductImportFromLink', expectedArtifacts: ['product'], bindings: [productImportFromLinkBinding] },
@@ -818,8 +869,9 @@ export const contentHubIntentDescriptions: Record<string, { description: string;
   'Intent.SystemHealthCheck': { title: 'System health check', description: 'Check whether models, TikTok creative accounts, publishing and disk space are ready.', requirements: [], employeeId: 'employee.package' },
   'Intent.AssetSearch': { title: 'Search asset library', description: 'Find images or videos in the asset library by keyword or type.', requirements: [], employeeId: 'employee.material' },
   'Intent.AssetArchive': { title: 'Archive to asset library', description: 'Save produced or attached media into the asset library.', requirements: ['Media from attachments or an earlier step.'], employeeId: 'employee.material' },
-  'Intent.CloneShotsSend': { title: 'Send clone shots', description: 'Send storyboard frames of a clone project to Live Photo and/or TikTok Creative Studio (context.targets: livephoto, creative).', requirements: ['A clone project, or a product that has one.'], employeeId: 'employee.clone' },
+  'Intent.CloneShotsSend': { title: 'Send clone shots', description: 'Send storyboard frames of a clone project to Live Photo and/or TikTok Creative Studio (context.targets: livephoto, creative; muse only when the user asks for Muse).', requirements: ['A clone project, or a product that has one.'], employeeId: 'employee.clone' },
   'Intent.CreativeFromImages': { title: 'Creative Studio from scene images', description: 'Swap a product into scene images and render short videos with TikTok creative accounts.', requirements: ['A product.', 'One or more scene images (attachments or asset library).'], employeeId: 'employee.clone' },
+  'Intent.MuseFromImages': { title: 'Muse from scene images', description: 'Only when the user explicitly asks for Muse: swap a product into scene images and render short videos with Muse accounts. The user approves every swapped picture first.', requirements: ['A product.', 'One or more scene images (attachments or asset library).', 'The user asked for Muse.'], employeeId: 'employee.clone' },
   'Intent.LivePhotoFromVideo': { title: 'Live Photo from video', description: 'Package already finished videos into Apple Live Photos without regenerating them.', requirements: ['One or more finished videos.'], employeeId: 'employee.package' },
   'Intent.ReviewSubmit': { title: 'Send to review inbox', description: 'Collect finished outputs into the review inbox for the user to approve.', requirements: [], employeeId: 'employee.package' },
   'Intent.ProductImportFromLink': { title: 'Create product from link', description: 'Create a product record from a shop or product page link.', requirements: ['A product link.'], employeeId: 'employee.material' },

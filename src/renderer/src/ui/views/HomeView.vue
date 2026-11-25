@@ -54,6 +54,7 @@ let unsubscribe: (() => void) | null = null
 const lines = computed(() => [
   { key: 'clone', icon: Clapperboard, tone: 'accent', title: t('ai.home.lines.clone.title'), desc: t('ai.home.lines.clone.desc'), to: '/clone', recipe: 'product-content-pack' },
   { key: 'creative', icon: Wand2, tone: 'violet', title: t('ai.home.lines.creative.title'), desc: t('ai.home.lines.creative.desc'), to: '/plugins/tiktok-creative-studio', recipe: 'scene-images' },
+  ...(import.meta.env.DEV ? [{ key: 'muse', icon: Sparkles, tone: 'blue', title: t('ai.home.lines.muse.title'), desc: t('ai.home.lines.muse.desc'), to: '/plugins/muse-creative-studio', recipe: 'scene-images' }] : []),
   { key: 'livephoto', icon: PlaySquare, tone: 'red', title: t('ai.home.lines.livephoto.title'), desc: t('ai.home.lines.livephoto.desc'), to: '/plugins/live-photo-generator', recipe: 'scene-images' },
 ])
 

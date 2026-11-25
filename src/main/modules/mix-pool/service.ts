@@ -61,7 +61,7 @@ function newSource(productId: string, kind: PoolSourceKind, filePath: string, or
   }
 }
 
-export type LinkedScan = Record<'product_asset' | 'clone_output' | 'creative_studio' | 'live_photo', number>
+export type LinkedScan = Record<'product_asset' | 'clone_output' | 'creative_studio' | 'muse_studio' | 'live_photo', number>
 
 /**
  * Every video already tied to the product anywhere in the app:
@@ -70,7 +70,7 @@ export type LinkedScan = Record<'product_asset' | 'clone_output' | 'creative_stu
  */
 async function collectLinkedSources(product: Product): Promise<{ sources: PoolSource[]; scan: LinkedScan }> {
   const out: PoolSource[] = []
-  const scan: LinkedScan = { product_asset: 0, clone_output: 0, creative_studio: 0, live_photo: 0 }
+  const scan: LinkedScan = { product_asset: 0, clone_output: 0, creative_studio: 0, muse_studio: 0, live_photo: 0 }
   const push = (kind: PoolSourceKind, fp: string | undefined, origin: ClipOrigin, ref?: string) => {
     const p = String(fp || '')
     if (!p || !VIDEO_EXT.test(p) || !existsSync(p)) return
@@ -97,6 +97,14 @@ async function collectLinkedSources(product: Product): Promise<{ sources: PoolSo
     }
   } catch {
     /* creative studio store unavailable */
+  }
+  try {
+    const { museCreativeStudioService } = await import('../muse-creative-studio/service')
+    for (const job of (await museCreativeStudioService.listJobs()).jobs) {
+      if (job.productId === product.id && job.status === 'completed') push('muse_studio', job.result?.videoPath || job.subtitleVideoPath, 'ai', job.id)
+    }
+  } catch {
+    /* muse studio store unavailable */
   }
   try {
     const { livePhotoRepo } = await import('../live-photo/repo')

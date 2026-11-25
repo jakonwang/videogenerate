@@ -22,7 +22,7 @@ import { useAiProducerStore } from '@/stores/aiProducer'
 type Decision = 'pending' | 'approved' | 'redo' | 'discarded'
 type ReviewItem = {
   ref: string
-  line: 'clone' | 'creative' | 'livephoto'
+  line: 'clone' | 'creative' | 'muse' | 'livephoto'
   title: string
   productId?: string
   productName?: string
@@ -193,6 +193,7 @@ onBeforeUnmount(() => {
         <option value="">{{ t('ai.inbox.allLines') }}</option>
         <option value="clone">{{ t('ai.line.clone') }}</option>
         <option value="creative">{{ t('ai.line.creative') }}</option>
+        <option v-if="items.some((item) => item.line === 'muse')" value="muse">{{ t('ai.line.muse') }}</option>
         <option value="livephoto">{{ t('ai.line.livephoto') }}</option>
       </select>
       <button v-if="decision === 'approved' && items.length" type="button" class="vg-btn vg-btn--sm vg-btn--primary" @click="createPublishDrafts(items.filter((item) => item.line !== 'livephoto').map((item) => item.ref))">
