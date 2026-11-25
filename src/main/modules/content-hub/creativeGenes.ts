@@ -5,6 +5,7 @@
  *   使用：AI 制片人规划新素材时带上最佳结构（brandMemory 里接入）
  * 每条素材只分析一次（结果存 creative-genes.json）；分析会下载视频、调 AI，所以由用户点按钮触发。
  */
+import { productCodesService } from '../product-codes/service'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getAppPaths } from '../../lib/paths'
@@ -14,7 +15,6 @@ import { detectSceneCuts } from '../clone/analyzer'
 import { cloneRepo } from '../clone/repo'
 import { generateChatCompletion, type ChatImageInput } from '../clone/unifiedChat'
 import { gmvMaxRepo } from '../tiktok-gmv-max/sqlite'
-import { productsRepo } from '../products/repo'
 import { recognizeSpeech } from '../tiktok-publisher/localize'
 import { downloadCreativeVideo } from './creativeVideo'
 import { readCreativesForProducts } from './publishProfit'
@@ -78,7 +78,7 @@ export function setGeneTestDependencies(next: Partial<Deps>) { deps = { ...defau
 
 /** 商品的类目：店铺类目（GMV MAX 商品资料）> AI 识别的品类 > 商品类型 */
 async function productScope(productId: string) {
-  const product = (await productsRepo.list()).find((item) => item.id === productId)
+  const product = (await productCodesService.linkedProducts()).find((item) => item.id === productId)
   const tiktokProductIds = [...new Set((product?.tiktokProductIds || []).map((id) => String(id).trim()).filter(Boolean))]
   const category = normalizeCategory(deps.productCategory(tiktokProductIds) || product?.productAnalysis?.category || product?.type || '')
   return { product, tiktokProductIds, category }

@@ -12,13 +12,14 @@ export type LiveKpis = {
   /** 商品曝光、点击（次数） */
   exposures: number
   clicks: number
+  carts: number
   orders: number
   assigned: number
   productGmv: number
 }
 
 export function sumRooms(rooms: LiveRoomView[]): LiveKpis {
-  const out: LiveKpis = { rooms: rooms.length, hours: 0, gmv: 0, sales: 0, views: 0, impressions: 0, exposures: 0, clicks: 0, orders: 0, assigned: 0, productGmv: 0 }
+  const out: LiveKpis = { rooms: rooms.length, hours: 0, gmv: 0, sales: 0, views: 0, impressions: 0, exposures: 0, clicks: 0, carts: 0, orders: 0, assigned: 0, productGmv: 0 }
   for (const room of rooms) {
     out.hours += (room.endAt - room.startAt) / 3_600_000
     out.gmv += room.gmv
@@ -28,6 +29,7 @@ export function sumRooms(rooms: LiveRoomView[]): LiveKpis {
     for (const product of room.products) {
       out.exposures += product.exposures
       out.clicks += product.clicks
+      out.carts += product.carts
       out.orders += product.orders
       out.productGmv += product.gmv
       out.assigned += Math.min(product.gmv, product.codes.reduce((sum, item) => sum + item.gmv, 0))
@@ -38,7 +40,7 @@ export function sumRooms(rooms: LiveRoomView[]): LiveKpis {
 
 export const per = (part: number, whole: number) => (whole > 0 ? part / whole : undefined)
 
-export type LiveStyle = { code: string; image?: string; name: string; sessions: number; exposures: number; clicks: number; orders: number; sales: number; gmv: number; estimated: boolean; share: number }
+export type LiveStyle = { code: string; image?: string; name: string; /** 有出单的场次 */ soldRooms: number; exposures: number; clicks: number; carts: number; /** 直播实测的成交，算比率用 */ measuredOrders: number; measuredGmv: number; orders: number; sales: number; gmv: number; estimated: boolean; share: number }
 
 export function stylesOf(rooms: LiveRoomView[]): LiveStyle[] {
   const map = new Map<string, LiveStyle & { ids: Set<string>; best: number }>()
@@ -47,10 +49,12 @@ export function stylesOf(rooms: LiveRoomView[]): LiveStyle[] {
     for (const product of room.products) {
       total += product.gmv
       for (const share of product.codes) {
-        const entry = map.get(share.code) || { code: share.code, name: product.name, image: product.image, sessions: 0, exposures: 0, clicks: 0, orders: 0, sales: 0, gmv: 0, estimated: false, share: 0, ids: new Set<string>(), best: -1 }
-        entry.ids.add(room.id)
+        const entry = map.get(share.code) || { code: share.code, name: product.name, image: product.image, soldRooms: 0, exposures: 0, clicks: 0, carts: 0, measuredOrders: 0, measuredGmv: 0, orders: 0, sales: 0, gmv: 0, estimated: false, share: 0, ids: new Set<string>(), best: -1 }
+        if (share.sales > 0) entry.ids.add(room.id)
         entry.exposures += share.exposures
         entry.clicks += share.clicks
+        entry.carts += share.carts
+        if (!share.estimated) { entry.measuredOrders += share.orders; entry.measuredGmv += share.gmv }
         entry.orders += share.orders
         entry.sales += share.sales
         entry.gmv += share.gmv
@@ -62,7 +66,7 @@ export function stylesOf(rooms: LiveRoomView[]): LiveStyle[] {
       }
     }
   }
-  return [...map.values()].map(({ ids, best: _best, ...item }) => ({ ...item, sessions: ids.size, share: total ? item.gmv / total : 0 })).sort((a, b) => b.gmv - a.gmv || b.clicks - a.clicks)
+  return [...map.values()].map(({ ids, best: _best, ...item }) => ({ ...item, soldRooms: ids.size, share: total ? item.gmv / total : 0 })).sort((a, b) => b.gmv - a.gmv || b.clicks - a.clicks)
 }
 
 export type LiveLoose = { productId: string; name: string; image?: string; sessions: number; sales: number; gmv: number; share: number; generic: boolean }

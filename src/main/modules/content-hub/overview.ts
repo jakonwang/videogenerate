@@ -1,9 +1,9 @@
+import { productCodesService } from '../product-codes/service'
 import { contentIndex } from './contentIndex'
 import { getHealthReport } from './healthCheck'
 import { createSpineReads, productSpine } from './productSpine'
 import { reviewInbox } from './reviewInbox'
 import { brandMemoryStore, reviewStore } from './stores'
-import { productsRepo } from '../products/repo'
 import { gmvMaxRepo } from '../tiktok-gmv-max/sqlite'
 import { creatorHubRepo } from '../tiktok-creator-hub/repo'
 import { dianxiaomiInventoryRepo } from '../dianxiaomi-inventory/repo'
@@ -145,7 +145,7 @@ export async function readInventoryInput(now: number): Promise<OverviewInventory
 
 async function readProductsInput(items: ReportItem[], rangeDays: number, now: number): Promise<OverviewProductInput[]> {
   const since = now - rangeDays * DAY
-  const products = (await productsRepo.list())
+  const products = (await productCodesService.linkedProducts())
     .filter((product) => (product.tiktokProductIds || []).length > 0)
     .slice(0, MAX_PRODUCTS)
   const rows: OverviewProductInput[] = []

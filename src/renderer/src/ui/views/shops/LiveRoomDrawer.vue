@@ -25,9 +25,12 @@ const metrics = computed(() => {
   const list: Array<{ key: string; text: string; mine?: number; base?: number }> = [
     { key: 'perHour', text: money(per(a.gmv, a.hours)), mine: per(a.gmv, a.hours), base: per(b.gmv, b.hours) },
     { key: 'sales', text: num(a.sales), mine: a.sales, base: per(b.sales, b.rooms) },
+    { key: 'aov', text: money(per(a.gmv, a.sales)), mine: per(a.gmv, a.sales), base: per(b.gmv, b.sales) },
     { key: 'views', text: num(a.views), mine: a.views, base: per(b.views, b.rooms) },
     { key: 'enterRate', text: pct(per(a.views, a.impressions)), mine: per(a.views, a.impressions), base: per(b.views, b.impressions) },
     { key: 'ctr', text: pct(per(a.clicks, a.exposures)), mine: per(a.clicks, a.exposures), base: per(b.clicks, b.exposures) },
+    { key: 'cartRate', text: pct(per(a.carts, a.clicks)), mine: per(a.carts, a.clicks), base: per(b.carts, b.clicks) },
+    { key: 'cartToOrder', text: pct(per(a.orders, a.carts)), mine: per(a.orders, a.carts), base: per(b.orders, b.carts) },
     { key: 'cvr', text: pct(per(a.orders, a.clicks)), mine: per(a.orders, a.clicks), base: per(b.orders, b.clicks) },
   ]
   return list.map((item) => ({ ...item, diff: item.mine !== undefined && item.base ? item.mine / item.base - 1 : undefined }))
@@ -88,7 +91,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               <div class="lrd__info">
                 <p :title="item.name"><b v-for="code in item.codes.slice(0, 3)" :key="code.code">{{ code.code }}</b><em v-if="!item.codes.length">{{ t('shops.live.noCode') }}</em>{{ item.name }}</p>
                 <div class="lrd__track"><i :style="{ width: `${(item.gmv / peak) * 100}%` }"></i></div>
-                <small>{{ t('shops.live.exposures') }} {{ num(item.exposures) }} · {{ t('shops.live.metric.ctr') }} {{ pct(per(item.clicks, item.exposures)) }} · {{ t('shops.live.carts') }} {{ num(item.carts) }} · {{ t('shops.live.metric.cvr') }} {{ pct(per(item.orders, item.clicks)) }}</small>
+                <small>{{ t('shops.live.exposures') }} {{ num(item.exposures) }} · {{ t('shops.live.col.ctr') }} {{ pct(per(item.clicks, item.exposures)) }} · {{ t('shops.live.carts') }} {{ num(item.carts) }}（{{ pct(per(item.carts, item.clicks)) }}） · {{ t('shops.live.metric.cvr') }} {{ pct(per(item.orders, item.clicks)) }}</small>
                 <small v-if="item.codes.some((code) => code.estimated)" class="lrd__est">{{ t('shops.live.estimated') }}：{{ item.codes.map((code) => `${code.code} ×${code.sales}`).join('、') }}</small>
               </div>
               <div class="lrd__sum"><strong>{{ money(item.gmv) }}</strong><small>{{ t('shops.live.units', { n: num(item.sales) }) }}</small></div>

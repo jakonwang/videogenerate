@@ -508,6 +508,15 @@ export const gmvMaxRepo = {
       GROUP BY campaign_id, creative_id, item_group_id, stat_day`)
       .all(startDate, endDate, ...ids) as Array<{ campaignId: string; creativeId: string; productId: string; statDay: string; cost: number; grossRevenue: number; orders: number; creativeName: string }>
   },
+  /** 币种传空不筛。每个商品的花费、成交和有花费的视频素材数（不算商品图卡）；同一素材同一天按最大值，和上面一致 */
+  listProductAdTotals(startDate: string, endDate: string, currency: string) {
+    return getDatabase().prepare(`SELECT productId, SUM(cost) AS spend, SUM(revenue) AS revenue, SUM(orders) AS orders, COUNT(DISTINCT CASE WHEN cost > 0 AND creativeId GLOB '[0-9]*' THEN creativeId END) AS creatives FROM (
+        SELECT campaign_id, creative_id AS creativeId, item_group_id AS productId, stat_day, MAX(cost) AS cost, MAX(gross_revenue) AS revenue, MAX(orders) AS orders
+        FROM gmv_creative_metrics
+        WHERE stat_day >= ? AND stat_day <= ? AND item_group_id <> '' AND (? = '' OR COALESCE(json_extract(payload, '$.raw.metrics.currency'), ?) = ?)
+        GROUP BY campaign_id, creative_id, item_group_id, stat_day) GROUP BY productId`)
+      .all(startDate, endDate, currency, currency, currency) as Array<{ productId: string; spend: number; revenue: number; orders: number; creatives: number }>
+  },
   /** Only the fields needed for "latest status per creative", without parsing whole metric payloads. */
   listCreativeStatusesRange(startDate: string, endDate: string, campaignIds: string[]) {
     const ids = [...new Set(campaignIds.filter(Boolean))]

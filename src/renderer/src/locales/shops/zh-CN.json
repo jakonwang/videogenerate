@@ -12,7 +12,10 @@
       "rooms": "开播",
       "enterRate": "进房率",
       "ctr": "商品点击率",
-      "cvr": "点击下单率"
+      "cvr": "点击下单率",
+      "aov": "件单价",
+      "cartRate": "加购率",
+      "cartToOrder": "加购下单率"
     },
     "roomsHours": "{rooms} 场 · {hours} 小时",
     "daily": "每日{name}",
@@ -103,6 +106,31 @@
       "json": "Cookie 格式不对，请粘贴 Cookie-Editor 导出的 JSON",
       "running": "正在同步，请稍后",
       "api": "直播后台暂时没有返回数据，请稍后再试"
+    },
+    "soldIn": "{n} 场出单",
+    "col": {
+      "gmv": "成交额",
+      "sales": "件数",
+      "soldRooms": "出单场次",
+      "exposures": "曝光",
+      "ctr": "点击率",
+      "carts": "加购",
+      "cartRate": "加购率",
+      "cartToOrder": "加购下单率",
+      "cvr": "下单率",
+      "gpm": "千次曝光成交"
+    },
+    "colHint": {
+      "gmv": "直播成交额",
+      "sales": "成交件数",
+      "soldRooms": "卖出过这个款的场次",
+      "exposures": "商品曝光次数",
+      "ctr": "点击 ÷ 曝光",
+      "carts": "加购次数",
+      "cartRate": "加购 ÷ 点击",
+      "cartToOrder": "订单 ÷ 加购；低说明想要但没付款，看价格、运费、优惠",
+      "cvr": "订单 ÷ 点击",
+      "gpm": "每 1000 次曝光带来的成交额，适合决定主推谁"
     }
   },
   "title": "店铺管理",
@@ -404,5 +432,84 @@
     "dailyTitle": "每日销售额",
     "showMore": "再显示 50 个（还有 {n} 个）",
     "note": "数据来自商家后台「数据罗盘 → 商品卡」，按人数统计，每天更新前一天。多日相加的人数可能有重复，比例更有参考意义。库存和补货建议来自「销售与库存」，需要商品的 SKU 编码已填写。"
+  },
+  "sb": {
+    "byStyle": "按款号",
+    "byLink": "按商品链接",
+    "title": "每个款下一步做什么",
+    "hint": "最近 {n} 天：店铺、商品卡、直播、广告按款号合在一起；{live} 个款有直播数据，{ads} 个款有广告数据",
+    "refresh": "刷新",
+    "todo": "有事要做",
+    "allStyles": "在售款",
+    "search": "搜索款号或名称",
+    "style": "款号",
+    "next": "下一步",
+    "days": "{n} 天",
+    "nothing": "正常，暂时不用处理",
+    "noMatch": "没有符合的款",
+    "emptyTitle": "还没有款号数据",
+    "emptyDesc": "同步店铺后，标题结尾或商家 SKU 带款号的商品会自动归到款。",
+    "group": {
+      "shop": "店铺",
+      "card": "商品卡",
+      "live": "直播",
+      "ads": "广告"
+    },
+    "col": {
+      "amount30": "成交额",
+      "units30": "件数",
+      "cardCart": "加购率",
+      "cardPay": "成交率",
+      "liveGmv": "成交额",
+      "liveCart": "加购率",
+      "liveCvr": "下单率",
+      "adsSpend": "花费",
+      "adsRoi": "ROI",
+      "daysLeft": "库存可卖"
+    },
+    "action": {
+      "restock": "补货",
+      "cutAds": "查广告",
+      "makeVideo": "多出片",
+      "livePush": "直播主推",
+      "fixPrice": "查价格",
+      "fixDetail": "改图文",
+      "gap": "补上架"
+    },
+    "actionDesc": {
+      "restock": "还在卖，库存快没了",
+      "cutAds": "花费不少，ROI 明显低",
+      "makeVideo": "卖得动，但素材太少",
+      "livePush": "成交效率高，曝光没跟上",
+      "fixPrice": "加购多，付款少",
+      "fixDetail": "点的人多，加购少",
+      "gap": "别的店好卖，这家没有"
+    },
+    "reason": {
+      "restock": "库存 {stock}，约 {days} 天卖完，建议补 {qty} 件",
+      "restockStock": "库存 {stock}，建议补 {qty} 件",
+      "cutAds": "ROI {roi}，平均 {avg}，30 天花了 {spend}；看看素材或降预算",
+      "makeVideoLive": "直播下单率 {cvr}（平均 {avg}），投放素材只有 {creatives} 条",
+      "makeVideoAds": "广告 ROI {roi}（平均 {avg}），投放素材只有 {creatives} 条",
+      "makeVideoCard": "商品卡转化好于店铺平均，投放素材只有 {creatives} 条",
+      "livePush": "千次曝光成交 {gpm}（平均 {avg}），曝光 {exposures} 次、没超过平均的 {usual} 次，多讲几次",
+      "fixPrice": "加购率 {cartRate} 不低，加购后只有 {cartToOrder} 下单（平均 {avg}）；看价格、运费、优惠",
+      "fixDetail": "点击率 {ctr} 不低，加购率只有 {cartRate}（平均 {avg}）；看图片、规格、讲解",
+      "fixDetailCard": "商品卡点的人多，买的人少；看主图、价格和评价",
+      "gap": "近 30 天卖 {units} 件，{shops} 还没上架"
+    },
+    "ads": {
+      "spend": "花费",
+      "revenue": "广告成交",
+      "roi": "ROI",
+      "creatives": "投放素材"
+    },
+    "produce": "去出片",
+    "archiveAndProduce": "建档并去出片",
+    "notListed": "店铺里找不到这个款的商品",
+    "archiveFailed": "建档失败：{message}",
+    "noLive": "近 30 天没有直播数据",
+    "noAds": "近 30 天没有广告花费",
+    "vsNote": "百分比是和全部款的平均比。广告只含单独成款的商品链接，多款共用的链接拆不开。"
   }
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_PRODUCT_RESEARCH_SOURCE, normalizeResearchSource, researchSourceOf } from '../../../shared/productResearch'
+import { DEFAULT_PRODUCT_RESEARCH_SOURCE, normalizeResearchSource, researchCurrencyOf, researchSourceOf } from '../../../shared/productResearch'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { execFile } from 'node:child_process'
@@ -621,6 +621,26 @@ class ProductResearchService {
   async listCodes(): Promise<string[]> {
     await this.ensureLoaded()
     return Object.values(this.state.schemeStates).flatMap((item) => (item.productEdits || []).map((edit) => edit.code || '')).filter(Boolean)
+  }
+
+  /** 每个采集商品走到哪一步，给命中率统计用 */
+  async listYieldRows() {
+    await this.ensureLoaded()
+    return this.state.results.map((result) => {
+      const scheme = result.schemeId ? this.state.schemeStates[result.schemeId] : undefined
+      const edit = scheme?.productEdits?.find((item) => item.resultId === result.id)
+      const candidate = Boolean(scheme?.candidateIds?.includes(result.id))
+      return {
+        keyword: result.keyword || '—',
+        source: researchSourceOf(result) as string,
+        currency: researchCurrencyOf(result),
+        price: result.priceValue,
+        candidate,
+        kept: candidate && Boolean(edit?.kept),
+        code: edit?.code,
+        tested: Boolean(scheme?.liveTestRecords?.some((item) => item.resultId === result.id)),
+      }
+    })
   }
 
   async listSchemes(): Promise<ProductResearchScheme[]> {

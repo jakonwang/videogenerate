@@ -12,7 +12,10 @@
       "rooms": "Phiên live",
       "enterRate": "Tỷ lệ vào phòng",
       "ctr": "CTR sản phẩm",
-      "cvr": "Nhấp thành đơn"
+      "cvr": "Nhấp thành đơn",
+      "aov": "Giá mỗi món",
+      "cartRate": "Tỷ lệ thêm giỏ",
+      "cartToOrder": "Giỏ thành đơn"
     },
     "roomsHours": "{rooms} phiên · {hours} giờ",
     "daily": "{name} theo ngày",
@@ -103,6 +106,31 @@
       "json": "Hãy dán JSON từ Cookie-Editor",
       "running": "Đang đồng bộ",
       "api": "Trang LIVE chưa trả dữ liệu, thử lại sau"
+    },
+    "soldIn": "bán ở {n} phiên",
+    "col": {
+      "gmv": "Doanh số",
+      "sales": "Đã bán",
+      "soldRooms": "Phiên có đơn",
+      "exposures": "Hiển thị",
+      "ctr": "CTR",
+      "carts": "Thêm giỏ",
+      "cartRate": "Tỷ lệ giỏ",
+      "cartToOrder": "Giỏ thành đơn",
+      "cvr": "Tỷ lệ đơn",
+      "gpm": "GPM"
+    },
+    "colHint": {
+      "gmv": "Doanh số livestream",
+      "sales": "Số món bán",
+      "soldRooms": "Số phiên bán được mẫu này",
+      "exposures": "Lượt hiển thị sản phẩm",
+      "ctr": "Nhấp / hiển thị",
+      "carts": "Lượt thêm giỏ",
+      "cartRate": "Thêm giỏ / nhấp",
+      "cartToOrder": "Đơn / thêm giỏ; thấp thì xem lại giá và phí ship",
+      "cvr": "Đơn / nhấp",
+      "gpm": "Doanh số trên 1000 hiển thị"
     }
   },
   "title": "Quản lý cửa hàng",
@@ -404,5 +432,84 @@
     "dailyTitle": "GMV theo ngày",
     "showMore": "Hiện thêm 50 (còn {n})",
     "note": "Dữ liệu từ Seller Center La bàn dữ liệu → Thẻ sản phẩm, tính theo người, cập nhật mỗi ngày cho ngày hôm trước. Cộng nhiều ngày có thể trùng người nên tỷ lệ đáng tin hơn. Tồn kho và đề xuất nhập lấy từ Bán hàng & tồn kho, cần mã SKU của sản phẩm."
+  },
+  "sb": {
+    "byStyle": "Theo mẫu",
+    "byLink": "Theo liên kết",
+    "title": "Việc cần làm cho từng mẫu",
+    "hint": "{n} ngày qua: gộp shop, thẻ sản phẩm, livestream và quảng cáo theo mã; {live} mẫu có dữ liệu live, {ads} mẫu có quảng cáo",
+    "refresh": "Làm mới",
+    "todo": "Cần làm",
+    "allStyles": "Đang bán",
+    "search": "Tìm mã hoặc tên",
+    "style": "Mẫu",
+    "next": "Bước tiếp theo",
+    "days": "{n} ngày",
+    "nothing": "Bình thường",
+    "noMatch": "Không có mẫu phù hợp",
+    "emptyTitle": "Chưa có dữ liệu mã",
+    "emptyDesc": "Đồng bộ shop; sản phẩm có mã ở tiêu đề hoặc SKU sẽ tự gộp.",
+    "group": {
+      "shop": "Shop",
+      "card": "Thẻ sản phẩm",
+      "live": "Livestream",
+      "ads": "Quảng cáo"
+    },
+    "col": {
+      "amount30": "Doanh số",
+      "units30": "Đã bán",
+      "cardCart": "Tỷ lệ giỏ",
+      "cardPay": "Chuyển đổi",
+      "liveGmv": "Doanh số",
+      "liveCart": "Tỷ lệ giỏ",
+      "liveCvr": "Tỷ lệ đơn",
+      "adsSpend": "Chi phí",
+      "adsRoi": "ROI",
+      "daysLeft": "Tồn kho"
+    },
+    "action": {
+      "restock": "Nhập hàng",
+      "cutAds": "Xem quảng cáo",
+      "makeVideo": "Thêm video",
+      "livePush": "Đẩy trên live",
+      "fixPrice": "Xem giá",
+      "fixDetail": "Sửa hình ảnh",
+      "gap": "Đăng bán"
+    },
+    "actionDesc": {
+      "restock": "Đang bán, sắp hết hàng",
+      "cutAds": "Chi nhiều, ROI thấp",
+      "makeVideo": "Bán tốt, ít video",
+      "livePush": "GPM cao, ít hiển thị",
+      "fixPrice": "Nhiều giỏ, ít thanh toán",
+      "fixDetail": "Nhiều nhấp, ít giỏ",
+      "gap": "Shop khác bán tốt, shop này chưa có"
+    },
+    "reason": {
+      "restock": "Còn {stock}, khoảng {days} ngày, nên nhập {qty}",
+      "restockStock": "Còn {stock}, nên nhập {qty}",
+      "cutAds": "ROI {roi}, trung bình {avg}, đã chi {spend} trong 30 ngày",
+      "makeVideoLive": "Tỷ lệ đơn live {cvr} (trung bình {avg}), chỉ có {creatives} video",
+      "makeVideoAds": "ROI {roi} (trung bình {avg}), chỉ có {creatives} video",
+      "makeVideoCard": "Thẻ sản phẩm chuyển đổi tốt, chỉ có {creatives} video",
+      "livePush": "GPM {gpm} (trung bình {avg}), {exposures} hiển thị (trung bình {usual})",
+      "fixPrice": "Tỷ lệ giỏ {cartRate}, nhưng chỉ {cartToOrder} thành đơn (trung bình {avg})",
+      "fixDetail": "CTR {ctr}, tỷ lệ giỏ chỉ {cartRate} (trung bình {avg})",
+      "fixDetailCard": "Nhiều người nhấp, ít người mua",
+      "gap": "Bán {units} trong 30 ngày, {shops} chưa có"
+    },
+    "ads": {
+      "spend": "Chi phí",
+      "revenue": "Doanh số quảng cáo",
+      "roi": "ROI",
+      "creatives": "Video"
+    },
+    "produce": "Làm video",
+    "archiveAndProduce": "Tạo hồ sơ và làm video",
+    "notListed": "Không tìm thấy sản phẩm trong shop",
+    "archiveFailed": "Lỗi: {message}",
+    "noLive": "Không có dữ liệu live 30 ngày",
+    "noAds": "Không có chi phí quảng cáo 30 ngày",
+    "vsNote": "Phần trăm so với trung bình tất cả mẫu. Quảng cáo chỉ gồm liên kết một mẫu."
   }
 }

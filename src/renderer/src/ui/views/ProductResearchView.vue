@@ -23,6 +23,8 @@ import {
   MARKET_OPTIONS, SCHEME_STATUS_OPTIONS, SOP_STEPS, TASK_STATUS_LABEL, formatDate, formatDuration, formatNumber, marketOf,
   ratio, schemeStatusLabel, stageLabel, type SchemeFormValue,
 } from './product-research/productResearchUtils'
+import type { YieldBy, YieldRow } from '../../../../shared/styleBoard'
+import { PRODUCT_RESEARCH_SOURCES, type ProductResearchSource } from '../../../../shared/productResearch'
 import './product-research/product-research.css'
 
 type Tab = 'schemes' | 'tasks' | 'analytics' | 'radar'
@@ -97,9 +99,25 @@ async function loadSchemeStates() {
   }
 }
 
+// ===== 命中率：采集的款最后卖得怎么样 =====
+const hasYield = Boolean(window.api.productCodes?.researchYield)
+const yieldBy = ref<YieldBy>('keyword')
+const yieldRows = ref<YieldRow[]>([])
+const yieldCurrency = ref('')
+async function loadYield() {
+  if (!hasYield) return
+  try {
+    const result = await window.api.productCodes.researchYield(yieldBy.value)
+    yieldRows.value = result.rows
+    yieldCurrency.value = result.currency
+  } catch { yieldRows.value = [] }
+}
+watch(yieldBy, () => void loadYield())
+const yieldName = (key: string) => (yieldBy.value === 'source' ? PRODUCT_RESEARCH_SOURCES[key as ProductResearchSource]?.label || key : key)
+
 async function refreshAll() {
   await Promise.all([loadSchemes(), loadSnapshot()])
-  if (tab.value === 'analytics') await loadSchemeStates()
+  if (tab.value === 'analytics') await Promise.all([loadSchemeStates(), loadYield()])
 }
 
 const onlineDevices = computed(() => snapshot.value?.devices.filter((item) => item.connected).length || 0)
@@ -357,7 +375,7 @@ watch(() => taskCounts.value.active, (count, previous) => {
 })
 
 watch(tab, (value) => {
-  if (value === 'analytics') void loadSchemeStates()
+  if (value === 'analytics') { void loadSchemeStates(); void loadYield() }
   if (value === 'tasks') void loadSnapshot()
 })
 
@@ -624,6 +642,25 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
+      <section v-if="hasYield" class="prd-card prd-card--flush pr-table-card" data-testid="research-yield">
+        <div class="prd-card__head">
+          <div class="prd-card__title"><ShoppingBag :size="16" />选品命中率<small>按款号对上店铺近 30 天销量</small></div>
+          <div class="vg-seg vg-seg--sm"><button v-for="item in ([['keyword', '关键词'], ['source', '平台'], ['price', '采集价位']] as const)" :key="item[0]" type="button" class="vg-seg__btn" :class="{ 'is-active': yieldBy === item[0] }" @click="yieldBy = item[0]">{{ item[1] }}</button></div>
+        </div>
+        <div class="pr-table-scroll">
+          <table class="prd-table pr-table">
+            <thead><tr><th>{{ yieldBy === 'keyword' ? '关键词' : yieldBy === 'source' ? '平台' : '采集价位' }}</th><th class="num">采集</th><th class="num">候选</th><th class="num">确定</th><th class="num">填了款号</th><th class="num">已上架</th><th class="num">出单</th><th class="num">爆款 / 畅销</th><th class="num">命中率</th><th class="num">30 天件数</th><th class="num">30 天成交{{ yieldCurrency ? `（${yieldCurrency}）` : '' }}</th></tr></thead>
+            <tbody>
+              <tr v-if="!yieldRows.length"><td colspan="11" class="prd-empty-cell">还没有采集数据</td></tr>
+              <tr v-for="row in yieldRows" :key="row.key">
+                <td><b>{{ yieldName(row.key) }}</b></td><td class="num">{{ formatNumber(row.collected) }}</td><td class="num">{{ formatNumber(row.candidates) }}</td><td class="num">{{ formatNumber(row.kept) }}</td><td class="num">{{ formatNumber(row.coded) }}</td><td class="num">{{ formatNumber(row.listed) }}</td><td class="num">{{ formatNumber(row.sold) }}</td><td class="num prd-num-green">{{ row.hot }}</td><td class="num">{{ row.listed ? `${ratio(row.hot, row.listed).toFixed(1)}%` : '-' }}</td><td class="num">{{ formatNumber(row.units30) }}</td><td class="num">{{ formatNumber(row.amount30) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="yieldRows.some((row) => row.kept > row.coded)" class="pr-yield-tip">有 {{ yieldRows.reduce((sum, row) => sum + row.kept - row.coded, 0) }} 个确定的商品没填款号，上架后的销量对不上。在方案的「确定商品」里填上款号就会自动统计。</p>
+      </section>
+
       <section class="prd-card prd-card--flush pr-table-card">
         <div class="prd-card__head"><div class="prd-card__title"><TrendingUp :size="16" />方案效果对比</div></div>
         <div class="pr-table-scroll">
@@ -685,6 +722,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pr-yield-tip { margin: 0; padding: 10px 16px 14px; font-size: 12px; color: var(--theme-text-muted); }
 .pr-hero { position: relative; display: flex; align-items: center; gap: 16px; padding: 18px 22px; min-height: 96px; border-radius: 12px; border: 1px solid var(--theme-border); background: linear-gradient(110deg, var(--theme-panel) 45%, color-mix(in srgb, var(--theme-accent) 16%, var(--theme-panel))); overflow: hidden; }
 .pr-hero__icon { color: var(--theme-accent); flex-shrink: 0; }
 .pr-hero__copy { position: relative; z-index: 1; }

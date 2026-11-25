@@ -73,7 +73,7 @@ async function main() {
     const { applyImport, previewImport } = await import('../src/main/modules/product-codes/library')
     const { buildDashboard, SI_DEFAULT_SETTINGS, shiftDate } = await import('../src/shared/sellerInventory')
     const today = '2026-11-24'
-    const sku = (shopKey: string, skuId: string, productName: string, sellerSku: string) => ({ id: `${shopKey}:${skuId}`, shopKey, productId: `p${skuId}`, skuId, productName, skuName: '', sellerSku, stockTotal: 50, stockAvailable: 50, updatedAt: 1 })
+    const sku = (shopKey: string, skuId: string, productName: string, sellerSku: string) => ({ id: `${shopKey}:${skuId}`, shopKey, productId: `p${skuId}`, skuId, productName, skuName: '', sellerSku, image: 'https://x/y.jpg', stockTotal: 50, stockAvailable: 50, updatedAt: 1 })
     // 标题 A-2、商家 SKU 写错成 A-9：按标题归到 A-2；只有 s1 上架
     const skus = [sku('s1', '1', 'Bông tai A-2', 'A-9'), sku('s1', '2', 'Nhẫn E-3', 'E-3'), sku('s2', '3', 'Nhẫn E-3', '')]
     const daily = Array.from({ length: 25 }, (_, index) => ({ shopKey: 's1', skuId: '1', date: shiftDate(today, -(index + 1)), units: 20, amount: 2000, orders: 20, sellerSku: 'A-9' }))
@@ -83,6 +83,9 @@ async function main() {
     setProductCodesTestDependencies({
       store: async () => ({ skus, mappings: new Map(), shopNames: new Map([['s1', 'Lumee'], ['s2', 'Arua']]) }),
       researchCodes: async () => [],
+      live: async () => [],
+      ads: async () => new Map([['p1', { spend: 100, revenue: 500, orders: 5, creatives: 2 }]]),
+      fetchImage: async () => red,
       dataVersion: async () => 1,
       stats: async (codes) => ({ all: build(['s1', 's2'], codes), byShop: new Map([['s1', build(['s1'], codes)], ['s2', build(['s2'], codes)]]), cards: [], currency: 'VND', feeRates: new Map([['s1', 0.2]]) }),
     })
@@ -95,6 +98,38 @@ async function main() {
     const detail = await productCodesService.detail('a-2')
     assert.equal(detail?.profit30, 50000 * 0.8 - 30 * 500)
     assert.equal((await productCodesService.detail('E-3'))?.profit30, undefined)
+
+    // 款号闭环：规则要有样本才下结论
+    const { styleActions, styleBaseline, buildYield, priceBand } = await import('../src/shared/styleBoard')
+    const liveOf = (code: string, exposures: number, clicks: number, carts: number, orders: number, gmv: number) => ({ code, sessions: 3, exposures, clicks, carts, measuredOrders: orders, measuredGmv: gmv, orders, buyers: orders, sales: orders, gmv, currency: 'VND', lastAt: 1, estimated: false })
+    const base = styleBaseline([liveOf('X', 100000, 10000, 1000, 400, 400000)], [{ spend: 1000, revenue: 4000, orders: 40, creatives: 5 }])
+    assert.deepEqual([base.liveCartRate, base.liveCartToOrder, base.adsRoi], [0.1, 0.4, 4])
+    const row = (patch: object) => ({ code: 'X', name: '', units7: 0, unitsPrev7: 0, units30: 50, amount30: 1, suggestQty: 20, risk: 'healthy' as const, ...patch })
+    const kinds = (patch: object) => styleActions(row(patch), base).map((item) => item.kind)
+    assert.deepEqual(kinds({ live: liveOf('X', 2000, 200, 30, 20, 40000) }), ['makeVideo', 'livePush'])
+    assert.deepEqual(kinds({ risk: 'urgent', stock: 2, daysLeft: 1.5, live: liveOf('X', 2000, 200, 30, 20, 40000) }), ['restock'])
+    assert.deepEqual(kinds({ live: liveOf('X', 20000, 2000, 300, 30, 1) }), ['fixPrice'])
+    assert.deepEqual(kinds({ live: liveOf('X', 20000, 2400, 100, 60, 1) }), ['fixDetail'])
+    assert.deepEqual(kinds({ live: liveOf('X', 100, 20, 10, 4, 99999) }), [])
+    assert.deepEqual(kinds({ ads: { spend: 900, revenue: 900, orders: 9, creatives: 2 } }), ['cutAds'])
+    assert.deepEqual(kinds({ ads: { spend: 10, revenue: 1, orders: 0, creatives: 1 } }), [])
+    const yieldRow = (patch: object) => ({ keyword: '耳环', source: 'douyin', currency: 'CNY', price: 15, candidate: true, kept: true, tested: false, ...patch })
+    const yields = buildYield([yieldRow({ code: 'A-2' }), yieldRow({ code: 'A-2' }), yieldRow({ kept: false, candidate: false })], 'keyword', new Map([['A-2', { listed: true, units30: 9, amount30: 90, hot: true }]]))
+    assert.deepEqual(yields.map((item) => [item.collected, item.kept, item.coded, item.listed, item.hot, item.units30]), [[3, 2, 1, 1, 1, 9]])
+    assert.deepEqual([priceBand(9.9, 'CNY'), priceBand(10, 'CNY'), priceBand(200, 'CNY'), priceBand(undefined, 'CNY')], ['< 10 CNY', '10–20 CNY', '≥ 100 CNY', '—'])
+    const board = await productCodesService.board()
+    const a2 = board.items.find((item) => item.code === 'A-2')!
+    assert.deepEqual([a2.ads, a2.missingIn, a2.actions.some((item) => item.kind === 'gap')], [{ spend: 100, revenue: 500, orders: 5, creatives: 2 }, 'Arua', true])
+    assert.equal(board.notArchived, 2)
+
+    // 一键建档：带款号和图片；再点一次不重复建
+    const made = await productCodesService.archive('e-3')
+    assert.deepEqual([made.created, made.image, (await productCodesService.archive('E-3')).created], [true, true, false])
+    const archived = (await productsRepo.list()).find((item) => item.id === made.productId)!
+    assert.deepEqual([archived.code, archived.type, existsSync(archived.images![0].filePath)], ['E-3', 'ring', true])
+    assert.deepEqual((await productCodesService.linkedProducts()).find((item) => item.id === made.productId)?.tiktokProductIds, ['p2', 'p3'])
+    await assert.rejects(() => productCodesService.archive('Z-9'), /NOT_LISTED/)
+    await productsRepo.remove(made.productId)
 
     // 导入：已有商品只补图和类型；空号不建档；先备份
     const keep = await productsRepo.upsert({ name: '我的名字', type: 'earring', code: 'A-2' })

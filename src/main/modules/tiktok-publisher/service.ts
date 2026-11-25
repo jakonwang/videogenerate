@@ -246,8 +246,8 @@ export const creatokPublisherService = {
       const { productSpine } = await import('../content-hub/productSpine')
       const known = (await productSpine.listChannelProducts()).map((item) => ({ id: item.id, title: item.title || item.id, imageUrl: item.imageUrl || '', image: item.imageUrl || '' }))
       // 商品库里绑定过店铺商品 ID 的，用商品库的名字补上
-      const { productsRepo } = await import('../products/repo')
-      for (const product of await productsRepo.list().catch(() => [])) {
+      const { productCodesService } = await import('../product-codes/service')
+      for (const product of await productCodesService.linkedProducts().catch(() => [])) {
         for (const id of product.tiktokProductIds || []) {
           const existing = known.find((item) => item.id === id)
           if (!existing) known.push({ id, title: product.name, imageUrl: '', image: '' })

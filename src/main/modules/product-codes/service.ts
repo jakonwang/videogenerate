@@ -13,7 +13,10 @@ import type { SiPlatformSku } from '../../../shared/sellerInventory'
 import { getAppPaths } from '../../lib/paths'
 import { readJsonFile, writeJsonFile } from '../../lib/storeJson'
 import type { CodeStatsDetail, CodeStatsOverview } from '../../../shared/productCodeStats'
-import { buildCodeDetail, buildCodeStats, type StatsInput } from './stats'
+import { buildYield, buildStyleBoard, type StyleAds, type StyleBoard, type YieldBy, type YieldRow, type YieldSourceRow } from '../../../shared/styleBoard'
+import type { LiveCodeTotals } from '../../../shared/liveAccounts'
+import type { Product } from '../products/types'
+import { buildCodeDetail, buildCodeStats, codeCards, type StatsInput } from './stats'
 import { productsRepo } from '../products/repo'
 
 export type StoreData = { skus: SiPlatformSku[]; mappings: Map<string, string>; shopNames: Map<string, string> }
@@ -26,6 +29,12 @@ type Deps = {
   stats: (skuCodes: Map<string, string>) => Promise<StatsSource>
   dataVersion: () => Promise<number>
   researchCodes: () => Promise<string[]>
+  /** 近 30 天直播按款号的数据 */
+  live: () => Promise<LiveCodeTotals[]>
+  /** 近 30 天广告按店铺商品的数据 */
+  ads: (currency: string) => Promise<Map<string, StyleAds>>
+  researchRows: () => Promise<YieldSourceRow[]>
+  fetchImage: (url: string) => Promise<Buffer>
 }
 
 const defaultDeps: Deps = {
@@ -55,6 +64,25 @@ const defaultDeps: Deps = {
   async researchCodes() {
     const { productResearchService } = await import('../product-research/service')
     return productResearchService.listCodes()
+  },
+  async live() {
+    const { liveAccountsService } = await import('../live-accounts/service')
+    return (await liveAccountsService.overview({ since: Date.now() - 30 * 86_400_000 })).codes
+  },
+  async ads(currency) {
+    const { gmvMaxRepo } = await import('../tiktok-gmv-max/sqlite')
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+    const now = Date.now()
+    return new Map(gmvMaxRepo.listProductAdTotals(day(now - 29 * 86_400_000), day(now), currency).map((item) => [item.productId, { spend: item.spend, revenue: item.revenue, orders: item.orders, creatives: item.creatives }]))
+  },
+  async researchRows() {
+    const { productResearchService } = await import('../product-research/service')
+    return productResearchService.listYieldRows()
+  },
+  async fetchImage(url) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(20_000) })
+    if (!response.ok) throw new Error(`HTTP_${response.status}`)
+    return Buffer.from(await response.arrayBuffer())
   },
 }
 const REGION_CURRENCY: Record<string, string> = { VN: 'VND', TH: 'THB', MY: 'MYR', PH: 'PHP', ID: 'IDR', SG: 'SGD', US: 'USD', GB: 'GBP' }
@@ -233,6 +261,78 @@ export const productCodesService = {
   async storeProductIds(): Promise<Map<string, string[]>> {
     const { match } = await load()
     return new Map([...match.links].map(([code, list]) => [code, [...new Set(list.filter((item) => !item.shared).map((item) => item.productId))]]))
+  },
+
+  /** 款号闭环：店铺、商品卡、直播、广告放在一起，给出每个款下一步 */
+  async board(): Promise<StyleBoard> {
+    const input = await statsInput()
+    const stats = buildCodeStats(input)
+    const [live, byProduct, productIds, products] = await Promise.all([
+      deps.live().catch(() => []),
+      deps.ads(stats.currency).catch(() => new Map<string, StyleAds>()),
+      this.storeProductIds(),
+      productsRepo.list(),
+    ])
+    const ads = new Map<string, StyleAds>()
+    for (const [code, ids] of productIds) {
+      const total: StyleAds = { spend: 0, revenue: 0, orders: 0, creatives: 0 }
+      for (const id of ids) {
+        const own = byProduct.get(id)
+        if (!own) continue
+        total.spend += own.spend
+        total.revenue += own.revenue
+        total.orders += own.orders
+        total.creatives += own.creatives
+      }
+      if (total.spend > 0 || total.revenue > 0) ads.set(code, total)
+    }
+    const library = new Map<string, { id: string; hotType?: string }>()
+    for (const item of products) {
+      const code = normalizeProductCode(item.code)
+      if (code && !library.has(code)) library.set(code, { id: item.id, hotType: item.hotType })
+    }
+    return buildStyleBoard({ stats: stats.items, gaps: stats.gaps, currency: stats.currency, lastSyncAt: stats.lastSyncAt, cards: codeCards(input), live, ads, library })
+  },
+
+  /** 哪个关键词、平台、采集价位选出来的款最后卖得好 */
+  async researchYield(by: YieldBy): Promise<{ rows: YieldRow[]; currency: string }> {
+    const rows = (await deps.researchRows()).map((row) => ({ ...row, code: normalizeProductCode(row.code) || undefined }))
+    const stats = buildCodeStats(await statsInput())
+    const hotTypes = new Map((await productsRepo.list()).map((item) => [normalizeProductCode(item.code), item.hotType]))
+    const isHot = (type?: string) => type === '大爆款' || type === '畅销款'
+    const styles = new Map(stats.items.map((item) => [item.code, { listed: item.shops.some((shop) => shop.listed), units30: item.units30, amount30: item.amount30, hot: isHot(hotTypes.get(item.code) || item.suggestion) }]))
+    // 看板不含售罄又没销量的款，这些仍算已上架
+    for (const code of (await load()).match.links.keys()) if (!styles.has(code)) styles.set(code, { listed: true, units30: 0, amount30: 0, hot: isHot(hotTypes.get(code)) })
+    return { rows: buildYield(rows, by, styles), currency: stats.currency }
+  },
+
+  /** 店里的款一键建档：款号、类型、店铺图片自动带上；已有档案直接返回 */
+  async archive(code: string): Promise<{ productId: string; created: boolean; image: boolean }> {
+    const key = normalizeProductCode(code)
+    const existing = (await productsRepo.list()).find((item) => normalizeProductCode(item.code) === key)
+    if (existing) return { productId: existing.id, created: false, image: true }
+    const links = (await load()).match.links.get(key) || []
+    const link = links.find((item) => !item.shared) || links[0]
+    if (!link) throw new Error('PRODUCT_CODE_NOT_LISTED')
+    const { typeFromTitle, saveWithImage } = await import('./library')
+    const data = link.image ? await deps.fetchImage(link.image).catch(() => undefined) : undefined
+    const saved = await saveWithImage({ name: key, code: await this.prepare(key), type: typeFromTitle(link.title), remark: link.title }, data)
+    await remember([key])
+    return { productId: saved.id, created: true, image: Boolean(data) }
+  },
+
+  /** 商品库商品，店铺商品 ID = 手工绑定的 + 按款号对上的 */
+  async linkedProducts(): Promise<Product[]> {
+    const products = await productsRepo.list()
+    if (!products.some((item) => item.code)) return products
+    const byCode = await this.storeProductIds().catch(() => new Map<string, string[]>())
+    const ads = await deps.ads('').catch(() => new Map<string, StyleAds>())
+    const spend = (item: Product) => (item.tiktokProductIds || []).reduce((sum, id) => sum + (ads.get(id)?.spend || 0), 0)
+    // 在投放的排前面：有的功能只看前几十个商品
+    return products.map((item) => {
+      const own = byCode.get(normalizeProductCode(item.code)) || []
+      return own.length ? { ...item, tiktokProductIds: [...new Set([...(item.tiktokProductIds || []), ...own])] } : item
+    }).sort((a, b) => spend(b) - spend(a))
   },
 
   async next(input: { start: string; count?: number; reserved?: string[] }): Promise<string[]> {

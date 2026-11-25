@@ -8,6 +8,7 @@ import ShopAccountsPanel from './shops/ShopAccountsPanel.vue'
 import LiveAccountsSection from './shops/LiveAccountsSection.vue'
 import LiveSessionsPanel from './shops/LiveSessionsPanel.vue'
 import ProductCardsPanel from './shops/ProductCardsPanel.vue'
+import StyleBoardPanel from './shops/StyleBoardPanel.vue'
 import { findingText } from '../../../../shared/shopReportText'
 import ShopReportDialog from './shops/ShopReportDialog.vue'
 import { change, fmtChange, fmtMoney, fmtNumber, fmtPercent } from './shops/shopFormat'
@@ -20,6 +21,9 @@ const router = useRouter()
 const route = useRoute()
 /** 直播账号的登录在电脑上，网页版没有 */
 const hasLive = Boolean(window.api.liveAccounts)
+/** 商品分析：按款号看下一步，或按商品链接看商品卡 */
+const hasStyles = Boolean(window.api.productCodes?.board)
+const productView = ref<'styles' | 'links'>(hasStyles ? 'styles' : 'links')
 type ShopsTab = 'business' | 'products' | 'live' | 'accounts'
 function tabOf(value: unknown): ShopsTab {
   return value === 'accounts' || value === 'products' || (value === 'live' && hasLive) ? value : 'business'
@@ -176,7 +180,14 @@ onBeforeUnmount(() => clearInterval(clock))
       <LiveAccountsSection v-if="hasLive" />
     </template>
     <LiveSessionsPanel v-else-if="tab === 'live'" @accounts="tab = 'accounts'" />
-    <ProductCardsPanel v-else-if="tab === 'products'" :shops="(overview?.cards || []).map((card) => ({ shopKey: card.shop.shopKey, name: card.shop.name, region: card.shop.region }))" @sync="syncAll" />
+    <div v-else-if="tab === 'products'" class="shops-view__products">
+      <div v-if="hasStyles" class="vg-seg vg-seg--sm">
+        <button type="button" class="vg-seg__btn" :class="{ 'is-active': productView === 'styles' }" data-testid="product-view-styles" @click="productView = 'styles'">{{ t('shops.sb.byStyle') }}</button>
+        <button type="button" class="vg-seg__btn" :class="{ 'is-active': productView === 'links' }" data-testid="product-view-links" @click="productView = 'links'">{{ t('shops.sb.byLink') }}</button>
+      </div>
+      <StyleBoardPanel v-if="productView === 'styles'" />
+      <ProductCardsPanel v-else :shops="(overview?.cards || []).map((card) => ({ shopKey: card.shop.shopKey, name: card.shop.name, region: card.shop.region }))" @sync="syncAll" />
+    </div>
 
     <template v-else>
       <div v-if="errorText" class="vg-notice vg-notice--danger"><AlertTriangle :size="16" /><span>{{ errorText }}</span></div>
@@ -278,6 +289,8 @@ onBeforeUnmount(() => clearInterval(clock))
 
 <style scoped>
 .shops-view { display: flex; flex-direction: column; gap: 16px; }
+.shops-view__products { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+.shops-view__products > .vg-seg { align-self: flex-start; }
 .shops-view__tabs { overflow-y: hidden; flex-shrink: 0; }
 .shops-view__sync { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
 .shops-view__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }

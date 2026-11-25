@@ -12,7 +12,10 @@
       "rooms": "Sessions",
       "enterRate": "Enter rate",
       "ctr": "Product CTR",
-      "cvr": "Click to order"
+      "cvr": "Click to order",
+      "aov": "Price per item",
+      "cartRate": "Add-to-cart rate",
+      "cartToOrder": "Cart to order"
     },
     "roomsHours": "{rooms} · {hours} h",
     "daily": "Daily {name}",
@@ -103,6 +106,31 @@
       "json": "Paste the JSON exported by Cookie-Editor",
       "running": "Sync is running",
       "api": "The LIVE manager returned no data, try again later"
+    },
+    "soldIn": "sold in {n} sessions",
+    "col": {
+      "gmv": "GMV",
+      "sales": "Sold",
+      "soldRooms": "Sessions sold",
+      "exposures": "Impressions",
+      "ctr": "CTR",
+      "carts": "Carts",
+      "cartRate": "Cart rate",
+      "cartToOrder": "Cart to order",
+      "cvr": "Order rate",
+      "gpm": "GPM"
+    },
+    "colHint": {
+      "gmv": "LIVE GMV",
+      "sales": "Items sold",
+      "soldRooms": "Sessions that sold this style",
+      "exposures": "Product impressions",
+      "ctr": "Clicks / impressions",
+      "carts": "Add to cart",
+      "cartRate": "Carts / clicks",
+      "cartToOrder": "Orders / carts. Low means wanted but not paid: check price and shipping",
+      "cvr": "Orders / clicks",
+      "gpm": "GMV per 1000 impressions"
     }
   },
   "title": "Shops",
@@ -404,5 +432,84 @@
     "dailyTitle": "Daily GMV",
     "showMore": "Show 50 more ({n} left)",
     "note": "From Seller Center Data Compass → Product card, counted by people and updated daily for the day before. People summed over several days can overlap, so rates are the better guide. Stock and restock advice come from Sales & inventory and need the product's SKU codes."
+  },
+  "sb": {
+    "byStyle": "By style",
+    "byLink": "By listing",
+    "title": "What to do with each style",
+    "hint": "Last {n} days: shops, product cards, LIVE and ads joined by style code. {live} styles have LIVE data, {ads} have ads.",
+    "refresh": "Refresh",
+    "todo": "To do",
+    "allStyles": "Active",
+    "search": "Search style",
+    "style": "Style",
+    "next": "Next step",
+    "days": "{n} d",
+    "nothing": "Fine, nothing to do",
+    "noMatch": "No styles",
+    "emptyTitle": "No style data yet",
+    "emptyDesc": "Sync a shop. Products with a style code in the title or seller SKU are grouped automatically.",
+    "group": {
+      "shop": "Shop",
+      "card": "Product card",
+      "live": "LIVE",
+      "ads": "Ads"
+    },
+    "col": {
+      "amount30": "GMV",
+      "units30": "Sold",
+      "cardCart": "Cart rate",
+      "cardPay": "Conversion",
+      "liveGmv": "GMV",
+      "liveCart": "Cart rate",
+      "liveCvr": "Order rate",
+      "adsSpend": "Spend",
+      "adsRoi": "ROI",
+      "daysLeft": "Stock days"
+    },
+    "action": {
+      "restock": "Restock",
+      "cutAds": "Check ads",
+      "makeVideo": "More videos",
+      "livePush": "Push on LIVE",
+      "fixPrice": "Check price",
+      "fixDetail": "Fix listing",
+      "gap": "List it"
+    },
+    "actionDesc": {
+      "restock": "Selling, stock running out",
+      "cutAds": "Real spend, low ROI",
+      "makeVideo": "Sells well, few creatives",
+      "livePush": "High GPM, few impressions",
+      "fixPrice": "Many carts, few payments",
+      "fixDetail": "Many clicks, few carts",
+      "gap": "Sells elsewhere, missing here"
+    },
+    "reason": {
+      "restock": "{stock} in stock, about {days} days left, order {qty}",
+      "restockStock": "{stock} in stock, order {qty}",
+      "cutAds": "ROI {roi} vs average {avg}, spent {spend} in 30 days",
+      "makeVideoLive": "LIVE order rate {cvr} (average {avg}), only {creatives} creatives",
+      "makeVideoAds": "Ad ROI {roi} (average {avg}), only {creatives} creatives",
+      "makeVideoCard": "Product card converts above average, only {creatives} creatives",
+      "livePush": "GPM {gpm} (average {avg}) with {exposures} impressions (average {usual})",
+      "fixPrice": "Cart rate {cartRate}, but only {cartToOrder} of carts order (average {avg})",
+      "fixDetail": "CTR {ctr}, but cart rate only {cartRate} (average {avg})",
+      "fixDetailCard": "Product card gets clicks but few orders",
+      "gap": "{units} sold in 30 days, not listed in {shops}"
+    },
+    "ads": {
+      "spend": "Spend",
+      "revenue": "Ad GMV",
+      "roi": "ROI",
+      "creatives": "Creatives"
+    },
+    "produce": "Make videos",
+    "archiveAndProduce": "Add to library and make videos",
+    "notListed": "No shop product has this style",
+    "archiveFailed": "Could not add: {message}",
+    "noLive": "No LIVE data in 30 days",
+    "noAds": "No ad spend in 30 days",
+    "vsNote": "Percentages compare with the average of all styles. Ads only include single-style listings."
   }
 }

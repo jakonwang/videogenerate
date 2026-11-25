@@ -20,6 +20,9 @@ export function registerProductsIpc(ipcMain: IpcMain) {
   ipcMain.handle('productCodes:next', async (_e, payload: { start: string; count?: number; reserved?: string[] }) => productCodesService.next(payload))
   ipcMain.handle('productCodes:stats', async () => productCodesService.stats())
   ipcMain.handle('productCodes:detail', async (_e, code: string) => productCodesService.detail(code))
+  ipcMain.handle('productCodes:board', async () => productCodesService.board())
+  ipcMain.handle('productCodes:researchYield', async (_e, by: 'keyword' | 'source' | 'price') => productCodesService.researchYield(by))
+  ipcMain.handle('productCodes:archive', async (_e, code: string) => productCodesService.archive(code))
   ipcMain.handle('productCodes:importPreview', async () => {
     const picked = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Excel', extensions: ['xlsx', 'xlsm', 'xls', 'csv'] }] })
     return picked.canceled || !picked.filePaths[0] ? null : previewImport(picked.filePaths[0])

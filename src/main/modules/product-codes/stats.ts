@@ -1,6 +1,6 @@
 import { compareCodes, isValidProductCode, normalizeProductCode } from '../../../shared/productCode'
 import { bestVerdict, suggestHotType, type CodeGap, type CodeStats, type CodeStatsDetail, type CodeStatsOverview } from '../../../shared/productCodeStats'
-import { addTotals, emptyTotals, type PcProduct } from '../../../shared/productCards'
+import { addTotals, emptyTotals, type PcProduct, type PcTotals } from '../../../shared/productCards'
 import { shiftDate, type SiDashboard } from '../../../shared/sellerInventory'
 import { matchSkuCodes, type StoreData } from './service'
 
@@ -83,6 +83,24 @@ export function buildCodeStats(input: StatsInput): CodeStatsOverview {
     gaps.push({ code: item.code, name: item.name, image: item.image, units30: item.units30, soldIn: sold.map((shop) => shop.shopName).join('、'), missingIn: missing.map((shop) => shop.shopName).join('、'), stock: item.stock, suggestion: item.suggestion })
   }
   return { items, gaps, shops, currency: input.currency, lastSyncAt: all.lastSyncAt }
+}
+
+/** 款号 → 商品卡漏斗（只含单独成款的链接） */
+export function codeCards(input: Pick<StatsInput, 'store' | 'known' | 'cards'>): Map<string, PcTotals> {
+  const skuCodes = matchSkuCodes(input.store, input.known)
+  const byProduct = new Map<string, Set<string>>()
+  for (const sku of input.store.skus) {
+    const key = `${sku.shopKey}:${sku.productId}`
+    byProduct.set(key, (byProduct.get(key) || new Set()).add(skuCodes.get(sku.id) || `#${sku.id}`))
+  }
+  const out = new Map<string, PcTotals>()
+  for (const card of input.cards) {
+    const codes = byProduct.get(card.key)
+    if (!codes || codes.size !== 1) continue
+    const [code] = codes
+    out.set(code, addTotals(out.get(code) || emptyTotals(), card.totals))
+  }
+  return out
 }
 
 export function buildCodeDetail(input: StatsInput & { code: string; feeRates: Map<string, number> }): CodeStatsDetail | null {

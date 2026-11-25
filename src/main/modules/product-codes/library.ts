@@ -99,6 +99,23 @@ export async function applyImport(token: string): Promise<{ created: number; upd
   return result
 }
 
+/** 新建一个带封面的商品 */
+export async function saveWithImage(product: { name: string; code: string; type: ProductType; remark: string }, data?: Buffer): Promise<Product> {
+  if (!data) return productsRepo.upsert({ ...product, images: [] })
+  const temp = join(getAppPaths().dataDir, 'tmp', `code-archive-${randomUUID()}`)
+  await mkdir(temp, { recursive: true })
+  try {
+    const { default: sharp } = await import('sharp')
+    const path = join(temp, `${randomUUID()}.jpg`)
+    const jpeg = await sharp(data).rotate().flatten({ background: '#ffffff' }).jpeg({ quality: 92 }).toBuffer()
+    await writeFile(path, jpeg)
+    const now = Date.now()
+    return await productsRepo.upsert({ ...product, images: [{ id: randomUUID(), productId: '', filePath: path, fileName: `${product.code}.jpg`, fileSize: jpeg.length, createdAt: now, updatedAt: now, isCover: true }] })
+  } finally {
+    await rm(temp, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
 async function thumbnail(path: string) {
   try {
     const { default: sharp } = await import('sharp')

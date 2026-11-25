@@ -6,8 +6,8 @@
  *   护栏：默认关闭、默认只建议；每天最多 N 个生成任务；亏钱的商品不放大、不补货；
  *         同一条素材 3 天内不重复补；发布只建草稿，不会自动提交。
  */
+import { productCodesService } from '../product-codes/service'
 import { gmvMaxRepo } from '../tiktok-gmv-max/sqlite'
-import { productsRepo } from '../products/repo'
 import { agentOsService } from '../agent-os/service'
 import type { AgentIntentType } from '../agent-os/types'
 import { createSpineReads, productSpine, readPublishTasks, type SpineSignal } from './productSpine'
@@ -48,7 +48,7 @@ type Deps = {
 }
 const defaultDeps: Deps = {
   now: () => Date.now(),
-  products: async () => (await productsRepo.list()).map((item) => ({ id: item.id, name: item.name, tiktokProductIds: item.tiktokProductIds })),
+  products: async () => (await productCodesService.linkedProducts()).map((item) => ({ id: item.id, name: item.name, tiktokProductIds: item.tiktokProductIds })),
   signals: async (productId, now) => {
     const reads = createSpineReads()
     return (await productSpine.build(productId, now, reads)).signals

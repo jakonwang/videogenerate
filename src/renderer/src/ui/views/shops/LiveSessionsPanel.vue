@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight, FileImage, Link2Off, LoaderCircle, Radio, RefreshCcw, Tv } from 'lucide-vue-next'
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, ChevronRight, FileImage, Link2Off, LoaderCircle, Radio, RefreshCcw, Tv } from 'lucide-vue-next'
 import type { LiveOverview, LiveRoomView, LiveSyncState } from '../../../../../shared/liveAccounts'
 import { dateRange, zonedDate } from '../../../../../shared/sellerInventory'
 import { freshnessText } from '../../../../../shared/sellerSyncText'
 import { formatMoney } from '../product-research/productResearchUtils'
 import { fmtMoney, fmtNumber, fmtPercent } from './shopFormat'
 import { liveErrorText } from './liveText'
-import { daysOf, looseOf, per, slotsOf, stylesOf, sumRooms, type LiveDay } from './liveAnalysis'
+import { daysOf, looseOf, per, slotsOf, stylesOf, sumRooms, type LiveDay, type LiveStyle } from './liveAnalysis'
 import LiveRoomDrawer from './LiveRoomDrawer.vue'
 import ShopTrendChart from './ShopTrendChart.vue'
 
@@ -96,9 +96,11 @@ const kpis = computed(() => {
     { key: 'sales', text: num(a.sales), value: a.sales, before: b.sales, chart: 'sales' },
     { key: 'views', text: num(a.views), value: a.views, before: b.views, chart: 'views' },
     { key: 'perHour', text: money(per(a.gmv, a.hours), true), value: per(a.gmv, a.hours), before: per(b.gmv, b.hours), chart: 'perHour' },
+    { key: 'aov', text: money(per(a.gmv, a.sales), true), value: per(a.gmv, a.sales), before: per(b.gmv, b.sales) },
     { key: 'rooms', text: t('shops.live.roomsHours', { rooms: a.rooms, hours: Math.round(a.hours) }), value: a.rooms, before: b.rooms },
     { key: 'enterRate', text: pct(per(a.views, a.impressions)), value: per(a.views, a.impressions), before: per(b.views, b.impressions), points: true },
     { key: 'ctr', text: pct(per(a.clicks, a.exposures)), value: per(a.clicks, a.exposures), before: per(b.clicks, b.exposures), points: true },
+    { key: 'cartRate', text: pct(per(a.carts, a.clicks)), value: per(a.carts, a.clicks), before: per(b.carts, b.clicks), points: true },
     { key: 'cvr', text: pct(per(a.orders, a.clicks)), value: per(a.orders, a.clicks), before: per(b.orders, b.clicks), points: true },
   ]
   return list.map((item) => {
@@ -125,6 +127,53 @@ const pad = (value: number) => String(value).padStart(2, '0')
 const styles = computed(() => stylesOf(rooms.value))
 const topStyles = computed(() => styles.value.slice(0, 5))
 const stylePeak = computed(() => Math.max(1, ...styles.value.map((item) => item.gmv)))
+type StyleSort = 'gmv' | 'sales' | 'soldRooms' | 'exposures' | 'ctr' | 'carts' | 'cartRate' | 'cartToOrder' | 'cvr' | 'gpm'
+const STYLE_COLUMNS: StyleSort[] = ['gmv', 'sales', 'soldRooms', 'exposures', 'ctr', 'carts', 'cartRate', 'cartToOrder', 'cvr', 'gpm']
+const styleSort = ref<StyleSort>('gmv')
+const styleDesc = ref(true)
+function sortStyles(key: StyleSort) {
+  styleDesc.value = styleSort.value === key ? !styleDesc.value : true
+  styleSort.value = key
+}
+/** 比率只用直播实测的成交；点击太少的比率没有意义，排序时放后面 */
+function styleValue(item: LiveStyle, key: StyleSort): number | undefined {
+  switch (key) {
+    case 'ctr': return per(item.clicks, item.exposures)
+    case 'cartRate': return per(item.carts, item.clicks)
+    case 'cartToOrder': return per(item.measuredOrders, item.carts)
+    case 'cvr': return per(item.measuredOrders, item.clicks)
+    case 'gpm': return item.exposures ? (item.measuredGmv / item.exposures) * 1000 : undefined
+    default: return item[key]
+  }
+}
+const RATES = new Set<StyleSort>(['ctr', 'cartRate', 'cartToOrder', 'cvr'])
+const styleText = (item: LiveStyle, key: StyleSort) => {
+  const value = styleValue(item, key)
+  if (key === 'exposures' || key === 'carts') return item.exposures ? num(value) : '—'
+  return RATES.has(key) ? pct(value) : key === 'gmv' || key === 'gpm' ? money(value) : num(value)
+}
+/** 和全部商品的平均比，明显高低才标色 */
+const styleAverage = computed(() => {
+  const a = total.value
+  return { ctr: per(a.clicks, a.exposures), cartRate: per(a.carts, a.clicks), cartToOrder: per(a.orders, a.carts), cvr: per(a.orders, a.clicks) } as Partial<Record<StyleSort, number>>
+})
+function styleTone(item: LiveStyle, key: StyleSort) {
+  const base = styleAverage.value[key]
+  const value = styleValue(item, key)
+  if (!base || value === undefined || item.clicks < 50) return ''
+  return value >= base * 1.3 ? 'up' : value <= base * 0.6 ? 'down' : ''
+}
+const sortedStyles = computed(() => {
+  const key = styleSort.value
+  const rate = RATES.has(key) || key === 'gpm'
+  const rank = (item: LiveStyle) => (rate && item.clicks < 50 ? undefined : styleValue(item, key))
+  return [...styles.value].sort((a, b) => {
+    const left = rank(a)
+    const right = rank(b)
+    if (left === undefined || right === undefined) return (left === undefined ? 1 : 0) - (right === undefined ? 1 : 0)
+    return (left - right) * (styleDesc.value ? -1 : 1)
+  })
+})
 const generic = computed(() => new Map((data.value?.unassigned || []).map((item) => [item.productId, item.reason === 'generic'])))
 const loose = computed(() => looseOf(rooms.value, generic.value))
 const assignedRate = computed(() => per(total.value.assigned, total.value.productGmv))
@@ -222,8 +271,8 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
               <div class="lv-style__body">
                 <strong>{{ item.code }}</strong>
                 <b>{{ money(item.gmv, true) }}</b>
-                <small>{{ t('shops.live.units', { n: num(item.sales) }) }} · {{ t('shops.live.roomCount', { n: item.sessions }) }}</small>
-                <small>{{ t('shops.live.metric.ctr') }} {{ pct(per(item.clicks, item.exposures)) }} · {{ t('shops.live.metric.cvr') }} {{ item.clicks ? pct(per(item.orders, item.clicks)) : '—' }}</small>
+                <small>{{ t('shops.live.units', { n: num(item.sales) }) }} · {{ t('shops.live.soldIn', { n: item.soldRooms }) }}</small>
+                <small>{{ t('shops.live.col.ctr') }} {{ pct(per(item.clicks, item.exposures)) }} · {{ t('shops.live.col.cartRate') }} {{ pct(per(item.carts, item.clicks)) }} · {{ t('shops.live.col.cvr') }} {{ pct(per(item.measuredOrders, item.clicks)) }}</small>
               </div>
             </article>
           </div>
@@ -262,18 +311,21 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
             </button>
           </div>
 
-          <table v-else-if="tab === 'codes'" class="lv-table">
-            <thead><tr><th>#</th><th>{{ t('shops.live.code') }}</th><th class="num">{{ t('shops.live.gmv') }}</th><th></th><th class="num">{{ t('shops.live.sales') }}</th><th class="num">{{ t('shops.live.sessions') }}</th><th class="num">{{ t('shops.live.exposures') }}</th><th class="num">{{ t('shops.live.ctr') }}</th><th class="num">{{ t('shops.live.cvr') }}</th></tr></thead>
-            <tbody>
-              <tr v-for="(item, index) in styles.slice(0, shown)" :key="item.code">
-                <td class="lv-rank">{{ index + 1 }}</td>
-                <td><span class="lv-prod"><img v-if="item.image" :src="item.image" alt="" loading="lazy" /><span v-else class="lv-ph"><FileImage :size="14" /></span><span><b>{{ item.code }}</b><small :title="item.name">{{ item.name }}</small></span></span></td>
-                <td class="num"><b>{{ money(item.gmv) }}</b><small v-if="item.estimated" class="lv-tag" :title="t('shops.live.estimatedHint')">{{ t('shops.live.estimated') }}</small></td>
-                <td class="lv-bar"><i :style="{ width: `${(item.gmv / stylePeak) * 100}%` }"></i></td>
-                <td class="num">{{ num(item.sales) }}</td><td class="num">{{ item.sessions }}</td><td class="num">{{ item.exposures ? num(item.exposures) : '—' }}</td><td class="num">{{ pct(per(item.clicks, item.exposures)) }}</td><td class="num">{{ item.clicks ? pct(per(item.orders, item.clicks)) : '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-else-if="tab === 'codes'" class="lv-scroll">
+            <table class="lv-table lv-table--styles">
+              <thead><tr><th>#</th><th>{{ t('shops.live.code') }}</th><th v-for="key in STYLE_COLUMNS" :key="key" class="num lv-sort" :class="{ 'is-active': styleSort === key }" :title="t(`shops.live.colHint.${key}`)" :data-testid="`live-sort-${key}`" @click="sortStyles(key)"><span>{{ t(`shops.live.col.${key}`) }}<ArrowDown v-if="styleSort === key && styleDesc" :size="11" /><ArrowUp v-else-if="styleSort === key" :size="11" /></span></th></tr></thead>
+              <tbody>
+                <tr v-for="(item, index) in sortedStyles.slice(0, shown)" :key="item.code">
+                  <td class="lv-rank">{{ index + 1 }}</td>
+                  <td><span class="lv-prod"><img v-if="item.image" :src="item.image" alt="" loading="lazy" /><span v-else class="lv-ph"><FileImage :size="14" /></span><span><b>{{ item.code }}</b><small :title="item.name">{{ item.name }}</small></span></span></td>
+                  <td v-for="key in STYLE_COLUMNS" :key="key" class="num" :class="styleTone(item, key)">
+                    <template v-if="key === 'gmv'"><b>{{ money(item.gmv) }}</b><span class="lv-track"><i :style="{ width: `${(item.gmv / stylePeak) * 100}%` }"></i></span><small v-if="item.estimated" class="lv-tag" :title="t('shops.live.estimatedHint')">{{ t('shops.live.estimated') }}</small></template>
+                    <template v-else>{{ styleText(item, key) }}</template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <template v-else>
             <p class="lv-tip">{{ t('shops.live.unassignedTip') }} {{ t('shops.live.unassignedFix') }}</p>
@@ -309,10 +361,10 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
 .up { color: var(--vg-green, #16a34a); } .down { color: var(--vg-red); } .flat { color: var(--theme-text-muted); }
 
 .lv-perf { display: flex; flex-direction: column; gap: 16px; }
-.lv-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--theme-border); border-radius: 10px; overflow: hidden; }
+.lv-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--theme-border); border-radius: 10px; overflow: hidden; }
 .lv-kpi { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 13px 16px; border: 0; border-left: 1px solid var(--theme-divider); border-top: 1px solid var(--theme-divider); background: transparent; color: inherit; font: inherit; text-align: left; }
-.lv-kpi:nth-child(4n + 1) { border-left: 0; }
-.lv-kpi:nth-child(-n + 4) { border-top: 0; }
+.lv-kpi:nth-child(5n + 1) { border-left: 0; }
+.lv-kpi:nth-child(-n + 5) { border-top: 0; }
 .lv-kpi.is-link { cursor: pointer; }
 .lv-kpi.is-link:hover { background: var(--theme-panel-soft); }
 .lv-kpi.is-active { background: color-mix(in srgb, var(--vg-accent) 9%, transparent); }
@@ -396,8 +448,13 @@ const vs = (room: LiveRoomView) => (average.value ? room.gmv / average.value - 1
 .lv-prod b.is-plain { font-weight: 500; }
 .lv-prod b, .lv-prod small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-prod small { font-size: 11.5px; color: var(--theme-text-muted); }
-.lv-bar { width: 110px; }
-.lv-bar i { display: block; height: 6px; min-width: 2px; border-radius: 3px; background: var(--vg-accent); }
+.lv-scroll { overflow-x: auto; scrollbar-width: thin; }
+.lv-table--styles .lv-prod > span:last-child { max-width: 190px; }
+.lv-sort { cursor: pointer; user-select: none; }
+.lv-sort span { display: inline-flex; align-items: center; gap: 3px; }
+.lv-sort:hover, .lv-sort.is-active { color: var(--vg-accent) !important; }
+.lv-track { display: block; width: 92px; height: 4px; margin: 5px 0 0 auto; border-radius: 2px; background: var(--theme-panel-soft); overflow: hidden; }
+.lv-track i { display: block; height: 100%; border-radius: 2px; background: var(--vg-accent); }
 .lv-tag { display: block; font-size: 11px; color: var(--theme-text-muted); }
 .lv-tip { margin: 0; font-size: 12px; line-height: 1.6; color: var(--theme-text-muted); }
 @media (max-width: 1240px) {

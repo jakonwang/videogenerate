@@ -53,11 +53,12 @@ export type LiveRoom = {
 export type LiveSyncState = { accountId: string; status: 'running' | 'done' | 'failed'; done: number; total: number; error?: string }
 
 /** 一行商品归到哪个款 */
-export type LiveCodeShare = { code: string; sales: number; orders: number; gmv: number; exposures: number; clicks: number; buyers: number; estimated: boolean }
+export type LiveCodeShare = { code: string; sales: number; orders: number; gmv: number; exposures: number; clicks: number; carts: number; buyers: number; estimated: boolean }
 
 export type LiveRoomView = Omit<LiveRoom, 'products'> & { accountName: string; products: Array<LiveRoomProduct & { codes: LiveCodeShare[] }> }
 
-export type LiveCodeTotals = { code: string; sessions: number; exposures: number; clicks: number; orders: number; buyers: number; sales: number; gmv: number; currency: string; lastAt: number; estimated: boolean }
+/** measured：直播后台直接给出的成交，算比率只用这部分（按订单估算的没有曝光和点击） */
+export type LiveCodeTotals = { code: string; sessions: number; exposures: number; clicks: number; carts: number; measuredOrders: number; measuredGmv: number; orders: number; buyers: number; sales: number; gmv: number; currency: string; lastAt: number; estimated: boolean }
 
 export type LiveUnassigned = { productId: string; name: string; image?: string; sessions: number; sales: number; gmv: number; reason: 'noCode' | 'generic' }
 
@@ -109,7 +110,7 @@ export function productCodesIndex(input: Pick<LiveMatchInput, 'skus' | 'mappings
  */
 export function shareRoomProduct(room: Pick<LiveRoom, 'startAt' | 'endAt'>, product: LiveRoomProduct, index: Map<string, ProductCodes>, input: LiveMatchInput): LiveCodeShare[] {
   const own = index.get(product.productId)
-  const whole = (code: string): LiveCodeShare[] => [{ code, sales: product.sales, orders: product.orders, gmv: product.gmv, exposures: product.exposures, clicks: product.clicks, buyers: product.buyers, estimated: false }]
+  const whole = (code: string): LiveCodeShare[] => [{ code, sales: product.sales, orders: product.orders, gmv: product.gmv, exposures: product.exposures, clicks: product.clicks, carts: product.carts, buyers: product.buyers, estimated: false }]
   if (!own) {
     const code = codeFromTitle(product.name, input.known)
     return code ? whole(code) : []
@@ -123,7 +124,7 @@ export function shareRoomProduct(room: Pick<LiveRoom, 'startAt' | 'endAt'>, prod
   for (const line of input.orders(own.skuKeys, room.startAt, room.endAt + ORDER_GRACE_MS)) {
     const code = own.skuCodes.get(`${line.shopKey}:${line.skuId}`)
     if (!code) continue
-    const share = shares.get(code) || { code, sales: 0, orders: 0, gmv: 0, exposures: 0, clicks: 0, buyers: 0, estimated: true }
+    const share = shares.get(code) || { code, sales: 0, orders: 0, gmv: 0, exposures: 0, clicks: 0, carts: 0, buyers: 0, estimated: true }
     share.sales += line.quantity
     share.orders += 1
     share.gmv += line.amount
@@ -150,10 +151,12 @@ export function buildLiveOverview(accounts: LiveAccount[], rooms: LiveRoom[], in
         total.sales += product.sales
         for (const share of shares) {
           const key = `${share.code}|${room.currency}`
-          const entry = codes.get(key) || { code: share.code, sessions: 0, exposures: 0, clicks: 0, orders: 0, buyers: 0, sales: 0, gmv: 0, currency: room.currency, lastAt: 0, estimated: false, rooms: new Set<string>() }
+          const entry = codes.get(key) || { code: share.code, sessions: 0, exposures: 0, clicks: 0, carts: 0, measuredOrders: 0, measuredGmv: 0, orders: 0, buyers: 0, sales: 0, gmv: 0, currency: room.currency, lastAt: 0, estimated: false, rooms: new Set<string>() }
           entry.rooms.add(room.id)
           entry.exposures += share.exposures
           entry.clicks += share.clicks
+          entry.carts += share.carts
+          if (!share.estimated) { entry.measuredOrders += share.orders; entry.measuredGmv += share.gmv }
           entry.orders += share.orders
           entry.buyers += share.buyers
           entry.sales += share.sales
