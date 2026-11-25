@@ -912,11 +912,17 @@
     }
   },
   "sceneSwap": {
-    "pane": {"new": "New", "batches": "Batches", "scenes": "Scenes"},
-    "emptyTitle": "Drop the photos to restage here",
-    "emptyHint": "Up to {max} at a time, grouped by the style number in the file name. Model and clothes stay, only the background changes.",
+    "pane": {
+      "new": "New",
+      "batches": "Batches",
+      "scenes": "Scenes",
+      "models": "Models"
+    },
     "method": "Method",
-    "modeShort": {"keep": "Exact", "blend": "Blend"},
+    "modeShort": {
+      "keep": "Exact",
+      "blend": "Blend"
+    },
     "sizeShort": "Original",
     "sum": "{images} photos × {scenes} scenes",
     "compare": "Drag to compare",
@@ -924,8 +930,8 @@
     "noBatches": "No batches yet",
     "pickedScenes": "{count} scenes selected",
     "useScenes": "Use these scenes",
-    "title": "Batch scene swap",
-    "subtitle": "Keep the model and clothes, change only the background.",
+    "title": "AI retouch",
+    "subtitle": "Try it free first, then run the whole batch.",
     "sceneLibrary": "Scenes",
     "sceneLibraryHint": "Use the built-in scenes or your own; yours show on every device.",
     "back": "Back",
@@ -963,8 +969,8 @@
     "willMake": "Images to make",
     "estimate": "Points at most",
     "points": "{points} pts",
-    "startTrial": "Try 2 for free",
-    "startPaidTrial": "Try 2 first",
+    "startTrial": "Try {count} free",
+    "startPaidTrial": "Try {count}",
     "trialNote": "Run the batch when you like the trial. Images that fail the check and you reject are not charged.",
     "noTrials": "Free trials for today are used up; trials cost points.",
     "more": "More settings",
@@ -974,7 +980,7 @@
     "blendSize": "The model decides the size in Blend mode",
     "history": "Past batches",
     "original": "Original",
-    "result": "New scene",
+    "result": "Result",
     "trialReady": "Trial is ready. Happy with it?",
     "trialHint": "One photo from each style",
     "batchHint": "{mode} · You can leave, it keeps running",
@@ -1016,7 +1022,7 @@
     "runCost": "Up to {points} points",
     "retrial": "Try 2 others",
     "run": "Looks good, run all",
-    "savedToLibrary": "Passed images are in the library, folder 批量换景",
+    "savedToLibrary": "Passed images are saved in the library",
     "checks": "Checks",
     "check": {
       "color": "Color",
@@ -1024,7 +1030,11 @@
       "face": "Face and hands",
       "edge": "Edges",
       "light": "Light and scale",
-      "frame": "Framing"
+      "frame": "Framing",
+      "shape": "Fit",
+      "model": "Looks like the model",
+      "pose": "Pose",
+      "limbs": "Hands and feet"
     },
     "level": {
       "ok": "OK",
@@ -1039,7 +1049,11 @@
       "衣服变了": "Clothes changed",
       "脸变了": "Face changed",
       "光线假": "Fake light",
-      "比例不对": "Wrong scale"
+      "比例不对": "Wrong scale",
+      "版型不对": "Wrong fit",
+      "不像所选模特": "Not like the model",
+      "手脚不对": "Hands or feet wrong",
+      "姿势变了": "Pose changed"
     },
     "redo": "Redo",
     "redoPaid": "Redo (charged again)",
@@ -1059,6 +1073,87 @@
       "户外": "Outdoor",
       "棚拍": "Studio",
       "我的场景": "Mine"
+    },
+    "product": "Product photo",
+    "stepModel": "Choose a model",
+    "stepShots": "Shots per style",
+    "uploadModel": "Upload model",
+    "modelRights": "Likeness rights required",
+    "removeModel": "Delete model",
+    "confirmRemoveModel": "Delete model \"{name}\"?",
+    "modelLibraryHint": "Use the built-in models, your uploads, or synced models from your model library.",
+    "pickedModel": "Selected: {name}",
+    "useForModel": "Swap models",
+    "useForTryon": "Make model photos",
+    "modelFilter": {
+      "source": "All sources",
+      "gender": "All genders",
+      "skin": "All skin tones",
+      "body": "All body types"
+    },
+    "modelOption": {
+      "system": "Built-in",
+      "own": "Mine",
+      "女": "Female",
+      "男": "Male",
+      "中性": "Neutral",
+      "浅": "Light",
+      "中": "Medium",
+      "深": "Dark",
+      "标准": "Standard",
+      "高挑": "Tall",
+      "大码": "Plus size"
+    },
+    "keepTitle": "Stays the same",
+    "keepAll": "Clothes, pose, framing, background",
+    "keepNoScene": "Clothes, pose, framing",
+    "alsoScene": "Change the scene too",
+    "studioHint": "Without a scene, a plain studio background is used.",
+    "viewHint": "Keep photos of one style together; up to {max} per style are used. Click the label on a photo to switch front, back or detail.",
+    "changeView": "Click to switch",
+    "view": {
+      "front": "Front",
+      "back": "Back",
+      "detail": "Detail"
+    },
+    "noBack": "No back photo, so no back shot",
+    "tooManyProducts": "Only {max} photos are used",
+    "shot": {
+      "front": "Front",
+      "side": "Side",
+      "half": "Half body",
+      "detail": "Detail",
+      "back": "Back",
+      "seated": "Seated"
+    },
+    "master": "Main photo",
+    "sumTryon": "{styles} styles",
+    "sumModel": "{images} photos",
+    "blocked": "The chosen shots cannot be made for \"{name}\". Change the shots or add photos.",
+    "tooManyOutputs": "Up to {max} images per batch. Use fewer styles or shots.",
+    "needModel": "Choose a model first.",
+    "trialNoteTryon": "Main photos for up to 2 styles come first. Images you reject are not charged.",
+    "trialHintTryon": "The rest will follow the face, clothes and scene of the main photo",
+    "againModel": "Use another model",
+    "task": {
+      "tryon": {
+        "name": "Model photos",
+        "hint": "Product photo in, AI model wears it",
+        "emptyTitle": "Drop product photos here",
+        "emptyHint": "Flat lay, hanger or mannequin. Up to {max} at a time, grouped by the style number in the file name."
+      },
+      "model": {
+        "name": "Swap model",
+        "hint": "Same clothes and pose, new person",
+        "emptyTitle": "Drop photos of models wearing the clothes",
+        "emptyHint": "Up to {max} at a time, grouped by style number. Clothes, pose and background stay."
+      },
+      "scene": {
+        "name": "Swap scene",
+        "hint": "Same person and clothes, new background",
+        "emptyTitle": "Drop the photos to restage here",
+        "emptyHint": "Up to {max} at a time, grouped by the style number in the file name. Model and clothes stay, only the background changes."
+      }
     }
   }
 }

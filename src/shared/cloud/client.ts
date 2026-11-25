@@ -58,7 +58,7 @@ export type CloudGenerateRedeemInput = {
 
 export type CloudBillingOverview = { defaults: BillingDefaults; models: AiModelEntry[] }
 
-import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene } from '../sceneSwap'
+import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene, SwapModel } from '../sceneSwap'
 
 export type CloudUsageStats = {
   days: number
@@ -175,6 +175,8 @@ export function createCloudClient(options: CloudClientOptions) {
       info: () => request<SceneSwapInfo>('GET', '/api/v1/scene-swap/info'),
       addScene: (input: { fileId: string; name: string; category?: string }) => request<{ scene: SceneSwapScene }>('POST', '/api/v1/scene-swap/scenes', input).then((r) => r.scene),
       removeScene: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/scenes/${encodeURIComponent(id)}`),
+      addModel: (input: { fileId: string; name: string; gender?: string; skin?: string; body?: string }) => request<{ model: SwapModel }>('POST', '/api/v1/scene-swap/models', input).then((r) => r.model),
+      removeModel: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/models/${encodeURIComponent(id)}`),
       list: () => request<{ batches: SceneSwapBatch[] }>('GET', '/api/v1/scene-swap/batches').then((r) => r.batches),
       get: (id: string) => request<{ batch: SceneSwapBatch }>('GET', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}`).then((r) => r.batch),
       create: (input: SceneSwapCreateInput) => request<{ batch: SceneSwapBatch }>('POST', '/api/v1/scene-swap/batches', input, 60_000).then((r) => r.batch),
@@ -229,6 +231,9 @@ export function createCloudClient(options: CloudClientOptions) {
       listScenes: () => request<{ scenes: SceneSwapScene[] }>('GET', '/api/v1/admin/scenes'),
       addScene: (input: { fileId: string; name: string; category: string }) => request<{ scene: SceneSwapScene }>('POST', '/api/v1/admin/scenes', input),
       removeScene: (id: string) => request<object>('DELETE', `/api/v1/admin/scenes/${encodeURIComponent(id)}`),
+      listModels: () => request<{ models: SwapModel[] }>('GET', '/api/v1/admin/models'),
+      addModel: (input: { fileId: string; name: string; gender: string; skin: string; body: string }) => request<{ model: SwapModel }>('POST', '/api/v1/admin/models', input),
+      removeModel: (id: string) => request<object>('DELETE', `/api/v1/admin/models/${encodeURIComponent(id)}`),
       uploadFile: async (body: Blob, mime: string) => (await (await binary('PUT', '/api/v1/admin/files', body, mime)).json()) as SyncUploadResponse,
       downloadFile: async (fileId: string) => (await binary('GET', `/api/v1/admin/files/${encodeURIComponent(fileId)}`)).blob(),
       stats: () => request<{ stats: CloudAdminStats; channels: CloudPayChannel[] }>('GET', '/api/v1/admin/stats'),

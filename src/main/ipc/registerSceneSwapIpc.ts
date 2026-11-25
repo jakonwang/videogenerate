@@ -20,6 +20,8 @@ export function registerSceneSwapIpc(ipcMain: IpcMain) {
   ipcMain.handle('sceneSwap:item', (_event, id: string, itemId: string, action, reasons?: string[]) => sceneSwapService.client().item(id, itemId, action, reasons))
   ipcMain.handle('sceneSwap:addScene', (_event, input: { fileId: string; name: string }) => sceneSwapService.client().addScene(input))
   ipcMain.handle('sceneSwap:removeScene', (_event, id: string) => sceneSwapService.client().removeScene(id))
+  ipcMain.handle('sceneSwap:addModel', (_event, input: { fileId: string; name: string }) => sceneSwapService.client().addModel(input))
+  ipcMain.handle('sceneSwap:removeModel', (_event, id: string) => sceneSwapService.client().removeModel(id))
   ipcMain.handle('sceneSwap:exportResults', async (_event, files: Array<{ fileId: string; name: string }>) => {
     const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
     if (result.canceled || !result.filePaths[0]) return { canceled: true, count: 0 }

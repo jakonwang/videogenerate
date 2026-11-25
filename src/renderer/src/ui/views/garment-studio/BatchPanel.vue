@@ -41,8 +41,10 @@ function step(offset: number) {
 }
 watch(() => props.batch.id, () => { openId.value = ''; filter.value = 'all' })
 /** 只有画面没变（保真 + 原尺寸）时前后能对齐，才用拖动对比 */
-const aligned = computed(() => props.batch.mode === 'keep' && props.batch.size === 'original')
+const aligned = computed(() => props.batch.task === 'scene' && props.batch.mode === 'keep' && props.batch.size === 'original')
 const tabCount = (name: Filter) => (groups[name] ? visible.value.filter((item) => groups[name]!.includes(item.status)).length : visible.value.length)
+const canRetrial = computed(() => props.batch.items.some((item) => item.status === 'waiting' && item.master !== false))
+const sourceLabel = computed(() => k(props.batch.task === 'tryon' ? 'product' : 'original'))
 const runCost = computed(() => count('waiting') * props.pointsPerImage)
 </script>
 
@@ -52,11 +54,11 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
       <button type="button" class="vg-icon-btn" :aria-label="k('back')" @click="emit('back')"><ArrowLeft :size="18" /></button>
       <div class="batch__title">
         <h1>{{ trialMode && batch.status === 'trial_ready' ? k('trialReady') : batch.title }}</h1>
-        <p>{{ trialMode ? k('trialHint') : k('batchHint', { mode: k(`mode.${batch.mode}`) }) }}</p>
+        <p>{{ trialMode ? k(batch.task === 'tryon' ? 'trialHintTryon' : 'trialHint') : k('batchHint', { mode: batch.task === 'scene' ? k(`mode.${batch.mode}`) : [k(`task.${batch.task}.name`), batch.modelName].filter(Boolean).join(' · ') }) }}</p>
       </div>
       <div class="batch__actions">
         <button type="button" class="vg-icon-btn" :aria-label="k('removeBatch')" :title="k('removeBatch')" :disabled="busy" @click="emit('remove')"><Trash2 :size="16" /></button>
-        <button type="button" class="vg-btn vg-btn--ghost" :disabled="busy" @click="emit('again')">{{ k('again') }}</button>
+        <button type="button" class="vg-btn vg-btn--ghost" :disabled="busy" @click="emit('again')">{{ k(batch.task === 'scene' ? 'again' : 'againModel') }}</button>
         <button v-if="batch.status === 'running'" type="button" class="vg-btn" :disabled="busy" @click="emit('action', 'pause')"><Pause :size="15" /> {{ k('pause') }}</button>
         <button v-if="batch.status === 'paused'" type="button" class="vg-btn vg-btn--primary" :disabled="busy" @click="emit('action', 'resume')"><Play :size="15" /> {{ k('resume') }}</button>
         <button v-if="passed.length && !trialMode" type="button" class="vg-btn" :class="{ 'vg-btn--primary': batch.status !== 'paused' }" :disabled="busy" @click="emit('download', passed)"><Download :size="15" /> {{ k('downloadPassed', { count: passed.length }) }}</button>
@@ -70,13 +72,13 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
       <article v-for="item in visible" :key="item.id" class="trial__item">
         <div class="trial__stage">
           <CompareImage v-if="item.outputFileId && aligned" :before="item.sourceFileId" :after="item.outputFileId" />
-          <div v-else-if="item.outputFileId" class="trial__pair"><SwapImage :file-id="item.sourceFileId" fill :alt="k('original')" /><SwapImage :file-id="item.outputFileId" fill :alt="k('result')" /></div>
+          <div v-else-if="item.outputFileId" class="trial__pair"><SwapImage :file-id="item.sourceFileId" fill :alt="sourceLabel" /><SwapImage :file-id="item.outputFileId" fill :alt="k('result')" /></div>
           <div v-else class="trial__wait"><span class="trial__ghost"><SwapImage :file-id="item.sourceFileId" fill :alt="k('original')" /></span><span class="trial__status"><LoaderCircle v-if="['queued', 'running'].includes(item.status)" :size="16" class="vg-spin" />{{ item.error || k(`status.${item.status}`) }}</span></div>
         </div>
         <div class="trial__meta">
           <span class="dot" :class="`is-${item.status}`" />
           <span class="trial__name">{{ item.sourceName }}</span>
-          <span class="trial__sub">{{ item.sceneName }} · {{ item.trial ? k('freeTrial') : k('paidTrial') }}</span>
+          <span class="trial__sub">{{ item.shot ? k(item.master ? 'master' : `shot.${item.shot}`) : item.sceneName }} · {{ item.trial ? k('freeTrial') : k('paidTrial') }}</span>
           <button v-if="item.outputFileId || item.status === 'failed'" type="button" class="vg-link" @click="openId = item.id">{{ k('inspect') }}</button>
         </div>
       </article>
@@ -91,7 +93,7 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
         <button v-for="item in shown" :key="item.id" type="button" class="shot" :disabled="!item.outputFileId && item.status !== 'failed'" @click="openId = item.id">
           <span class="shot__img" :class="{ 'is-dim': !item.outputFileId }"><SwapImage :file-id="item.outputFileId || item.sourceFileId" :alt="item.sourceName" :width="260" /><LoaderCircle v-if="item.status === 'running'" :size="20" class="vg-spin shot__spin" /></span>
           <span class="shot__name">{{ item.sourceName.replace(/\.[^.]+$/, '') }}</span>
-          <span class="shot__meta"><span class="dot" :class="`is-${item.status}`" /><span class="shot__status">{{ k(`status.${item.status}`) }}</span><span class="shot__scene">{{ item.sceneName }}</span></span>
+          <span class="shot__meta"><span class="dot" :class="`is-${item.status}`" /><span class="shot__status">{{ k(`status.${item.status}`) }}</span><span class="shot__scene">{{ item.shot ? k(`shot.${item.shot}`) : item.sceneName }}</span></span>
         </button>
       </div>
       <p v-if="!shown.length" class="batch__empty">{{ k('nothingHere') }}</p>
@@ -99,11 +101,11 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
 
     <footer v-if="trialMode && batch.status === 'trial_ready'" class="batch__foot">
       <div><strong>{{ k('runTitle', { count: count('waiting') }) }}</strong><span>{{ k('runCost', { points: runCost }) }}</span></div>
-      <button type="button" class="vg-btn" :disabled="busy" @click="emit('action', 'retrial')">{{ k('retrial') }}</button>
+      <button v-if="canRetrial" type="button" class="vg-btn" :disabled="busy" @click="emit('action', 'retrial')">{{ k('retrial') }}</button>
       <button type="button" class="vg-btn vg-btn--primary vg-btn--lg" :disabled="busy" @click="emit('action', 'run')">{{ k('run') }}</button>
     </footer>
 
-    <ReviewDialog v-if="opened" :item="opened" :aligned="aligned" :busy="busy" @close="openId = ''" @step="step" @act="(action, reasons) => emit('item', opened!.id, action, reasons)" @download="emit('download', [opened!])" />
+    <ReviewDialog v-if="opened" :item="opened" :task="batch.task" :aligned="aligned" :busy="busy" @close="openId = ''" @step="step" @act="(action, reasons) => emit('item', opened!.id, action, reasons)" @download="emit('download', [opened!])" />
   </section>
 </template>
 

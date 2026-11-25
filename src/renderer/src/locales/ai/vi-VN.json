@@ -912,11 +912,17 @@
     }
   },
   "sceneSwap": {
-    "pane": {"new": "Tạo mới", "batches": "Các lô", "scenes": "Thư viện cảnh"},
-    "emptyTitle": "Kéo ảnh cần đổi cảnh vào đây",
-    "emptyHint": "Tối đa {max} ảnh, tự nhóm theo mã mẫu trong tên tệp. Giữ người mẫu và quần áo, chỉ đổi nền.",
+    "pane": {
+      "new": "Tạo mới",
+      "batches": "Các lô",
+      "scenes": "Thư viện cảnh",
+      "models": "Người mẫu"
+    },
     "method": "Cách xử lý",
-    "modeShort": {"keep": "Giữ nguyên", "blend": "Hòa trộn"},
+    "modeShort": {
+      "keep": "Giữ nguyên",
+      "blend": "Hòa trộn"
+    },
     "sizeShort": "Gốc",
     "sum": "{images} ảnh × {scenes} cảnh",
     "compare": "Kéo để so sánh",
@@ -924,8 +930,8 @@
     "noBatches": "Chưa có lô nào",
     "pickedScenes": "Đã chọn {count} cảnh",
     "useScenes": "Dùng các cảnh này",
-    "title": "Đổi cảnh hàng loạt",
-    "subtitle": "Giữ nguyên người mẫu và quần áo, chỉ đổi nền.",
+    "title": "Chỉnh ảnh AI",
+    "subtitle": "Thử miễn phí trước, ưng ý rồi chạy cả lô.",
     "sceneLibrary": "Thư viện cảnh",
     "sceneLibraryHint": "Dùng cảnh có sẵn hoặc cảnh của bạn; cảnh của bạn hiện trên mọi thiết bị.",
     "back": "Quay lại",
@@ -963,8 +969,8 @@
     "willMake": "Sẽ tạo",
     "estimate": "Điểm tối đa",
     "points": "{points} điểm",
-    "startTrial": "Thử miễn phí 2 ảnh",
-    "startPaidTrial": "Thử 2 ảnh trước",
+    "startTrial": "Thử miễn phí {count} ảnh",
+    "startPaidTrial": "Thử {count} ảnh",
     "trialNote": "Ưng ý rồi mới chạy cả lô. Ảnh không đạt mà bạn bỏ sẽ không trừ điểm.",
     "noTrials": "Đã hết lượt thử miễn phí hôm nay, thử sẽ trừ điểm.",
     "more": "Cài đặt thêm",
@@ -974,7 +980,7 @@
     "blendSize": "Chế độ hòa trộn do mô hình quyết định kích thước",
     "history": "Các lô trước",
     "original": "Ảnh gốc",
-    "result": "Cảnh mới",
+    "result": "Kết quả",
     "trialReady": "Ảnh thử đã xong, bạn ưng chứ?",
     "trialHint": "Mỗi mẫu lấy một ảnh",
     "batchHint": "{mode} · Có thể rời trang, máy chủ vẫn chạy",
@@ -1016,7 +1022,7 @@
     "runCost": "Tối đa {points} điểm",
     "retrial": "Thử 2 ảnh khác",
     "run": "Ưng ý, chạy cả lô",
-    "savedToLibrary": "Ảnh đạt đã lưu vào thư viện, thư mục 批量换景",
+    "savedToLibrary": "Ảnh đạt đã lưu vào thư viện",
     "checks": "Kiểm tra",
     "check": {
       "color": "Màu quần áo",
@@ -1024,7 +1030,11 @@
       "face": "Mặt và tay",
       "edge": "Viền",
       "light": "Ánh sáng và tỉ lệ",
-      "frame": "Khung hình"
+      "frame": "Khung hình",
+      "shape": "Phom dáng",
+      "model": "Giống người mẫu",
+      "pose": "Tư thế",
+      "limbs": "Tay chân"
     },
     "level": {
       "ok": "Đạt",
@@ -1039,7 +1049,11 @@
       "衣服变了": "Quần áo bị đổi",
       "脸变了": "Mặt bị đổi",
       "光线假": "Ánh sáng giả",
-      "比例不对": "Sai tỉ lệ"
+      "比例不对": "Sai tỉ lệ",
+      "版型不对": "Sai phom",
+      "不像所选模特": "Không giống người mẫu",
+      "手脚不对": "Tay chân sai",
+      "姿势变了": "Đổi tư thế"
     },
     "redo": "Làm lại",
     "redoPaid": "Làm lại (trừ điểm lần nữa)",
@@ -1059,6 +1073,87 @@
       "户外": "Ngoài trời",
       "棚拍": "Studio",
       "我的场景": "Của tôi"
+    },
+    "product": "Ảnh sản phẩm",
+    "stepModel": "Chọn người mẫu",
+    "stepShots": "Số ảnh mỗi mẫu",
+    "uploadModel": "Tải người mẫu",
+    "modelRights": "Cần quyền sử dụng hình ảnh",
+    "removeModel": "Xóa người mẫu",
+    "confirmRemoveModel": "Xóa người mẫu \"{name}\"?",
+    "modelLibraryHint": "Dùng người mẫu có sẵn, người mẫu bạn tải lên hoặc đã đồng bộ từ thư viện người mẫu.",
+    "pickedModel": "Đã chọn {name}",
+    "useForModel": "Đổi người mẫu",
+    "useForTryon": "Tạo ảnh người mẫu",
+    "modelFilter": {
+      "source": "Mọi nguồn",
+      "gender": "Mọi giới tính",
+      "skin": "Mọi màu da",
+      "body": "Mọi dáng"
+    },
+    "modelOption": {
+      "system": "Có sẵn",
+      "own": "Của tôi",
+      "女": "Nữ",
+      "男": "Nam",
+      "中性": "Trung tính",
+      "浅": "Da sáng",
+      "中": "Da vừa",
+      "深": "Da tối",
+      "标准": "Tiêu chuẩn",
+      "高挑": "Cao",
+      "大码": "Ngoại cỡ"
+    },
+    "keepTitle": "Giữ nguyên",
+    "keepAll": "Quần áo, tư thế, bố cục, nền",
+    "keepNoScene": "Quần áo, tư thế, bố cục",
+    "alsoScene": "Đổi cả cảnh",
+    "studioHint": "Không chọn cảnh sẽ dùng nền studio trơn.",
+    "viewHint": "Để ảnh cùng mẫu cạnh nhau, dùng tối đa {max} ảnh mỗi mẫu. Bấm nhãn trên ảnh để đổi mặt trước, sau, chi tiết.",
+    "changeView": "Bấm để đổi",
+    "view": {
+      "front": "Mặt trước",
+      "back": "Mặt sau",
+      "detail": "Chi tiết"
+    },
+    "noBack": "Không có ảnh mặt sau nên không tạo mặt sau",
+    "tooManyProducts": "Chỉ dùng {max} ảnh",
+    "shot": {
+      "front": "Mặt trước",
+      "side": "Bên cạnh",
+      "half": "Nửa người",
+      "detail": "Chi tiết",
+      "back": "Mặt sau",
+      "seated": "Ngồi"
+    },
+    "master": "Ảnh chính",
+    "sumTryon": "{styles} mẫu",
+    "sumModel": "{images} ảnh",
+    "blocked": "Không tạo được góc đã chọn cho \"{name}\". Hãy đổi góc hoặc thêm ảnh.",
+    "tooManyOutputs": "Mỗi lô tối đa {max} ảnh. Hãy giảm mẫu hoặc góc chụp.",
+    "needModel": "Hãy chọn người mẫu trước.",
+    "trialNoteTryon": "Tạo ảnh chính của tối đa 2 mẫu trước. Ảnh bạn không lấy sẽ không bị trừ điểm.",
+    "trialHintTryon": "Các ảnh còn lại sẽ theo khuôn mặt, quần áo và cảnh của ảnh chính",
+    "againModel": "Đổi người mẫu khác",
+    "task": {
+      "tryon": {
+        "name": "Tạo ảnh người mẫu",
+        "hint": "Tải ảnh sản phẩm, người mẫu AI mặc",
+        "emptyTitle": "Kéo ảnh sản phẩm vào đây",
+        "emptyHint": "Ảnh trải phẳng, treo hoặc ma-nơ-canh. Tối đa {max} ảnh, tự nhóm theo mã mẫu trong tên tệp."
+      },
+      "model": {
+        "name": "Đổi người mẫu",
+        "hint": "Giữ quần áo và tư thế, chỉ đổi người",
+        "emptyTitle": "Kéo ảnh người mẫu đã mặc đồ vào đây",
+        "emptyHint": "Tối đa {max} ảnh, tự nhóm theo mã mẫu. Giữ quần áo, tư thế và nền."
+      },
+      "scene": {
+        "name": "Đổi cảnh",
+        "hint": "Giữ người và quần áo, chỉ đổi nền",
+        "emptyTitle": "Kéo ảnh cần đổi cảnh vào đây",
+        "emptyHint": "Tối đa {max} ảnh, tự nhóm theo mã mẫu trong tên tệp. Giữ người mẫu và quần áo, chỉ đổi nền."
+      }
     }
   }
 }

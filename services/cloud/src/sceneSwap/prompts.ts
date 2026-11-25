@@ -56,12 +56,12 @@ export function inspectPrompt(mode: SceneSwapMode) {
 }
 
 /** 看不懂的回答一律算 unknown，不当成通过 */
-export function parseInspection(mode: SceneSwapMode, text: string): SceneSwapCheck[] {
+export function parseInspection(mode: SceneSwapMode | Array<SceneSwapCheck['key']>, text: string): SceneSwapCheck[] {
   let json: Record<string, unknown> = {}
   try {
     json = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}')
   } catch {
     json = {}
   }
-  return KEYS[mode].map((key) => ({ key, level: json[key] === true ? 'ok' : json[key] === false ? 'warn' : 'unknown' }))
+  return (Array.isArray(mode) ? mode : KEYS[mode]).map((key) => ({ key, level: json[key] === true ? 'ok' : json[key] === false ? 'warn' : 'unknown' }))
 }

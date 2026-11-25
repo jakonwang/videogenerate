@@ -2,15 +2,17 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronDown, ImagePlus, Images, Layers, LoaderCircle, Plus, Shirt, X } from 'lucide-vue-next'
-import { SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, styleGroupOf, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapScene, type SceneSwapSize } from '../../../../shared/sceneSwap'
+import { ChevronDown, ImagePlus, Images, Layers, LoaderCircle, Plus, Shirt, UserRound, X } from 'lucide-vue-next'
+import { PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, SCENE_SWAP_TASKS, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, productViewOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapScene, type SceneSwapSize, type SceneSwapTask, type SwapModel, type TryonShot } from '../../../../shared/sceneSwap'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import BatchPanel from './garment-studio/BatchPanel.vue'
+import ModelGallery from './garment-studio/ModelGallery.vue'
 import SceneGallery from './garment-studio/SceneGallery.vue'
 import SwapImage from './garment-studio/SwapImage.vue'
+import TaskCards from './garment-studio/TaskCards.vue'
 
-/** AI 修图 · 批量换景：传图 → 选场景 → 免费试图 → 跑整批。批次在云端，网页和电脑是同一个页面 */
-type Source = { key: string; path: string; name: string; group: string; fileId?: string; error?: string }
+/** AI 修图（生成模特图 / 换模特 / 换场景）：传图 → 选模特、场景 → 免费试图 → 跑整批。批次在云端，网页和电脑是同一个页面 */
+type Source = { key: string; path: string; name: string; group: string; view: ProductView; fileId?: string; error?: string }
 
 const { t } = useI18n()
 const k = (key: string, params: Record<string, unknown> = {}) => t(`ai.sceneSwap.${key}`, params)
@@ -22,6 +24,13 @@ const info = ref<SceneSwapInfo | null>(null)
 const batches = ref<SceneSwapBatch[]>([])
 const sources = ref<Source[]>([])
 const picked = ref<string[]>([])
+const task = ref<SceneSwapTask>('tryon')
+const modelId = ref('')
+const shots = ref<TryonShot[]>([...TRYON_DEFAULT_SHOTS])
+const tryonSize = ref<SceneSwapSize>('3:4')
+/** 换模特默认不动背景 */
+const alsoScene = ref(false)
+const uploadingModel = ref(false)
 const mode = ref<SceneSwapMode>('keep')
 const size = ref<SceneSwapSize>('original')
 const matchLight = ref(true)
@@ -43,12 +52,21 @@ const groups = computed(() => {
 })
 const uploading = computed(() => sources.value.filter((source) => !source.fileId && !source.error).length)
 const ready = computed(() => sources.value.filter((source) => source.fileId))
-const total = computed(() => ready.value.length * picked.value.length)
+const model = computed(() => info.value?.models.find((item) => item.id === modelId.value))
+/** 每款按实际能出的镜头算：没有背面图就不出背面 */
+const styleShots = computed(() => groups.value.map((group) => ({ name: group.name, shots: tryonShotsFor(group.items, shots.value) })))
+const blocked = computed(() => (task.value === 'tryon' ? styleShots.value.find((style) => !style.shots.length)?.name : undefined))
+const total = computed(() => {
+  if (task.value === 'tryon') return styleShots.value.reduce((sum, style) => sum + style.shots.length, 0)
+  if (task.value === 'model') return ready.value.length * (alsoScene.value ? picked.value.length : 1)
+  return ready.value.length * picked.value.length
+})
+const trialCount = computed(() => Math.min(2, task.value === 'tryon' ? groups.value.length : total.value))
 const pointsPerImage = computed(() => info.value?.pointsPerImage ?? 0)
 const go = (name: string) => router.push({ query: name ? { pane: name } : {} })
-const PANES = [{ name: '', icon: Plus }, { name: 'batches', icon: Layers }, { name: 'scenes', icon: Images }]
+const PANES = [{ name: '', icon: Plus }, { name: 'batches', icon: Layers }, { name: 'models', icon: UserRound }, { name: 'scenes', icon: Images }]
 const SIZES: SceneSwapSize[] = ['original', '3:4', '1:1', '9:16']
-const canStart = computed(() => total.value > 0 && !uploading.value && !busy.value)
+const canStart = computed(() => total.value > 0 && !uploading.value && !busy.value && (task.value === 'scene' || Boolean(model.value)) && !blocked.value && !(task.value === 'tryon' && total.value > SCENE_SWAP_MAX_IMAGES))
 
 const messageOf = (cause: unknown) => String((cause as Error)?.message || cause).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '')
 
@@ -68,6 +86,7 @@ async function guard(work: () => Promise<unknown>) {
 async function loadInfo() {
   info.value = (await api.info()) as SceneSwapInfo
   if (!info.value.keepAvailable && mode.value === 'keep') mode.value = 'blend'
+  if (!info.value.models.some((item) => item.id === modelId.value)) modelId.value = ''
   picked.value = picked.value.filter((id) => info.value!.scenes.some((scene) => scene.id === id))
 }
 async function loadBatches() {
@@ -82,7 +101,7 @@ function add(list: Array<{ path: string; name: string }>) {
   error.value = ''
   const room = SCENE_SWAP_MAX_IMAGES - sources.value.length
   if (list.length > room) error.value = k('tooMany', { max: SCENE_SWAP_MAX_IMAGES })
-  sources.value.push(...list.slice(0, Math.max(0, room)).map((file) => ({ key: `s${(seq += 1)}`, path: file.path, name: file.name, group: styleGroupOf(file.name) })))
+  sources.value.push(...list.slice(0, Math.max(0, room)).map((file) => ({ key: `s${(seq += 1)}`, path: file.path, name: file.name, group: styleGroupOf(file.name), view: productViewOf(file.name) })))
   startUploads()
 }
 function startUploads() {
@@ -107,6 +126,9 @@ async function uploadAll() {
     }
   }
   await Promise.all([worker(), worker(), worker()])
+}
+function nextView(source: Source) {
+  source.view = PRODUCT_VIEWS[(PRODUCT_VIEWS.indexOf(source.view) + 1) % PRODUCT_VIEWS.length]!
 }
 function removeSource(key: string) {
   sources.value = sources.value.filter((source) => source.key !== key)
@@ -151,6 +173,10 @@ function moveToGroup(key: string, event: DragEvent | null, group: string) {
 /* ------------------------------------------------------------------ 场景 */
 
 function toggleScene(id: string) {
+  if (task.value === 'tryon') {
+    picked.value = picked.value.includes(id) ? [] : [id]
+    return
+  }
   if (picked.value.includes(id)) picked.value = picked.value.filter((item) => item !== id)
   else if (picked.value.length >= SCENE_SWAP_MAX_SCENES) error.value = k('tooManyScenes', { max: SCENE_SWAP_MAX_SCENES })
   else picked.value = [...picked.value, id]
@@ -164,7 +190,8 @@ async function uploadScene() {
     for (const file of files) {
       const { fileId } = (await api.upload(file.path)) as { fileId: string }
       const scene = (await api.addScene({ fileId, name: file.name.replace(/\.[^.]+$/, '') })) as SceneSwapScene
-      if (picked.value.length < SCENE_SWAP_MAX_SCENES) picked.value = [...picked.value, scene.id]
+      if (task.value === 'tryon') picked.value = [scene.id]
+      else if (picked.value.length < SCENE_SWAP_MAX_SCENES) picked.value = [...picked.value, scene.id]
     }
     await loadInfo()
   } catch (cause) {
@@ -172,6 +199,40 @@ async function uploadScene() {
   } finally {
     uploadingScene.value = false
   }
+}
+function setTask(next: SceneSwapTask) {
+  task.value = next
+  if (next === 'tryon') picked.value = picked.value.slice(0, 1)
+}
+function toggleShot(shot: TryonShot) {
+  if (!shots.value.includes(shot)) shots.value = [...shots.value, shot]
+  else if (shots.value.length > 1) shots.value = shots.value.filter((item) => item !== shot)
+}
+async function uploadModel() {
+  const files = (await api.pick('files')) as Array<{ path: string; name: string }>
+  if (!files.length) return
+  uploadingModel.value = true
+  error.value = ''
+  try {
+    let last = ''
+    for (const file of files) {
+      const { fileId } = (await api.upload(file.path)) as { fileId: string }
+      last = ((await api.addModel({ fileId, name: file.name.replace(/\.[^.]+$/, '') })) as SwapModel).id
+    }
+    await loadInfo()
+    modelId.value = last
+  } catch (cause) {
+    error.value = messageOf(cause)
+  } finally {
+    uploadingModel.value = false
+  }
+}
+async function removeModel(item: SwapModel) {
+  if (!window.confirm(k('confirmRemoveModel', { name: item.name }))) return
+  await guard(async () => {
+    await api.removeModel(item.id)
+    await loadInfo()
+  })
 }
 async function removeScene(scene: SceneSwapScene) {
   if (!window.confirm(k('confirmRemoveScene', { name: scene.name }))) return
@@ -189,11 +250,14 @@ function replaceBatch(next: SceneSwapBatch) {
 async function start() {
   await guard(async () => {
     const created = (await api.create({
-      mode: mode.value,
-      size: size.value,
+      task: task.value,
+      mode: task.value === 'scene' ? mode.value : 'blend',
+      size: task.value === 'tryon' ? tryonSize.value : task.value === 'scene' ? size.value : 'original',
       matchLight: matchLight.value,
-      images: ready.value.map((source) => ({ fileId: source.fileId!, name: source.name, group: source.group })),
-      sceneIds: [...picked.value],
+      images: ready.value.map((source) => ({ fileId: source.fileId!, name: source.name, group: source.group, view: source.view })),
+      sceneIds: task.value === 'model' && !alsoScene.value ? [] : [...picked.value],
+      ...(task.value === 'scene' ? {} : { modelId: modelId.value }),
+      ...(task.value === 'tryon' ? { shots: [...shots.value] } : {}),
     })) as SceneSwapBatch
     replaceBatch(created)
     sources.value = []
@@ -212,8 +276,12 @@ async function removeBatch() {
   })
 }
 function again() {
-  const unique = new Map(batch.value!.items.map((item) => [item.sourceFileId, item]))
-  sources.value = [...unique.values()].map((item) => ({ key: `s${(seq += 1)}`, path: '', name: item.sourceName, group: item.group, fileId: item.sourceFileId }))
+  const old = batch.value!
+  const list = old.images ?? [...new Map(old.items.map((item) => [item.sourceFileId, { fileId: item.sourceFileId, name: item.sourceName, group: item.group }])).values()]
+  sources.value = list.map((image) => ({ key: `s${(seq += 1)}`, path: '', name: image.name, group: image.group || styleGroupOf(image.name), view: ('view' in image && image.view) || productViewOf(image.name), fileId: image.fileId }))
+  task.value = old.task
+  if (old.shots?.length) shots.value = [...old.shots]
+  modelId.value = info.value?.models.some((item) => item.id === old.modelId) ? old.modelId! : ''
   picked.value = []
   void router.push({ query: {} })
 }
@@ -262,6 +330,12 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
         <div v-if="picked.length" class="garment__use"><span>{{ k('pickedScenes', { count: picked.length }) }}</span><button type="button" class="vg-btn vg-btn--primary" @click="go('')">{{ k('useScenes') }}</button></div>
       </div>
 
+      <div v-else-if="pane === 'models'" class="garment__scroll">
+        <p class="garment__lead">{{ k('modelLibraryHint') }}</p>
+        <ModelGallery :models="info?.models ?? []" :selected="modelId" :uploading="uploadingModel" manage @pick="modelId = modelId === $event ? '' : $event" @upload="uploadModel" @remove="removeModel" />
+        <div v-if="model" class="garment__use"><span>{{ k('pickedModel', { name: model.name }) }}</span><button type="button" class="vg-btn" @click="setTask('model'); go('')">{{ k('useForModel') }}</button><button type="button" class="vg-btn vg-btn--primary" @click="setTask('tryon'); go('')">{{ k('useForTryon') }}</button></div>
+      </div>
+
       <div v-else-if="pane === 'batches'" class="garment__scroll">
         <div v-if="batches.length" class="garment__batches">
           <button v-for="item in batches" :key="item.id" type="button" class="tile" @click="router.push({ query: { batch: item.id } })">
@@ -273,12 +347,14 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
         <p v-else class="garment__none">{{ k('noBatches') }}</p>
       </div>
 
-      <div v-else class="garment__work">
+      <template v-else>
+      <TaskCards :task="task" :tasks="SCENE_SWAP_TASKS" @pick="setTask" />
+      <div class="garment__work">
         <section class="stage" :class="{ 'is-drop': dragging }" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="drop">
           <div v-if="!sources.length" class="stage__empty">
             <span class="stage__art"><ImagePlus :size="38" :stroke-width="1.4" /></span>
-            <h2>{{ k('emptyTitle') }}</h2>
-            <p>{{ k('emptyHint', { max: SCENE_SWAP_MAX_IMAGES }) }}</p>
+            <h2>{{ k(`task.${task}.emptyTitle`) }}</h2>
+            <p>{{ k(`task.${task}.emptyHint`, { max: SCENE_SWAP_MAX_IMAGES }) }}</p>
             <div class="stage__pick">
               <button type="button" class="vg-btn vg-btn--lg vg-btn--primary" @click="pick('files')">{{ k('pickFiles') }}</button>
               <button type="button" class="vg-btn vg-btn--lg" @click="pick('folder')">{{ k('pickFolder') }}</button>
@@ -296,13 +372,15 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
               <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost" @click="pickFromLibrary">{{ k('pickLibrary') }}</button>
             </div>
             <p v-if="sources.some((source) => source.error)" class="stage__failed">{{ k('uploadFailed', { count: sources.filter((source) => source.error).length }) }} <button type="button" class="vg-link" @click="retryUploads">{{ k('retry') }}</button></p>
+            <p v-if="task === 'tryon'" class="stage__tip">{{ k('viewHint', { max: TRYON_MAX_PRODUCT_IMAGES }) }}</p>
             <div v-for="group in groups" :key="group.name" class="stage__group" @dragover.prevent @drop.prevent.stop="(event) => event.dataTransfer?.types.includes('text/scene-source') ? moveToGroup('', event, group.name) : drop(event)">
-              <div class="stage__group-head"><input :value="group.name" :aria-label="k('groupName')" @change="renameGroup(group.name, $event)" /><span>{{ group.items.length }}</span></div>
+              <div class="stage__group-head"><input :value="group.name" :aria-label="k('groupName')" @change="renameGroup(group.name, $event)" /><span>{{ group.items.length }}</span><em v-if="task === 'tryon' && shots.includes('back') && !group.items.some((item) => item.view === 'back')">{{ k('noBack') }}</em><em v-if="task === 'tryon' && group.items.length > TRYON_MAX_PRODUCT_IMAGES">{{ k('tooManyProducts', { max: TRYON_MAX_PRODUCT_IMAGES }) }}</em></div>
               <div class="stage__photos">
                 <div v-for="source in group.items" :key="source.key" class="photo" :class="{ 'is-bad': source.error }" :title="source.error || source.name" draggable="true" @dragstart="$event.dataTransfer?.setData('text/scene-source', source.key)">
                   <SwapImage :file-id="source.fileId" :alt="source.name" :width="150" />
                   <LoaderCircle v-if="!source.fileId && !source.error" :size="16" class="vg-spin photo__spin" />
-                  <button type="button" :aria-label="k('remove')" @click="removeSource(source.key)"><X :size="13" /></button>
+                  <button v-if="task === 'tryon'" type="button" class="photo__view" :title="k('changeView')" @click="nextView(source)">{{ k(`view.${source.view}`) }}</button>
+                  <button type="button" class="photo__remove" :aria-label="k('remove')" @click="removeSource(source.key)"><X :size="13" /></button>
                 </div>
               </div>
             </div>
@@ -311,12 +389,26 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 
         <aside class="panel">
           <div class="panel__scroll">
-            <section>
-              <h2>{{ k('stepScenes') }}<span>{{ picked.length }} / {{ SCENE_SWAP_MAX_SCENES }}</span></h2>
+            <section v-if="task !== 'scene'">
+              <h2>{{ k('stepModel') }}<span>{{ model?.name }}</span></h2>
+              <ModelGallery :models="info?.models ?? []" :selected="modelId" :uploading="uploadingModel" @pick="modelId = $event" @upload="uploadModel" />
+            </section>
+            <section v-if="task === 'model'">
+              <h2>{{ k('keepTitle') }}</h2>
+              <p class="panel__hint panel__hint--first">{{ k(alsoScene ? 'keepNoScene' : 'keepAll') }}</p>
+              <label class="panel__check">{{ k('alsoScene') }}<input v-model="alsoScene" type="checkbox" /></label>
+            </section>
+            <section v-if="task !== 'model' || alsoScene">
+              <h2>{{ k('stepScenes') }}<span>{{ picked.length }} / {{ task === 'tryon' ? 1 : SCENE_SWAP_MAX_SCENES }}</span></h2>
               <SceneGallery :scenes="info?.scenes ?? []" :selected="picked" :uploading="uploadingScene" @toggle="toggleScene" @upload="uploadScene" />
+              <p v-if="task === 'tryon' && !picked.length" class="panel__hint">{{ k('studioHint') }}</p>
               <p v-if="picked.length > 1" class="panel__hint">{{ k('sceneHint') }}</p>
             </section>
-            <section>
+            <section v-if="task === 'tryon'">
+              <h2>{{ k('stepShots') }}<span>{{ shots.length }}</span></h2>
+              <div class="chips"><button v-for="shot in TRYON_SHOTS" :key="shot" type="button" class="chip" :class="{ 'is-on': shots.includes(shot) }" :aria-pressed="shots.includes(shot)" @click="toggleShot(shot)">{{ k(`shot.${shot}`) }}</button></div>
+            </section>
+            <section v-if="task === 'scene'">
               <h2>{{ k('method') }}</h2>
               <div class="seg">
                 <button type="button" :class="{ 'is-on': mode === 'keep' }" :aria-pressed="mode === 'keep'" :disabled="info ? !info.keepAvailable : false" @click="mode = 'keep'">{{ k('modeShort.keep') }}</button>
@@ -324,10 +416,14 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
               </div>
               <p class="panel__hint">{{ info && !info.keepAvailable ? k('keepUnavailable') : mode === 'keep' ? k('keepHint') : k('blendHint') }}</p>
             </section>
-            <section>
+            <section v-if="task !== 'model'">
               <button type="button" class="panel__more" :aria-expanded="more" @click="more = !more">{{ k('more') }}<ChevronDown :size="15" :class="{ 'is-open': more }" /></button>
               <div v-if="more" class="panel__options">
-                <template v-if="mode === 'keep'">
+                <template v-if="task === 'tryon'">
+                  <span class="panel__label">{{ k('size') }}</span>
+                  <div class="seg"><button v-for="name in SIZES.slice(1)" :key="name" type="button" :class="{ 'is-on': tryonSize === name }" :aria-pressed="tryonSize === name" @click="tryonSize = name">{{ name }}</button></div>
+                </template>
+                <template v-else-if="mode === 'keep'">
                   <span class="panel__label">{{ k('size') }}</span>
                   <div class="seg"><button v-for="name in SIZES" :key="name" type="button" :class="{ 'is-on': size === name }" :aria-pressed="size === name" @click="size = name">{{ name === 'original' ? k('sizeShort') : name }}</button></div>
                   <label class="panel__check">{{ k('matchLight') }}<input v-model="matchLight" type="checkbox" /></label>
@@ -337,13 +433,17 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
             </section>
           </div>
           <footer class="panel__foot">
-            <div class="panel__sum"><span>{{ k('sum', { images: ready.length, scenes: picked.length }) }}</span><strong>{{ k('imageCount', { count: total }) }}</strong></div>
+            <div class="panel__sum"><span>{{ task === 'tryon' ? k('sumTryon', { styles: groups.length }) : task === 'model' ? k('sumModel', { images: ready.length }) : k('sum', { images: ready.length, scenes: picked.length }) }}</span><strong>{{ k('imageCount', { count: total }) }}</strong></div>
             <div v-if="pointsPerImage" class="panel__sum"><span>{{ k('estimate') }}</span><strong>{{ k('points', { points: total * pointsPerImage }) }}</strong></div>
-            <button type="button" class="vg-btn vg-btn--primary panel__go" :disabled="!canStart" data-testid="scene-start" @click="start"><LoaderCircle v-if="busy" :size="15" class="vg-spin" /> {{ info && !info.trialsLeft ? k('startPaidTrial') : k('startTrial') }}</button>
-            <small>{{ info && !info.trialsLeft ? k('noTrials') : k('trialNote') }}</small>
+            <button type="button" class="vg-btn vg-btn--primary panel__go" :disabled="!canStart" data-testid="scene-start" @click="start"><LoaderCircle v-if="busy" :size="15" class="vg-spin" /> {{ k(info && !info.trialsLeft ? 'startPaidTrial' : 'startTrial', { count: trialCount || 2 }) }}</button>
+            <small v-if="blocked">{{ k('blocked', { name: blocked }) }}</small>
+            <small v-else-if="task === 'tryon' && total > SCENE_SWAP_MAX_IMAGES">{{ k('tooManyOutputs', { max: SCENE_SWAP_MAX_IMAGES }) }}</small>
+            <small v-else-if="task !== 'scene' && !model">{{ k('needModel') }}</small>
+            <small v-else>{{ info && !info.trialsLeft ? k('noTrials') : k(task === 'tryon' ? 'trialNoteTryon' : 'trialNote') }}</small>
           </footer>
         </aside>
       </div>
+      </template>
     </template>
   </div>
 </template>
@@ -402,8 +502,16 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .photo { position: relative; overflow: hidden; border-radius: 6px; cursor: grab; }
 .photo.is-bad { box-shadow: 0 0 0 2px var(--vg-red); }
 .photo__spin { position: absolute; inset: 0; margin: auto; color: var(--theme-text-muted); }
-.photo button { position: absolute; top: 6px; right: 6px; display: grid; width: 24px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: rgba(0, 0, 0, .6); color: #fff; cursor: pointer; opacity: 0; }
-.photo:hover button, .photo button:focus-visible { opacity: 1; }
+.photo__remove { position: absolute; top: 6px; right: 6px; display: grid; width: 24px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: rgba(0, 0, 0, .6); color: #fff; cursor: pointer; opacity: 0; }
+.photo:hover .photo__remove, .photo__remove:focus-visible { opacity: 1; }
+.photo__view { position: absolute; top: 6px; left: 6px; padding: 2px 8px; border: 0; border-radius: 5px; background: rgba(0, 0, 0, .66); color: #fff; font-size: 11px; cursor: pointer; }
+.photo__view:hover { background: rgba(0, 0, 0, .85); }
+.stage__tip { color: var(--theme-text-muted); font-size: 12px; margin-bottom: 10px; }
+.stage__group-head em { color: var(--vg-amber); font-size: 12px; font-style: normal; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip { padding: 4px 12px; border: 1px solid var(--gs-line); border-radius: 7px; background: var(--gs-well); color: var(--theme-text-secondary); font-size: 12.5px; cursor: pointer; }
+.chip.is-on { border-color: var(--vg-accent); background: color-mix(in srgb, var(--vg-accent) 16%, transparent); color: var(--theme-text); }
+.panel__hint--first { margin: 0 0 10px; }
 
 .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); }
 .panel__scroll { flex: 1; min-height: 0; overflow: auto; }

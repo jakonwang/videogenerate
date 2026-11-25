@@ -1,4 +1,4 @@
-import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene } from '../shared/sceneSwap'
+import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene, SwapModel } from '../shared/sceneSwap'
 import type { MatrixAccountSettings } from '../shared/publishMatrix'
 import type { PublishProfitReport } from '../shared/publishProfit'
 type WarmupStatus = Record<string, { today?: import('../main/modules/tiktok-publisher/geelarkWarmup').WarmupLog; doneDays: number }>
@@ -928,6 +928,8 @@ const api = {
     item: (id: string, itemId: string, action: 'redo' | 'accept' | 'reject', reasons?: string[]) => ipcRenderer.invoke('sceneSwap:item', id, itemId, action, reasons) as Promise<SceneSwapBatch>,
     addScene: (input: { fileId: string; name: string }) => ipcRenderer.invoke('sceneSwap:addScene', input) as Promise<SceneSwapScene>,
     removeScene: (id: string) => ipcRenderer.invoke('sceneSwap:removeScene', id) as Promise<object>,
+    addModel: (input: { fileId: string; name: string }) => ipcRenderer.invoke('sceneSwap:addModel', input) as Promise<SwapModel>,
+    removeModel: (id: string) => ipcRenderer.invoke('sceneSwap:removeModel', id) as Promise<object>,
     exportResults: (files: Array<{ fileId: string; name: string }>) => ipcRenderer.invoke('sceneSwap:exportResults', files) as Promise<{ canceled: boolean; count: number }>,
   },
   productReplacement: {

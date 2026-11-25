@@ -50,6 +50,7 @@ const NAV: ReadonlyArray<{ section: string; items: NavItem[] }> = [
     items: [
       { href: '/admin/software', title: '软件设置', icon: SlidersHorizontal },
       { href: '/admin/scenes', title: '换景场景库', icon: Images },
+      { href: '/admin/models', title: '系统模特', icon: Users },
       { href: '/admin/config', title: '公告与开关', icon: Megaphone },
       { href: '/admin/audit', title: '操作日志', icon: FileClock },
     ],

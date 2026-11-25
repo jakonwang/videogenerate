@@ -288,6 +288,14 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
       CREATE INDEX idx_scene_swap_items_user ON scene_swap_items(user_id, status);
     `,
   },
+  {
+    // AI 修图 · 模特：和场景同一张表（读图权限、清理规则相同），用 kind 区分
+    id: 9,
+    sql: `
+      ALTER TABLE scene_swap_scenes ADD COLUMN kind TEXT NOT NULL DEFAULT 'scene';
+      ALTER TABLE scene_swap_scenes ADD COLUMN meta TEXT NOT NULL DEFAULT '{}';
+    `,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

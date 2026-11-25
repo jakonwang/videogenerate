@@ -169,6 +169,8 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     })
     route('POST', `${base}/scenes`, (ctx) => ({ scene: sceneSwap.addScene(member(ctx).id, ctx.body) }))
     route('DELETE', `${base}/scenes/:id`, (ctx) => sceneSwap.removeScene(user(ctx).id, ctx.params.id))
+    route('POST', `${base}/models`, (ctx) => ({ model: sceneSwap.addModel(member(ctx).id, ctx.body) }))
+    route('DELETE', `${base}/models/:id`, (ctx) => sceneSwap.removeModel(user(ctx).id, ctx.params.id))
     route('GET', `${base}/batches`, (ctx) => ({ batches: sceneSwap.list(user(ctx).id) }))
     route('POST', `${base}/batches`, (ctx) => ({ batch: sceneSwap.create(member(ctx).id, ctx.body as any) }))
     route('GET', `${base}/batches/:id`, (ctx) => ({ batch: sceneSwap.get(user(ctx).id, ctx.params.id) }))
@@ -182,6 +184,9 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     route('GET', '/api/v1/admin/scenes', (ctx) => (admin(ctx), { scenes: sceneSwap.systemScenes() }))
     route('POST', '/api/v1/admin/scenes', (ctx) => ({ scene: sceneSwap.addScene(admin(ctx).user.id, ctx.body, true) }))
     route('DELETE', '/api/v1/admin/scenes/:id', (ctx) => sceneSwap.removeScene(admin(ctx).user.id, ctx.params.id, true))
+    route('GET', '/api/v1/admin/models', (ctx) => (admin(ctx), { models: sceneSwap.systemModels() }))
+    route('POST', '/api/v1/admin/models', (ctx) => ({ model: sceneSwap.addModel(admin(ctx).user.id, ctx.body, true) }))
+    route('DELETE', '/api/v1/admin/models/:id', (ctx) => sceneSwap.removeModel(admin(ctx).user.id, ctx.params.id, true))
     route('PUT', '/api/v1/admin/files', (ctx) => sync.uploadFile(admin(ctx).user.id, ctx.bodyBuffer, String(ctx.req.headers['content-type'] || '')), { maxBodyBytes: SYNC_MAX_FILE_BYTES })
     route('GET', '/api/v1/admin/files/:id', (ctx) => {
       const file = sync.readFile(admin(ctx).user.id, ctx.params.id)

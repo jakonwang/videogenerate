@@ -41,6 +41,8 @@ const sceneSwap = {
   item: (id, itemId, action, reasons) => cloud.sceneSwap.item(id, itemId, action, reasons),
   addScene: (input) => cloud.sceneSwap.addScene(input),
   removeScene: (id) => cloud.sceneSwap.removeScene(id),
+  addModel: (input) => cloud.sceneSwap.addModel(input),
+  removeModel: (id) => cloud.sceneSwap.removeModel(id),
   exportResults: async (files: Array<{ fileId: string; name: string }>) => {
     const used = new Map<string, number>()
     for (const file of files) {

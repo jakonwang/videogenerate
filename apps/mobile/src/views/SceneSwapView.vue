@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Download, ImagePlus, LoaderCircle, Pause, Play, RefreshCw, Trash2, X } from 'lucide-vue-next'
-import { SCENE_REDO_REASONS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, styleGroupOf, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode } from '@shared/sceneSwap'
+import { MODEL_GENDERS, PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, TRYON_SHOT_LABEL, productViewOf, redoReasonsOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapTask, type TryonShot } from '@shared/sceneSwap'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { saveToGallery, shareTo } from '@/lib/publish'
@@ -10,8 +10,8 @@ import { uploadSceneImage } from '@/lib/sceneSwap'
 import { cloud, errorMessage } from '@/lib/session'
 import { toast } from '@/lib/toast'
 
-/** 批量换景（手机）：选照片 → 选场景 → 试图 → 跑整批。云端在跑，退出 App 也会继续 */
-type Photo = { key: number; name: string; group: string; url: string; file: File; fileId?: string; failed?: boolean }
+/** AI 修图（手机）：选功能和照片 → 选模特、场景 → 试图 → 跑整批。云端在跑，退出 App 也会继续 */
+type Photo = { key: number; name: string; group: string; view: ProductView; url: string; file: File; fileId?: string; failed?: boolean }
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +21,21 @@ const photos = ref<Photo[]>([])
 const picked = ref<string[]>([])
 const mode = ref<SceneSwapMode>('keep')
 const step = ref<1 | 2>(1)
+const TASKS: Array<{ name: SceneSwapTask; title: string; hint: string }> = [
+  { name: 'tryon', title: '生成模特图', hint: '传产品图，AI 模特穿上' },
+  { name: 'model', title: '换模特', hint: '衣服姿势不变，只换人' },
+  { name: 'scene', title: '换场景', hint: '人和衣服不变，只换背景' },
+]
+const VIEW_LABEL: Record<ProductView, string> = { front: '正面', back: '背面', detail: '细节' }
+const task = ref<SceneSwapTask>('tryon')
+const modelId = ref('')
+const gender = ref('')
+const shots = ref<TryonShot[]>([...TRYON_DEFAULT_SHOTS])
+const alsoScene = ref(false)
+const modelInput = ref<HTMLInputElement>()
+const models = computed(() => (info.value?.models ?? []).filter((item) => !gender.value || item.gender === gender.value))
+const needScene = computed(() => task.value !== 'model' || alsoScene.value)
+const maxScenes = computed(() => (task.value === 'tryon' ? 1 : SCENE_SWAP_MAX_SCENES))
 const busy = ref(false)
 const saving = ref(0)
 const photoInput = ref<HTMLInputElement>()
@@ -28,8 +43,20 @@ const sceneInput = ref<HTMLInputElement>()
 const batch = computed(() => batches.value.find((item) => item.id === route.query.batch))
 const ready = computed(() => photos.value.filter((photo) => photo.fileId))
 const uploading = computed(() => photos.value.filter((photo) => !photo.fileId && !photo.failed).length)
-const total = computed(() => ready.value.length * picked.value.length)
 const groups = computed(() => [...new Set(photos.value.map((photo) => photo.group))].map((name) => ({ name, items: photos.value.filter((photo) => photo.group === name) })))
+const styles = computed(() => groups.value.map((group) => ({ name: group.name, count: tryonShotsFor(group.items, shots.value).length })))
+const blocked = computed(() => (task.value === 'tryon' ? styles.value.find((style) => !style.count)?.name : undefined))
+const total = computed(() => {
+  if (task.value === 'tryon') return styles.value.reduce((sum, style) => sum + style.count, 0)
+  return ready.value.length * (needScene.value ? picked.value.length : 1)
+})
+const problem = computed(() => {
+  if (task.value !== 'scene' && !info.value?.models.some((item) => item.id === modelId.value)) return '请先选一个模特'
+  if (blocked.value) return `「${blocked.value}」选的镜头出不了，请换镜头或补图`
+  if (task.value === 'tryon' && total.value > SCENE_SWAP_MAX_IMAGES) return `一批最多出 ${SCENE_SWAP_MAX_IMAGES} 张，请减少款数或镜头`
+  return ''
+})
+const trialCount = computed(() => Math.min(2, task.value === 'tryon' ? groups.value.length : total.value) || 2)
 
 const trialMode = computed(() => Boolean(batch.value && ['trial', 'trial_ready'].includes(batch.value.status) && batch.value.items.some((item) => item.status === 'waiting')))
 const visible = computed(() => batch.value?.items.filter((item) => !trialMode.value || item.status !== 'waiting') ?? [])
@@ -67,7 +94,7 @@ function addPhotos(event: Event) {
   input.value = ''
   const room = SCENE_SWAP_MAX_IMAGES - photos.value.length
   if (files.length > room) toast(`一次最多 ${SCENE_SWAP_MAX_IMAGES} 张`)
-  photos.value.push(...files.slice(0, room).map((file) => ({ key: (seq += 1), name: file.name, group: styleGroupOf(file.name), url: URL.createObjectURL(file), file })))
+  photos.value.push(...files.slice(0, room).map((file) => ({ key: (seq += 1), name: file.name, group: styleGroupOf(file.name), view: productViewOf(file.name), url: URL.createObjectURL(file), file })))
   chain ??= uploadAll().finally(() => (chain = null))
 }
 async function uploadAll() {
@@ -90,8 +117,33 @@ function tapPhoto(photo: Photo) {
   URL.revokeObjectURL(photo.url)
   photos.value = photos.value.filter((item) => item.key !== photo.key)
 }
+function nextView(photo: Photo) {
+  photo.view = PRODUCT_VIEWS[(PRODUCT_VIEWS.indexOf(photo.view) + 1) % PRODUCT_VIEWS.length]!
+}
+function setTask(next: SceneSwapTask) {
+  task.value = next
+  if (next === 'tryon') picked.value = picked.value.slice(0, 1)
+}
+function toggleShot(shot: TryonShot) {
+  if (!shots.value.includes(shot)) shots.value = [...shots.value, shot]
+  else if (shots.value.length > 1) shots.value = shots.value.filter((item) => item !== shot)
+}
+async function addModel(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  await guard(async () => {
+    const { fileId } = await uploadSceneImage(file)
+    const added = await cloud.sceneSwap.addModel({ fileId, name: file.name.replace(/\.[^.]+$/, '') })
+    await loadInfo()
+    gender.value = ''
+    modelId.value = added.id
+  })
+}
 function toggleScene(id: string) {
   if (picked.value.includes(id)) picked.value = picked.value.filter((item) => item !== id)
+  else if (task.value === 'tryon') picked.value = [id]
   else if (picked.value.length >= SCENE_SWAP_MAX_SCENES) toast(`最多选 ${SCENE_SWAP_MAX_SCENES} 个场景`)
   else picked.value = [...picked.value, id]
 }
@@ -104,7 +156,8 @@ async function addScene(event: Event) {
     const { fileId } = await uploadSceneImage(file)
     const scene = await cloud.sceneSwap.addScene({ fileId, name: file.name.replace(/\.[^.]+$/, '') })
     await loadInfo()
-    if (picked.value.length < SCENE_SWAP_MAX_SCENES) picked.value = [...picked.value, scene.id]
+    if (task.value === 'tryon') picked.value = [scene.id]
+    else if (picked.value.length < SCENE_SWAP_MAX_SCENES) picked.value = [...picked.value, scene.id]
   })
 }
 
@@ -113,7 +166,7 @@ function put(next: SceneSwapBatch) {
 }
 const start = () =>
   guard(async () => {
-    const created = await cloud.sceneSwap.create({ mode: mode.value, size: 'original', matchLight: true, images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group })), sceneIds: picked.value })
+    const created = await cloud.sceneSwap.create({ task: task.value, mode: task.value === 'scene' ? mode.value : 'blend', size: task.value === 'tryon' ? '3:4' : 'original', matchLight: true, ...(task.value === 'scene' ? {} : { modelId: modelId.value }), ...(task.value === 'tryon' ? { shots: shots.value } : {}), images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group, view: photo.view })), sceneIds: needScene.value ? picked.value : [] })
     put(created)
     photos.value.forEach((photo) => URL.revokeObjectURL(photo.url))
     photos.value = []
@@ -179,7 +232,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <PageHeader :title="batch ? (trialMode ? '看看试图' : '换景结果') : '批量换景'" :back="batch ? '/scene-swap' : '/create'">
+  <PageHeader :title="batch ? (trialMode ? '看看试图' : '做好的图') : 'AI 修图'" :back="batch ? '/scene-swap' : '/create'">
     <template v-if="batch" #actions><button type="button" class="m-icon-btn" aria-label="删除这一批" :disabled="busy" @click="removeBatch"><Trash2 :size="20" /></button></template>
   </PageHeader>
 
@@ -190,18 +243,19 @@ onBeforeUnmount(() => {
       <div class="bar" role="progressbar" :aria-valuenow="finished" aria-valuemin="0" :aria-valuemax="batch.items.length"><span :style="{ width: `${(finished / Math.max(1, batch.items.length)) * 100}%` }" /></div>
       <span class="m-muted small">{{ finished < batch.items.length ? '可以先离开，云端会继续生成' : `合格 ${passed.length} 张，已存进素材库` }}</span>
     </section>
-    <p v-else class="m-muted small">不满意可以换图或换场景，满意再跑整批。</p>
+    <p v-else class="m-muted small">{{ batch.task === 'tryon' ? '其余图片会照着主图来出，满意再出整组。' : '不满意可以换图再试，满意再跑整批。' }}</p>
     <button v-if="!trialMode && review.length" type="button" class="m-card warn" @click="open(review[0])"><strong>{{ review.length }} 张要看一下</strong><br />点开决定，不要的不扣点</button>
     <div class="grid" :class="{ 'grid--big': trialMode }">
       <button v-for="item in visible" :key="item.id" type="button" class="cell" :class="`is-${item.status}`" :aria-label="`${item.sourceName} ${STATUS[item.status]}`" @click="open(item)">
         <CloudImage :file-id="item.outputFileId || item.sourceFileId" :alt="item.sourceName" />
         <span v-if="item.status !== 'passed'" class="tag"><LoaderCircle v-if="item.status === 'running'" :size="12" class="m-spin" /> {{ STATUS[item.status] }}</span>
+        <span v-else-if="item.shot" class="tag">{{ TRYON_SHOT_LABEL[item.shot] }}</span>
       </button>
     </div>
     <div class="foot">
       <template v-if="trialMode && batch.status === 'trial_ready'">
         <button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="busy" @click="act('run')"><Play :size="18" /> 满意，跑剩下 {{ waiting }} 张<template v-if="info?.pointsPerImage">（最多 {{ waiting * info.pointsPerImage }} 点）</template></button>
-        <button type="button" class="m-btn m-btn--block" :disabled="busy" @click="act('retrial')"><RefreshCw :size="18" /> 换 2 张再试</button>
+        <button v-if="batch.items.some((item) => item.status === 'waiting' && item.master !== false)" type="button" class="m-btn m-btn--block" :disabled="busy" @click="act('retrial')"><RefreshCw :size="18" /> 换 2 张再试</button>
       </template>
       <button v-else-if="batch.status === 'paused'" type="button" class="m-btn m-btn--primary m-btn--block" :disabled="busy" @click="act('resume')"><Play :size="18" /> 继续</button>
       <button v-else-if="batch.status === 'running'" type="button" class="m-btn m-btn--block" :disabled="busy" @click="act('pause')"><Pause :size="18" /> 暂停</button>
@@ -212,9 +266,9 @@ onBeforeUnmount(() => {
       <div class="sheet__box">
         <header><strong>{{ opened.sourceName }}</strong><button type="button" class="m-icon-btn" aria-label="关闭" @click="close"><X :size="20" /></button></header>
         <div class="sheet__img"><CloudImage :file-id="showOriginal || !opened.outputFileId ? opened.sourceFileId : opened.outputFileId" /></div>
-        <button v-if="opened.outputFileId" type="button" class="m-btn m-btn--sm" @click="showOriginal = !showOriginal">{{ showOriginal ? '看换景后' : '看原图' }}</button>
+        <button v-if="opened.outputFileId" type="button" class="m-btn m-btn--sm" @click="showOriginal = !showOriginal">{{ showOriginal ? '看做好的' : batch.task === 'tryon' ? '看产品图' : '看原图' }}</button>
         <p v-if="opened.error" class="warn small">{{ opened.error }}</p>
-        <div class="chips"><button v-for="reason in SCENE_REDO_REASONS" :key="reason" type="button" class="chip" :class="{ 'is-on': reasons.includes(reason) }" :aria-pressed="reasons.includes(reason)" @click="reasons = reasons.includes(reason) ? reasons.filter((r) => r !== reason) : [...reasons, reason]">{{ reason }}</button></div>
+        <div class="chips"><button v-for="reason in redoReasonsOf(batch.task)" :key="reason" type="button" class="chip" :class="{ 'is-on': reasons.includes(reason) }" :aria-pressed="reasons.includes(reason)" @click="reasons = reasons.includes(reason) ? reasons.filter((r) => r !== reason) : [...reasons, reason]">{{ reason }}</button></div>
         <button type="button" class="m-btn m-btn--block" :disabled="busy || ['queued', 'running'].includes(opened.status)" @click="actItem('redo')"><RefreshCw :size="18" /> {{ ['passed', 'rejected'].includes(opened.status) ? '重做（再扣一次）' : '重做' }}</button>
         <template v-if="opened.status === 'review'">
           <button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="busy" @click="actItem('accept')"><Check :size="18" /> {{ opened.trial ? '可以用（免费）' : '可以用（扣点）' }}</button>
@@ -227,32 +281,50 @@ onBeforeUnmount(() => {
 
   <main v-else class="m-page m-page--no-tabs swap" data-testid="scene-swap-new">
     <template v-if="step === 1">
-      <p class="m-muted">第 1 步，共 2 步：选照片。模特和衣服不变，只换背景。</p>
+      <div class="tasks" role="group" aria-label="选功能"><button v-for="item in TASKS" :key="item.name" type="button" class="task" :class="{ 'is-on': task === item.name }" :aria-pressed="task === item.name" @click="setTask(item.name)"><strong>{{ item.title }}</strong><span class="m-muted small">{{ item.hint }}</span></button></div>
+      <p class="m-muted small">{{ task === 'tryon' ? `选产品实拍图，同一款放一起，每款最多参考 ${TRYON_MAX_PRODUCT_IMAGES} 张。` : task === 'model' ? '选已经穿好衣服的模特图。' : '选要换背景的照片。' }}</p>
       <button type="button" class="m-btn m-btn--block pick" @click="photoInput?.click()"><ImagePlus :size="20" /> 从相册多选（{{ photos.length }}/{{ SCENE_SWAP_MAX_IMAGES }}）</button>
       <input ref="photoInput" type="file" accept="image/*" multiple hidden @change="addPhotos" />
       <p v-if="uploading" class="m-muted small"><LoaderCircle :size="14" class="m-spin" /> 正在上传，还剩 {{ uploading }} 张</p>
       <section v-for="group in groups" :key="group.name" class="m-section">
         <div class="m-section__head"><h2 class="m-section__title">{{ group.name }}</h2><span class="m-muted small">{{ group.items.length }} 张</span></div>
-        <div class="grid"><button v-for="photo in group.items" :key="photo.key" type="button" class="cell" :class="{ 'is-failed': photo.failed }" :aria-label="photo.failed ? '重新上传' : '移除'" @click="tapPhoto(photo)"><img :src="photo.url" alt="" /><span class="tag">{{ photo.failed ? '点我重传' : '移除' }}</span></button></div>
+        <div class="grid"><div v-for="photo in group.items" :key="photo.key"><button type="button" class="cell" :class="{ 'is-failed': photo.failed }" :aria-label="photo.failed ? '重新上传' : '移除'" @click="tapPhoto(photo)"><img :src="photo.url" alt="" /><span class="tag">{{ photo.failed ? '点我重传' : '移除' }}</span></button><button v-if="task === 'tryon'" type="button" class="view" :aria-label="`现在是${VIEW_LABEL[photo.view]}，点一下切换`" @click="nextView(photo)">{{ VIEW_LABEL[photo.view] }} ⇄</button></div></div>
+        <p v-if="task === 'tryon' && shots.includes('back') && !group.items.some((item) => item.view === 'back')" class="m-muted small">没有背面图，这款不出背面</p>
       </section>
       <section v-if="!photos.length && batches.length" class="m-section">
         <div class="m-section__head"><h2 class="m-section__title">最近的批次</h2></div>
         <div class="m-card m-list"><button v-for="item in batches" :key="item.id" type="button" class="m-row" @click="router.push({ query: { batch: item.id } })"><span class="cover"><CloudImage :file-id="item.items.find((row) => row.outputFileId)?.outputFileId || item.items[0]?.sourceFileId" /></span><span class="m-row__main"><span class="m-row__title">{{ item.title }}</span><span class="m-row__sub">{{ item.status === 'trial_ready' ? '试图好了，等你确认' : item.status === 'paused' ? '已暂停' : item.status === 'done' ? '已完成' : '生成中' }}</span></span></button></div>
       </section>
-      <div class="foot"><button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="!ready.length || uploading > 0" @click="step = 2">下一步：选场景</button></div>
+      <div class="foot"><button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="!ready.length || uploading > 0" @click="step = 2">{{ task === 'scene' ? '下一步：选场景' : '下一步：选模特' }}</button></div>
     </template>
     <template v-else>
-      <p class="m-muted">第 2 步，共 2 步：选场景（{{ picked.length }}/{{ SCENE_SWAP_MAX_SCENES }}）。选多个会每个场景各出一张。</p>
+      <template v-if="task !== 'scene'">
+        <h2 class="m-section__title">选模特</h2>
+        <div class="chips"><button v-for="name in ['', ...MODEL_GENDERS]" :key="name" type="button" class="chip" :class="{ 'is-on': gender === name }" :aria-pressed="gender === name" @click="gender = name">{{ name || '全部' }}</button></div>
+        <div class="grid grid--scene"><button v-for="item in models" :key="item.id" type="button" class="scene" :class="{ 'is-on': modelId === item.id }" :aria-pressed="modelId === item.id" @click="modelId = item.id"><span class="cell"><CloudImage :file-id="item.fileId" :alt="item.name" /></span><span class="small">{{ item.name }}</span></button></div>
+        <button type="button" class="m-btn m-btn--block" :disabled="busy" @click="modelInput?.click()"><ImagePlus :size="18" /> 上传模特（须有肖像使用权）</button>
+        <input ref="modelInput" type="file" accept="image/*" hidden @change="addModel" />
+      </template>
+      <template v-if="task === 'tryon'">
+        <h2 class="m-section__title">每款出几张</h2>
+        <div class="chips"><button v-for="shot in TRYON_SHOTS" :key="shot" type="button" class="chip" :class="{ 'is-on': shots.includes(shot) }" :aria-pressed="shots.includes(shot)" @click="toggleShot(shot)">{{ TRYON_SHOT_LABEL[shot] }}</button></div>
+      </template>
+      <button v-if="task === 'model'" type="button" class="chip" :class="{ 'is-on': alsoScene }" :aria-pressed="alsoScene" @click="alsoScene = !alsoScene">同时换场景</button>
+      <template v-if="needScene">
+      <h2 class="m-section__title">选场景（{{ picked.length }}/{{ maxScenes }}）</h2>
+      <p class="m-muted small">{{ task === 'tryon' ? '不选就用纯色影棚背景。' : '选多个会每个场景各出一张。' }}</p>
       <div class="grid grid--scene">
         <button v-for="scene in info?.scenes ?? []" :key="scene.id" type="button" class="scene" :class="{ 'is-on': picked.includes(scene.id) }" :aria-pressed="picked.includes(scene.id)" @click="toggleScene(scene.id)"><span class="cell"><CloudImage :file-id="scene.fileId" :alt="scene.name" /></span><span class="small">{{ scene.name }}</span></button>
       </div>
       <button type="button" class="m-btn m-btn--block" :disabled="busy" @click="sceneInput?.click()"><ImagePlus :size="18" /> 拍一张或上传场景</button>
       <input ref="sceneInput" type="file" accept="image/*" hidden @change="addScene" />
-      <div class="two"><button type="button" class="chip" :class="{ 'is-on': mode === 'keep' }" :aria-pressed="mode === 'keep'" :disabled="!info?.keepAvailable" @click="mode = 'keep'">保真（推荐）</button><button type="button" class="chip" :class="{ 'is-on': mode === 'blend' }" :aria-pressed="mode === 'blend'" @click="mode = 'blend'">融合</button></div>
-      <p class="m-muted small">{{ mode === 'keep' ? '保留原图人物和衣服' : '更自然，但衣服细节可能变化' }}</p>
+      </template>
+      <template v-if="task === 'scene'"><div class="two"><button type="button" class="chip" :class="{ 'is-on': mode === 'keep' }" :aria-pressed="mode === 'keep'" :disabled="!info?.keepAvailable" @click="mode = 'keep'">保真（推荐）</button><button type="button" class="chip" :class="{ 'is-on': mode === 'blend' }" :aria-pressed="mode === 'blend'" @click="mode = 'blend'">融合</button></div>
+      <p class="m-muted small">{{ mode === 'keep' ? '保留原图人物和衣服' : '更自然，但衣服细节可能变化' }}</p></template>
+      <p v-if="problem" class="m-muted small">{{ problem }}</p>
       <div class="m-card sum"><span>将生成 <strong>{{ total }}</strong> 张</span><span>最多 <strong>{{ total * (info?.pointsPerImage ?? 0) }}</strong> 点</span></div>
       <div class="foot">
-        <button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="busy || !total" @click="start"><LoaderCircle v-if="busy" :size="18" class="m-spin" /> {{ info && !info.trialsLeft ? '先试 2 张（今天免费次数用完，按张扣点）' : '先免费试 2 张' }}</button>
+        <button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="busy || !total || Boolean(problem)" @click="start"><LoaderCircle v-if="busy" :size="18" class="m-spin" /> {{ info && !info.trialsLeft ? `先试 ${trialCount} 张（今天免费次数用完，按张扣点）` : `先免费试 ${trialCount} 张` }}</button>
         <button type="button" class="m-btn m-btn--block" @click="step = 1">上一步</button>
       </div>
     </template>
@@ -273,6 +345,10 @@ onBeforeUnmount(() => {
 .tag { position: absolute; inset: auto 0 0; padding: 4px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 11px; text-align: center; }
 .scene { padding: 3px; border: 2px solid var(--theme-border); border-radius: 13px; background: var(--theme-panel); color: var(--theme-text); }
 .scene.is-on { border-color: var(--theme-accent); }
+.tasks { display: flex; flex-direction: column; gap: 8px; }
+.task { display: flex; justify-content: space-between; gap: 10px; align-items: center; min-height: 52px; padding: 10px 14px; border: 1px solid var(--theme-border-control); border-radius: 12px; background: var(--theme-panel); color: var(--theme-text); text-align: left; }
+.task.is-on { border-color: var(--theme-accent); background: var(--theme-accent-soft); }
+.view { width: 100%; min-height: 36px; border: 0; background: none; color: var(--theme-text); font-size: 12px; }
 .progress { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
 .bar { height: 8px; overflow: hidden; border-radius: 9px; background: var(--theme-divider); }
 .bar span { display: block; height: 100%; background: var(--theme-accent); }

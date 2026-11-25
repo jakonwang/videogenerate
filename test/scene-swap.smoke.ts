@@ -18,7 +18,7 @@ import { canvasFor, composeKeep, maskStats, normalizeSource, readMask } from '..
 import { createCloudClient } from '../src/shared/cloud/client'
 import { createDefaultManagedSettings, maskManagedSettings, mergeManagedSecrets, normalizeManagedSettings, stripManagedSecretsForClient, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
 import { SYNC_COLLECTIONS } from '../src/shared/cloud/sync'
-import { styleGroupOf } from '../src/shared/sceneSwap'
+import { productViewOf, styleGroupOf, tryonProducts, tryonShotsFor } from '../src/shared/sceneSwap'
 
 const W = 120
 const H = 160
@@ -44,6 +44,9 @@ async function main() {
   assert.equal(styleGroupOf('A108 (2).png'), 'A108')
   assert.equal(styleGroupOf('红色连衣裙_03.jpg'), '红色连衣裙')
   assert.equal(styleGroupOf('IMG_001.jpg'), '未分款')
+  assert.equal(styleGroupOf('A108-背.jpg'), 'A108')
+  assert.equal(styleGroupOf('A108_back_2.jpg'), 'A108')
+  assert.equal(styleGroupOf('A108-2 细节.jpg'), 'A108')
   assert.equal(styleGroupOf('abc.jpg'), '未分款')
   assert.deepEqual(canvasFor(900, 1200, '1:1'), { width: 1200, height: 1200, left: 150, top: 0 })
   assert.deepEqual(canvasFor(900, 1200, '9:16'), { width: 900, height: 1600, left: 0, top: 400 })
@@ -127,12 +130,18 @@ async function main() {
 
   let verdict = '{"edge":true,"light":true,"color":true,"pattern":true,"face":true}'
   let renders = 0
+  let lastRefs = 0
+  let lastPrompt = ''
+  const refLog: number[] = []
   let mattes = 0
   const overrides = { dataDir: dir, dbPath: join(dir, 'cloud.sqlite'), entitlementPrivateKeyPath: keyPath, allowRegistration: true, mockPay: true, aiPerDay: 500, publicBaseUrl: '', sceneSwapTrialsPerDay: 4, sceneSwapConcurrency: 2 }
   const options = {
     generationProviders: {
       generateImage: async (input: any) => {
         renders += 1
+        lastRefs = input.imagePaths?.length ?? 0
+        lastPrompt = input.prompt
+        refLog.push(lastRefs)
         const outputPath = join(input.outDir, `r_${renders}.png`)
         await sharp({ create: { width: 90, height: 120, channels: 3, background: { r: renders % 255, g: 120, b: 200 } } }).png().toFile(outputPath)
         return { outputPath } as any
@@ -271,6 +280,94 @@ async function main() {
     assert.equal(await status(alice.sceneSwap.create({ ...input, images: [] })), 400)
     assert.equal(await status(alice.sceneSwap.create({ ...input, sceneIds: ['nope'] })), 400)
     assert.equal(await status(bob.sceneSwap.create({ ...input, sceneIds: [system.id] })), 404, 'cannot use images of another account')
+
+    // ---- 模特库：自己的、系统的、同步上来的；场景列表里看不到模特
+    assert.deepEqual([productViewOf('A1-背面.jpg'), productViewOf('A1_detail.png'), productViewOf('A1-1.jpg')], ['back', 'detail', 'front'])
+    assert.deepEqual(tryonProducts([...Array(5)].map((_, i) => ({ i, view: 'front' as const })).concat([{ i: 9, view: 'back' as any }])).map((p) => p.i), [0, 1, 2, 9], 'back photo is always kept')
+    assert.deepEqual(tryonShotsFor([{ view: 'front' }], ['back', 'side', 'front']), ['front', 'side'])
+    assert.deepEqual(tryonShotsFor([{ view: 'back' }], ['back', 'front']), ['back'])
+    const modelFile = await up(alice, await photo(90))
+    const sceneCount = (await alice.sceneSwap.info()).scenes.length
+    const mineModel = await alice.sceneSwap.addModel({ fileId: modelFile, name: 'Mali', gender: '女', skin: '乱填' })
+    assert.equal(mineModel.skin, '')
+    const sysModelFile = await up(alice, await photo(91))
+    const sysModel = app.sceneSwap.addModel(ids.alice!, { fileId: sysModelFile, name: 'Nina', gender: '女', skin: '浅', body: '标准' }, true)
+    await alice.sync.push([{ collection: SYNC_COLLECTIONS.models, id: 'm1', updatedAt: Date.now(), deleted: false, data: { name: '库里的', gender: 'female', images: [{ fileId: modelFile, mime: 'image/png' }], createdAt: 1 } }] as any)
+    const models = (await alice.sceneSwap.info()).models
+    assert.deepEqual(models.map((m) => [m.name, m.source, m.gender]), [['Mali', 'mine', '女'], ['Nina', 'system', '女'], ['库里的', 'library', '女']])
+    assert.equal((await alice.sceneSwap.info()).scenes.length, sceneCount)
+    assert.deepEqual((await bob.sceneSwap.info()).models.map((m) => m.name), ['Nina'])
+    assert.ok((await bob.sync.downloadFile(sysModelFile)).size > 0)
+    assert.equal(await status(bob.sync.downloadFile(modelFile)), 404)
+    assert.equal(await status(bob.sceneSwap.removeModel(mineModel.id)), 404)
+    assert.equal(await status(alice.sceneSwap.removeScene(mineModel.id)), 404, 'a model is not a scene')
+    assert.equal(await status(bob.admin.listModels()), 403)
+
+    // ---- 换模特：不选场景也能做；不像所选模特就要看，重做理由按任务过滤
+    setCredits('alice', 5000)
+    const swapInput = { ...input, task: 'model' as const, sceneIds: [], images: images.slice(0, 3) }
+    assert.equal(await status(alice.sceneSwap.create(swapInput)), 400, 'model is required')
+    assert.equal(await status(bob.sceneSwap.create({ ...swapInput, modelId: mineModel.id })), 400)
+    verdict = '{"color":true,"pattern":true,"model":true,"pose":true,"limbs":true}'
+    const swap = await alice.sceneSwap.create({ ...swapInput, modelId: 'lib_m1' })
+    let swapped = await done(swap.id)
+    assert.equal(swapped.status, 'trial_ready')
+    assert.deepEqual([swapped.task, swapped.mode, swapped.modelName, lastRefs], ['model', 'blend', '库里的', 2])
+    await alice.sceneSwap.action(swap.id, 'run')
+    swapped = await done(swap.id)
+    assert.ok(swapped.items.every((item) => item.status === 'passed'))
+    verdict = '{"color":true,"pattern":true,"model":false,"pose":true,"limbs":true}'
+    await alice.sceneSwap.item(swap.id, swapped.items[0]!.id, 'redo', ['脸变了', '不像所选模特'])
+    swapped = await done(swap.id)
+    assert.equal(swapped.items[0]!.status, 'review')
+    assert.match(lastPrompt, /did not look like the chosen model/)
+    assert.doesNotMatch(lastPrompt, /identical to image 1: same color, print, logo, seams, buttons/)
+
+    // ---- 生成模特图：先主图，其余等主图并带上主图参考；没有背面图不出背面
+    verdict = '{"color":true,"pattern":true,"shape":true,"model":true,"limbs":true}'
+    const tryInput = { ...input, task: 'tryon' as const, modelId: sysModel.id, shots: ['front', 'side', 'back'] as any, size: '3:4' as const, images: [...images.slice(0, 1), { ...images[1]!, name: 'A108-背.jpg', group: 'A108' }, ...images.slice(2, 3)] }
+    refLog.length = 0
+    const beforeTry = credits('alice')
+    const tryon = await alice.sceneSwap.create(tryInput)
+    assert.equal(await status(alice.sceneSwap.create({ ...tryInput, sceneIds: [mine.id, system.id] })), 400)
+    assert.equal(await status(alice.sceneSwap.create({ ...tryInput, shots: ['back'] as any })), 400, 'style without a back photo')
+    let made = await done(tryon.id)
+    assert.equal(made.status, 'trial_ready')
+    assert.deepEqual(made.items.map((item) => [item.group, item.shot, item.master, item.status]), [
+      ['A108', 'front', true, 'passed'], ['A108', 'side', false, 'waiting'], ['A108', 'back', false, 'waiting'],
+      ['A109', 'front', true, 'passed'], ['A109', 'side', false, 'waiting'],
+    ])
+    assert.deepEqual([...refLog].sort(), [3, 4], 'products + model + scene')
+    assert.equal(await status(alice.sceneSwap.action(tryon.id, 'retrial')), 400, 'no other style to try')
+    refLog.length = 0
+    await alice.sceneSwap.action(tryon.id, 'run')
+    made = await done(tryon.id)
+    assert.equal(made.status, 'done', JSON.stringify(made.items.map((item) => [item.status, item.error])))
+    assert.deepEqual([...refLog].sort(), [4, 5, 5], 'the approved photo is a reference')
+    assert.equal(beforeTry - credits('alice'), 5 * price, 'free trials are used up, every image is charged once')
+    assert.equal(made.items[2]!.sourceFileId, images[1]!.fileId, 'back view is compared with the back photo')
+
+    // ---- 主图没过：同款其余先不跑；主图不要了，其余失败但不扣点
+    verdict = '{"color":false,"pattern":true,"shape":true,"model":true,"limbs":true}'
+    const three = await alice.sceneSwap.create({ ...tryInput, shots: ['front', 'side'] as any, images: images.slice(0, 3).map((image, i) => ({ ...image, group: `G${i}` })) })
+    verdict = '{"color":true,"pattern":true,"shape":true,"model":true,"limbs":true}'
+    await done(three.id)
+    verdict = '{"color":false,"pattern":true,"shape":true,"model":true,"limbs":true}'
+    await alice.sceneSwap.action(three.id, 'run')
+    made = await done(three.id)
+    const third = made.items.filter((item) => item.group === 'G2')
+    assert.deepEqual(third.map((item) => item.status), ['review', 'waiting'])
+    assert.equal(made.status, 'trial_ready')
+    await alice.sceneSwap.item(three.id, third[0]!.id, 'reject')
+    const kept = credits('alice')
+    await alice.sceneSwap.action(three.id, 'run')
+    made = await done(three.id)
+    assert.equal(made.items.find((item) => item.id === third[1]!.id)!.status, 'failed')
+    assert.match(made.items.find((item) => item.id === third[1]!.id)!.error ?? '', /主图/)
+    assert.equal(credits('alice'), kept)
+    assert.equal(made.status, 'done')
+    const folders = (await alice.sync.pull(0, [SYNC_COLLECTIONS.assets])).changes.map((change: any) => change.data.folder)
+    assert.ok(folders.includes('模特图 / A108') && folders.includes('换模特 / A108'))
 
     // ---- 重启：跑到一半的重新排队
     app.db.prepare("UPDATE scene_swap_items SET status = 'running' WHERE id = ?").run(paused.items[0]!.id)

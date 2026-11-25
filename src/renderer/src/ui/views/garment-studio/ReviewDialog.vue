@@ -2,11 +2,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw, X } from 'lucide-vue-next'
-import { SCENE_REDO_REASONS, type SceneSwapItem } from '../../../../../shared/sceneSwap'
+import { redoReasonsOf, type SceneSwapItem, type SceneSwapTask } from '../../../../../shared/sceneSwap'
 import CompareImage from './CompareImage.vue'
 import SwapImage from './SwapImage.vue'
 
-const props = defineProps<{ item: SceneSwapItem; aligned: boolean; busy: boolean }>()
+const props = defineProps<{ item: SceneSwapItem; task: SceneSwapTask; aligned: boolean; busy: boolean }>()
 const emit = defineEmits<{ close: []; step: [offset: number]; act: [action: 'redo' | 'accept' | 'reject', reasons: string[]]; download: [] }>()
 const { t } = useI18n()
 const k = (key: string) => t(`ai.sceneSwap.${key}`)
@@ -28,7 +28,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   <div class="review" role="dialog" aria-modal="true" :aria-label="item.sourceName" @click.self="emit('close')">
     <div class="review__box">
       <header class="review__head">
-        <strong>{{ item.sourceName }}</strong><span class="review__scene">{{ item.sceneName }}</span>
+        <strong>{{ item.sourceName }}</strong><span class="review__scene">{{ item.shot ? k(`shot.${item.shot}`) : item.sceneName }}</span>
         <span class="vg-toolbar__spacer" />
         <button type="button" class="vg-icon-btn" :aria-label="k('prev')" @click="emit('step', -1)"><ChevronLeft :size="18" /></button>
         <button type="button" class="vg-icon-btn" :aria-label="k('next')" @click="emit('step', 1)"><ChevronRight :size="18" /></button>
@@ -50,7 +50,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <template v-else>
             <div>
               <h2 class="review__label">{{ k('whatsWrong') }}</h2>
-              <div class="reasons"><button v-for="reason in SCENE_REDO_REASONS" :key="reason" type="button" class="reason" :class="{ 'is-on': reasons.includes(reason) }" :aria-pressed="reasons.includes(reason)" @click="toggle(reason)">{{ k(`reason.${reason}`) }}</button></div>
+              <div class="reasons"><button v-for="reason in redoReasonsOf(task)" :key="reason" type="button" class="reason" :class="{ 'is-on': reasons.includes(reason) }" :aria-pressed="reasons.includes(reason)" @click="toggle(reason)">{{ k(`reason.${reason}`) }}</button></div>
             </div>
             <button type="button" class="vg-btn" :class="{ 'vg-btn--primary': item.status === 'review' || item.status === 'failed' }" :disabled="busy" @click="emit('act', 'redo', reasons)"><RefreshCw :size="15" /> {{ item.status === 'passed' || item.status === 'rejected' ? k('redoPaid') : k('redo') }}</button>
             <template v-if="item.status === 'review'">
