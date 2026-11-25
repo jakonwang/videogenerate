@@ -10,6 +10,7 @@ import {
   BILLING_CAPABILITY_LABELS,
   BILLING_MODE_LABELS,
   defaultPlanQuotas,
+  newPlanQuotas,
   type BillingMode,
   type PlanQuotas,
 } from '@shared/cloud/billing'
@@ -45,7 +46,7 @@ type PlanForm = {
   isNew: boolean
 }
 
-const emptyForm: PlanForm = { code: '', name: '', description: '', days: '30', price: '', maxDevices: '1', features: ['*'], active: true, sort: '0', credits: '0', quotas: defaultPlanQuotas(), isNew: true }
+const emptyForm: PlanForm = { code: '', name: '', description: '', days: '30', price: '', maxDevices: '1', features: ['*'], active: true, sort: '0', credits: '0', quotas: newPlanQuotas(), isNew: true }
 
 const MODES = Object.keys(BILLING_MODE_LABELS) as BillingMode[]
 

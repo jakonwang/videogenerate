@@ -43,6 +43,9 @@ export function loadCloudConfig() {
     /** 云端 AI 网关：每个账号每分钟 / 每天最多调用次数 */
     aiPerMinute: envInt('CLOUD_AI_PER_MINUTE', 20),
     aiPerDay: envInt('CLOUD_AI_PER_DAY', 500),
+    /** 电脑端 AI 代理：不扣点但平台要收钱的调用，每个账号每天上限（对话 / 转写、TikHub），0 = 不限 */
+    aiProxyChatPerDay: envInt('CLOUD_AI_PROXY_CHAT_PER_DAY', 1500),
+    aiProxyTikhubPerDay: envInt('CLOUD_AI_PROXY_TIKHUB_PER_DAY', 500),
     /** 电脑端 AI 代理：TikHub 上游地址、单个请求体上限（含 base64 参考图） */
     tikhubBaseUrl: env('CLOUD_TIKHUB_BASE_URL', 'https://api.tikhub.io').replace(/\/+$/, ''),
     aiProxyMaxBodyMb: envInt('CLOUD_AI_PROXY_MAX_BODY_MB', 64),

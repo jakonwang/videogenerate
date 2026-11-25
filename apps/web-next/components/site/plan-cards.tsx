@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Check, LoaderCircle } from 'lucide-react'
 
+import { BILLING_CAPABILITIES, BILLING_CAPABILITY_LABELS } from '@shared/cloud/billing'
 import { describeDeviceAllowance, type CloudFeature, type CloudPlan } from '@shared/cloud/types'
 import { formatYuan, useCloudUser, userClient } from '@/lib/cloud-user'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,20 @@ const FEATURE_LABELS: Record<string, string> = {
 function featureList(features: CloudFeature[]) {
   if (features.includes('*')) return ['全部功能与插件', '爆款复刻与批量生产', 'GMV Max 与达人中心']
   return features.map((f) => FEATURE_LABELS[f] ?? f)
+}
+
+/** 生成额度要写在价格旁边，避免买了才知道要扣点 */
+function quotaList(plan: CloudPlan) {
+  const lines = plan.credits ? [`赠送 ${plan.credits} 点`] : []
+  for (const cap of BILLING_CAPABILITIES) {
+    const rule = plan.quotas[cap]
+    const label = BILLING_CAPABILITY_LABELS[cap]
+    if (rule.mode === 'credits') lines.push(`${label}按次扣点`)
+    else if (rule.mode === 'free_then_credits') lines.push(`${label}每月免费 ${rule.freePerMonth} 次，超出扣点`)
+    else if (rule.mode === 'disabled') lines.push(`不含${label}`)
+    else lines.push(`${label}不扣点（有每日上限）`)
+  }
+  return lines
 }
 
 function perDay(plan: CloudPlan) {
@@ -84,7 +99,7 @@ export function PlanCards({ compact = false }: { compact?: boolean }) {
             {perDay(plan) ? <span className="-mt-3 text-xs text-[var(--text-muted)]">{perDay(plan)}</span> : null}
             {!compact ? (
               <ul className="grid gap-2.5 text-sm text-[var(--text-secondary)]">
-                {[...featureList(plan.features), `可登录 ${describeDeviceAllowance(plan.maxDevices, mobileSlots)}`].map((item) => (
+                {[...featureList(plan.features), ...quotaList(plan), `可登录 ${describeDeviceAllowance(plan.maxDevices, mobileSlots)}`].map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" /> {item}
                   </li>

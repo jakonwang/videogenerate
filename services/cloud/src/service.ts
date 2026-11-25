@@ -37,7 +37,7 @@ import { qiniuDomainOf, qiniuObjectKey, qiniuPrefixOf, qiniuUploadHostOf, qiniuU
 import type { CloudConfig } from './config'
 import { transaction, type CloudDb } from './db'
 import { createBillingService } from './billing'
-import { defaultPlanQuotas, normalizePlanQuotas, type CloudRedeemKind } from '../../../src/shared/cloud/billing'
+import { defaultPlanQuotas, newPlanQuotas, normalizePlanQuotas, type CloudRedeemKind } from '../../../src/shared/cloud/billing'
 import { AlipayGateway } from './payments/alipay'
 import { WechatPayV3, type WechatSignatureHeaders } from './payments/wechatPayV3'
 import { publicUser, type CloudRepo, type UserRow } from './repo'
@@ -830,7 +830,7 @@ export function createCloudService(deps: {
       active: input.active ?? existing?.active ?? true,
       sort: Math.floor(Number(input.sort ?? existing?.sort ?? 0)),
       credits: Math.max(0, Math.min(10_000_000, Math.floor(Number(input.credits ?? existing?.credits ?? 0) || 0))),
-      quotas: normalizePlanQuotas(input.quotas ?? existing?.quotas ?? defaultPlanQuotas()),
+      quotas: normalizePlanQuotas(input.quotas ?? existing?.quotas ?? newPlanQuotas()),
     }
     if (!plan.name) throw badRequest('请填写套餐名称')
     repo.upsertPlan(plan, now())

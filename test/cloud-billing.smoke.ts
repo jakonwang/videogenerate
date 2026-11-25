@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCloudApp } from '../services/cloud/src/app'
+import { extractUnits } from '../services/cloud/src/aiProxy'
 import { MANAGED_SETTINGS_KEY } from '../services/cloud/src/service'
 import { hashPassword, newId } from '../services/cloud/src/security'
 import { CloudClientError, createCloudClient } from '../src/shared/cloud/client'
@@ -270,6 +271,46 @@ async function main() {
   assert.ok(veo.calls >= 1 && veo.failed >= 1)
   assert.ok(stats.outstandingCredits > 0)
   console.log('  ✓ 后台按模型统计次数、失败与扣点')
+
+  // ---- 防亏：不限套餐每天封顶、成本入账、客户端不能给云端冻结的记录退点、一次多份按份扣
+  await owner.admin.saveBillingDefaults({ points: { video: 10, image: 2 }, refundPerDay: 100, includedPerDay: { video: 2, image: 5 }, costFen: { video: 80, image: 0.5 }, pointFen: 19.8 })
+  await owner.admin.savePlan({ code: 'open', name: '不限版', days: 30, amountFen: 100, quotas: { video: { mode: 'unlimited', freePerMonth: 0 }, image: { mode: 'unlimited', freePerMonth: 0 } } })
+  const erin = await register('erin@example.com')
+  await erin.redeem((await owner.admin.generateRedeemCodes({ kind: 'plan', planCode: 'open', count: 1 })).codes[0])
+  const erinId = (await erin.me()).user.id
+  const video = { capability: 'video' as const, platform: 'vectorengine', model: 'veo3.1-fast' }
+  const e1 = (await erin.holdUsage(video)).hold
+  assert.equal(e1.source, 'included')
+  const e2 = (await erin.holdUsage(video)).hold
+  await expectError(erin.holdUsage(video), 'RATE_LIMITED', 429, /最多 2 次/)
+  await erin.settleUsage(e2.id, false, 'boom')
+  const e3 = (await erin.holdUsage(video)).hold
+  assert.equal(e3.source, 'included', 'a failed one does not use up the daily cap')
+  await expectError(Promise.resolve().then(() => erin.holdUsage(video)), 'RATE_LIMITED', 429)
+  const img4 = app.service.billing.hold(erinId, { capability: 'image', platform: 'p', model: 'm' }, { units: 4 })
+  assert.throws(() => app.service.billing.hold(erinId, { capability: 'image', platform: 'p', model: 'm' }, { units: 2 }), /最多 5 次/)
+  await expectError(erin.settleUsage(img4.id, false, '骗退'), 'FORBIDDEN', 403, /云端自动结算/)
+  const paid4 = await owner.admin.adjustCredits(aliceId, 100, '份数测试')
+  const multi = app.service.billing.hold(aliceId, { capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro' }, { units: 2 })
+  assert.equal(multi.points, 60)
+  assert.equal(paid4.credits - (await alice.credits()).balance, 60)
+  app.service.billing.settle(null, multi.id, false)
+  await owner.admin.adjustCredits(aliceId, -100000, '清零')
+  // 没有单独填成本：用默认成本；单独填了用自己的
+  const erinCost = (await owner.admin.usageStats(30)).topUsers.find((u) => u.userId === erinId)!
+  assert.equal(erinCost.costFen, 162, '2 videos x 80 + 4 images x 0.5')
+  const listed = (await owner.admin.getBilling()).models.find((m) => m.model === 'veo3.1-pro')!
+  await owner.admin.saveModel({ ...listed, costFen: 250 })
+  app.service.billing.hold(erinId, { capability: 'image', platform: 'p', model: 'm' })
+  assert.equal((await owner.admin.getBilling()).models.find((m) => m.model === 'veo3.1-pro')!.costFen, 250)
+  assert.ok(!/costFen|pointFen|includedPerDay/.test(JSON.stringify(await alice.pricing())), 'cost never reaches the public price list')
+  const fresh = await owner.admin.savePlan({ code: 'fresh', name: '新套餐', days: 30, amountFen: 100 })
+  assert.equal(fresh.plan.quotas.video.mode, 'credits', 'new plans charge unless the admin picks unlimited')
+  assert.equal(extractUnits(Buffer.from('{"n":4}')), 4)
+  assert.equal(extractUnits(Buffer.from('{"input":{"parameters":{"batch_size":"3"}}}')), 3)
+  assert.equal(extractUnits(Buffer.from('--b\r\nContent-Disposition: form-data; name="n"\r\n\r\n5\r\n--b--'), 'multipart/form-data; boundary=b'), 5)
+  assert.equal(extractUnits(Buffer.from('{"prompt":"n: 9"}')), 1)
+  console.log('  ✓ 防亏：每天封顶、成本入账、不能自己退点、多份按份扣、新套餐默认扣点')
 
   // ---- 电脑端计费挂钩：嵌套只算一次，失败退回，未登录给出明确提示
   const events: string[] = []

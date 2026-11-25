@@ -27,6 +27,11 @@ export const BILLING_MODE_LABELS: Record<BillingMode, string> = {
 export type BillingRule = { mode: BillingMode; freePerMonth: number }
 export type PlanQuotas = Record<BillingCapability, BillingRule>
 
+/** 新建套餐默认扣点：「不限」要由管理员明确选择 */
+export function newPlanQuotas(): PlanQuotas {
+  return { video: { mode: 'credits', freePerMonth: 0 }, image: { mode: 'credits', freePerMonth: 0 } }
+}
+
 /** 老套餐没有配置时按「不限」处理，升级后已付费用户的使用方式不变 */
 export function defaultPlanQuotas(): PlanQuotas {
   return { video: { mode: 'unlimited', freePerMonth: 0 }, image: { mode: 'unlimited', freePerMonth: 0 } }
@@ -54,6 +59,8 @@ export type AiModelEntry = {
   label: string
   /** 每次生成扣多少点 */
   points: number
+  /** 平台每次实际收我们多少钱（分，可带小数）；0 = 没填，用默认成本。只在后台可见 */
+  costFen: number
   enabled: boolean
   /** 允许使用的套餐编码，空数组表示全部套餐 */
   planCodes: string[]
@@ -67,10 +74,25 @@ export type BillingDefaults = {
   points: Record<BillingCapability, number>
   /** 每个账号 24 小时内最多自动退还多少次失败生成（防止滥用退款），超出后失败不再退点 */
   refundPerDay: number
+  /** 「不限次数」套餐每个账号 24 小时内最多生成几次，0 = 不封顶（不建议） */
+  includedPerDay: Record<BillingCapability, number>
+  /** 没有单独填成本的模型，每次按多少分算成本，0 = 未知 */
+  costFen: Record<BillingCapability, number>
+  /** 1 点卖多少分，用来估算收入和判断模型是否亏本，0 = 未填 */
+  pointFen: number
 }
 
+/** 只给后台看的字段不能出现在公开价目里 */
+export type PublicBillingDefaults = Pick<BillingDefaults, 'points' | 'refundPerDay'>
+
 export function defaultBillingDefaults(): BillingDefaults {
-  return { points: { video: 10, image: 2 }, refundPerDay: 50 }
+  return { points: { video: 10, image: 2 }, refundPerDay: 50, includedPerDay: { video: 20, image: 60 }, costFen: { video: 0, image: 0 }, pointFen: 0 }
+}
+
+/** 金额（分），保留两位小数：单张图的成本可能不到 1 分 */
+export function normalizeFen(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.max(0, Math.min(10_000_000, Math.round(n * 100) / 100)) : 0
 }
 
 export function normalizeBillingDefaults(input: unknown): BillingDefaults {
@@ -80,6 +102,12 @@ export function normalizeBillingDefaults(input: unknown): BillingDefaults {
     const value = Number(src.points?.[cap])
     if (Number.isFinite(value)) base.points[cap] = Math.max(0, Math.min(1_000_000, Math.floor(value)))
   }
+  for (const cap of BILLING_CAPABILITIES) {
+    const perDay = Number(src.includedPerDay?.[cap])
+    if (src.includedPerDay?.[cap] !== undefined && Number.isFinite(perDay)) base.includedPerDay[cap] = Math.max(0, Math.min(100_000, Math.floor(perDay)))
+    base.costFen[cap] = normalizeFen(src.costFen?.[cap])
+  }
+  base.pointFen = normalizeFen(src.pointFen)
   const refund = Number(src.refundPerDay)
   if (Number.isFinite(refund)) base.refundPerDay = Math.max(0, Math.min(10_000, Math.floor(refund)))
   return base
@@ -158,7 +186,7 @@ export type CreditsResponse = CreditsSummary & {
 }
 
 export type PricingResponse = {
-  defaults: BillingDefaults
+  defaults: PublicBillingDefaults
   models: Array<Pick<AiModelEntry, 'capability' | 'platform' | 'model' | 'label' | 'points' | 'enabled'>>
 }
 

@@ -51,7 +51,7 @@ const FAQ = [
   { q: '需要自己准备 AI 平台的 Key 吗？', a: '不需要。会员登录客户端后，模型和存储由我们统一配置并自动同步，打开就能用。' },
   { q: '一个会员能在几台电脑上用？', a: '按套餐不同可绑定 1–3 台电脑。换电脑时可以在用户中心自助解绑旧设备。' },
   { q: '没网的时候能用吗？', a: '登录过的电脑在会员有效期内可以离线使用数天，联网后自动续期。AI 生成本身需要联网。' },
-  { q: '怎么付款？', a: '支持微信、支付宝扫码支付，到账后自动开通；也可以使用兑换码开通。续费时长自动叠加。' },
+  { q: '怎么付款？', a: '目前使用卡密（兑换码）开通：联系客服购买后，在用户中心兑换即可。续费时长自动叠加。' },
 ]
 
 function PipelinePreview() {
@@ -133,7 +133,7 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--text-muted)]">
             <span>✓ 无需配置 AI Key</span>
-            <span>✓ 微信 / 支付宝扫码开通</span>
+            <span>✓ 卡密兑换，立即开通</span>
             <span>✓ Windows 客户端</span>
           </div>
         </div>

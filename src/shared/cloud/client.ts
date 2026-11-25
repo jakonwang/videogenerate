@@ -61,9 +61,10 @@ export type CloudBillingOverview = { defaults: BillingDefaults; models: AiModelE
 import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene, SwapModel } from '../sceneSwap'
 
 export type CloudUsageStats = {
+  topUsers: Array<{ userId: string; account: string; planCode: string | null; calls: number; points: number; costFen: number }>
   days: number
   outstandingCredits: number
-  models: Array<{ capability: BillingCapability; platform: string; model: string; calls: number; failed: number; points: number; users: number }>
+  models: Array<{ capability: BillingCapability; platform: string; model: string; calls: number; failed: number; points: number; users: number; costFen: number; unknownCost: number }>
 }
 
 export class CloudClientError extends Error {

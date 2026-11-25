@@ -23,13 +23,17 @@ type ModelForm = {
   model: string
   label: string
   points: string
+  costYuan: string
   enabled: boolean
   planCodes: string[]
   sort: string
   note: string
 }
 
-const emptyModel: ModelForm = { capability: 'video', platform: '*', model: '', label: '', points: '10', enabled: true, planCodes: [], sort: '0', note: '' }
+const emptyModel: ModelForm = { capability: 'video', platform: '*', model: '', label: '', points: '10', costYuan: '', enabled: true, planCodes: [], sort: '0', note: '' }
+
+const yuanToFen = (value: string) => Math.max(0, Math.round((Number(value) || 0) * 10000) / 100)
+const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`
 
 const platformLabel = (key: string) => (key === '*' ? '任意平台' : MANAGED_PLATFORM_LABELS[key as keyof typeof MANAGED_PLATFORM_LABELS]?.label ?? key)
 
@@ -85,6 +89,7 @@ export default function AdminBillingPage() {
           model: form.model.trim(),
           label: form.label.trim(),
           points,
+          costFen: yuanToFen(form.costYuan),
           enabled: form.enabled,
           planCodes: form.planCodes,
           sort: Number(form.sort) || 0,
@@ -104,7 +109,7 @@ export default function AdminBillingPage() {
     void run(async () => billing.setData(await adminClient.admin.saveModel({ ...model, enabled: !model.enabled })), model.enabled ? `已停用「${model.label}」` : `已启用「${model.label}」`)
 
   const editModel = (model: AiModelEntry) =>
-    setForm({ id: model.id, capability: model.capability, platform: model.platform, model: model.model, label: model.label, points: String(model.points), enabled: model.enabled, planCodes: model.planCodes, sort: String(model.sort), note: model.note })
+    setForm({ id: model.id, capability: model.capability, platform: model.platform, model: model.model, label: model.label, points: String(model.points), costYuan: model.costFen ? String(model.costFen / 100) : '', enabled: model.enabled, planCodes: model.planCodes, sort: String(model.sort), note: model.note })
 
   const planName = (code: string) => plans.data?.plans.find((p) => p.code === code)?.name ?? code
   const current = software.data?.settings
@@ -113,6 +118,13 @@ export default function AdminBillingPage() {
     const cap = current.capabilities[m.capability]
     return cap.model === m.model && (m.platform === '*' || m.platform === cap.platform)
   }
+  const saved = billing.data?.defaults
+  const pointFen = saved?.pointFen ?? 0
+  const costOf = (m: Pick<AiModelEntry, 'capability' | 'costFen'>) => m.costFen || (saved?.costFen[m.capability] ?? 0)
+  const totalCost = usage.data?.models.reduce((sum, m) => sum + m.costFen, 0) ?? 0
+  const totalPoints = usage.data?.models.reduce((sum, m) => sum + m.points, 0) ?? 0
+  const unknownCost = usage.data?.models.reduce((sum, m) => sum + m.unknownCost, 0) ?? 0
+  const openPlans = plans.data?.plans.filter((p) => p.active && BILLING_CAPABILITIES.some((cap) => p.quotas[cap].mode === 'unlimited')) ?? []
   const unlistedCurrent = current?.enabled
     ? BILLING_CAPABILITIES.filter((cap) => current.capabilities[cap].model && !billing.data?.models.some((m) => m.capability === cap && isCurrent(m)))
     : []
@@ -125,6 +137,9 @@ export default function AdminBillingPage() {
         description="每次视频 / 图片生成扣多少点。套餐决定是否扣点（在「套餐与价格」里设置），这里决定扣多少。客户端实际用哪个模型，在「软件设置」里选。"
       />
       {notice ? <AdminNotice tone={notice.tone}>{notice.text}</AdminNotice> : null}
+      {openPlans.length ? (
+        <AdminNotice tone="danger">在售套餐{openPlans.map((p) => `「${p.name}」`).join('、')}有「不限次数」的生成，只受每天上限约束，可能亏本。建议到「套餐与价格」改成扣点。</AdminNotice>
+      ) : null}
       {billing.error ? <AdminError message={billing.error} onRetry={() => void billing.reload()} /> : null}
       {billing.loading && !billing.data ? <AdminLoading /> : null}
 
@@ -145,6 +160,31 @@ export default function AdminBillingPage() {
               ))}
               <AdminField label="每天失败自动退点次数" hint="每个账号 24 小时内；超出后失败不再退点，防止刷退款">
                 <Input type="number" min="0" step="1" value={String(defaults.refundPerDay)} onChange={(e) => setDefaults({ ...defaults, refundPerDay: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
+              </AdminField>
+              {BILLING_CAPABILITIES.map((cap) => (
+                <AdminField key={`cap-${cap}`} label={`「不限」套餐每天上限 · ${BILLING_CAPABILITY_LABELS[cap]}`} hint="每个账号 24 小时内最多几次；0 = 不封顶（可能亏本）">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={String(defaults.includedPerDay[cap])}
+                    onChange={(e) => setDefaults({ ...defaults, includedPerDay: { ...defaults.includedPerDay, [cap]: Math.max(0, Math.floor(Number(e.target.value) || 0)) } })}
+                  />
+                </AdminField>
+              ))}
+              {BILLING_CAPABILITIES.map((cap) => (
+                <AdminField key={`cost-${cap}`} label={`默认成本 · ${BILLING_CAPABILITY_LABELS[cap]}（元 / 次）`} hint="没有单独填成本的模型按这个算">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    defaultValue={defaults.costFen[cap] ? String(defaults.costFen[cap] / 100) : ''}
+                    onChange={(e) => setDefaults({ ...defaults, costFen: { ...defaults.costFen, [cap]: yuanToFen(e.target.value) } })}
+                  />
+                </AdminField>
+              ))}
+              <AdminField label="1 点卖多少元" hint="例如 ¥99 送 500 点约 0.198，用来估算收入">
+                <Input type="number" min="0" step="any" defaultValue={defaults.pointFen ? String(defaults.pointFen / 100) : ''} onChange={(e) => setDefaults({ ...defaults, pointFen: yuanToFen(e.target.value) })} />
               </AdminField>
             </div>
             <div className="admin-form-actions">
@@ -206,6 +246,9 @@ export default function AdminBillingPage() {
               <AdminField label="点数 / 次">
                 <Input type="number" min="0" step="1" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value })} required />
               </AdminField>
+              <AdminField label="平台成本（元 / 次）" hint="平台每次实际收多少钱；留空用默认成本">
+                <Input type="number" min="0" step="any" value={form.costYuan} onChange={(e) => setForm({ ...form, costYuan: e.target.value })} />
+              </AdminField>
               <AdminField label="排序">
                 <Input type="number" value={form.sort} onChange={(e) => setForm({ ...form, sort: e.target.value })} />
               </AdminField>
@@ -242,7 +285,7 @@ export default function AdminBillingPage() {
           </form>
         ) : null}
         {billing.data ? (
-          <AdminTable head={['模型', '类型', '平台', { label: '点数 / 次', align: 'right' }, '可用套餐', '状态', { label: '', align: 'right' }]} empty={!billing.data.models.length} emptyText="还没有单独定价的模型，全部按默认价格扣点">
+          <AdminTable head={['模型', '类型', '平台', { label: '点数 / 次', align: 'right' }, { label: '成本 / 次', align: 'right' }, '可用套餐', '状态', { label: '', align: 'right' }]} empty={!billing.data.models.length} emptyText="还没有单独定价的模型，全部按默认价格扣点">
             {billing.data.models.map((m) => (
               <tr key={m.id}>
                 <td>
@@ -258,6 +301,10 @@ export default function AdminBillingPage() {
                 <td>{BILLING_CAPABILITY_LABELS[m.capability]}</td>
                 <td>{platformLabel(m.platform)}</td>
                 <td className="num text-[15px] font-bold">{m.points}</td>
+                <td className="num">
+                  {costOf(m) ? yuan(costOf(m)) : '未填'}
+                  {costOf(m) && pointFen && m.points * pointFen < costOf(m) ? <AdminTag tone="danger">亏本</AdminTag> : null}
+                </td>
                 <td>{m.planCodes.length ? m.planCodes.map(planName).join('、') : '全部'}</td>
                 <td>
                   {m.enabled ? (
@@ -289,7 +336,7 @@ export default function AdminBillingPage() {
         flush
         icon={BarChart3}
         title="生成用量"
-        subtitle={usage.data ? `所有用户当前剩余点数合计 ${usage.data.outstandingCredits}` : undefined}
+        subtitle={usage.data ? `平台成本 ${yuan(totalCost)}${pointFen ? ` · 扣点折合收入 ${yuan(totalPoints * pointFen)}` : ''}${unknownCost ? ` · ${unknownCost} 次没填成本` : ''} · 用户剩余点数 ${usage.data.outstandingCredits}` : undefined}
         actions={
           <select className="vg-select" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             <option value={7}>近 7 天</option>
@@ -305,7 +352,7 @@ export default function AdminBillingPage() {
         ) : null}
         {usage.data ? (
           <AdminTable
-            head={['模型', '类型', { label: '成功次数', align: 'right' }, { label: '失败退回', align: 'right' }, { label: '扣点', align: 'right' }, { label: '使用人数', align: 'right' }]}
+            head={['模型', '类型', { label: '成功次数', align: 'right' }, { label: '失败退回', align: 'right' }, { label: '扣点', align: 'right' }, { label: '平台成本', align: 'right' }, { label: '使用人数', align: 'right' }]}
             empty={!usage.data.models.length}
             emptyText="这段时间还没有生成"
           >
@@ -319,7 +366,24 @@ export default function AdminBillingPage() {
                 <td className="num">{m.calls}</td>
                 <td className="num">{m.failed}</td>
                 <td className="num font-semibold">{m.points}</td>
+                <td className="num">{m.costFen ? yuan(m.costFen) : '未填'}</td>
                 <td className="num">{m.users}</td>
+              </tr>
+            ))}
+          </AdminTable>
+        ) : null}
+      </AdminPanel>
+
+      <AdminPanel flush icon={BarChart3} title="用得最多的账号" subtitle={`近 ${days} 天，按平台成本从高到低`}>
+        {usage.data ? (
+          <AdminTable head={['账号', '套餐', { label: '生成次数', align: 'right' }, { label: '扣点', align: 'right' }, { label: '平台成本', align: 'right' }]} empty={!usage.data.topUsers.length} emptyText="这段时间还没有生成">
+            {usage.data.topUsers.map((u) => (
+              <tr key={u.userId}>
+                <td>{u.account}</td>
+                <td>{u.planCode ? planName(u.planCode) : '—'}</td>
+                <td className="num">{u.calls}</td>
+                <td className="num">{u.points}</td>
+                <td className="num font-semibold">{u.costFen ? yuan(u.costFen) : '未填'}</td>
               </tr>
             ))}
           </AdminTable>

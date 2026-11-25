@@ -3,8 +3,9 @@ import {
   BILLING_CAPABILITIES,
   BILLING_CAPABILITY_LABELS,
   billingMonth,
-  defaultPlanQuotas,
+  newPlanQuotas,
   normalizeBillingDefaults,
+  normalizeFen,
   type AiModelEntry,
   type BillingCapability,
   type BillingDefaults,
@@ -55,6 +56,7 @@ function mapModel(row: Row): AiModelEntry {
     model: String(row.model),
     label: String(row.label ?? ''),
     points: Number(row.points ?? 0),
+    costFen: Number(row.cost_fen ?? 0),
     enabled: Number(row.enabled) === 1,
     planCodes: parseJson<string[]>(row.plan_codes, []),
     sort: Number(row.sort ?? 0),
@@ -137,11 +139,11 @@ export function createBillingService(deps: {
     const clash = db.prepare('SELECT id FROM ai_models WHERE capability = ? AND platform = ? AND model = ?').get(capability, platform, model) as Row | undefined
     if (clash && String(clash.id) !== String(existing?.id ?? '')) throw new CloudError('CONFLICT', '同一平台下这个模型已经在列表里了', 409)
     const id = existing ? String(existing.id) : `m_${randomUUID().replace(/-/g, '').slice(0, 16)}`
-    const values = [capability, platform, model, clean(input.label, 60) || model, points, input.enabled === false ? 0 : 1, JSON.stringify(planCodes), Math.floor(Number(input.sort) || 0), clean(input.note, 200)]
+    const values = [capability, platform, model, clean(input.label, 60) || model, points, input.enabled === false ? 0 : 1, JSON.stringify(planCodes), Math.floor(Number(input.sort) || 0), clean(input.note, 200), normalizeFen(input.costFen)]
     if (existing) {
-      db.prepare('UPDATE ai_models SET capability = ?, platform = ?, model = ?, label = ?, points = ?, enabled = ?, plan_codes = ?, sort = ?, note = ?, updated_at = ? WHERE id = ?').run(...values, t, id)
+      db.prepare('UPDATE ai_models SET capability = ?, platform = ?, model = ?, label = ?, points = ?, enabled = ?, plan_codes = ?, sort = ?, note = ?, cost_fen = ?, updated_at = ? WHERE id = ?').run(...values, t, id)
     } else {
-      db.prepare('INSERT INTO ai_models (capability, platform, model, label, points, enabled, plan_codes, sort, note, created_at, updated_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...values, t, t, id)
+      db.prepare('INSERT INTO ai_models (capability, platform, model, label, points, enabled, plan_codes, sort, note, cost_fen, created_at, updated_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...values, t, t, id)
     }
     return mapModel(db.prepare('SELECT * FROM ai_models WHERE id = ?').get(id) as Row)
   }
@@ -167,7 +169,7 @@ export function createBillingService(deps: {
 
   function pricing(): PricingResponse {
     return {
-      defaults: readDefaults(),
+      defaults: (({ points, refundPerDay }) => ({ points, refundPerDay }))(readDefaults()),
       models: listModels().map(({ capability, platform, model, label, points, enabled }) => ({ capability, platform, model, label, points, enabled })),
     }
   }
@@ -216,13 +218,13 @@ export function createBillingService(deps: {
 
   function ruleFor(user: UserRow, capability: BillingCapability): BillingRule {
     const plan = user.planCode ? repo.getPlan(user.planCode) : null
-    return (plan?.quotas ?? defaultPlanQuotas())[capability]
+    return (plan?.quotas ?? newPlanQuotas())[capability]
   }
 
   function countMonth(userId: string, capability: BillingCapability, month: string, source?: UsageHoldSource) {
     const row = (source
-      ? db.prepare("SELECT COUNT(*) AS n FROM usage_holds WHERE user_id = ? AND month = ? AND capability = ? AND source = ? AND status != 'released'").get(userId, month, capability, source)
-      : db.prepare("SELECT COUNT(*) AS n FROM usage_holds WHERE user_id = ? AND month = ? AND capability = ? AND status != 'released'").get(userId, month, capability)) as Row
+      ? db.prepare("SELECT COALESCE(SUM(units), 0) AS n FROM usage_holds WHERE user_id = ? AND month = ? AND capability = ? AND source = ? AND status != 'released'").get(userId, month, capability, source)
+      : db.prepare("SELECT COALESCE(SUM(units), 0) AS n FROM usage_holds WHERE user_id = ? AND month = ? AND capability = ? AND status != 'released'").get(userId, month, capability)) as Row
     return Number(row.n)
   }
 
@@ -232,7 +234,17 @@ export function createBillingService(deps: {
 
   /* ---------------------------------------------------------------- 生成前冻结 / 生成后结算 */
 
-  function hold(userId: string, request: UsageHoldRequest): UsageHold {
+  /** 「不限」套餐 24 小时内已生成几份（失败退回的不算） */
+  function includedLastDay(userId: string, capability: BillingCapability) {
+    const row = db
+      .prepare("SELECT COALESCE(SUM(units), 0) AS n FROM usage_holds WHERE user_id = ? AND capability = ? AND source = 'included' AND status != 'released' AND created_at >= ?")
+      .get(userId, capability, now() - DAY) as Row
+    return Number(row.n)
+  }
+
+  /** origin：client = 客户端自己来冻结（之后由它结算）；server = 云端代理 / 云端任务冻结，客户端不能自己退。units：一次请求生成几份 */
+  function hold(userId: string, request: UsageHoldRequest, options: { origin?: 'client' | 'server'; units?: number } = {}): UsageHold {
+    const units = Math.max(1, Math.floor(options.units ?? 1))
     const capability = BILLING_CAPABILITIES.find((cap) => cap === request?.capability)
     if (!capability) throw badRequest('不支持的计费类型')
     const platform = clean(request.platform, 40)
@@ -252,6 +264,7 @@ export function createBillingService(deps: {
       if (entry && entry.planCodes.length && !entitlement.unlimited && !entry.planCodes.includes(user.planCode ?? '')) {
         throw forbidden(`当前套餐不能使用模型「${entry.label}」，请升级套餐`)
       }
+      const unitCost = entry?.costFen || defaults.costFen[capability]
       const price = entry ? entry.points : defaults.points[capability]
       const month = billingMonth(now())
       let source: UsageHoldSource
@@ -262,10 +275,14 @@ export function createBillingService(deps: {
         const rule = ruleFor(user, capability)
         if (rule.mode === 'disabled') throw forbidden(`当前套餐不包含${label}，请升级套餐`)
         if (rule.mode === 'unlimited') source = 'included'
-        else if (rule.mode === 'free_then_credits' && countMonth(user.id, capability, month, 'free') < rule.freePerMonth) source = 'free'
+        else if (rule.mode === 'free_then_credits' && countMonth(user.id, capability, month, 'free') + units <= rule.freePerMonth) source = 'free'
         else {
           source = 'credits'
-          points = price
+          points = price * units
+        }
+        const cap = defaults.includedPerDay[capability]
+        if (source === 'included' && cap > 0 && includedLastDay(user.id, capability) + units > cap) {
+          throw new CloudError('RATE_LIMITED', `${label} 24 小时内最多 ${cap} 次，今天的额度已用完，请稍后再试`, 429, { limit: cap })
         }
       }
       const id = `h_${randomUUID().replace(/-/g, '')}`
@@ -278,8 +295,8 @@ export function createBillingService(deps: {
       }
       const t = now()
       db.prepare(
-        'INSERT INTO usage_holds (id, user_id, capability, platform, model, client, feature, source, points, status, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, user.id, capability, platform, model, client, feature, source, points, 'held', month, t)
+        'INSERT INTO usage_holds (id, user_id, capability, platform, model, client, feature, source, points, status, month, created_at, cost_fen, units, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, user.id, capability, platform, model, client, feature, source, points, 'held', month, t, unitCost * units, units, options.origin ?? 'server')
       return mapHold(db.prepare('SELECT * FROM usage_holds WHERE id = ?').get(id) as Row)
     })
   }
@@ -290,6 +307,8 @@ export function createBillingService(deps: {
     return transaction(db, () => {
       const row = db.prepare('SELECT * FROM usage_holds WHERE id = ?').get(String(holdId || '')) as Row | undefined
       if (!row || (userId !== null && row.user_id !== userId)) throw notFound('计费记录不存在')
+      // 云端代理 / 云端任务的冻结只能由云端按真实结果结算，否则客户端能报「失败」给自己退点
+      if (userId !== null && row.origin !== 'client') throw forbidden('这条记录由云端自动结算')
       if (row.status !== 'held') return mapHold(row)
       const t = now()
       const why = clean(reason, 200)
@@ -353,11 +372,20 @@ export function createBillingService(deps: {
     const rows = db
       .prepare(
         `SELECT capability, platform, model,
-           SUM(CASE WHEN status != 'released' THEN 1 ELSE 0 END) AS calls,
+           SUM(CASE WHEN status != 'released' THEN units ELSE 0 END) AS calls,
+           SUM(CASE WHEN status != 'released' THEN cost_fen ELSE 0 END) AS cost_fen,
+           SUM(CASE WHEN status != 'released' AND cost_fen <= 0 THEN units ELSE 0 END) AS unknown_cost,
            SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) AS failed,
            SUM(CASE WHEN status != 'released' THEN points ELSE 0 END) AS points,
            COUNT(DISTINCT user_id) AS users
          FROM usage_holds WHERE created_at >= ? GROUP BY capability, platform, model ORDER BY calls DESC LIMIT 200`,
+      )
+      .all(since) as Row[]
+    const users = db
+      .prepare(
+        `SELECT h.user_id, u.account, u.plan_code, SUM(h.units) AS calls, SUM(h.points) AS points, SUM(h.cost_fen) AS cost_fen
+         FROM usage_holds h JOIN users u ON u.id = h.user_id
+         WHERE h.created_at >= ? AND h.status != 'released' GROUP BY h.user_id ORDER BY SUM(h.cost_fen) DESC, calls DESC LIMIT 20`,
       )
       .all(since) as Row[]
     const totals = db.prepare('SELECT COALESCE(SUM(credits), 0) AS outstanding FROM users').get() as Row
@@ -372,11 +400,27 @@ export function createBillingService(deps: {
         failed: Number(row.failed ?? 0),
         points: Number(row.points ?? 0),
         users: Number(row.users ?? 0),
+        costFen: Number(row.cost_fen ?? 0),
+        unknownCost: Number(row.unknown_cost ?? 0),
+      })),
+      topUsers: users.map((row) => ({
+        userId: String(row.user_id),
+        account: String(row.account),
+        planCode: row.plan_code ? String(row.plan_code) : null,
+        calls: Number(row.calls ?? 0),
+        points: Number(row.points ?? 0),
+        costFen: Number(row.cost_fen ?? 0),
       })),
     }
   }
 
+  function isUnlimited(userId: string) {
+    const user = repo.getUserById(userId)
+    return Boolean(user && deps.entitlementFor(user).unlimited)
+  }
+
   return {
+    isUnlimited,
     readDefaults,
     saveDefaults,
     listModels,

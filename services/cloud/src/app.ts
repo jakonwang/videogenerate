@@ -104,6 +104,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     fetchImpl: options.fetchImpl,
     now: options.now ?? Date.now,
     tikhubBaseUrl: config.tikhubBaseUrl,
+    meteredPerDay: { chat: config.aiProxyChatPerDay, tikhub: config.aiProxyTikhubPerDay },
     maxBodyBytes: Math.max(1, config.aiProxyMaxBodyMb) * 1024 * 1024,
   })
   const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap)

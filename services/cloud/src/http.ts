@@ -221,7 +221,7 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     return service.billing.credits(user(ctx), page, 20)
   })
   // 电脑端 / 服务器复刻引擎每次向 AI 平台发起视频 / 图片生成前冻结点数，结束后结算
-  route('POST', '/api/v1/usage/hold', (ctx) => ({ hold: service.billing.hold(user(ctx).id, ctx.body as any) }))
+  route('POST', '/api/v1/usage/hold', (ctx) => ({ hold: service.billing.hold(user(ctx).id, ctx.body as any, { origin: 'client' }) }))
   route('POST', '/api/v1/usage/holds/:id/settle', (ctx) => ({
     hold: service.billing.settle(user(ctx).id, ctx.params.id, ctx.body.ok === true, String(ctx.body.reason || '')),
   }))

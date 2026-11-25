@@ -296,6 +296,23 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
       ALTER TABLE scene_swap_scenes ADD COLUMN meta TEXT NOT NULL DEFAULT '{}';
     `,
   },
+  {
+    // 计费：真实成本、一次请求生成几份、谁冻结的（只有客户端自己冻结的才允许客户端结算）
+    id: 10,
+    sql: `
+      ALTER TABLE ai_models ADD COLUMN cost_fen REAL NOT NULL DEFAULT 0;
+      ALTER TABLE usage_holds ADD COLUMN cost_fen REAL NOT NULL DEFAULT 0;
+      ALTER TABLE usage_holds ADD COLUMN units INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE usage_holds ADD COLUMN origin TEXT NOT NULL DEFAULT 'server';
+      CREATE TABLE ai_proxy_usage (
+        user_id TEXT NOT NULL REFERENCES users(id),
+        day TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        calls INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, day, kind)
+      );
+    `,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

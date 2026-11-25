@@ -135,7 +135,7 @@ export default function LoginPage() {
           <ul className="grid gap-3 text-[15px] text-[var(--text-secondary)]">
             <li>· 自动拆脚本、出分镜、合成成片</li>
             <li>· 模型与 Key 统一配置，登录即用</li>
-            <li>· 微信 / 支付宝扫码开通，时长可叠加</li>
+            <li>· 卡密兑换开通，时长可叠加</li>
           </ul>
         </div>
         <p className="text-sm text-[var(--text-muted)]">© {new Date().getFullYear()} Klipmill</p>

@@ -26,7 +26,8 @@ import { TIKHUB_RADAR_PATHS } from '../../../src/shared/competitorRadar'
 export type ProxyIdentity = { userId: string }
 
 export type ProxyDecision =
-  | { kind: 'free' }
+  /** metered：不扣点，但平台按次收我们钱，限每天次数 */
+  | { kind: 'free'; metered?: 'chat' | 'tikhub' }
   | { kind: 'charge'; capability: BillingCapability; track: boolean }
   | { kind: 'blocked'; reason: string }
   | { kind: 'unknown' }
@@ -83,11 +84,12 @@ export function classifyProxyRequest(input: {
   if (input.platform === 'tikhub') {
     // 解析下载 + 竞品爆款雷达（账号资料、账号作品）
     const allowed = (input.method.toUpperCase() === 'GET' || input.method.toUpperCase() === 'HEAD') && (TIKHUB_PARSE_PATHS.includes(path) || (TIKHUB_RADAR_PATHS as readonly string[]).includes(path))
-    return allowed ? { kind: 'free' } : { kind: 'blocked', reason: '这个接口不对客户端开放' }
+    return allowed ? { kind: 'free', metered: 'tikhub' } : { kind: 'blocked', reason: '这个接口不对客户端开放' }
   }
   const method = input.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD') return { kind: 'free' }
   if (method !== 'POST') return { kind: 'unknown' }
+  if (/\/v1\/(audio\/transcriptions|embeddings)$/.test(path)) return { kind: 'free', metered: 'chat' }
   if (FREE_POST.some((re) => re.test(path))) return { kind: 'free' }
   if (VIDEO_SUBMIT.some((re) => re.test(path))) return { kind: 'charge', capability: 'video', track: true }
   if (IMAGE_SUBMIT.some((re) => re.test(path))) return { kind: 'charge', capability: 'image', track: true }
@@ -102,7 +104,7 @@ export function classifyProxyRequest(input: {
     if (isVideo) return { kind: 'charge', capability: 'video', track: false }
     const isImage = input.isImageModel?.(model) || IMAGE_MODEL_RE.test(model)
     if (isImage) return { kind: 'charge', capability: 'image', track: false }
-    return { kind: 'free' }
+    return { kind: 'free', metered: 'chat' }
   }
   return { kind: 'unknown' }
 }
@@ -145,6 +147,41 @@ export function extractModelCandidates(path: string, contentType: string, body: 
     for (let m = re.exec(all); m; m = re.exec(all)) add(m[2])
   }
   return found
+}
+
+const COUNT_FIELDS = ['n', 'num_images', 'numImages', 'number_of_images', 'numberOfImages', 'num_outputs', 'numOutputs', 'batch_size', 'batchSize', 'sampleCount', 'sample_count', 'numberOfVideos', 'candidateCount', 'candidate_count', 'max_images']
+const COUNT_PARENTS = ['input', 'parameters', 'config', 'generationConfig', 'generation_config', 'extra_body', 'sequential_image_generation_options']
+const MAX_UNITS = 10
+
+/** 一次请求要生成几份：参数里写 n=4 就按 4 份扣，防止花一次的点数出多份 */
+export function extractUnits(body: Buffer, contentType = ''): number {
+  let units = 1
+  const add = (value: unknown) => {
+    const n = Number(value)
+    if (Number.isFinite(n) && n > units) units = Math.ceil(n)
+  }
+  const scan = (json: any) => {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return
+    for (const field of COUNT_FIELDS) if (typeof json[field] === 'number' || typeof json[field] === 'string') add(json[field])
+  }
+  if (!body.length) return units
+  const text = body.toString('utf8')
+  if (/^\s*\{/.test(text)) {
+    try {
+      const json = JSON.parse(text)
+      scan(json)
+      for (const key of COUNT_PARENTS) scan(json[key])
+      for (const key of COUNT_PARENTS) scan(json.input?.[key])
+    } catch {
+      // 不是合法 JSON
+    }
+  }
+  if (contentType.includes('multipart/form-data') || /content-disposition:\s*form-data/i.test(body.subarray(0, 4096).toString('latin1'))) {
+    const re = new RegExp(`name="?(?:${COUNT_FIELDS.join('|')})"?\\r\\n(?:[^\\r\\n]+\\r\\n)*\\r\\n\\s*(\\d{1,6})`, 'g')
+    const all = body.toString('latin1')
+    for (let m = re.exec(all); m; m = re.exec(all)) add(m[1])
+  }
+  return units
 }
 
 /** 兼容旧调用：取第一个写了的模型 */
@@ -283,6 +320,8 @@ export function createAiProxy(deps: {
   fetchImpl?: typeof fetch
   now: () => number
   maxBodyBytes?: number
+  /** 不扣点但有成本的调用每天上限，0 = 不限 */
+  meteredPerDay?: { chat: number; tikhub: number }
   tikhubBaseUrl?: string
 }) {
   const { db } = deps
@@ -321,6 +360,17 @@ export function createAiProxy(deps: {
       const settings = deps.readManagedSettings()
       return settings.capabilities[capability].model === model
     }
+  }
+
+  /** 先占次数再转发；超管 / 不受限账号不限 */
+  function countMetered(userId: string, kind: 'chat' | 'tikhub') {
+    const limit = deps.meteredPerDay?.[kind] ?? 0
+    const day = new Date(deps.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const row = db.prepare('SELECT calls FROM ai_proxy_usage WHERE user_id = ? AND day = ? AND kind = ?').get(userId, day, kind) as { calls: number } | undefined
+    if (limit > 0 && Number(row?.calls ?? 0) >= limit && !deps.billing.isUnlimited(userId)) {
+      throw new CloudError('RATE_LIMITED', `今天的${kind === 'chat' ? ' AI 对话' : '视频解析'}次数已用完（${limit} 次），请明天再试`, 429, { limit })
+    }
+    db.prepare('INSERT INTO ai_proxy_usage (user_id, day, kind, calls) VALUES (?, ?, ?, 1) ON CONFLICT (user_id, day, kind) DO UPDATE SET calls = calls + 1').run(userId, day, kind)
   }
 
   function settle(holdId: string, ok: boolean, reason = '') {
@@ -457,6 +507,7 @@ export function createAiProxy(deps: {
       const init: RequestInit = { method, headers, body: body.length ? new Uint8Array(body) : undefined, signal: abort.signal, redirect: 'manual' }
 
       if (decision.kind === 'free') {
+        if (decision.metered) countMetered(identity.userId, decision.metered)
         const pending = findPendingTask(identity.userId, platform, `${url.pathname}${url.search} ${body.length && body.length < 64 * 1024 ? body.toString('utf8') : ''}`)
         const upstreamRes = await doFetch(target, init)
         if (!pending) {
@@ -481,7 +532,9 @@ export function createAiProxy(deps: {
       // x-vg-client 只用于后台统计（服务器复刻引擎带 web），不影响扣多少点
       const clientHeader = String(req.headers['x-vg-client'] || '')
       const client = clientHeader === 'web' || clientHeader === 'mobile' ? clientHeader : 'desktop'
-      const hold = deps.billing.hold(identity.userId, { capability: decision.capability, platform, model, client, feature: 'ai-proxy' })
+      const units = extractUnits(body, contentType)
+      if (units > MAX_UNITS) throw new CloudError('BAD_REQUEST', `一次最多生成 ${MAX_UNITS} 份`, 400)
+      const hold = deps.billing.hold(identity.userId, { capability: decision.capability, platform, model, client, feature: 'ai-proxy' }, { units })
       let upstreamRes: Response
       let responseBody: Buffer
       try {
