@@ -17,19 +17,22 @@ import { productImageMaterialsQueue } from './queue'
 import { productImageMaterialsRepo } from './repo'
 import { videoParserDownloadService } from '../video-parser-download/service'
 import {
-  BACKGROUND_VARIANT_SCENES,
   DEFAULT_DERIVED_IMAGE_PROMPT,
+  DEFAULT_DERIVED_PROMPT_NAME,
   MAX_BACKGROUND_VARIANT_COUNT,
   MAX_SCENE_SEGMENT_DURATION_SEC,
   MIN_SEGMENT_DURATION_SEC,
   backgroundVariantNegativePrompt,
   buildBackgroundVariantPrompt,
+  buildImageVariantPrompt,
+  upgradeDerivedPrompt,
   computeFrameTimeSec,
   fallbackCuts,
   round3,
   toSegments,
   type VideoSegment,
 } from '../../../shared/imageMaterials'
+import { BUILTIN_PRODUCT_CATEGORIES, normalizeProductCategory } from '../../../shared/productCategories'
 import type {
   ProductImageMaterialBatch,
   ProductImageMaterialCategory,
@@ -40,7 +43,7 @@ import type {
   ProductImageMaterialUsageStatus,
 } from './types'
 
-const BUILTIN_CATEGORIES: ProductImageMaterialCategory[] = ['necklace', 'ring', 'earring', 'bracelet']
+const BUILTIN_CATEGORIES: ProductImageMaterialCategory[] = [...BUILTIN_PRODUCT_CATEGORIES]
 const MAX_PROMPT_LENGTH = 20_000
 
 type ProductImageMaterialsServiceDeps = {
@@ -72,8 +75,9 @@ function safeName(input: string) {
 }
 
 function ensureCategory(input: string): ProductImageMaterialCategory {
-  if (BUILTIN_CATEGORIES.includes(input as ProductImageMaterialCategory)) return input as ProductImageMaterialCategory
-  throw new Error('Unsupported material category')
+  const category = normalizeProductCategory(input)
+  if (category) return category
+  throw new Error('Material category is required')
 }
 
 function materialRoot(batchId: string) {
@@ -125,10 +129,10 @@ const promptVersionsPath = () => join(getAppPaths().dbDir, 'product-image-materi
 
 async function listPromptVersions() {
   const db = await readJsonFile(promptVersionsPath(), { versions: [] as ProductImagePromptVersion[] })
-  if (db.versions.length) return db.versions.sort((a, b) => b.version - a.version)
+  if (db.versions.length) return db.versions.map(upgradeDerivedPrompt).sort((a, b) => b.version - a.version)
   const timestamp = now()
   const version: ProductImagePromptVersion = {
-    id: randomUUID(), name: 'Cafe and Everyday Scenes', version: 1,
+    id: randomUUID(), name: DEFAULT_DERIVED_PROMPT_NAME, version: 1,
     prompt: DEFAULT_DERIVED_IMAGE_PROMPT, active: true, createdAt: timestamp, updatedAt: timestamp,
   }
   await writeJsonFile(promptVersionsPath(), { versions: [version] })
@@ -260,11 +264,7 @@ async function detectVideoSegments(input: {
 }
 
 function inferCategoryFromProductType(type: string): ProductImageMaterialCategory | null {
-  const normalized = String(type || '').trim()
-  if (normalized === 'necklace' || normalized === 'ring' || normalized === 'earring' || normalized === 'bracelet') {
-    return normalized
-  }
-  return null
+  return normalizeProductCategory(type) || null
 }
 
 async function listProductSummaries(): Promise<ProductImageMaterialProductSummary[]> {
@@ -521,7 +521,6 @@ export const productImageMaterialsService = {
             credentials,
             prompt: buildBackgroundVariantPrompt({
               category: source.category,
-              variantIndex,
               template: prompt,
             }),
             negativePrompt: backgroundVariantNegativePrompt(),
@@ -607,7 +606,7 @@ export const productImageMaterialsService = {
       try {
         const outputPath = await deps.generateVariantImage({
           credentials,
-          prompt: `${prompt} Product category: ${category}.`,
+          prompt: buildImageVariantPrompt({ category, template: prompt }),
           negativePrompt: backgroundVariantNegativePrompt(),
           imagePaths: [sourceImagePath],
           outDir: join(getAppPaths().dataDir, 'product-image-materials', 'derived', groupId),

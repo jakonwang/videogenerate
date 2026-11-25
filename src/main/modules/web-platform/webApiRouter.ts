@@ -237,13 +237,7 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
 
     if (req.method === 'GET' && pathname === '/plugins/product-image-materials/materials') {
       const result = await webPlatformService.listProductImageMaterials(token, {
-        category:
-          url.searchParams.get('category') === 'necklace' ||
-          url.searchParams.get('category') === 'ring' ||
-          url.searchParams.get('category') === 'earring' ||
-          url.searchParams.get('category') === 'bracelet'
-            ? (url.searchParams.get('category') as any)
-            : 'all',
+        category: url.searchParams.get('category') || 'all',
         usageStatus:
           url.searchParams.get('usageStatus') === 'unused' || url.searchParams.get('usageStatus') === 'used'
             ? (url.searchParams.get('usageStatus') as any)

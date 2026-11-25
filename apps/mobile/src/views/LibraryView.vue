@@ -4,7 +4,7 @@ import { isWeb } from '@/lib/platform'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Boxes, Plus, Search, Users } from 'lucide-vue-next'
-import { SYNC_PRODUCT_TYPE_LABELS, type SyncProductType } from '@shared/cloud/sync'
+import { productCategoryLabel, productCategoryOptions } from '@shared/productCategories'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SyncStatus from '@/components/SyncStatus.vue'
@@ -23,11 +23,11 @@ watch(tab, (value) => router.replace({ query: { tab: value } }))
 const { items: products, loading: productsLoading } = useProducts()
 const { items: models, loading: modelsLoading } = useModels()
 const keyword = ref('')
-const typeFilter = ref<SyncProductType | 'all'>('all')
+const typeFilter = ref('all')
 
 const productTypes = computed(() => {
   const present = new Set(products.value.map((p) => p.type))
-  return (Object.keys(SYNC_PRODUCT_TYPE_LABELS) as SyncProductType[]).filter((type) => present.has(type))
+  return productCategoryOptions([...present]).filter((type) => present.has(type))
 })
 const filteredProducts = computed(() => {
   const k = keyword.value.trim().toLowerCase()
@@ -65,7 +65,7 @@ function create() {
     <div v-if="tab === 'products' && productTypes.length > 1" class="m-chips">
       <button type="button" class="m-chip" :class="{ 'is-active': typeFilter === 'all' }" @click="typeFilter = 'all'">全部</button>
       <button v-for="type in productTypes" :key="type" type="button" class="m-chip" :class="{ 'is-active': typeFilter === type }" @click="typeFilter = type">
-        {{ SYNC_PRODUCT_TYPE_LABELS[type] }}
+        {{ productCategoryLabel(type) }}
       </button>
     </div>
     <div class="sync-line"><SyncStatus /></div>
@@ -76,7 +76,7 @@ function create() {
           <span class="card__img"><CloudImage :file-id="coverOf(item)" :alt="item.name" /><span v-if="item.images.length > 1" class="card__count">{{ item.images.length }}</span></span>
           <span class="card__body">
             <span class="card__name">{{ item.name }}</span>
-            <span class="card__meta"><span class="m-tag">{{ SYNC_PRODUCT_TYPE_LABELS[item.type] || '通用' }}</span><span>{{ item.pending ? '待同步' : relativeTime(item.updatedAt) }}</span></span>
+            <span class="card__meta"><span class="m-tag">{{ productCategoryLabel(item.type) }}</span><span>{{ item.pending ? '待同步' : relativeTime(item.updatedAt) }}</span></span>
           </span>
         </button>
       </div>

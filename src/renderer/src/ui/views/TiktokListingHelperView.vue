@@ -22,8 +22,10 @@ import {
   Upload,
 } from 'lucide-vue-next'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
+import CategorySelect from '../components/product/CategorySelect.vue'
+import { productCategoryLabel, productCategoryOptions } from '../../../../shared/productCategories'
 
-type Category = 'earring' | 'ring' | 'necklace' | 'phone_case' | 'bracelet'
+type Category = string
 type Language = 'zh-CN' | 'en-US' | 'vi-VN'
 type GenerationStatus = 'idle' | 'generating' | 'done' | 'failed'
 type WorkspaceTab = 'list' | 'editor'
@@ -58,15 +60,17 @@ type ExportCategoryConfig = {
 
 const router = useRouter()
 const route = useRoute()
-const { t: tr } = useI18n()
+const { t: tr, locale } = useI18n()
 
-const categoryOptions = computed<Array<{ value: Category; label: string }>>(() => [
-  { value: 'earring', label: tr('autoUi.k_0e17cd118937') },
-  { value: 'ring', label: tr('autoUi.k_58e24abc1430') },
-  { value: 'necklace', label: tr('autoUi.k_53af67d6bcab') },
-  { value: 'phone_case', label: tr('autoUi.k_db7edce09c55') },
-  { value: 'bracelet', label: tr('autoUi.k_da76d14a8008') },
-])
+const items = ref<Item[]>([])
+/** 商品库里的自定义分类也列出来 */
+const libraryTypes = ref<string[]>([])
+const usedCategories = computed(() => [...items.value.map((item) => item.category), ...libraryTypes.value])
+const categoryOptions = computed(() => productCategoryOptions(usedCategories.value).map((value) => ({ value, label: categoryLabel(value) })))
+async function loadLibraryTypes() {
+  const products = (await Promise.resolve(window.api.products?.list?.()).catch(() => [])) as Array<{ type?: string }> | undefined
+  libraryTypes.value = Array.isArray(products) ? products.map((item) => item.type || '').filter(Boolean) : []
+}
 
 const languageOptions = computed<Array<{ value: Language; label: string }>>(() => [
   { value: 'zh-CN', label: tr('autoUi.k_b6754c19aba8') },
@@ -79,7 +83,6 @@ const saving = ref(false)
 const generating = ref(false)
 const exporting = ref(false)
 const exportConfigSaving = ref(false)
-const items = ref<Item[]>([])
 const selectedIds = ref<string[]>([])
 const notice = ref('')
 const errorText = ref('')
@@ -104,7 +107,7 @@ const form = reactive({
   id: '',
   sourceImagePath: '',
   referenceImagePaths: [] as string[],
-  category: 'earring' as Category,
+  category: 'general' as Category,
   sku: '',
   localDisplayPrice: '',
   titleLanguage: 'zh-CN' as Language,
@@ -125,7 +128,7 @@ function toFileUrl(filePath: string) {
 }
 
 function categoryLabel(value: Category) {
-  return categoryOptions.value.find((item) => item.value === value)?.label || value
+  return productCategoryLabel(value, locale.value)
 }
 
 function languageLabel(value: Language) {
@@ -279,7 +282,9 @@ async function refresh() {
 async function loadExportCategoryConfigs() {
   const loader = window.api.tiktokListing?.getExportCategoryConfigs
   const configs = (typeof loader === 'function' ? await loader() : []) as ExportCategoryConfig[]
-  exportCategoryConfigs.value = defaultExportCategoryConfigs().map((base) => {
+  // 存过设置、但现在没有商品在用的分类也要留着
+  const extra = configs.filter((item) => !categoryOptions.value.some((option) => option.value === item.category))
+  exportCategoryConfigs.value = [...defaultExportCategoryConfigs(), ...extra].map((base) => {
     const current = configs.find((item) => item.category === base.category)
     return current
       ? {
@@ -527,7 +532,7 @@ function resetForm() {
   form.id = ''
   form.sourceImagePath = ''
   form.referenceImagePaths = []
-  form.category = 'earring'
+  form.category = 'general'
   form.sku = ''
   form.localDisplayPrice = ''
   form.titleLanguage = 'zh-CN'
@@ -573,6 +578,7 @@ function goPage(page: number) {
 }
 
 onMounted(async () => {
+  void loadLibraryTypes()
   offRuntimeLog = window.api.clone.onRuntimeLog?.((payload) => {
     const text = safeText(payload?.message, '')
     if (!text || !isTiktokListingRuntimeMessage(text)) return
@@ -853,12 +859,7 @@ onBeforeUnmount(() => {
 
             <label class="editor-field">
               <span>{{ tr('autoUi.k_09482df68d8a') }} <em>*</em></span>
-              <div class="select-shell">
-                <select v-model="form.category">
-                  <option v-for="option in categoryOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
-                <ChevronDown class="h-4 w-4" />
-              </div>
+              <CategorySelect v-model="form.category" :used="usedCategories" data-testid="listing-category" />
             </label>
 
             <div class="upload-box">

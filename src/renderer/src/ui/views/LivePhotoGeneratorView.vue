@@ -64,7 +64,7 @@ type Product = {
 
 type ProductImageMaterialOption = {
   id: string
-  category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+  category: string
   localImagePath: string
   qiniuUrl: string
   materialOrigin?: 'original' | 'derived'

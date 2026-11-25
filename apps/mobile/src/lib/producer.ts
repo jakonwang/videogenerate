@@ -9,7 +9,8 @@ import {
   type SyncProduct,
 } from '@shared/cloud/sync'
 import { buildProducerSystemPrompt, buildProducerUserPrompt, parseProducerDecision, type ProducerContext } from '@shared/cloud/producer'
-import type { TiktokListingCategory, TiktokListingLanguage } from '@shared/tiktokListingPrompts'
+import { normalizeProductCategory } from '@shared/productCategories'
+import type { TiktokListingLanguage } from '@shared/tiktokListingPrompts'
 import { createProjectFromVideo, uploadVideo } from './clone'
 import { categoryForProduct, generateModelImage, generateProductImages, generateVideo, VIDEO_MOTIONS } from './generate'
 import { loadBrand } from './brand'
@@ -131,7 +132,6 @@ async function videoFiles(ids: unknown) {
 }
 
 const LANGUAGES: TiktokListingLanguage[] = ['zh-CN', 'en-US', 'vi-VN']
-const CATEGORIES: TiktokListingCategory[] = ['earring', 'ring', 'necklace', 'phone_case', 'bracelet']
 
 async function runStep(chat: SyncProducerChat, step: SyncProducerStepState): Promise<string | undefined> {
   const p = step.params
@@ -158,7 +158,7 @@ async function runStep(chat: SyncProducerChat, step: SyncProducerStepState): Pro
     case 'listing': {
       const product = await productOf(p.productId)
       const language = LANGUAGES.includes(p.language as TiktokListingLanguage) ? (p.language as TiktokListingLanguage) : 'en-US'
-      const category = CATEGORIES.includes(p.category as TiktokListingCategory) ? (p.category as TiktokListingCategory) : categoryForProduct(product.data.type) ?? 'earring'
+      const category = normalizeProductCategory(p.category) || categoryForProduct(product.data.type) || 'general'
       const copy = await writeListingCopy({ images: product.data.images, coverFileId: product.cover, category, language })
       const listingId = newId('listing')
       await saveRecord<SyncListing>(SYNC_COLLECTIONS.listings, listingId, {

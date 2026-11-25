@@ -1,4 +1,8 @@
 {
+  "category": {
+    "add": "＋ 自定义分类",
+    "placeholder": "输入分类名称，回车确定"
+  },
   "producer": "AI 制片人",
   "producerTagline": "说出目标，它来规划、调度、交付",
   "history": "历史对话",

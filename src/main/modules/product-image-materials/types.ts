@@ -1,4 +1,6 @@
-export type ProductImageMaterialCategory = 'necklace' | 'ring' | 'earring' | 'bracelet'
+import type { ProductCategory } from '../../../shared/productCategories'
+
+export type ProductImageMaterialCategory = ProductCategory
 
 export type ProductImageMaterialUsageStatus = 'unused' | 'used'
 

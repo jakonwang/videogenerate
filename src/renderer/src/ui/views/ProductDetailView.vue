@@ -29,21 +29,13 @@ import {
 import { thumbnailUrl } from '@/lib/localMedia'
 import ProductSpacePanel from '../components/ai/ProductSpacePanel.vue'
 import ProductStyleStats from '../components/product/ProductStyleStats.vue'
+import CategorySelect from '../components/product/CategorySelect.vue'
+import { productCategoryLabel } from '../../../../shared/productCategories'
 import ProductCodeCard from '../components/product/ProductCodeCard.vue'
 import { useAiProducerStore } from '@/stores/aiProducer'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
 
-type ProductType =
-  | 'phone_case'
-  | 'earring'
-  | 'necklace'
-  | 'ring'
-  | 'bracelet'
-  | 'clothes'
-  | 'bag'
-  | 'shoes'
-  | 'toy'
-  | 'general'
+type ProductType = string
 type GalleryViewMode = 'grid' | 'list'
 
 type ProductImageAsset = {
@@ -113,7 +105,7 @@ type FeedbackTone = 'info' | 'success' | 'error'
 
 const route = useRoute()
 const router = useRouter()
-const { t: tr } = useI18n()
+const { t: tr, locale } = useI18n()
 const aiProducer = useAiProducerStore()
 const spaceTab = ref<'space' | 'profile'>('space')
 
@@ -141,18 +133,7 @@ const feedback = ref('')
 const feedbackTone = ref<FeedbackTone>('info')
 const galleryViewMode = ref<GalleryViewMode>('grid')
 
-const productTypeOptionsV2 = computed<Array<{ value: ProductType; label: string }>>(() => [
-  { value: 'phone_case', label: tr('autoUi.k_afabad5de2c2') },
-  { value: 'earring', label: tr('autoUi.k_329e434a7323') },
-  { value: 'necklace', label: tr('autoUi.k_cf7a4db3d465') },
-  { value: 'ring', label: tr('autoUi.k_669d663512e8') },
-  { value: 'bracelet', label: tr('autoUi.k_6e4748e0e92c') },
-  { value: 'clothes', label: tr('autoUi.k_c430623070e3') },
-  { value: 'bag', label: tr('autoUi.k_e71c5a827969') },
-  { value: 'shoes', label: tr('autoUi.k_4c2e7ca1d1a3') },
-  { value: 'toy', label: tr('autoUi.k_dc0613dae17b') },
-  { value: 'general', label: tr('autoUi.k_3843dd0edcb0') },
-])
+const usedTypes = computed(() => list.value.map((item) => item.type))
 
 const productId = computed(() => String(route.params.productId || '').trim())
 const selected = computed(() => list.value.find((item) => item.id === productId.value) ?? null)
@@ -302,7 +283,7 @@ function canonicalDiagnosticStatusLabel(status: ProductCanonicalDiagnostic['stat
 }
 
 function productTypeLabel(type: ProductType) {
-  return productTypeOptionsV2.value.find((item) => item.value === type)?.label ?? tr('autoUi.k_3843dd0edcb0')
+  return productCategoryLabel(type, locale.value)
 }
 
 function shortFileName(filePath?: string) {
@@ -735,9 +716,7 @@ watch(productId, () => {
         <div class="pd-summary__item">
           <span>{{ tr('autoUi.k_8c0e804b9002') }}</span>
           <div v-if="editingType" class="vg-row pd-summary__edit">
-            <select v-model="typeDraft" class="vg-select vg-select--sm" data-testid="product-type-select">
-              <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
+            <CategorySelect v-model="typeDraft" :used="usedTypes" small data-testid="product-type-select" />
             <button class="vg-btn vg-btn--primary vg-btn--xs" :disabled="savingType" data-testid="product-type-save-button" type="button" @click="saveProductType">
               {{ savingType ? tr('autoUi.k_d70d425039f2') : tr('autoUi.k_fadf24dbc5a9') }}
             </button>

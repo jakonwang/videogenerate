@@ -128,7 +128,7 @@ export type PluginDetail = PluginSummary & {
   config: Record<string, unknown>
 }
 
-export type ProductImageMaterialCategory = 'necklace' | 'ring' | 'earring' | 'bracelet'
+export type ProductImageMaterialCategory = string
 export type ProductImageMaterialUsageStatus = 'unused' | 'used'
 export type ProductImageMaterialBatchStatus = 'queued' | 'processing' | 'completed' | 'partial_failed' | 'failed'
 

@@ -2,7 +2,8 @@
  * 网页版的 window.api.productResearch / products / shell：让电脑端的选品方案页面（ProductResearchView 等）
  * 原样在网页上运行。数据走云同步（src/shared/cloud/research.ts）；采集由电脑端连着的手机执行。
  */
-import { SYNC_COLLECTIONS, type SyncFileRef, type SyncProduct, type SyncProductType } from '@shared/cloud/sync'
+import { SYNC_COLLECTIONS, type SyncFileRef, type SyncProduct } from '@shared/cloud/sync'
+import { normalizeProductCategory } from '@shared/productCategories'
 import { MOBILE_SCHEME_ID, RESEARCH_STATUS_ID, type PrRequest, type SyncPrRequest, type SyncPrResult, type SyncPrStatus, type SyncResearchScheme } from '@shared/cloud/research'
 import { DESKTOP_ONLINE_MS } from '@shared/cloud/production'
 import type { ProductResearchResult, ProductResearchScheme, ProductResearchSchemeState, ProductResearchSnapshot, ProductResearchTask } from '@shared/productResearch'
@@ -280,8 +281,6 @@ const productResearch = {
   },
 }
 
-const TYPES = new Set<SyncProductType>(['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'])
-
 const products = {
   async list() {
     return (await listRecords<SyncProduct>(SYNC_COLLECTIONS.products)).filter((r) => r.data).map((r) => ({ id: r.id, ...(r.data as SyncProduct) }))
@@ -294,7 +293,7 @@ const products = {
     const id = newId('prod')
     const product: SyncProduct = {
       name,
-      type: TYPES.has(input.type as SyncProductType) ? (input.type as SyncProductType) : 'general',
+      type: normalizeProductCategory(input.type) || 'general',
       remark: input.remark,
       ...(input.code ? { code: input.code } : {}),
       images: image ? [image] : [],

@@ -1,3 +1,4 @@
+import { productCategoryLabel } from './productCategories'
 import type { TiktokListingCategory } from './tiktokListingPrompts'
 
 /**
@@ -13,7 +14,10 @@ const RING_EXPORT_CONFIG: ListingExportCategoryConfig = {
     '[{"attributeId":"100347","attributeName":"Số lượng trên mỗi gói","values":[{"valueId":"1000256","valueName":"1"}]},{"attributeId":"100392","attributeName":"Dịp","values":[{"valueId":"1001082","valueName":"Hằng ngày"}]},{"attributeId":"100445","attributeName":"Giới","values":[{"valueId":"1001452","valueName":"Phi giới tính"}]},{"attributeId":"100701","attributeName":"Vật liệu","values":[{"valueId":"1001475","valueName":"Phủ kim loại"}]},{"attributeId":"100757","attributeName":"Thiết kế","values":[{"valueId":"1003618","valueName":"Hình học"}]},{"attributeId":"101155","attributeName":"Phụ kiện cặp đôi","values":[{"valueId":"1000059","valueName":"Không"}]},{"attributeId":"101157","attributeName":"Bộ nhẫn","values":[{"valueId":"1000059","valueName":"Không"}]}]',
 }
 
-export const DEFAULT_LISTING_EXPORT_CONFIG: Record<TiktokListingCategory, ListingExportCategoryConfig> = {
+/** 没有默认值的分类：分类 id 要在导出设置里自己填 */
+export const defaultListingExportConfig = (category: TiktokListingCategory): ListingExportCategoryConfig => DEFAULT_LISTING_EXPORT_CONFIG[category] ?? { category, categoryId: '', productAttributes: '' }
+
+export const DEFAULT_LISTING_EXPORT_CONFIG: Record<string, ListingExportCategoryConfig> = {
   earring: {
     category: 'earring',
     categoryId: '605268',
@@ -95,7 +99,8 @@ export function buildListingDescriptionFromUrls(urls: string[]) {
 export type ListingExportInput = { category: TiktokListingCategory; title: string; description: string; sku: string; price: string; imageUrls: string[] }
 
 /** 一行店小秘导入数据 */
-export function buildListingExportRow(item: ListingExportInput, config: ListingExportCategoryConfig = DEFAULT_LISTING_EXPORT_CONFIG[item.category]) {
+export function buildListingExportRow(item: ListingExportInput, config: ListingExportCategoryConfig = defaultListingExportConfig(item.category)) {
+  if (!config.categoryId) throw new Error(`「${productCategoryLabel(item.category)}」还没填店小秘分类 id，请先在导出设置里填写`)
   return {
     '*分类id\n（必填）': config.categoryId,
     '*产品标题\n（必填）': item.title || '',
@@ -138,9 +143,9 @@ export function buildListingExportRow(item: ListingExportInput, config: ListingE
 /** 用户保存的配置盖在默认配置上 */
 export function mergeListingExportConfigs(saved: Array<Partial<ListingExportCategoryConfig>> = []): ListingExportCategoryConfig[] {
   const map = new Map<TiktokListingCategory, ListingExportCategoryConfig>()
-  for (const category of Object.keys(DEFAULT_LISTING_EXPORT_CONFIG) as TiktokListingCategory[]) map.set(category, { ...DEFAULT_LISTING_EXPORT_CONFIG[category] })
+  for (const category of Object.keys(DEFAULT_LISTING_EXPORT_CONFIG) as TiktokListingCategory[]) map.set(category, { ...DEFAULT_LISTING_EXPORT_CONFIG[category]! })
   for (const config of saved) {
-    if (!config?.category || !map.has(config.category)) continue
+    if (!config?.category) continue
     map.set(config.category, { category: config.category, categoryId: String(config.categoryId || '').trim(), productAttributes: repairAttributeNames(String(config.productAttributes || '').trim()) })
   }
   return [...map.values()]

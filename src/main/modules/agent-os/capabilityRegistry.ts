@@ -1,3 +1,4 @@
+import { normalizeProductCategory } from '../../../shared/productCategories'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { existsSync } from 'node:fs'
@@ -291,12 +292,8 @@ async function resolveProduct(input: Record<string, unknown>) {
   return products.find((item) => request.includes(text(item.name).toLowerCase())) || products[0] || null
 }
 
-function materialCategory(value: unknown): 'necklace' | 'ring' | 'earring' | 'bracelet' {
-  const normalized = text(value).toLowerCase()
-  if (normalized.includes('necklace') || normalized.includes('\u9879\u94fe')) return 'necklace'
-  if (normalized.includes('earring') || normalized.includes('\u8033')) return 'earring'
-  if (normalized.includes('bracelet') || normalized.includes('\u624b\u94fe')) return 'bracelet'
-  return 'ring'
+function materialCategory(value: unknown) {
+  return normalizeProductCategory(value) || 'general'
 }
 
 function livePhotoMotionTemplate(value: unknown): 'push_in' | 'push_out' | 'ambient_sway' | undefined {
@@ -362,19 +359,6 @@ const productReadBinding: AgentCapabilityBinding = {
   },
 }
 
-const productTypes = new Set([
-  'phone_case',
-  'earring',
-  'necklace',
-  'ring',
-  'bracelet',
-  'clothes',
-  'bag',
-  'shoes',
-  'toy',
-  'general',
-])
-
 const storyboardTemplateTypes = new Set([
   'general',
   'jewelry',
@@ -401,7 +385,7 @@ const productSaveBinding: AgentCapabilityBinding = {
     const name = text(input.productName || input.name) || current?.name || ''
     if (!name) return failed('missing_product_name', 'Add a product name before creating the product.')
     const requestedType = text(input.productType).toLowerCase()
-    const productType = productTypes.has(requestedType) ? requestedType : current?.type || 'general'
+    const productType = normalizeProductCategory(requestedType) || current?.type || 'general'
     const requestedStoryboardType = text(input.storyboardTemplateType).toLowerCase()
     const imagePaths = Array.from(new Set(strings(input.imagePaths)))
     const images = []
@@ -1789,10 +1773,6 @@ async function generateListingsForProducts(productIds: string[], input: Record<s
       warnings.push(`Product ${productId} no longer exists.`)
       continue
     }
-    if (!listingCategories.has(product.type)) {
-      warnings.push(`${product.name}: listing copy supports earrings, rings, necklaces, bracelets and phone cases only.`)
-      continue
-    }
     const sourceImagePath = productListingImage(product)
     if (!sourceImagePath) {
       warnings.push(`${product.name}: add a product image before generating listing copy.`)
@@ -1857,7 +1837,6 @@ const listingExportBinding: AgentCapabilityBinding = {
   },
 }
 
-const listingCategories = new Set(['earring', 'ring', 'necklace', 'phone_case', 'bracelet'])
 const listingLanguages = new Set(['zh-CN', 'en-US', 'vi-VN'])
 
 const listingManageBinding: AgentCapabilityBinding = {
@@ -1894,11 +1873,11 @@ const listingManageBinding: AgentCapabilityBinding = {
       const configs = rawConfigs.map((value) => {
         const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
         return {
-          category: text(row.category),
+          category: normalizeProductCategory(row.category),
           categoryId: text(row.categoryId),
           productAttributes: text(row.productAttributes),
         }
-      }).filter((item) => listingCategories.has(item.category))
+      }).filter((item) => item.category)
       if (!configs.length) return failed('missing_listing_config', 'Add at least one supported listing category configuration.')
       if (configs.some((item) => !item.categoryId)) return failed('missing_listing_category_id', 'Every listing category configuration requires a category identifier.')
       const saved = await capabilityDependencies.saveListingExportConfigs(configs as any)
@@ -1918,13 +1897,13 @@ const listingManageBinding: AgentCapabilityBinding = {
     const current = listingId ? (await capabilityDependencies.listListings()).find((item) => item.id === listingId) : undefined
     if (listingId && !current) return failed('listing_not_found', 'The selected listing record does not exist.')
     const sourceImagePath = text(input.sourceImagePath) || current?.sourceImagePath || ''
-    const category = text(input.category) || current?.category || ''
+    const category = normalizeProductCategory(input.category) || current?.category || ''
     const sku = text(input.sku) || current?.sku || ''
     const localDisplayPrice = text(input.localDisplayPrice) || current?.localDisplayPrice || ''
     const titleLanguage = text(input.titleLanguage) || current?.titleLanguage || 'zh-CN'
     if (!sourceImagePath) return failed('missing_listing_image', 'Add a source image before saving the listing.')
     if (!existsSync(sourceImagePath)) return failed('listing_image_not_found', 'The listing source image does not exist.')
-    if (!listingCategories.has(category)) return failed('invalid_listing_category', 'Choose a supported listing category.')
+    if (!category) return failed('invalid_listing_category', 'Choose a listing category.')
     if (!sku) return failed('missing_listing_sku', 'Add a SKU before saving the listing.')
     if (!localDisplayPrice) return failed('missing_listing_price', 'Add a local display price before saving the listing.')
     if (!listingLanguages.has(titleLanguage)) return failed('invalid_listing_language', 'Choose a supported listing title language.')

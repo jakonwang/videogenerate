@@ -26,19 +26,11 @@ import {
 import type { CodeImportPreview, CodeStats } from '../../../../shared/productCodeStats'
 import ProductCodeImportDialog from '../components/product/ProductCodeImportDialog.vue'
 import ProductCodesDialog from '../components/product/ProductCodesDialog.vue'
+import CategorySelect from '../components/product/CategorySelect.vue'
+import { productCategoryLabel, productCategoryOptions } from '../../../../shared/productCategories'
 import { productCodeError } from '../components/product/productCodeText'
 
-type ProductType =
-  | 'phone_case'
-  | 'earring'
-  | 'necklace'
-  | 'ring'
-  | 'bracelet'
-  | 'clothes'
-  | 'bag'
-  | 'shoes'
-  | 'toy'
-  | 'general'
+type ProductType = string
 type ProductStatusFilter = 'all' | 'pending' | 'processing' | 'done' | 'failed'
 type ViewMode = 'grid' | 'list'
 type SortMode = 'updated_desc' | 'sales_desc' | 'name_asc' | 'analysis_board_status'
@@ -93,7 +85,7 @@ const statusFilter = ref<ProductStatusFilter>('all')
 const viewMode = ref<ViewMode>('grid')
 const currentPage = ref(1)
 const pageSize = ref(12)
-const creating = reactive({ name: '', code: '', type: 'phone_case' as ProductType })
+const creating = reactive({ name: '', code: '', type: 'general' as ProductType })
 const createError = ref('')
 const codesOpen = ref(false)
 const codeMenuOpen = ref(false)
@@ -141,10 +133,8 @@ const promptText = ref('')
 const promptBusy = ref(false)
 const promptError = ref('')
 
-const productTypeOptionsV2 = computed<Array<{ value: ProductType; label: string }>>(() =>
-  (['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'] as ProductType[])
-    .map((value) => ({ value, label: t(`productLibrary.types.${value}`) })),
-)
+const usedTypes = computed(() => list.value.map((item) => item.type))
+const productTypeOptionsV2 = computed(() => productCategoryOptions(usedTypes.value).map((value) => ({ value, label: productTypeLabelV2(value) })))
 
 const analysisBoardStatusRank: Record<'idle' | 'processing' | 'done' | 'failed', number> = {
   done: 0,
@@ -262,7 +252,7 @@ function productImageCount(product: Product) {
 }
 
 function productTypeLabelV2(type: ProductType) {
-  return productTypeOptionsV2.value.find((item) => item.value === type)?.label ?? t('productLibrary.types.general')
+  return productCategoryLabel(type, locale.value)
 }
 
 function formatDateTime(ts?: number) {
@@ -407,7 +397,7 @@ async function createProduct() {
   }
   creating.code = ''
   creating.name = ''
-  creating.type = 'phone_case'
+  creating.type = 'general'
   createOpen.value = false
   await refresh()
   void router.push(`/products/${created.id}`)
@@ -512,9 +502,7 @@ onBeforeUnmount(() => {
             <p v-if="createError" class="pl-create__error" role="alert">{{ createError }}</p>
             <label class="vg-field">
               <span class="vg-field__label">{{ t('productLibrary.productType') }}</span>
-              <select v-model="creating.type" class="vg-select" data-testid="product-create-type-select">
-                <option v-for="option in productTypeOptionsV2" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              <CategorySelect v-model="creating.type" :used="usedTypes" data-testid="product-create-type-select" />
             </label>
             <button class="vg-btn vg-btn--primary vg-btn--block" data-testid="product-create-submit" type="submit">
               {{ t('productLibrary.create') }} <ArrowRight :size="14" />

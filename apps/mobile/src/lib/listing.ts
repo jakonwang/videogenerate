@@ -1,3 +1,4 @@
+import { productCategoryLabel } from '@shared/productCategories'
 import { SYNC_COLLECTIONS, type SyncFileRef, type SyncListing } from '@shared/cloud/sync'
 import { buildTiktokListingImagePrompt } from '@shared/tiktokListingPrompts'
 import { mergeListingExportConfigs, normalizeGeneratedTitle, type ListingExportCategoryConfig } from '@shared/tiktokListingExport'
@@ -62,10 +63,9 @@ export async function writeListingCopy(input: {
 /* ------------------------------------------------------------------ 上架助手（和电脑端一样：标题 + 5 张商品图） */
 
 export const LISTING_IMAGE_COUNT = 5
-const CATEGORY_TEXT: Record<TiktokListingCategory, string> = { earring: '耳环', ring: '戒指', necklace: '项链', phone_case: '手机壳', bracelet: '手链' }
 
 function imagePrompt(category: TiktokListingCategory, index: number, sku: string, anchorMode: 'source_only' | 'source_plus_hero') {
-  return buildTiktokListingImagePrompt({ category, index, sku, anchorMode, detailText: `${CATEGORY_TEXT[category]} ecommerce listing image` })
+  return buildTiktokListingImagePrompt({ category, index, sku, anchorMode, detailText: `${productCategoryLabel(category)} ecommerce listing image` })
 }
 
 /** 第 1 张：主图 + 参考图；第 2–5 张：主图 + 第 1 张成图 + 参考图（同电脑端，云端最多 5 张参考） */

@@ -1,4 +1,8 @@
 {
+  "category": {
+    "add": "+ Danh mục khác",
+    "placeholder": "Nhập danh mục rồi nhấn Enter"
+  },
   "producer": "AI Nhà sản xuất",
   "producerTagline": "Nêu mục tiêu, AI lập kế hoạch, điều phối và bàn giao",
   "history": "Lịch sử",

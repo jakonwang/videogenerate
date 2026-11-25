@@ -9,6 +9,7 @@ import type { VideoJobResult } from '@shared/cloud/videoTools'
 import {
   backgroundVariantNegativePrompt,
   buildBackgroundVariantPrompt,
+  buildImageVariantPrompt,
   type ImageMaterialCategory,
 } from '@shared/imageMaterials'
 import { fileBlob } from './files'
@@ -130,7 +131,7 @@ export async function createBackgroundVariants(materials: ImageMaterialItem[], c
     for (let index = 0; index < count; index += 1) {
       await submitDerived({
         category: material.category,
-        prompt: buildBackgroundVariantPrompt({ category: material.category, variantIndex: index, template }),
+        prompt: buildBackgroundVariantPrompt({ category: material.category, template }),
         sourceFileId: material.fileId,
         derivedFromId: material.id,
         sourceName: material.sourceName,
@@ -150,7 +151,7 @@ export async function createImageVariants(sources: Array<{ fileId: string; name:
   for (const source of sources) {
     const aspect = await aspectOf(source.fileId)
     for (let index = 0; index < count; index += 1) {
-      await submitDerived({ category, prompt: `${prompt} Product category: ${category}.`, sourceFileId: source.fileId, sourceName: source.name, variantIndex: index, aspect })
+      await submitDerived({ category, prompt: buildImageVariantPrompt({ category, template: prompt }), sourceFileId: source.fileId, sourceName: source.name, variantIndex: index, aspect })
       total += 1
     }
   }

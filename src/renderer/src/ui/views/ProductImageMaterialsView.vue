@@ -34,12 +34,14 @@ import {
   X,
 } from 'lucide-vue-next'
 import VideoPreviewModal from '../components/VideoPreviewModal.vue'
+import CategorySelect from '../components/product/CategorySelect.vue'
+import { productCategoryLabel, productCategoryOptions } from '../../../../shared/productCategories'
 import MaterialPager from '../components/product-materials/MaterialPager.vue'
 import MaterialTile from '../components/product-materials/MaterialTile.vue'
 // The page brings its own stylesheet so the web version (which reuses this page) gets it too.
 import '@/design-system/product-materials.css'
 
-type Category = 'necklace' | 'ring' | 'earring' | 'bracelet'
+type Category = string
 type UsageStatus = 'unused' | 'used'
 
 type BatchItem = {
@@ -109,15 +111,15 @@ const ASSET_USAGE_PLUGIN = 'product-image-materials'
 type PromptVersion = { id: string; name: string; version: number; prompt: string; active: boolean }
 const activeTab = ref<'batch' | 'image-to-image' | 'background' | 'library'>('batch')
 const batchSourceMode = ref<'upload' | 'downloaded'>('upload')
-const categories = ref<Category[]>(['necklace', 'ring', 'earring', 'bracelet'])
-const selectedCategory = ref<Category>('necklace')
+const categories = ref<Category[]>(productCategoryOptions())
+const selectedCategory = ref<Category>('general')
 const pickedVideos = ref<string[]>([])
 const parserVideos = ref<ParserVideoItem[]>([])
 const selectedParserVideoIds = ref<string[]>([])
 const batches = ref<BatchItem[]>([])
 const materials = ref<MaterialItem[]>([])
 const products = ref<ProductItem[]>([])
-const filterCategory = ref<'all' | Category>('all')
+const filterCategory = ref<Category>('all')
 const filterUsageStatus = ref<'all' | UsageStatus>('all')
 const libraryPage = ref(1)
 const backgroundPage = ref(1)
@@ -127,7 +129,7 @@ const parserVideoPageSize = ref(12)
 const selectedMaterialIds = ref<string[]>([])
 const backgroundMaterialCount = ref(3)
 const imageVariantCount = ref(3)
-const imageCategory = ref<Category>('necklace')
+const imageCategory = ref<Category>('general')
 const sourceImagePaths = ref<string[]>([])
 const imageGenerateProgress = ref({ done: 0, total: 0 })
 function fileBaseName(path: string) { return path.split(/[\\/]/).pop() || '' }
@@ -553,6 +555,7 @@ const uiText = computed(() => {
     source: '视频来源', selected: '已选', videos: '个视频', remove: '移除', history: '最近批次', imagesUnit: '张图',
     queueEmpty: '在左侧选择视频并加入队列，处理进度会在这里实时更新。',
     promptDesc: '生成时使用当前选中的版本，可保存、复制或回滚。',
+    sceneHint: '{scene} 会自动换成不同场景；想固定一个场景，把它改成那个场景就行。',
     sourceEmpty: '先在「拆解视频」中处理视频，拆解出的图片会出现在这里。',
     sourceCount: '已选 {n} 张源图', clearAll: '清空', addMore: '继续添加', sourceFailed: '部分源图生成失败：', sourceMultiHint: '可一次选择多张',
   }
@@ -560,6 +563,7 @@ const uiText = computed(() => {
     source: 'Nguon video', selected: 'Da chon', videos: 'video', remove: 'Bo', history: 'Batch gan day', imagesUnit: 'anh',
     queueEmpty: 'Chon video ben trai va them vao hang doi; tien trinh se cap nhat tai day.',
     promptDesc: 'Phien ban dang chon se duoc dung khi tao anh.',
+    sceneHint: '{scene} se tu doi thanh boi canh khac nhau cho tung anh. Muon co dinh, hay thay bang boi canh cua ban.',
     sourceEmpty: 'Hay tach video truoc; anh tach ra se hien thi tai day.',
     sourceCount: 'Da chon {n} anh nguon', clearAll: 'Xoa het', addMore: 'Them anh', sourceFailed: 'Mot so anh nguon that bai:', sourceMultiHint: 'Co the chon nhieu anh',
   }
@@ -567,6 +571,7 @@ const uiText = computed(() => {
     source: 'Video source', selected: 'Selected', videos: 'videos', remove: 'Remove', history: 'Recent batches', imagesUnit: 'images',
     queueEmpty: 'Pick videos on the left and queue them; progress updates here automatically.',
     promptDesc: 'The selected version is used for generation. Save, copy or roll back anytime.',
+    sceneHint: '{scene} becomes a different setting for each image. Replace it with your own to keep one setting.',
     sourceEmpty: 'Break down a video first; extracted frames will show up here.',
     sourceCount: '{n} source images selected', clearAll: 'Clear all', addMore: 'Add more', sourceFailed: 'Some source images failed:', sourceMultiHint: 'Multiple images allowed',
   }
@@ -600,7 +605,7 @@ function removePickedVideo(path: string) {
   pickedVideos.value = pickedVideos.value.filter((item) => item !== path)
 }
 
-function setLibraryCategory(value: 'all' | Category) {
+function setLibraryCategory(value: Category) {
   filterCategory.value = value
   void loadAll()
 }
@@ -665,26 +670,8 @@ function formatDateTime(value: number) {
   }
 }
 
-function categoryLabel(value: Category | 'all') {
-  if (locale.value === 'zh-CN') {
-    if (value === 'all') return '全部'
-    if (value === 'necklace') return '项链'
-    if (value === 'ring') return '戒指'
-    if (value === 'earring') return '耳环'
-    return '手链'
-  }
-  if (locale.value === 'vi-VN') {
-    if (value === 'all') return 'Tat ca'
-    if (value === 'necklace') return 'Day chuyen'
-    if (value === 'ring') return 'Nhan'
-    if (value === 'earring') return 'Bong tai'
-    return 'Vong tay'
-  }
-  if (value === 'all') return 'All'
-  if (value === 'necklace') return 'Necklace'
-  if (value === 'ring') return 'Ring'
-  if (value === 'earring') return 'Earring'
-  return 'Bracelet'
+function categoryLabel(value: Category) {
+  return value === 'all' ? copy.value.all : productCategoryLabel(value, locale.value)
 }
 
 function batchStatusLabel(status: BatchItem['status']) {
@@ -764,7 +751,8 @@ async function loadAll() {
       window.api.productImageMaterials.listProducts() as Promise<ProductItem[]>,
       window.api.videoParserDownload.listItems({ userId: DESKTOP_USER_ID }) as Promise<ParserVideoItem[]>,
     ])
-    categories.value = nextCategories
+    // 素材是按筛选条件读的，之前见过的自定义分类要留着
+    categories.value = productCategoryOptions([...categories.value, ...nextCategories, ...nextBatches.map((item) => item.category), ...nextMaterials.map((item) => item.category), ...nextProducts.map((item) => item.type || '')])
     batches.value = nextBatches
     materials.value = nextMaterials
     products.value = nextProducts
@@ -1307,11 +1295,7 @@ onUnmounted(() => {
 
         <div class="pm-field">
           <span class="pm-field__label">{{ copy.category }}</span>
-          <div class="pm-seg pm-seg--full">
-            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': selectedCategory === item }" @click="selectedCategory = item">
-              {{ categoryLabel(item) }}
-            </button>
-          </div>
+          <CategorySelect v-model="selectedCategory" :used="categories" data-testid="batch-category" />
         </div>
 
         <div class="pm-field">
@@ -1563,9 +1547,7 @@ onUnmounted(() => {
 
         <div class="pm-field">
           <span class="pm-field__label">{{ promptUi.category }}</span>
-          <div class="pm-seg pm-seg--full">
-            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': imageCategory === item }" @click="imageCategory = item">{{ categoryLabel(item) }}</button>
-          </div>
+          <CategorySelect v-model="imageCategory" :used="categories" data-testid="image-category" />
         </div>
         <div class="pm-field">
           <span class="pm-field__label">{{ promptUi.count }}</span>
@@ -1606,6 +1588,7 @@ onUnmounted(() => {
         <label class="vg-field pm-grow">
           <span class="vg-field__label">{{ promptUi.content }}</span>
           <textarea v-model="promptText" class="vg-textarea pm-prompt" rows="12" spellcheck="false" />
+          <span class="vg-field__hint">{{ uiText.sceneHint }}</span>
         </label>
         <footer class="pm-card__foot">
           <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><History :size="13" />{{ promptUi.rollback }}</button>
@@ -1653,6 +1636,7 @@ onUnmounted(() => {
         <label class="vg-field">
           <span class="vg-field__label">{{ promptUi.content }}</span>
           <textarea v-model="promptText" class="vg-textarea pm-prompt" rows="5" spellcheck="false" />
+          <span class="vg-field__hint">{{ uiText.sceneHint }}</span>
         </label>
         <div class="pm-row pm-row--end">
           <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><History :size="13" />{{ promptUi.rollback }}</button>
@@ -1730,10 +1714,10 @@ onUnmounted(() => {
           <p>{{ libraryDisplayCopy.desc }}</p>
         </div>
         <div class="pm-bar__tools">
-          <div class="pm-seg">
-            <button type="button" :class="{ 'is-on': filterCategory === 'all' }" @click="setLibraryCategory('all')">{{ copy.all }}</button>
-            <button v-for="item in categories" :key="item" type="button" :class="{ 'is-on': filterCategory === item }" @click="setLibraryCategory(item)">{{ categoryLabel(item) }}</button>
-          </div>
+          <select class="vg-select vg-select--sm" :value="filterCategory" :aria-label="copy.category" @change="setLibraryCategory(($event.target as HTMLSelectElement).value)">
+            <option value="all">{{ copy.all }}</option>
+            <option v-for="item in categories" :key="item" :value="item">{{ categoryLabel(item) }}</option>
+          </select>
           <div class="pm-seg">
             <button type="button" :class="{ 'is-on': filterUsageStatus === 'all' }" @click="setLibraryUsage('all')">{{ copy.all }}</button>
             <button type="button" :class="{ 'is-on': filterUsageStatus === 'unused' }" @click="setLibraryUsage('unused')">{{ copy.unused }}</button>

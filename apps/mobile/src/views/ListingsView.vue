@@ -3,7 +3,8 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronRight, Plus, Store } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncListing } from '@shared/cloud/sync'
-import { TIKTOK_LISTING_CATEGORY_LABELS, TIKTOK_LISTING_LANGUAGE_LABELS } from '@shared/tiktokListingPrompts'
+import { productCategoryLabel, productCategoryOptions } from '@shared/productCategories'
+import { TIKTOK_LISTING_LANGUAGE_LABELS } from '@shared/tiktokListingPrompts'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { relativeTime } from '@/lib/library'
@@ -61,7 +62,7 @@ watch(
     <main class="vg-page ls" data-testid="web-listings">
       <div class="ls-filters">
         <label class="vg-search ls-search"><Search :size="14" /><input v-model="lsQuery" class="vg-input vg-input--sm" placeholder="搜索 SKU、标题" /></label>
-        <select v-model="lsCategory" class="vg-select vg-select--sm"><option value="all">全部分类</option><option v-for="(label, key) in TIKTOK_LISTING_CATEGORY_LABELS" :key="key" :value="key">{{ label }}</option></select>
+        <select v-model="lsCategory" class="vg-select vg-select--sm"><option value="all">全部分类</option><option v-for="key in productCategoryOptions(items.map((item) => item.category))" :key="key" :value="key">{{ productCategoryLabel(key) }}</option></select>
         <select v-model="lsStatus" class="vg-select vg-select--sm"><option value="all">全部状态</option><option value="done">已完成</option><option value="draft">草稿</option></select>
         <select v-model="lsLanguage" class="vg-select vg-select--sm"><option value="all">全部语言</option><option v-for="(label, key) in TIKTOK_LISTING_LANGUAGE_LABELS" :key="key" :value="key">{{ label }}</option></select>
         <button type="button" class="vg-btn vg-btn--sm" @click="resetListingFilters">重置</button>
@@ -80,7 +81,7 @@ watch(
               <td><span class="ls-thumb"><CloudImage :file-id="item.images[0]?.fileId" /></span></td>
               <td class="vg-num">{{ item.sku || '—' }}</td>
               <td class="ls-title">{{ item.title || '还没有生成文案' }}</td>
-              <td>{{ TIKTOK_LISTING_CATEGORY_LABELS[item.category] }}</td>
+              <td>{{ productCategoryLabel(item.category) }}</td>
               <td>{{ TIKTOK_LISTING_LANGUAGE_LABELS[item.language] }}</td>
               <td class="vg-num">{{ item.price || '—' }}</td>
               <td><span class="vg-pill vg-pill--dot" :class="item.title ? 'vg-pill--green' : 'vg-pill--amber'">{{ item.title ? '已完成' : '草稿' }}</span></td>
@@ -115,7 +116,7 @@ watch(
           <span class="thumb"><CloudImage :file-id="item.images[0]?.fileId" /></span>
           <span class="m-row__main">
             <span class="m-row__title">{{ item.title || '还没有生成文案' }}</span>
-            <span class="m-row__sub">{{ TIKTOK_LISTING_CATEGORY_LABELS[item.category] }} · {{ TIKTOK_LISTING_LANGUAGE_LABELS[item.language] }} · {{ relativeTime(item.updatedAt) }}</span>
+            <span class="m-row__sub">{{ productCategoryLabel(item.category) }} · {{ TIKTOK_LISTING_LANGUAGE_LABELS[item.language] }} · {{ relativeTime(item.updatedAt) }}</span>
           </span>
           <ChevronRight :size="18" class="m-muted" />
         </button>

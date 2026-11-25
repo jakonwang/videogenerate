@@ -1,4 +1,8 @@
 {
+  "category": {
+    "add": "+ Custom category",
+    "placeholder": "Type a category, press Enter"
+  },
   "producer": "AI Producer",
   "producerTagline": "State a goal; it plans, orchestrates and delivers",
   "history": "History",

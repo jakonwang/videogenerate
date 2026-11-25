@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 import { SYNC_COLLECTIONS, type SyncGeneration, type SyncModel, type SyncProduct } from '@shared/cloud/sync'
 import { buildModelLibraryPrompt } from '@shared/modelLibraryPrompt'
 import { PRODUCT_REPLACEMENT_PROMPT } from '@shared/productReplacementPrompt'
+import { normalizeProductCategory } from '@shared/productCategories'
 import { buildTiktokListingImagePrompt, type TiktokListingCategory } from '@shared/tiktokListingPrompts'
 import type { AiGenerationRequest } from '@shared/cloud/ai'
 import { cloud } from './session'
@@ -33,10 +34,9 @@ export const VIDEO_MOTIONS = [
 
 export const VIDEO_BASE_PROMPT = 'Create a realistic six-second product close-up video while preserving the exact product identity and composition. Keep the product shape, color, material and every visible detail unchanged.'
 
-const LISTING_CATEGORIES = new Set<TiktokListingCategory>(['earring', 'ring', 'necklace', 'phone_case', 'bracelet'])
-
 export function categoryForProduct(type: string | undefined): TiktokListingCategory | null {
-  return type && LISTING_CATEGORIES.has(type as TiktokListingCategory) ? (type as TiktokListingCategory) : null
+  const category = normalizeProductCategory(type)
+  return category && category !== 'general' ? category : null
 }
 
 function productImagePrompt(category: TiktokListingCategory | null, shot: number) {

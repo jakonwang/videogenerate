@@ -1,16 +1,11 @@
 /**
  * TikTok 上架助手的提示词（桌面端、云端 AI 网关、手机 App 共用同一份）。
  */
-export type TiktokListingCategory = 'earring' | 'ring' | 'necklace' | 'phone_case' | 'bracelet'
-export type TiktokListingLanguage = 'zh-CN' | 'en-US' | 'vi-VN'
+import { productCategoryPromptName, type ProductCategory } from './productCategories'
 
-export const TIKTOK_LISTING_CATEGORY_LABELS: Record<TiktokListingCategory, string> = {
-  earring: '耳饰',
-  ring: '戒指',
-  necklace: '项链',
-  phone_case: '手机壳',
-  bracelet: '手链',
-}
+/** 常用分类，或用户自己填的分类；没有专门模板的用通用模板 */
+export type TiktokListingCategory = ProductCategory
+export type TiktokListingLanguage = 'zh-CN' | 'en-US' | 'vi-VN'
 
 export const TIKTOK_LISTING_LANGUAGE_LABELS: Record<TiktokListingLanguage, string> = {
   'zh-CN': '中文',
@@ -62,7 +57,7 @@ const GLOBAL_PROMPT_RULES = [
   'Clean premium social-commerce output.',
 ]
 
-const promptPresets: Record<TiktokListingPromptCategory, TiktokListingImagePromptPreset> = {
+const promptPresets: Record<string, TiktokListingImagePromptPreset> = {
   earring: {
     category: 'earring',
     subject: 'a model ear wearing the exact same earrings from the reference image',
@@ -280,7 +275,7 @@ const promptPresets: Record<TiktokListingPromptCategory, TiktokListingImagePromp
   },
 }
 
-const textPromptPresets: Record<TiktokListingPromptCategory, TiktokListingTextPromptPreset> = {
+const textPromptPresets: Record<string, TiktokListingTextPromptPreset> = {
   earring: {
     category: 'earring',
     categoryLabel: 'Earring',
@@ -338,8 +333,38 @@ const textPromptPresets: Record<TiktokListingPromptCategory, TiktokListingTextPr
   },
 }
 
+/** 没有专门模板的分类：按商品本身怎么用来拍 */
+function generalImagePreset(category: TiktokListingCategory): TiktokListingImagePromptPreset {
+  const name = productCategoryPromptName(category)
+  return {
+    category,
+    subject: `the exact same ${name} from the reference image, worn, held, or used the way this kind of item normally is`,
+    wearArea: `the natural wearing or usage area for this ${name}; show a person only when that is how the item is normally used`,
+    detailFocus: 'structure, silhouette, material, color, pattern, stitching or joins, hardware, openings, edges, and proportions',
+    templates: [
+      { key: 'hero', shotTitle: 'main hero listing image', composition: 'clean hero product shot, centered composition, premium ecommerce cover image', focus: 'show the exact same product clearly with the full structure and finish readable', styling: 'soft studio lighting, clean premium background, elegant ecommerce presentation' },
+      { key: 'angle_2', shotTitle: 'front in-use shot', composition: 'front view of the product in natural use', focus: 'show the real size and how the product looks when worn or used', styling: 'soft natural light, uncluttered everyday setting' },
+      { key: 'angle_3', shotTitle: 'side profile shot', composition: 'three-quarter or side view of the same product', focus: 'show thickness, profile, and exact structure from the side', styling: 'soft directional light, simple neutral setting' },
+      { key: 'angle_4', shotTitle: 'material close-up', composition: 'tight close-up of the surface and main details', focus: 'show the exact material texture, color, pattern, and workmanship', styling: 'sharp focus, soft light, minimal background' },
+      { key: 'angle_5', shotTitle: 'lifestyle shot', composition: 'medium lifestyle shot with the product as the clear subject', focus: 'show a believable everyday scene where this product is used', styling: 'natural light, realistic social-commerce look' },
+    ],
+  }
+}
+
+function generalTextPreset(category: TiktokListingCategory): TiktokListingTextPromptPreset {
+  const name = productCategoryPromptName(category)
+  return {
+    category,
+    categoryLabel: name,
+    titleKeywords: [name, 'style', 'everyday use', 'gift idea'],
+    titleFocus: 'product type, visible style, color, material look, and main use',
+    descriptionFocus: 'visible appearance and details, how it is worn or used, and everyday appeal',
+    visibleConstraints: ['Only mention visible structure, shape, color, material look, and details.', 'Do not invent materials, sizes, certifications, functions, or performance claims unless visible in the image.'],
+  }
+}
+
 function detailPlaceholder(category: TiktokListingCategory, sku?: string, detailText?: string) {
-  return [detailText, `Category: ${category}`, sku ? `SKU: ${sku}` : '']
+  return [detailText, `Category: ${productCategoryPromptName(category)}`, sku ? `SKU: ${sku}` : '']
     .map((item) => String(item || '').trim())
     .filter(Boolean)
     .join('. ')
@@ -358,7 +383,7 @@ export function buildTiktokListingImagePrompt(input: {
   detailText?: string
   anchorMode?: 'source_only' | 'source_plus_hero'
 }) {
-  const preset = promptPresets[input.category]
+  const preset = promptPresets[input.category] ?? generalImagePreset(input.category)
   const globalRules = GLOBAL_PROMPT_RULES.join(' ')
   const detail = detailPlaceholder(input.category, input.sku, input.detailText)
   const template = preset.templates[input.index] || preset.templates[0]
@@ -393,7 +418,7 @@ export function buildTiktokListingImagePrompt(input: {
       ].join(' ')
     : ''
   return [
-    `Create a TikTok ecommerce product image for ${preset.category}.`,
+    `Create a TikTok ecommerce product image for ${productCategoryPromptName(preset.category)}.`,
     globalRules,
     anchorRules,
     noHumanRules,
@@ -416,7 +441,7 @@ export function buildTiktokListingTitlePrompt(input: {
   sku: string
   detailText?: string
 }) {
-  const preset = textPromptPresets[input.category]
+  const preset = textPromptPresets[input.category] ?? generalTextPreset(input.category)
   const detail = detailPlaceholder(input.category, input.sku, input.detailText)
   return [
     'You are a TikTok ecommerce listing assistant.',
@@ -444,7 +469,7 @@ export function buildTiktokListingDescriptionPrompt(input: {
   sku: string
   detailText?: string
 }) {
-  const preset = textPromptPresets[input.category]
+  const preset = textPromptPresets[input.category] ?? generalTextPreset(input.category)
   const detail = detailPlaceholder(input.category, input.sku, input.detailText)
   return [
     'You are a TikTok ecommerce listing assistant.',

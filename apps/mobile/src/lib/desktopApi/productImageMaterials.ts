@@ -10,7 +10,7 @@
  */
 import { cloudFileRef } from '@shared/cloud/relay'
 import { SYNC_COLLECTIONS, type SyncImageMaterial, type SyncImageMaterialBatch, type SyncProduct, type SyncVideoToolRun } from '@shared/cloud/sync'
-import { DEFAULT_DERIVED_IMAGE_PROMPT, IMAGE_MATERIAL_CATEGORIES, type ImageMaterialCategory } from '@shared/imageMaterials'
+import { DEFAULT_DERIVED_IMAGE_PROMPT, IMAGE_MATERIAL_CATEGORIES, upgradeDerivedPrompt, type ImageMaterialCategory } from '@shared/imageMaterials'
 import { fileBlob } from '../files'
 import { cachedFileLink, resolveFileLinks } from '../fileLinks'
 import {
@@ -36,7 +36,7 @@ import { cloudFileIdOf, fileNameOf, getPathForFile, pickFiles } from './files'
 import { promptVersionApi } from './prompts'
 import parserApi from './videoParserDownload'
 
-const prompts = promptVersionApi(SYNC_COLLECTIONS.imageMaterialPrompts, 'Default Lifestyle', DEFAULT_DERIVED_IMAGE_PROMPT)
+const prompts = promptVersionApi(SYNC_COLLECTIONS.imageMaterialPrompts, 'Default Lifestyle', DEFAULT_DERIVED_IMAGE_PROMPT, upgradeDerivedPrompt)
 
 /* ------------------------------------------------------------------ 读取 */
 

@@ -4,7 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Inbox, LoaderCircle, Sparkles } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncProduct } from '@shared/cloud/sync'
-import { TIKTOK_LISTING_CATEGORY_LABELS, type TiktokListingCategory } from '@shared/tiktokListingPrompts'
+import CategoryChips from '@/components/CategoryChips.vue'
 import GenerationTile from '@/components/GenerationTile.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SourcePicker, { type Source } from '@/components/SourcePicker.vue'
@@ -25,8 +25,7 @@ const shots = ref<number[]>([0, 1, 3])
 const submitting = ref(false)
 const results = useGenerations((item) => item.purpose === 'product-image')
 const pendingReview = computed(() => results.value.filter((item) => item.status === 'succeeded' && item.review === 'pending').length)
-const category = ref<TiktokListingCategory | 'general'>('general')
-const categories = [...(Object.entries(TIKTOK_LISTING_CATEGORY_LABELS) as [TiktokListingCategory, string][]), ['general', '其他'] as ['general', string]]
+const category = ref('general')
 // Default to the product's own category; the user can still correct it (products from 选品 start as 通用).
 watch(source, (value) => {
   category.value = categoryForProduct(value?.product?.type) ?? 'general'
@@ -85,9 +84,7 @@ async function start() {
           <WebImageSource v-model="source" />
           <div class="wt-field">
             <span class="vg-field__label">商品品类 <small class="vg-muted">决定上身方式</small></span>
-            <div class="vg-seg vg-seg--sm">
-              <button v-for="[value, label] in categories" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': category === value }" @click="category = value">{{ label }}</button>
-            </div>
+            <CategoryChips v-model="category" web />
           </div>
         </WebStep>
         <WebStep :index="2" title="选择镜头" subtitle="每种镜头生成 1 张" :meta="`已选 ${shots.length} / ${PRODUCT_IMAGE_SHOTS.length}`">
@@ -133,9 +130,7 @@ async function start() {
 
     <section class="m-section">
       <div class="m-section__head"><h2 class="m-section__title">商品品类</h2><span class="m-muted small">决定上身方式</span></div>
-      <div class="chips">
-        <button v-for="[value, label] in categories" :key="value" type="button" class="m-chip" :class="{ 'is-active': category === value }" @click="category = value">{{ label }}</button>
-      </div>
+      <CategoryChips v-model="category" />
     </section>
 
     <section class="m-section">

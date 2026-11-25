@@ -17,12 +17,12 @@ function hashOf(text: string) {
   return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')
 }
 
-export function promptVersionApi(collection: string, defaultName: string, defaultPrompt: string) {
+export function promptVersionApi(collection: string, defaultName: string, defaultPrompt: string, upgrade: <T extends { name: string; prompt: string }>(version: T) => T = (version) => version) {
   async function rows(): Promise<PromptVersionItem[]> {
     const read = async () =>
       (await listRecords<SyncPromptVersion>(collection))
         .filter((record) => record.data)
-        .map((record) => ({ ...(record.data as SyncPromptVersion), id: record.id, updatedAt: record.updatedAt }))
+        .map((record) => upgrade({ ...(record.data as SyncPromptVersion), id: record.id, updatedAt: record.updatedAt }))
         .sort((a, b) => b.version - a.version)
     const list = await read()
     if (list.length) return list

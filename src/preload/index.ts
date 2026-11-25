@@ -876,7 +876,7 @@ const api = {
     listCategories: () => ipcRenderer.invoke('plugin:productImageMaterials:listCategories'),
     createBatch: (payload: {
       userId: string
-      category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+      category: string
       sourceVideoPaths: string[]
       parserVideoIds?: string[]
     }) => ipcRenderer.invoke('plugin:productImageMaterials:createBatch', payload),
@@ -885,7 +885,7 @@ const api = {
       ipcRenderer.invoke('plugin:productImageMaterials:retryBatch', payload),
     createBackgroundVariants: (payload: { userId: string; materialIds: string[]; variantCount: number; promptVersionId?: string; prompt?: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:createBackgroundVariants', payload),
-    createImageVariants: (payload: { userId: string; sourceImagePath: string; category: 'necklace' | 'ring' | 'earring' | 'bracelet'; variantCount: number; promptVersionId?: string; prompt?: string }) =>
+    createImageVariants: (payload: { userId: string; sourceImagePath: string; category: string; variantCount: number; promptVersionId?: string; prompt?: string }) =>
       ipcRenderer.invoke('plugin:productImageMaterials:createImageVariants', payload),
     listPromptVersions: () => ipcRenderer.invoke('plugin:productImageMaterials:listPromptVersions'),
     savePromptVersion: (payload: { id?: string; name?: string; prompt: string }) =>
@@ -895,7 +895,7 @@ const api = {
     listMaterials: (payload: {
       userId: string
       filters?: {
-        category?: 'necklace' | 'ring' | 'earring' | 'bracelet' | 'all'
+        category?: string
         usageStatus?: 'unused' | 'used' | 'all'
         boundProductId?: string
       }

@@ -94,8 +94,8 @@ export type SyncUsageResponse = { records: number; fileBytes: number; quotaBytes
 /** 云端引用的文件（图片 / 视频） */
 export type SyncFileRef = { fileId: string; mime: string; width?: number; height?: number }
 
-export type SyncProductType =
-  | 'phone_case' | 'earring' | 'necklace' | 'ring' | 'bracelet' | 'clothes' | 'bag' | 'shoes' | 'toy' | 'general'
+/** 常用分类，或用户自己填的分类 */
+export type SyncProductType = import('../productCategories').ProductCategory
 
 /** 商品库中可以跨端同步的部分（本地视频片段等大文件不同步） */
 export type SyncProduct = {
@@ -165,7 +165,7 @@ export type SyncListing = {
   /** 来自商品库时记录商品 id */
   productId?: string
   images: SyncFileRef[]
-  category: 'earring' | 'ring' | 'necklace' | 'phone_case' | 'bracelet'
+  category: import('../productCategories').ProductCategory
   language: 'zh-CN' | 'en-US' | 'vi-VN'
   sku: string
   price: string
@@ -398,19 +398,6 @@ export type SyncPublishRecord = {
   caption?: string
   label: string
   at: number
-}
-
-export const SYNC_PRODUCT_TYPE_LABELS: Record<SyncProductType, string> = {
-  phone_case: '手机壳',
-  earring: '耳饰',
-  necklace: '项链',
-  ring: '戒指',
-  bracelet: '手链',
-  clothes: '服装',
-  bag: '包袋',
-  shoes: '鞋子',
-  toy: '玩具',
-  general: '通用',
 }
 
 /** 图生图素材：拆解视频得到的原图（origin=original），或 AI 衍生图（origin=derived，生成中时 fileId 为空） */

@@ -1,14 +1,7 @@
-export type ProductType =
-  | 'phone_case'
-  | 'earring'
-  | 'necklace'
-  | 'ring'
-  | 'bracelet'
-  | 'clothes'
-  | 'bag'
-  | 'shoes'
-  | 'toy'
-  | 'general'
+import type { ProductCategory } from '../../../shared/productCategories'
+
+/** 常用分类，或用户自己填的分类 */
+export type ProductType = ProductCategory
 export type SegmentKey = string
 export type ProductCanonicalSourceStatus = 'idle' | 'processing' | 'done' | 'failed'
 export type ProductStoryboardTemplateType = 'general' | 'jewelry' | 'ecommerce_packaging' | 'lifestyle_interaction'

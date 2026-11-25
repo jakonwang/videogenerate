@@ -12,7 +12,8 @@ import { generateChatCompletion } from '../clone/unifiedChat'
 import type { ModelCredentials } from '../clone/types'
 import { getAppPaths } from '../../lib/paths'
 import { buildTiktokListingImagePrompt, buildTiktokListingTitlePrompt } from './prompts'
-import { DEFAULT_LISTING_EXPORT_CONFIG, LISTING_EXPORT_HEADERS, buildListingExportRow, mergeListingExportConfigs, normalizeGeneratedTitle } from '../../../shared/tiktokListingExport'
+import { productCategoryLabel } from '../../../shared/productCategories'
+import { defaultListingExportConfig, LISTING_EXPORT_HEADERS, buildListingExportRow, mergeListingExportConfigs, normalizeGeneratedTitle } from '../../../shared/tiktokListingExport'
 import { tiktokListingRepo } from './repo'
 import type {
   TiktokListingCategory,
@@ -62,13 +63,7 @@ function normalizeErrorMessage(error: unknown, fallback: string) {
   return message || fallback
 }
 
-function categoryLabel(category: TiktokListingCategory) {
-  if (category === 'earring') return '耳环'
-  if (category === 'ring') return '戒指'
-  if (category === 'necklace') return '项链'
-  if (category === 'phone_case') return '手机壳'
-  return '手链'
-}
+const categoryLabel = (category: TiktokListingCategory) => productCategoryLabel(category)
 
 export function resolveTiktokListingGenerationConfig(credentials: ModelCredentials): {
   image: TiktokListingResolvedRoute
@@ -432,7 +427,7 @@ function buildWorksheetRows(
         price: item.localDisplayPrice,
         imageUrls: (item.listingImages || []).map((image) => String(image.publicUrl || '')),
       },
-      configMap.get(item.category) || DEFAULT_LISTING_EXPORT_CONFIG[item.category],
+      configMap.get(item.category) || defaultListingExportConfig(item.category),
     ),
   )
 }

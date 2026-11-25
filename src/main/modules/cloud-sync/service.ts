@@ -1,3 +1,4 @@
+import { normalizeProductCategory } from '../../../shared/productCategories'
 import { normalizeResearchSource } from '../../../shared/productResearch'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -11,7 +12,6 @@ import {
   type SyncFileRef,
   type SyncModel,
   type SyncProduct,
-  type SyncProductType,
   type SyncResearchResult,
   type SyncResearchTask,
   type SyncGeneration,
@@ -124,7 +124,6 @@ const AUDIO_MIME: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audi
 const IMAGE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
 const MIME_EXT: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm', 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac', 'audio/ogg': '.ogg' }
 const COLLECTION_NAME: Record<Collection, string> = { products: SYNC_COLLECTIONS.products, models: SYNC_COLLECTIONS.models }
-const PRODUCT_TYPES = new Set<SyncProductType>(['phone_case', 'earring', 'necklace', 'ring', 'bracelet', 'clothes', 'bag', 'shoes', 'toy', 'general'])
 
 const statePath = () => join(getAppPaths().dbDir, 'cloud-sync.json')
 const downloadDir = () => join(getAppPaths().dataDir, 'cloud-sync', 'files')
@@ -210,7 +209,7 @@ async function productToSync(session: Session, state: SyncStateFile, product: Pr
   return {
     ...extra,
     name: product.name,
-    type: PRODUCT_TYPES.has(product.type as SyncProductType) ? (product.type as SyncProductType) : 'general',
+    type: normalizeProductCategory(product.type) || 'general',
     remark: product.remark || '',
     ...(product.code ? { code: product.code } : {}),
     ...(product.hotType ? { hotType: product.hotType } : {}),
@@ -252,7 +251,7 @@ async function applyProduct(session: Session, state: SyncStateFile, data: SyncPr
     ...(existing ? { id: existing.id } : {}),
     ...mergeProductDesktopFields(existing, data.desktop, files),
     name: data.name || '未命名商品',
-    type: PRODUCT_TYPES.has(data.type) ? data.type : 'general',
+    type: normalizeProductCategory(data.type) || 'general',
     remark: data.remark ?? '',
     // 旧版本没有款号字段：没带就保留本机的
     ...(data.code !== undefined ? { code: data.code } : {}),

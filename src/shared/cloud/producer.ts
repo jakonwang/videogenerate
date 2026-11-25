@@ -39,7 +39,7 @@ export const PRODUCER_TOOLS: ProducerTool[] = [
     id: 'listing',
     title: '写上架文案',
     description: 'Write a TikTok Shop title and description by looking at the product photos.',
-    params: 'productId (required); language: zh-CN | en-US | vi-VN (default en-US); category: earring | ring | necklace | phone_case | bracelet',
+    params: 'productId (required); language: zh-CN | en-US | vi-VN (default en-US); category: earring | ring | necklace | phone_case | bracelet | clothes | bag | shoes | toy, or any other short product category; omit to use the category of the product',
     needsProduct: true,
   },
   {

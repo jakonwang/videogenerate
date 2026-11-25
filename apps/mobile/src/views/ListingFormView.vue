@@ -4,11 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { Boxes, Copy, LoaderCircle, Sparkles, Trash2 } from 'lucide-vue-next'
 import { SYNC_COLLECTIONS, type SyncListing } from '@shared/cloud/sync'
 import {
-  TIKTOK_LISTING_CATEGORY_LABELS,
   TIKTOK_LISTING_LANGUAGE_LABELS,
-  type TiktokListingCategory,
   type TiktokListingLanguage,
 } from '@shared/tiktokListingPrompts'
+import CategoryChips from '@/components/CategoryChips.vue'
 import ImageGrid from '@/components/ImageGrid.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ProductPicker from '@/components/ProductPicker.vue'
@@ -28,18 +27,14 @@ const router = useRouter()
 const isNew = route.params.id === 'new'
 const id = isNew ? newId('listing') : String(route.params.id)
 
-const form = reactive<SyncListing>({ images: [], category: 'earring', language: 'en-US', sku: '', price: '', title: '', description: '', createdAt: Date.now() })
+const form = reactive<SyncListing>({ images: [], category: 'general', language: 'en-US', sku: '', price: '', title: '', description: '', createdAt: Date.now() })
 const cover = ref<string | undefined>()
 const loaded = ref(isNew)
 const picking = ref(false)
 const generating = ref(false)
 const usage = ref<{ usedToday: number; dailyLimit: number } | null>(null)
-const categories = Object.entries(TIKTOK_LISTING_CATEGORY_LABELS) as [TiktokListingCategory, string][]
 const languages = Object.entries(TIKTOK_LISTING_LANGUAGE_LABELS) as [TiktokListingLanguage, string][]
 const canGenerate = computed(() => form.images.length > 0 && !generating.value)
-
-/** 商品库里的品类对应到上架助手支持的品类 */
-const CATEGORY_FROM_PRODUCT: Partial<Record<string, TiktokListingCategory>> = { earring: 'earring', ring: 'ring', necklace: 'necklace', phone_case: 'phone_case', bracelet: 'bracelet' }
 
 onMounted(async () => {
   void cloud.ai.usage().then((value) => (usage.value = value)).catch(() => undefined)
@@ -61,8 +56,7 @@ function applyProduct(product: Pick<ProductItem, 'id' | 'images' | 'type' | 'cov
   form.productId = product.id
   form.images = [...product.images]
   cover.value = product.coverFileId
-  const category = CATEGORY_FROM_PRODUCT[product.type]
-  if (category) form.category = category
+  if (product.type && product.type !== 'general') form.category = product.type
   picking.value = false
 }
 
@@ -130,7 +124,7 @@ async function remove() {
           </section>
           <section class="pd-card">
             <h2 class="vg-section-title"><FileText :size="16" /> 商品信息</h2>
-            <div class="vg-field"><span class="vg-field__label">品类</span><div class="vg-seg vg-seg--sm"><button v-for="[value, label] in categories" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': form.category === value }" @click="form.category = value">{{ label }}</button></div></div>
+            <div class="vg-field"><span class="vg-field__label">品类</span><CategoryChips v-model="form.category" web /></div>
             <div class="vg-field"><span class="vg-field__label">文案语言</span><div class="vg-seg vg-seg--sm"><button v-for="[value, label] in languages" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': form.language === value }" @click="form.language = value">{{ label }}</button></div></div>
             <div class="lf-row">
               <label class="vg-field"><span class="vg-field__label">SKU</span><input v-model="form.sku" class="vg-input" type="text" maxlength="60" placeholder="选填" /></label>
@@ -177,9 +171,7 @@ async function remove() {
     <section class="m-section">
       <div class="m-field">
         <span class="m-field__label">品类</span>
-        <div class="chips">
-          <button v-for="[value, label] in categories" :key="value" type="button" class="m-chip" :class="{ 'is-active': form.category === value }" @click="form.category = value">{{ label }}</button>
-        </div>
+        <CategoryChips v-model="form.category" />
       </div>
       <div class="m-field">
         <span class="m-field__label">文案语言</span>

@@ -22,7 +22,7 @@ export function registerProductImageMaterialsIpc(ipcMain: IpcMain) {
   ipcMain.handle('plugin:productImageMaterials:createImageVariants', async (_e, payload: {
     userId: string
     sourceImagePath: string
-    category: 'necklace' | 'ring' | 'earring' | 'bracelet'
+    category: string
     variantCount: number
     promptVersionId?: string
     prompt?: string

@@ -795,7 +795,7 @@ export const webPlatformService = {
   },
 
   async listProductImageMaterials(token: string, filters?: {
-    category?: 'necklace' | 'ring' | 'earring' | 'bracelet' | 'all'
+    category?: string
     usageStatus?: 'unused' | 'used' | 'all'
     boundProductId?: string
   }) {

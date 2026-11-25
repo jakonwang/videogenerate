@@ -2,7 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clapperboard, ImagePlus, Store, Trash2 } from 'lucide-vue-next'
-import { SYNC_COLLECTIONS, SYNC_PRODUCT_TYPE_LABELS, type SyncProduct, type SyncProductType } from '@shared/cloud/sync'
+import { SYNC_COLLECTIONS, type SyncProduct } from '@shared/cloud/sync'
+import { productCategoryLabel } from '@shared/productCategories'
+import CategoryChips from '@/components/CategoryChips.vue'
 import ImageGrid from '@/components/ImageGrid.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { deleteRecord, getRecord, newId, saveRecord } from '@/lib/sync'
@@ -145,7 +147,6 @@ const form = reactive<SyncProduct>({ name: '', type: 'general', remark: '', tikt
 const tiktokIds = ref('')
 const loaded = ref(isNew)
 const missing = ref(false)
-const types = Object.entries(SYNC_PRODUCT_TYPE_LABELS) as [SyncProductType, string][]
 const canSave = computed(() => form.name.trim().length > 0)
 
 onMounted(async () => {
@@ -188,7 +189,7 @@ async function remove() {
 
 <template>
   <template v-if="inWebShell">
-    <PageHeader :title="isNew ? '新建商品' : form.name || '商品'" back="/library?tab=products" :description="isNew ? '填写商品名称并上传几张商品图，所有内容都会挂在商品下面' : `${SYNC_PRODUCT_TYPE_LABELS[form.type] || '通用'} · ${form.images.length} 张图${form.remark ? ` · ${form.remark}` : ''}`">
+    <PageHeader :title="isNew ? '新建商品' : form.name || '商品'" back="/library?tab=products" :description="isNew ? '填写商品名称并上传几张商品图，所有内容都会挂在商品下面' : `${productCategoryLabel(form.type)} · ${form.images.length} 张图${form.remark ? ` · ${form.remark}` : ''}`">
       <template #actions>
         <template v-if="!isNew && !missing">
           <button type="button" class="vg-btn vg-btn--primary" @click="router.push({ path: '/producer', query: { prompt: `为商品「${form.name}」做一套内容：主图、图生视频和一条复刻成片` } })"><Wand2 :size="14" /> AI 做一套内容</button>
@@ -299,7 +300,7 @@ async function remove() {
               <label class="vg-field"><span class="vg-field__label">商品名称 <span class="vg-req">*</span></span><input v-model="form.name" class="vg-input" type="text" maxlength="80" placeholder="例如：法式珍珠耳环" /></label>
               <div class="vg-field">
                 <span class="vg-field__label">品类</span>
-                <div class="vg-seg vg-seg--sm"><button v-for="[value, label] in types" :key="value" type="button" class="vg-seg__btn" :class="{ 'is-active': form.type === value }" @click="form.type = value">{{ label }}</button></div>
+                <CategoryChips v-model="form.type" web />
               </div>
               <label class="vg-field"><span class="vg-field__label">备注（卖点、材质、尺寸）</span><textarea v-model="form.remark" class="vg-textarea" rows="4" maxlength="500" placeholder="材质、尺寸、卖点等，AI 写文案和脚本时会参考" /></label>
               <label class="vg-field"><span class="vg-field__label">TikTok 商品 ID</span><textarea v-model="tiktokIds" class="vg-textarea" rows="3" placeholder="每行一个，用于关联广告和达人数据" /></label>
@@ -347,9 +348,7 @@ async function remove() {
 
         <div class="m-field">
           <span class="m-field__label">品类</span>
-          <div class="types">
-            <button v-for="[value, label] in types" :key="value" type="button" class="m-chip" :class="{ 'is-active': form.type === value }" @click="form.type = value">{{ label }}</button>
-          </div>
+          <CategoryChips v-model="form.type" />
         </div>
 
         <label class="m-field">
@@ -401,6 +400,5 @@ async function remove() {
 .listing-btn { margin-top: 14px; }
 .ai-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .ai-row .m-btn { height: 44px; font-size: 14px; }
-.types { display: flex; flex-wrap: wrap; gap: 8px; }
 .ids { min-height: 72px; font-family: ui-monospace, monospace; font-size: 13px; }
 </style>

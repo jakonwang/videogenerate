@@ -2,29 +2,57 @@
  * 图生图（商品图素材）：拆解视频取帧、衍生图提示词。电脑端 product-image-materials 和云端 / 网页共用。
  */
 
-export type ImageMaterialCategory = 'necklace' | 'ring' | 'earring' | 'bracelet'
-export const IMAGE_MATERIAL_CATEGORIES: ImageMaterialCategory[] = ['necklace', 'ring', 'earring', 'bracelet']
-export const IMAGE_MATERIAL_CATEGORY_LABEL: Record<ImageMaterialCategory, string> = { necklace: '项链', ring: '戒指', earring: '耳环', bracelet: '手链' }
+import { BUILTIN_PRODUCT_CATEGORIES, productCategoryPromptName, type ProductCategory } from './productCategories'
+
+export type ImageMaterialCategory = ProductCategory
+export const IMAGE_MATERIAL_CATEGORIES: ImageMaterialCategory[] = [...BUILTIN_PRODUCT_CATEGORIES]
 export const MAX_SCENE_SEGMENTS = 16
 export const MAX_SCENE_SEGMENT_DURATION_SEC = 8
 export const MIN_SEGMENT_DURATION_SEC = 0.5
 export const MAX_BACKGROUND_VARIANT_COUNT = 6
 
+/** 日常场景：室内、室外、光线错开，咖啡厅只占一个 */
 export const BACKGROUND_VARIANT_SCENES = [
-  'a neighborhood cafe with dark walnut tables, charcoal wood paneling, warm pendant lights, rich shadows, and a softly blurred coffee bar',
-  'a cozy coffee shop corner with espresso-brown furniture, low warm ambient light, deep background tones, and natural high contrast',
-  'an ordinary Southeast Asian bedroom with warm window light and a lived-in bedside table',
-  'a normal local living room with a sofa edge, soft daylight, and everyday home details',
-  'a simple bedroom dressing table with natural daylight and lightly used daily objects',
-  'a real window-side home corner with calm natural light and plain wall texture',
-  'a modest local apartment interior with realistic household surfaces and soft ambient light',
-  'a casual study corner with a simple desk, notebook, and soft side window light',
-  'a home office corner with practical clutter, natural reflections, and relaxed daily atmosphere',
-  'a balcony-side table with humid daylight, real apartment context, and ordinary local texture',
-  'a small wardrobe or entrance table area with natural indoor light and believable daily-use objects',
+  'a bright bedroom with rumpled white linen and soft morning window light',
+  'a leafy city park bench with dappled green shade and people far in the background',
+  'a kitchen counter with fresh fruit, a water glass, and clear daylight',
+  'a quiet seaside with pale sand, blue water, and clean open light',
+  'a simple dressing table with a small mirror and everyday skincare bottles without labels',
+  'an old town street with colorful painted walls and late afternoon sun',
+  'a library or bookstore aisle with rows of books softly blurred behind',
+  'an apartment balcony with potted plants and fresh morning air',
+  'a car passenger seat by the window with passing daylight outside',
+  'a flower shop corner with fresh blooms, kraft paper, and cool daylight',
+  'a living room sofa with a knitted throw and soft daylight',
+  'a local fresh market lane with colorful produce blurred behind',
+  'a light wooden study desk with a notebook, pencil, and side window light',
+  'a garden lawn with wildflowers and soft golden hour light',
+  'a modern office window seat with a city view and cool neutral light',
+  'a picnic blanket on grass with bread, fruit, and open shade',
+  'a fitting room or wardrobe with hanging clothes in neutral colors and soft indoor light',
+  'a rooftop terrace at dusk with a calm sky and distant city lights',
+  'a white tiled bathroom vanity with a folded towel and clean daylight',
+  'a riverside walkway with railings, water reflections, and overcast soft light',
+  'a small art studio table with paper, brushes, and north window light',
+  'a train or metro window seat with soft moving scenery outside',
+  'a neighborhood cafe table by the window with a plain cup and natural daylight',
+  'an outdoor stone step near a house entrance with textured walls and side sunlight',
 ] as const
 
+/** 提示词里写 {scene}，每张图自动换成不同的场景；没写就完全按提示词来 */
+export const SCENE_SLOT = '{scene}'
+
 export const DEFAULT_DERIVED_IMAGE_PROMPT = [
+  'Create a realistic lifestyle product photograph using the uploaded image as the exact product reference.',
+  'Keep the product identical in shape, proportions, material, color, pattern, texture, hardware, markings, and all visible details.',
+  'Do not redesign, replace, duplicate, or add products. Keep the product sharp and recognizable.',
+  `Place it naturally in this setting: ${SCENE_SLOT}. Build a completely new background and do not reuse the original one.`,
+  'Show the item being worn, held, or used only when that suits this kind of product. Keep any person or hands anatomically natural and secondary to the product.',
+  'Use realistic light and colors that fit the setting. Avoid a studio, showroom, staged advertisement, text, logos, or watermarks.',
+].join('\n')
+
+/** 旧版默认提示词（只会出咖啡厅）：用户没改过的，读取时换成新的默认 */
+const LEGACY_DERIVED_IMAGE_PROMPT = [
   'Create a realistic lifestyle product photograph using the uploaded image as the exact product reference.',
   'Keep the jewelry identical in shape, proportions, metal, color, gemstones, texture, markings, and all visible details.',
   'Do not redesign, replace, duplicate, or add jewelry. Keep the product sharp and recognizable.',
@@ -32,6 +60,34 @@ export const DEFAULT_DERIVED_IMAGE_PROMPT = [
   'Allow natural hands to hold or present the item when appropriate. Keep hands anatomically natural and secondary to the product.',
   'Use realistic warm ambient light, visible detail in the shadows, and restrained high contrast. Avoid a studio, showroom, staged advertisement, text, logos, or watermarks.',
 ].join('\n')
+const LEGACY_DERIVED_PROMPT_NAME = 'Cafe and Everyday Scenes'
+export const DEFAULT_DERIVED_PROMPT_NAME = 'Everyday Scenes'
+export function upgradeDerivedPrompt<T extends { name: string; prompt: string }>(version: T): T {
+  if (version.prompt.replace(/\r\n/g, '\n').trim() !== LEGACY_DERIVED_IMAGE_PROMPT) return version
+  return { ...version, name: version.name.replace(LEGACY_DERIVED_PROMPT_NAME, DEFAULT_DERIVED_PROMPT_NAME), prompt: DEFAULT_DERIVED_IMAGE_PROMPT }
+}
+
+let deck: string[] = []
+let lastScene = ''
+/** 像洗牌一样抽场景：全部用过一遍才会重复，多张原图之间也不重样 */
+export function nextVariantScene() {
+  if (!deck.length) {
+    deck = [...BACKGROUND_VARIANT_SCENES]
+    for (let i = deck.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[deck[i], deck[j]] = [deck[j]!, deck[i]!]
+    }
+    if (deck[deck.length - 1] === lastScene) deck.reverse()
+  }
+  lastScene = deck.pop()!
+  return lastScene
+}
+
+/** 图生图（上传商品图） */
+export function buildImageVariantPrompt(input: { category: ImageMaterialCategory; template: string }) {
+  const template = input.template.includes(SCENE_SLOT) ? input.template.replaceAll(SCENE_SLOT, nextVariantScene()) : input.template
+  return `${template} Product category: ${productCategoryPromptName(input.category)}.`
+}
 
 export type VideoSegment = {
   startSec: number
@@ -51,18 +107,17 @@ export function computeFrameTimeSec(segment: VideoSegment) {
 
 export function buildBackgroundVariantPrompt(input: {
   category: ImageMaterialCategory
-  variantIndex: number
   template: string
 }) {
-  const selectedScene = BACKGROUND_VARIANT_SCENES[input.variantIndex % BACKGROUND_VARIANT_SCENES.length]
+  const selectedScene = nextVariantScene()
   return [
     'You are a realistic lifestyle product photography system.',
-    input.template,
+    input.template.replaceAll(SCENE_SLOT, selectedScene),
     'Keep the product exactly identical to the reference image.',
     'Create a brand-new everyday environment that feels authentic, natural, and casually photographed.',
     'The final image should look like an ordinary person naturally taking a photo during daily life, not a commercial advertisement.',
     'The product is the highest priority.',
-    'Keep exactly the same shape, proportions, size, material, color, surface texture, metal finish, gemstones, engravings, hanging parts, thickness, reflections, and design details.',
+    'Keep exactly the same shape, proportions, size, material, color, pattern, surface texture, finish, hardware, small parts, thickness, reflections, and design details.',
     'Do not redesign, simplify, improve, beautify, generate missing details, replace materials, or change proportions.',
     'The product must remain visually identical to the reference.',
     'Keep the overall composition similar.',
@@ -76,14 +131,14 @@ export function buildBackgroundVariantPrompt(input: {
     `Choose exactly one realistic lifestyle scene for this generation: ${selectedScene}.`,
     'This scene must feel local, ordinary, and believable, with subtle daily-use objects only when naturally appropriate.',
     'Everyday scene details must feel casually present, never intentionally arranged, never showroom-like, and never commercially decorated.',
-    'Use only natural lighting such as soft window light, warm afternoon light, golden hour, or gentle indoor ambient light.',
-    'Keep natural shadows, natural reflections, realistic white balance, slightly warm tones, comfortable contrast, and natural exposure.',
+    'Use only natural, believable lighting that fits this scene.',
+    'Keep natural shadows, natural reflections, realistic neutral white balance, comfortable contrast, and natural exposure.',
     'Use shallow depth of field so the background is softly blurred while the product stays perfectly sharp.',
-    'The image should feel spontaneous, relaxed, comfortable, lived-in, warm, authentic, and human.',
+    'The image should feel spontaneous, relaxed, comfortable, lived-in, authentic, and human.',
     'It should look like someone casually picked up the product and took a quick phone photo in less than five seconds.',
     'Never make it look staged, luxury, catalog, influencer-commercial, e-commerce-studio, or AI-generated.',
     'Avoid cinematic camera angles, ultra-wide distortion, exaggerated perspective, HDR effect, oversaturation, fake sunlight, or artificial glow.',
-    `Product category: ${input.category}.`,
+    `Product category: ${productCategoryPromptName(input.category)}.`,
     'Do not add extra products, packaging, text, logos, subtitles, watermarks, or props that change the scene meaning.',
   ].join(' ')
 }
@@ -97,7 +152,7 @@ export function backgroundVariantNegativePrompt() {
     'same desk',
     'same lighting setup',
     'change product',
-    'different jewelry',
+    'different product',
     'extra accessories',
     'extra product',
     'text',
