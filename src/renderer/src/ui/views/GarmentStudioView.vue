@@ -6,12 +6,13 @@ import { ChevronDown, ImagePlus, Images, Layers, LoaderCircle, Plus, Shirt, User
 import { PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, SCENE_SWAP_TASKS, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, productViewOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapScene, type SceneSwapSize, type SceneSwapTask, type SwapModel, type TryonShot } from '../../../../shared/sceneSwap'
 import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import BatchPanel from './garment-studio/BatchPanel.vue'
+import ProductPanel from './garment-studio/ProductPanel.vue'
 import ModelGallery from './garment-studio/ModelGallery.vue'
 import SceneGallery from './garment-studio/SceneGallery.vue'
 import SwapImage from './garment-studio/SwapImage.vue'
 import TaskCards from './garment-studio/TaskCards.vue'
 
-/** AI 修图（生成模特图 / 换模特 / 换场景）：传图 → 选模特、场景 → 免费试图 → 跑整批。批次在云端，网页和电脑是同一个页面 */
+/** AI 修图（生成模特图 / 换模特 / 换场景 / 换商品）：传图 → 选模特、场景 → 免费试图 → 跑整批。批次在云端，网页和电脑是同一个页面 */
 type Source = { key: string; path: string; name: string; group: string; view: ProductView; fileId?: string; error?: string }
 
 const { t } = useI18n()
@@ -26,6 +27,8 @@ const sources = ref<Source[]>([])
 const picked = ref<string[]>([])
 const task = ref<SceneSwapTask>('tryon')
 const modelId = ref('')
+const product = ref<{ fileIds: string[]; name: string }>({ fileIds: [], name: '' })
+const needModel = computed(() => task.value === 'tryon' || task.value === 'model')
 const shots = ref<TryonShot[]>([...TRYON_DEFAULT_SHOTS])
 const tryonSize = ref<SceneSwapSize>('3:4')
 /** 换模特默认不动背景 */
@@ -59,6 +62,7 @@ const blocked = computed(() => (task.value === 'tryon' ? styleShots.value.find((
 const total = computed(() => {
   if (task.value === 'tryon') return styleShots.value.reduce((sum, style) => sum + style.shots.length, 0)
   if (task.value === 'model') return ready.value.length * (alsoScene.value ? picked.value.length : 1)
+  if (task.value === 'product') return ready.value.length
   return ready.value.length * picked.value.length
 })
 const trialCount = computed(() => Math.min(2, task.value === 'tryon' ? groups.value.length : total.value))
@@ -66,7 +70,7 @@ const pointsPerImage = computed(() => info.value?.pointsPerImage ?? 0)
 const go = (name: string) => router.push({ query: name ? { pane: name } : {} })
 const PANES = [{ name: '', icon: Plus }, { name: 'batches', icon: Layers }, { name: 'models', icon: UserRound }, { name: 'scenes', icon: Images }]
 const SIZES: SceneSwapSize[] = ['original', '3:4', '1:1', '9:16']
-const canStart = computed(() => total.value > 0 && !uploading.value && !busy.value && (task.value === 'scene' || Boolean(model.value)) && !blocked.value && !(task.value === 'tryon' && total.value > SCENE_SWAP_MAX_IMAGES))
+const canStart = computed(() => total.value > 0 && !uploading.value && !busy.value && (!needModel.value || Boolean(model.value)) && (task.value !== 'product' || product.value.fileIds.length > 0) && !blocked.value && !(task.value === 'tryon' && total.value > SCENE_SWAP_MAX_IMAGES))
 
 const messageOf = (cause: unknown) => String((cause as Error)?.message || cause).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '')
 
@@ -255,8 +259,9 @@ async function start() {
       size: task.value === 'tryon' ? tryonSize.value : task.value === 'scene' ? size.value : 'original',
       matchLight: matchLight.value,
       images: ready.value.map((source) => ({ fileId: source.fileId!, name: source.name, group: source.group, view: source.view })),
-      sceneIds: task.value === 'model' && !alsoScene.value ? [] : [...picked.value],
-      ...(task.value === 'scene' ? {} : { modelId: modelId.value }),
+      sceneIds: task.value === 'product' || (task.value === 'model' && !alsoScene.value) ? [] : [...picked.value],
+      ...(needModel.value ? { modelId: modelId.value } : {}),
+      ...(task.value === 'product' ? { productFileIds: [...product.value.fileIds], productName: product.value.name } : {}),
       ...(task.value === 'tryon' ? { shots: [...shots.value] } : {}),
     })) as SceneSwapBatch
     replaceBatch(created)
@@ -280,6 +285,7 @@ function again() {
   const list = old.images ?? [...new Map(old.items.map((item) => [item.sourceFileId, { fileId: item.sourceFileId, name: item.sourceName, group: item.group }])).values()]
   sources.value = list.map((image) => ({ key: `s${(seq += 1)}`, path: '', name: image.name, group: image.group || styleGroupOf(image.name), view: ('view' in image && image.view) || productViewOf(image.name), fileId: image.fileId }))
   task.value = old.task
+  product.value = { fileIds: [...(old.productFileIds ?? [])], name: old.productName ?? '' }
   if (old.shots?.length) shots.value = [...old.shots]
   modelId.value = info.value?.models.some((item) => item.id === old.modelId) ? old.modelId! : ''
   picked.value = []
@@ -348,7 +354,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
       </div>
 
       <template v-else>
-      <TaskCards :task="task" :tasks="SCENE_SWAP_TASKS" @pick="setTask" @product="router.push('/plugins/product-replacement')" />
+      <TaskCards :task="task" :tasks="SCENE_SWAP_TASKS" @pick="setTask" />
       <div class="garment__work">
         <section class="stage" :class="{ 'is-drop': dragging }" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="drop">
           <div v-if="!sources.length" class="stage__empty">
@@ -389,7 +395,15 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 
         <aside class="panel">
           <div class="panel__scroll">
-            <section v-if="task !== 'scene'">
+            <section v-if="task === 'product'">
+              <h2>{{ k('stepProduct') }}<span class="panel__name">{{ product.name }}</span></h2>
+              <ProductPanel :file-ids="product.fileIds" :name="product.name" @change="product = $event" @error="error = $event" />
+            </section>
+            <section v-if="task === 'product'">
+              <h2>{{ k('keepTitle') }}</h2>
+              <p class="panel__hint panel__hint--first">{{ k('keepProduct') }}</p>
+            </section>
+            <section v-if="needModel">
               <h2>{{ k('stepModel') }}<span>{{ model?.name }}</span></h2>
               <ModelGallery :models="info?.models ?? []" :selected="modelId" :uploading="uploadingModel" @pick="modelId = $event" @upload="uploadModel" />
             </section>
@@ -398,7 +412,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
               <p class="panel__hint panel__hint--first">{{ k(alsoScene ? 'keepNoScene' : 'keepAll') }}</p>
               <label class="panel__check">{{ k('alsoScene') }}<input v-model="alsoScene" type="checkbox" /></label>
             </section>
-            <section v-if="task !== 'model' || alsoScene">
+            <section v-if="task === 'tryon' || task === 'scene' || (task === 'model' && alsoScene)">
               <h2>{{ k('stepScenes') }}<span>{{ picked.length }} / {{ task === 'tryon' ? 1 : SCENE_SWAP_MAX_SCENES }}</span></h2>
               <SceneGallery :scenes="info?.scenes ?? []" :selected="picked" :uploading="uploadingScene" @toggle="toggleScene" @upload="uploadScene" />
               <p v-if="task === 'tryon' && !picked.length" class="panel__hint">{{ k('studioHint') }}</p>
@@ -416,7 +430,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
               </div>
               <p class="panel__hint">{{ info && !info.keepAvailable ? k('keepUnavailable') : mode === 'keep' ? k('keepHint') : k('blendHint') }}</p>
             </section>
-            <section v-if="task !== 'model'">
+            <section v-if="task === 'tryon' || task === 'scene'">
               <button type="button" class="panel__more" :aria-expanded="more" @click="more = !more">{{ k('more') }}<ChevronDown :size="15" :class="{ 'is-open': more }" /></button>
               <div v-if="more" class="panel__options">
                 <template v-if="task === 'tryon'">
@@ -433,12 +447,13 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
             </section>
           </div>
           <footer class="panel__foot">
-            <div class="panel__sum"><span>{{ task === 'tryon' ? k('sumTryon', { styles: groups.length }) : task === 'model' ? k('sumModel', { images: ready.length }) : k('sum', { images: ready.length, scenes: picked.length }) }}</span><strong>{{ k('imageCount', { count: total }) }}</strong></div>
+            <div class="panel__sum"><span>{{ task === 'tryon' ? k('sumTryon', { styles: groups.length }) : task === 'model' ? k('sumModel', { images: ready.length }) : task === 'product' ? k('sumProduct', { images: ready.length }) : k('sum', { images: ready.length, scenes: picked.length }) }}</span><strong>{{ k('imageCount', { count: total }) }}</strong></div>
             <div v-if="pointsPerImage" class="panel__sum"><span>{{ k('estimate') }}</span><strong>{{ k('points', { points: total * pointsPerImage }) }}</strong></div>
             <button type="button" class="vg-btn vg-btn--primary panel__go" :disabled="!canStart" data-testid="scene-start" @click="start"><LoaderCircle v-if="busy" :size="15" class="vg-spin" /> {{ k(info && !info.trialsLeft ? 'startPaidTrial' : 'startTrial', { count: trialCount || 2 }) }}</button>
             <small v-if="blocked">{{ k('blocked', { name: blocked }) }}</small>
             <small v-else-if="task === 'tryon' && total > SCENE_SWAP_MAX_IMAGES">{{ k('tooManyOutputs', { max: SCENE_SWAP_MAX_IMAGES }) }}</small>
-            <small v-else-if="task !== 'scene' && !model">{{ k('needModel') }}</small>
+            <small v-else-if="needModel && !model">{{ k('needModel') }}</small>
+            <small v-else-if="task === 'product' && !product.fileIds.length">{{ k('needProduct') }}</small>
             <small v-else>{{ info && !info.trialsLeft ? k('noTrials') : k(task === 'tryon' ? 'trialNoteTryon' : 'trialNote') }}</small>
           </footer>
         </aside>
@@ -512,6 +527,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .shot-chip { padding: 4px 12px; border: 1px solid var(--gs-line); border-radius: 7px; background: var(--gs-well); color: var(--theme-text-secondary); font-size: 12.5px; cursor: pointer; }
 .shot-chip:hover { color: var(--theme-text); }
 .shot-chip.is-on { border-color: var(--vg-accent); background: color-mix(in srgb, var(--vg-accent) 28%, var(--theme-panel)); color: var(--theme-text); font-weight: 600; }
+.panel__name { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel__hint--first { margin: 0 0 10px; }
 
 .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); }

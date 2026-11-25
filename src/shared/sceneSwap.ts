@@ -5,12 +5,14 @@ export const SCENE_SWAP_MAX_SCENES = 5
 export const SCENE_SWAP_TRIAL_IMAGES = 2
 export const SCENE_CATEGORIES = ['街拍', '室内', '户外', '棚拍'] as const
 
-/** scene = 换场景；tryon = 产品图生成模特图；model = 换模特 */
-export const SCENE_SWAP_TASKS = ['tryon', 'model', 'scene'] as const
+/** scene = 换场景；tryon = 产品图生成模特图；model = 换模特；product = 换商品 */
+export const SCENE_SWAP_TASKS = ['tryon', 'model', 'scene', 'product'] as const
 export type SceneSwapTask = (typeof SCENE_SWAP_TASKS)[number]
 
 /** 生成模特图：一款最多参考几张产品图 */
 export const TRYON_MAX_PRODUCT_IMAGES = 4
+/** 换商品：最多几张商品参考图 */
+export const SWAP_MAX_PRODUCT_IMAGES = 4
 export const TRYON_SHOTS = ['front', 'side', 'half', 'detail', 'back', 'seated'] as const
 export type TryonShot = (typeof TRYON_SHOTS)[number]
 export const TRYON_DEFAULT_SHOTS: TryonShot[] = ['front', 'side', 'half', 'detail']
@@ -29,11 +31,12 @@ export type SceneSwapSize = 'original' | '3:4' | '1:1' | '9:16'
 export type SceneSwapItemStatus = 'waiting' | 'queued' | 'running' | 'passed' | 'review' | 'failed' | 'rejected'
 export type SceneSwapBatchStatus = 'trial' | 'trial_ready' | 'running' | 'paused' | 'done'
 
-export type SceneSwapCheck = { key: 'color' | 'pattern' | 'face' | 'edge' | 'light' | 'frame' | 'shape' | 'model' | 'pose' | 'limbs'; level: 'ok' | 'warn' | 'unknown' }
+export type SceneSwapCheck = { key: 'color' | 'pattern' | 'face' | 'edge' | 'light' | 'frame' | 'shape' | 'model' | 'pose' | 'limbs' | 'product' | 'scene'; level: 'ok' | 'warn' | 'unknown' }
 export const SCENE_REDO_REASONS = ['边缘不干净', '衣服变了', '脸变了', '光线假', '比例不对'] as const
 export const MODEL_REDO_REASONS = ['衣服变了', '不像所选模特', '手脚不对', '姿势变了', '光线假', '比例不对'] as const
 export const TRYON_REDO_REASONS = ['衣服变了', '版型不对', '不像所选模特', '手脚不对', '光线假', '比例不对'] as const
-export const redoReasonsOf = (task: SceneSwapTask): readonly string[] => (task === 'tryon' ? TRYON_REDO_REASONS : task === 'model' ? MODEL_REDO_REASONS : SCENE_REDO_REASONS)
+export const PRODUCT_REDO_REASONS = ['商品不对', '其他地方变了', '没换干净', '光线假', '比例不对'] as const
+export const redoReasonsOf = (task: SceneSwapTask): readonly string[] => (task === 'product' ? PRODUCT_REDO_REASONS : task === 'tryon' ? TRYON_REDO_REASONS : task === 'model' ? MODEL_REDO_REASONS : SCENE_REDO_REASONS)
 
 export type SceneSwapScene = { id: string; name: string; category: string; fileId: string; source: 'system' | 'mine' }
 /** library = 「模特库」里已同步到云端的模特 */
@@ -70,6 +73,8 @@ export type SceneSwapBatch = {
   modelName?: string
   modelFileId?: string
   shots?: TryonShot[]
+  productName?: string
+  productFileIds?: string[]
   /** 生成模特图的全部产品图（再做一批时用） */
   images?: SceneSwapImage[]
   status: SceneSwapBatchStatus
@@ -91,6 +96,9 @@ export type SceneSwapCreateInput = {
   sceneIds: string[]
   modelId?: string
   shots?: TryonShot[]
+  /** 换商品：商品参考图 */
+  productFileIds?: string[]
+  productName?: string
 }
 export type SceneSwapInfo = { keepAvailable: boolean; trialsLeft: number; pointsPerImage: number; scenes: SceneSwapScene[]; models: SwapModel[] }
 

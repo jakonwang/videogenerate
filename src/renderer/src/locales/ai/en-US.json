@@ -1034,7 +1034,9 @@
       "shape": "Fit",
       "model": "Looks like the model",
       "pose": "Pose",
-      "limbs": "Hands and feet"
+      "limbs": "Hands and feet",
+      "product": "Product matches",
+      "scene": "Rest unchanged"
     },
     "level": {
       "ok": "OK",
@@ -1053,7 +1055,10 @@
       "版型不对": "Wrong fit",
       "不像所选模特": "Not like the model",
       "手脚不对": "Hands or feet wrong",
-      "姿势变了": "Pose changed"
+      "姿势变了": "Pose changed",
+      "商品不对": "Wrong product",
+      "其他地方变了": "Other parts changed",
+      "没换干净": "Old product still visible"
     },
     "redo": "Redo",
     "redoPaid": "Redo (charged again)",
@@ -1156,8 +1161,17 @@
       },
       "product": {
         "name": "Swap product",
-        "hint": "Put your product in, keep the rest"
+        "hint": "Upload a product, keep the rest",
+        "emptyTitle": "Drop the photos to change here",
+        "emptyHint": "Up to {max} at a time. The product in them becomes yours; people, pose and background stay."
       }
-    }
+    },
+    "stepProduct": "Upload the new product",
+    "uploadProduct": "Upload photo",
+    "productHint": "Up to {max} photos; more angles give better results.",
+    "keepProduct": "People, pose, background, framing and everything else",
+    "sumProduct": "{images} photos",
+    "needProduct": "Upload the new product first.",
+    "againProduct": "Use another product"
   }
 }

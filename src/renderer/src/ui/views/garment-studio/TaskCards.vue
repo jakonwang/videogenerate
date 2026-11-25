@@ -3,11 +3,11 @@ import { useI18n } from 'vue-i18n'
 import { ChevronRight, Image, Mountain, Package, PackageCheck, Shirt, UserRound, UserRoundCheck } from 'lucide-vue-next'
 import type { SceneSwapTask } from '../../../../../shared/sceneSwap'
 
-/** 功能入口：图标画出「从什么变成什么」；换商品用现有的商品替换页 */
+/** 功能入口：图标画出「从什么变成什么」 */
 defineProps<{ task: SceneSwapTask; tasks: readonly SceneSwapTask[] }>()
-const emit = defineEmits<{ pick: [task: SceneSwapTask]; product: [] }>()
+const emit = defineEmits<{ pick: [task: SceneSwapTask] }>()
 const { t } = useI18n()
-const ICONS = { tryon: [Shirt, UserRoundCheck], model: [UserRound, UserRoundCheck], scene: [Image, Mountain] }
+const ICONS = { tryon: [Shirt, UserRoundCheck], model: [UserRound, UserRoundCheck], scene: [Image, Mountain], product: [Package, PackageCheck] }
 </script>
 
 <template>
@@ -15,10 +15,6 @@ const ICONS = { tryon: [Shirt, UserRoundCheck], model: [UserRound, UserRoundChec
     <button v-for="name in tasks" :key="name" type="button" class="task" :class="{ 'is-on': task === name }" :aria-pressed="task === name" :data-testid="`task-${name}`" @click="emit('pick', name)">
       <span class="task__icons"><i><component :is="ICONS[name][0]" :size="20" /></i><ChevronRight :size="14" /><i class="is-after"><component :is="ICONS[name][1]" :size="20" /></i></span>
       <span class="task__text"><strong>{{ t(`ai.sceneSwap.task.${name}.name`) }}</strong><small>{{ t(`ai.sceneSwap.task.${name}.hint`) }}</small></span>
-    </button>
-    <button type="button" class="task" data-testid="task-product" @click="emit('product')">
-      <span class="task__icons"><i><Package :size="20" /></i><ChevronRight :size="14" /><i class="is-after"><PackageCheck :size="20" /></i></span>
-      <span class="task__text"><strong>{{ t('ai.sceneSwap.task.product.name') }}</strong><small>{{ t('ai.sceneSwap.task.product.hint') }}</small></span>
     </button>
   </div>
 </template>

@@ -1034,7 +1034,9 @@
       "shape": "Phom dáng",
       "model": "Giống người mẫu",
       "pose": "Tư thế",
-      "limbs": "Tay chân"
+      "limbs": "Tay chân",
+      "product": "Đúng sản phẩm",
+      "scene": "Phần khác giữ nguyên"
     },
     "level": {
       "ok": "Đạt",
@@ -1053,7 +1055,10 @@
       "版型不对": "Sai phom",
       "不像所选模特": "Không giống người mẫu",
       "手脚不对": "Tay chân sai",
-      "姿势变了": "Đổi tư thế"
+      "姿势变了": "Đổi tư thế",
+      "商品不对": "Sai sản phẩm",
+      "其他地方变了": "Phần khác bị đổi",
+      "没换干净": "Chưa thay hết"
     },
     "redo": "Làm lại",
     "redoPaid": "Làm lại (trừ điểm lần nữa)",
@@ -1156,8 +1161,17 @@
       },
       "product": {
         "name": "Đổi sản phẩm",
-        "hint": "Thay sản phẩm, giữ nguyên phần còn lại"
+        "hint": "Tải ảnh sản phẩm, giữ nguyên phần còn lại",
+        "emptyTitle": "Kéo ảnh cần sửa vào đây",
+        "emptyHint": "Tối đa {max} ảnh. Sản phẩm trong ảnh sẽ đổi thành của bạn; người, tư thế và nền giữ nguyên."
       }
-    }
+    },
+    "stepProduct": "Tải ảnh sản phẩm mới",
+    "uploadProduct": "Tải ảnh",
+    "productHint": "Tối đa {max} ảnh, nhiều góc sẽ chính xác hơn.",
+    "keepProduct": "Người, tư thế, nền, bố cục và mọi thứ khác",
+    "sumProduct": "{images} ảnh",
+    "needProduct": "Hãy tải ảnh sản phẩm mới trước.",
+    "againProduct": "Đổi sản phẩm khác"
   }
 }

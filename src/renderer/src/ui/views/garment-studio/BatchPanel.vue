@@ -54,11 +54,11 @@ const runCost = computed(() => count('waiting') * props.pointsPerImage)
       <button type="button" class="vg-icon-btn" :aria-label="k('back')" @click="emit('back')"><ArrowLeft :size="18" /></button>
       <div class="batch__title">
         <h1>{{ trialMode && batch.status === 'trial_ready' ? k('trialReady') : batch.title }}</h1>
-        <p>{{ trialMode ? k(batch.task === 'tryon' ? 'trialHintTryon' : 'trialHint') : k('batchHint', { mode: batch.task === 'scene' ? k(`mode.${batch.mode}`) : [k(`task.${batch.task}.name`), batch.modelName].filter(Boolean).join(' · ') }) }}</p>
+        <p>{{ trialMode ? k(batch.task === 'tryon' ? 'trialHintTryon' : 'trialHint') : k('batchHint', { mode: batch.task === 'scene' ? k(`mode.${batch.mode}`) : [k(`task.${batch.task}.name`), batch.modelName, batch.productName].filter(Boolean).join(' · ') }) }}</p>
       </div>
       <div class="batch__actions">
         <button type="button" class="vg-icon-btn" :aria-label="k('removeBatch')" :title="k('removeBatch')" :disabled="busy" @click="emit('remove')"><Trash2 :size="16" /></button>
-        <button type="button" class="vg-btn vg-btn--ghost" :disabled="busy" @click="emit('again')">{{ k(batch.task === 'scene' ? 'again' : 'againModel') }}</button>
+        <button type="button" class="vg-btn vg-btn--ghost" :disabled="busy" @click="emit('again')">{{ k(batch.task === 'scene' ? 'again' : batch.task === 'product' ? 'againProduct' : 'againModel') }}</button>
         <button v-if="batch.status === 'running'" type="button" class="vg-btn" :disabled="busy" @click="emit('action', 'pause')"><Pause :size="15" /> {{ k('pause') }}</button>
         <button v-if="batch.status === 'paused'" type="button" class="vg-btn vg-btn--primary" :disabled="busy" @click="emit('action', 'resume')"><Play :size="15" /> {{ k('resume') }}</button>
         <button v-if="passed.length && !trialMode" type="button" class="vg-btn" :class="{ 'vg-btn--primary': batch.status !== 'paused' }" :disabled="busy" @click="emit('download', passed)"><Download :size="15" /> {{ k('downloadPassed', { count: passed.length }) }}</button>

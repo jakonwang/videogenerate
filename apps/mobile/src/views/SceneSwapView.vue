@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Download, ImagePlus, LoaderCircle, Pause, Play, RefreshCw, Trash2, X } from 'lucide-vue-next'
-import { MODEL_GENDERS, PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, TRYON_SHOT_LABEL, productViewOf, redoReasonsOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapTask, type TryonShot } from '@shared/sceneSwap'
+import { MODEL_GENDERS, PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, SWAP_MAX_PRODUCT_IMAGES, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, TRYON_SHOT_LABEL, productViewOf, redoReasonsOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapTask, type TryonShot } from '@shared/sceneSwap'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { saveToGallery, shareTo } from '@/lib/publish'
@@ -25,6 +25,7 @@ const TASKS: Array<{ name: SceneSwapTask; title: string; hint: string }> = [
   { name: 'tryon', title: '生成模特图', hint: '传产品图，AI 模特穿上' },
   { name: 'model', title: '换模特', hint: '衣服姿势不变，只换人' },
   { name: 'scene', title: '换场景', hint: '人和衣服不变，只换背景' },
+  { name: 'product', title: '换商品', hint: '传产品图替换，其他不变' },
 ]
 const VIEW_LABEL: Record<ProductView, string> = { front: '正面', back: '背面', detail: '细节' }
 const task = ref<SceneSwapTask>('tryon')
@@ -34,7 +35,22 @@ const shots = ref<TryonShot[]>([...TRYON_DEFAULT_SHOTS])
 const alsoScene = ref(false)
 const modelInput = ref<HTMLInputElement>()
 const models = computed(() => (info.value?.models ?? []).filter((item) => !gender.value || item.gender === gender.value))
-const needScene = computed(() => task.value !== 'model' || alsoScene.value)
+const needModel = computed(() => task.value === 'tryon' || task.value === 'model')
+const needScene = computed(() => task.value === 'tryon' || task.value === 'scene' || (task.value === 'model' && alsoScene.value))
+const product = ref<{ fileIds: string[]; name: string }>({ fileIds: [], name: '' })
+const productInput = ref<HTMLInputElement>()
+async function addProduct(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? []).slice(0, SWAP_MAX_PRODUCT_IMAGES - product.value.fileIds.length)
+  input.value = ''
+  await guard(async () => {
+    for (const file of files) {
+      const { fileId } = await uploadSceneImage(file)
+      product.value = { fileIds: [...new Set([...product.value.fileIds, fileId])], name: product.value.name || file.name.replace(/\.[^.]+$/, '') }
+    }
+  })
+}
+const removeProduct = (id: string) => (product.value = { ...product.value, fileIds: product.value.fileIds.filter((item) => item !== id) })
 const maxScenes = computed(() => (task.value === 'tryon' ? 1 : SCENE_SWAP_MAX_SCENES))
 const busy = ref(false)
 const saving = ref(0)
@@ -51,7 +67,8 @@ const total = computed(() => {
   return ready.value.length * (needScene.value ? picked.value.length : 1)
 })
 const problem = computed(() => {
-  if (task.value !== 'scene' && !info.value?.models.some((item) => item.id === modelId.value)) return '请先选一个模特'
+  if (task.value === 'product' && !product.value.fileIds.length) return '请先上传要换上的产品图'
+  if (needModel.value && !info.value?.models.some((item) => item.id === modelId.value)) return '请先选一个模特'
   if (blocked.value) return `「${blocked.value}」选的镜头出不了，请换镜头或补图`
   if (task.value === 'tryon' && total.value > SCENE_SWAP_MAX_IMAGES) return `一批最多出 ${SCENE_SWAP_MAX_IMAGES} 张，请减少款数或镜头`
   return ''
@@ -166,7 +183,7 @@ function put(next: SceneSwapBatch) {
 }
 const start = () =>
   guard(async () => {
-    const created = await cloud.sceneSwap.create({ task: task.value, mode: task.value === 'scene' ? mode.value : 'blend', size: task.value === 'tryon' ? '3:4' : 'original', matchLight: true, ...(task.value === 'scene' ? {} : { modelId: modelId.value }), ...(task.value === 'tryon' ? { shots: shots.value } : {}), images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group, view: photo.view })), sceneIds: needScene.value ? picked.value : [] })
+    const created = await cloud.sceneSwap.create({ task: task.value, mode: task.value === 'scene' ? mode.value : 'blend', size: task.value === 'tryon' ? '3:4' : 'original', matchLight: true, ...(needModel.value ? { modelId: modelId.value } : {}), ...(task.value === 'product' ? { productFileIds: product.value.fileIds, productName: product.value.name } : {}), ...(task.value === 'tryon' ? { shots: shots.value } : {}), images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group, view: photo.view })), sceneIds: needScene.value ? picked.value : [] })
     put(created)
     photos.value.forEach((photo) => URL.revokeObjectURL(photo.url))
     photos.value = []
@@ -281,8 +298,8 @@ onBeforeUnmount(() => {
 
   <main v-else class="m-page m-page--no-tabs swap" data-testid="scene-swap-new">
     <template v-if="step === 1">
-      <div class="tasks" role="group" aria-label="选功能"><button v-for="item in TASKS" :key="item.name" type="button" class="task" :class="{ 'is-on': task === item.name }" :aria-pressed="task === item.name" @click="setTask(item.name)"><strong>{{ item.title }}</strong><span class="m-muted small">{{ item.hint }}</span></button><button type="button" class="task" @click="router.push('/product-replace')"><strong>换商品</strong><span class="m-muted small">选商品替换图里的，其他不变</span></button></div>
-      <p class="m-muted small">{{ task === 'tryon' ? `选产品实拍图，同一款放一起，每款最多参考 ${TRYON_MAX_PRODUCT_IMAGES} 张。` : task === 'model' ? '选已经穿好衣服的模特图。' : '选要换背景的照片。' }}</p>
+      <div class="tasks" role="group" aria-label="选功能"><button v-for="item in TASKS" :key="item.name" type="button" class="task" :class="{ 'is-on': task === item.name }" :aria-pressed="task === item.name" @click="setTask(item.name)"><strong>{{ item.title }}</strong><span class="m-muted small">{{ item.hint }}</span></button></div>
+      <p class="m-muted small">{{ task === 'tryon' ? `选产品实拍图，同一款放一起，每款最多参考 ${TRYON_MAX_PRODUCT_IMAGES} 张。` : task === 'model' ? '选已经穿好衣服的模特图。' : task === 'product' ? '选要改的图，里面的商品会换成你的。' : '选要换背景的照片。' }}</p>
       <button type="button" class="m-btn m-btn--block pick" @click="photoInput?.click()"><ImagePlus :size="20" /> 从相册多选（{{ photos.length }}/{{ SCENE_SWAP_MAX_IMAGES }}）</button>
       <input ref="photoInput" type="file" accept="image/*" multiple hidden @change="addPhotos" />
       <p v-if="uploading" class="m-muted small"><LoaderCircle :size="14" class="m-spin" /> 正在上传，还剩 {{ uploading }} 张</p>
@@ -295,10 +312,17 @@ onBeforeUnmount(() => {
         <div class="m-section__head"><h2 class="m-section__title">最近的批次</h2></div>
         <div class="m-card m-list"><button v-for="item in batches" :key="item.id" type="button" class="m-row" @click="router.push({ query: { batch: item.id } })"><span class="cover"><CloudImage :file-id="item.items.find((row) => row.outputFileId)?.outputFileId || item.items[0]?.sourceFileId" /></span><span class="m-row__main"><span class="m-row__title">{{ item.title }}</span><span class="m-row__sub">{{ item.status === 'trial_ready' ? '试图好了，等你确认' : item.status === 'paused' ? '已暂停' : item.status === 'done' ? '已完成' : '生成中' }}</span></span></button></div>
       </section>
-      <div class="foot"><button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="!ready.length || uploading > 0" @click="step = 2">{{ task === 'scene' ? '下一步：选场景' : '下一步：选模特' }}</button></div>
+      <div class="foot"><button type="button" class="m-btn m-btn--primary m-btn--block" :disabled="!ready.length || uploading > 0" @click="step = 2">{{ task === 'scene' ? '下一步：选场景' : task === 'product' ? '下一步：传产品图' : '下一步：选模特' }}</button></div>
     </template>
     <template v-else>
-      <template v-if="task !== 'scene'">
+      <template v-if="task === 'product'">
+        <h2 class="m-section__title">上传要换上的产品图</h2>
+        <div v-if="product.fileIds.length" class="grid"><button v-for="id in product.fileIds" :key="id" type="button" class="cell" aria-label="移除" @click="removeProduct(id)"><CloudImage :file-id="id" /><span class="tag">移除</span></button></div>
+        <button v-if="product.fileIds.length < SWAP_MAX_PRODUCT_IMAGES" type="button" class="m-btn m-btn--block" :disabled="busy" @click="productInput?.click()"><ImagePlus :size="18" /> 上传产品图（{{ product.fileIds.length }}/{{ SWAP_MAX_PRODUCT_IMAGES }}）</button>
+        <input ref="productInput" type="file" accept="image/*" multiple hidden @change="addProduct" />
+        <p class="m-muted small">人物、姿势、背景和其他东西不变，只换商品。</p>
+      </template>
+      <template v-if="needModel">
         <h2 class="m-section__title">选模特</h2>
         <div class="chips"><button v-for="name in ['', ...MODEL_GENDERS]" :key="name" type="button" class="chip" :class="{ 'is-on': gender === name }" :aria-pressed="gender === name" @click="gender = name">{{ name || '全部' }}</button></div>
         <div class="grid grid--scene"><button v-for="item in models" :key="item.id" type="button" class="scene" :class="{ 'is-on': modelId === item.id }" :aria-pressed="modelId === item.id" @click="modelId = item.id"><span class="cell"><CloudImage :file-id="item.fileId" :alt="item.name" /></span><span class="small">{{ item.name }}</span></button></div>

@@ -18,7 +18,9 @@ import {
   SCENE_CATEGORIES,
   SCENE_SWAP_MAX_IMAGES,
   SCENE_SWAP_MAX_SCENES,
+  SCENE_SWAP_TASKS,
   SCENE_SWAP_TRIAL_IMAGES,
+  SWAP_MAX_PRODUCT_IMAGES,
   TRYON_DEFAULT_SHOTS,
   TRYON_SHOT_LABEL,
   TRYON_SHOTS,
@@ -45,18 +47,18 @@ import {
 } from '../../../../src/shared/sceneSwap'
 import { checkKeep, composeKeep, maskStats, normalizeSource, readMask, type MaskStats } from './compose'
 import type { Matting } from './matting'
-import { modelCheckKeys, modelInspectPrompt, modelSwapPrompt, tryOnPrompt } from './modelPrompts'
+import { modelCheckKeys, modelInspectPrompt, modelSwapPrompt, productSwapPrompt, tryOnPrompt } from './modelPrompts'
 import { blendPrompt, inspectPrompt, parseInspection, platePrompt } from './prompts'
 
 /**
- * AI 修图（换场景 / 生成模特图 / 换模特）：批次和队列都在云端，三端只是看和点，关掉页面也会跑完。
+ * AI 修图（换场景 / 生成模特图 / 换模特 / 换商品）：批次和队列都在云端，三端只是看和点，关掉页面也会跑完。
  * 保真 = 原图抠人 + AI 出空背景 + 原像素贴回；融合 = 整张重画。
- * 生成模特图 = 每款先出主图，其余照着主图出；换模特 = 整张重画，只换人。
+ * 生成模特图 = 每款先出主图，其余照着主图出；换模特 / 换商品 = 整张重画，只换人 / 商品。
  * 计费：每张成品按一次图片生成计费；质检不确定的先冻结，用户点「可以用」才扣，不要就全退。
  */
 
 type BatchRow = { id: string; user_id: string; status: SceneSwapBatchStatus | 'deleted'; data: string; created_at: number; updated_at: number }
-type BatchData = { title: string; task?: SceneSwapTask; mode: SceneSwapMode; size: SceneSwapSize; matchLight: boolean; modelId?: string; modelName?: string; modelFileId?: string; shots?: TryonShot[]; images?: SceneSwapImage[]; notice?: string }
+type BatchData = { title: string; task?: SceneSwapTask; mode: SceneSwapMode; size: SceneSwapSize; matchLight: boolean; modelId?: string; modelName?: string; modelFileId?: string; shots?: TryonShot[]; productName?: string; productFileIds?: string[]; images?: SceneSwapImage[]; notice?: string }
 type ItemRow = { id: string; batch_id: string; user_id: string; ord: number; status: SceneSwapItemStatus; trial: number; hold_id: string | null; output_file_id: string | null; attempts: number; data: string; updated_at: number }
 type ItemData = { sourceFileId: string; sourceName: string; group: string; sceneId: string; sceneName: string; sceneFileId: string; modelFileId?: string; products?: Array<{ fileId: string; view: ProductView }>; shot?: TryonShot; masterId?: string; checks?: SceneSwapCheck[]; error?: string; reasons?: string[] }
 type SceneRow = { id: string; owner_id: string; is_system: number; name: string; category: string; file_id: string; meta: string; created_at: number }
@@ -72,7 +74,7 @@ const ATTEMPT_LIMIT_MS = 8 * 60_000
 const AUTO_REDO_WITHIN_MS = 3 * 60_000
 const DAY_MS = 24 * 60 * 60 * 1000
 /** 重新生成背景可能解决的问题；抠图边缘、画面被切重做也没用 */
-const RETRYABLE: Array<SceneSwapCheck['key']> = ['light', 'face', 'pattern', 'color', 'shape', 'model', 'pose', 'limbs']
+const RETRYABLE: Array<SceneSwapCheck['key']> = ['light', 'face', 'pattern', 'color', 'shape', 'model', 'pose', 'limbs', 'product', 'scene']
 
 /** 记录现在做到哪一步、每步多久：超时要说清卡在哪，日志也能查 */
 function createStages(id: string) {
@@ -282,18 +284,24 @@ export function createSceneSwapService(deps: {
   /* ---------------------------------------------------------------- 批次 */
 
   function create(userId: string, body: SceneSwapCreateInput): SceneSwapBatch {
-    const task: SceneSwapTask = body?.task === 'tryon' || body?.task === 'model' ? body.task : 'scene'
+    const task: SceneSwapTask = SCENE_SWAP_TASKS.find((item) => item === body?.task) ?? 'scene'
     const images = (Array.isArray(body?.images) ? body.images : []).map((image) => ({ fileId: String(image?.fileId || ''), name: String(image?.name || '图片').slice(0, 120), group: String(image?.group || '').trim().slice(0, 40), view: PRODUCT_VIEWS.find((view) => view === image?.view) ?? productViewOf(String(image?.name || '')) }))
     if (!images.length) throw badRequest('请先上传图片')
     if (images.length > SCENE_SWAP_MAX_IMAGES) throw badRequest(`一次最多 ${SCENE_SWAP_MAX_IMAGES} 张图片`)
-    const sceneIds = [...new Set((Array.isArray(body.sceneIds) ? body.sceneIds : []).map(String))]
+    const sceneIds = task === 'product' ? [] : [...new Set((Array.isArray(body.sceneIds) ? body.sceneIds : []).map(String))]
     if (task === 'scene' && !sceneIds.length) throw badRequest('请选择场景')
     const maxScenes = task === 'tryon' ? 1 : SCENE_SWAP_MAX_SCENES
     if (sceneIds.length > maxScenes) throw badRequest(`一次最多选 ${maxScenes} 个场景`)
     const all = new Map(listScenes(userId).map((scene) => [scene.id, scene]))
     const scenes = sceneIds.map((id) => all.get(id) ?? (() => { throw badRequest('有场景已被删除，请重新选择') })())
-    const model = task === 'scene' ? undefined : listModels(userId).find((item) => item.id === body.modelId)
-    if (task !== 'scene' && !model) throw badRequest(body.modelId ? '模特已被删除，请重新选择' : '请选择模特')
+    const needModel = task === 'tryon' || task === 'model'
+    const model = !needModel ? undefined : listModels(userId).find((item) => item.id === body.modelId)
+    if (needModel && !model) throw badRequest(body.modelId ? '模特已被删除，请重新选择' : '请选择模特')
+    const productFileIds = task === 'product' ? [...new Set((Array.isArray(body.productFileIds) ? body.productFileIds : []).map(String))] : []
+    if (task === 'product' && !productFileIds.length) throw badRequest('请选择商品')
+    if (productFileIds.length > SWAP_MAX_PRODUCT_IMAGES) throw badRequest(`商品参考图最多 ${SWAP_MAX_PRODUCT_IMAGES} 张`)
+    for (const fileId of productFileIds) if (!deps.sync.readFile(userId, fileId).mime.startsWith('image/')) throw badRequest('商品参考图要用图片')
+    const productName = task === 'product' ? String(body.productName || '').trim().slice(0, 60) || '商品' : undefined
     const mode: SceneSwapMode = task !== 'scene' || body.mode === 'blend' ? 'blend' : 'keep'
     if (mode === 'keep' && !deps.matting.available()) throw new CloudError('NO_ENTITLEMENT', '管理员还没有配置抠图服务，暂时不能用保真模式', 503)
     deps.assertConfigured()
@@ -302,11 +310,11 @@ export function createSceneSwapService(deps: {
 
     const withGroup = images.map((image) => ({ ...image, group: image.group || styleGroupOf(image.name) }))
     const groups = [...new Set(withGroup.map((image) => image.group))]
-    const title = String(body.title || '').trim().slice(0, 60) || [groups.slice(0, 2).join('、'), model?.name, scenes.map((scene) => scene.name).slice(0, 2).join('、')].filter(Boolean).join(' · ')
-    const head: BatchData = { title, task, mode, size, matchLight: body.matchLight !== false, ...(model ? { modelId: model.id, modelName: model.name, modelFileId: model.fileId } : {}) }
+    const title = String(body.title || '').trim().slice(0, 60) || [groups.slice(0, 2).join('、'), model?.name, productName, scenes.map((scene) => scene.name).slice(0, 2).join('、')].filter(Boolean).join(' · ')
+    const head: BatchData = { title, task, mode, size, matchLight: body.matchLight !== false, ...(model ? { modelId: model.id, modelName: model.name, modelFileId: model.fileId } : {}), ...(productName ? { productName, productFileIds } : {}) }
     if (task === 'tryon') return createTryon(userId, head, withGroup, groups, scenes[0], body.shots)
-    // 换模特可以不换场景
-    const places = scenes.length ? scenes : [{ id: '', name: model?.name ?? '', fileId: '' }]
+    // 换模特可以不换场景，换商品没有场景
+    const places = scenes.length ? scenes : [{ id: '', name: model?.name ?? productName ?? '', fileId: '' }]
 
     // 试图：第一个场景，从不同款里各抽一张，不够再补
     const firstOfGroup = groups.map((group) => withGroup.findIndex((image) => image.group === group))
@@ -321,7 +329,7 @@ export function createSceneSwapService(deps: {
       for (const [sceneIndex, scene] of places.entries()) {
         for (const [imageIndex, image] of withGroup.entries()) {
           const isTrial = sceneIndex === 0 && trialImages.has(imageIndex)
-          const data: ItemData = { sourceFileId: image.fileId, sourceName: image.name, group: image.group, sceneId: scene.id, sceneName: scene.name, sceneFileId: scene.fileId, modelFileId: model?.fileId }
+          const data: ItemData = { sourceFileId: image.fileId, sourceName: image.name, group: image.group, sceneId: scene.id, sceneName: scene.name, sceneFileId: scene.fileId, modelFileId: model?.fileId, ...(productFileIds.length ? { products: productFileIds.map((fileId) => ({ fileId, view: 'front' as const })) } : {}) }
           db.prepare('INSERT INTO scene_swap_items (id, batch_id, user_id, ord, status, trial, attempts, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)').run(`ssi_${randomUUID()}`, id, userId, (ord += 1), isTrial ? 'queued' : 'waiting', isTrial && takeTrial(userId) ? 1 : 0, JSON.stringify(data), t)
         }
       }
@@ -470,7 +478,7 @@ export function createSceneSwapService(deps: {
     if (!current.output_file_id) return
     const data = parse<ItemData>(current.data)
     const file = deps.sync.readFile(row.user_id, current.output_file_id)
-    const asset: SyncAsset = { name: `${data.sourceName.replace(/\.[^.]+$/, '')}_${data.sceneName}`, kind: 'image', fileId: current.output_file_id, mime: file.mime, size: file.size, folder: `${{ scene: '批量换景', tryon: '模特图', model: '换模特' }[taskOf(current.batch_id)]} / ${data.group}`, createdAt: now() }
+    const asset: SyncAsset = { name: `${data.sourceName.replace(/\.[^.]+$/, '')}_${data.sceneName}`, kind: 'image', fileId: current.output_file_id, mime: file.mime, size: file.size, folder: `${{ scene: '批量换景', tryon: '模特图', model: '换模特', product: '换商品' }[taskOf(current.batch_id)]} / ${data.group}`, createdAt: now() }
     deps.sync.push(row.user_id, { changes: [{ collection: SYNC_COLLECTIONS.assets, id: row.id, updatedAt: now(), deleted: false, data: asset }] })
   }
 
@@ -520,7 +528,7 @@ export function createSceneSwapService(deps: {
 
   async function attempt(row: ItemRow, batch: BatchData, workDir: string, reasons: string[], stages: Stages): Promise<{ output: string; checks: SceneSwapCheck[] }> {
     const data = parse<ItemData>(row.data)
-    if (batch.task === 'tryon' || batch.task === 'model') return attemptModel(row, batch, data, workDir, reasons, stages)
+    if (batch.task && batch.task !== 'scene') return attemptModel(row, batch, data, workDir, reasons, stages)
     if (batch.mode === 'keep' && !deps.matting.available()) throw new Error('管理员还没有配置抠图服务')
     // 抠图按张收费，融合模式用不到就不抠
     stages.enter(batch.mode === 'keep' ? '抠图' : '读取原图')
@@ -566,23 +574,29 @@ export function createSceneSwapService(deps: {
     return { output, checks: await vision('blend', source.path, output) }
   }
 
-  /** 生成模特图 / 换模特：整张重画，再和产品图（原图）、模特图比对 */
+  /** 生成模特图 / 换模特 / 换商品：整张重画，再和产品图（原图）、模特图比对 */
   async function attemptModel(row: ItemRow, batch: BatchData, data: ItemData, workDir: string, reasons: string[], stages: Stages): Promise<{ output: string; checks: SceneSwapCheck[] }> {
     stages.enter('读取原图')
     const ref = async (fileId: string) => ({ fileId, ...(await prepareSource(row.user_id, fileId, false)) })
-    const model = await ref(batch.modelFileId!)
+    // 质检拿来对比的那张：换商品看商品图，其余看模特图
+    const target = await ref(batch.task === 'product' ? data.products![0]!.fileId : batch.modelFileId!)
     const scene = data.sceneFileId ? await ref(data.sceneFileId) : null
     const source = await ref(data.sourceFileId)
     let width = source.width
     let height = source.height
-    let refs = [source, model, ...(scene ? [scene] : [])]
+    let refs = [source, target, ...(scene ? [scene] : [])]
     let prompt = modelSwapPrompt({ scene: Boolean(scene), reasons })
+    if (batch.task === 'product') {
+      const products = await Promise.all(data.products!.map((product) => ref(product.fileId)))
+      refs = [source, ...products]
+      prompt = productSwapPrompt({ products: products.length, reasons })
+    }
     if (batch.task === 'tryon') {
       const products = data.products ?? []
       const master = data.masterId ? (db.prepare('SELECT output_file_id FROM scene_swap_items WHERE id = ?').get(data.masterId) as ItemRow | undefined)?.output_file_id : null
       const productRefs = await Promise.all(products.map((product) => ref(product.fileId)))
       const masterRef = master ? await ref(master) : null
-      refs = [...productRefs, model, ...(scene ? [scene] : []), ...(masterRef ? [masterRef] : [])]
+      refs = [...productRefs, target, ...(scene ? [scene] : []), ...(masterRef ? [masterRef] : [])]
       prompt = tryOnPrompt({ views: products.map((product) => product.view), scene: Boolean(scene), master: Boolean(masterRef), shot: data.shot!, size: batch.size, reasons })
       ;[width, height] = batch.size === '1:1' ? [1024, 1024] : batch.size === '9:16' ? [576, 1024] : [768, 1024]
     }
@@ -612,7 +626,7 @@ export function createSceneSwapService(deps: {
     await image.jpeg({ quality: 95 }).toFile(output)
     stages.enter('质检')
     const keys = modelCheckKeys(batch.task!, data.shot)
-    const answer = await (async () => deps.inspect(modelInspectPrompt(batch.task!, keys), [await thumb(source.path), await thumb(model.path), await thumb(output)]))().catch(() => '')
+    const answer = await (async () => deps.inspect(modelInspectPrompt(batch.task!, keys), [await thumb(source.path), await thumb(target.path), await thumb(output)]))().catch(() => '')
     return { output, checks: parseInspection(keys, answer) }
   }
 

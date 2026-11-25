@@ -323,6 +323,25 @@ async function main() {
     assert.match(lastPrompt, /did not look like the chosen model/)
     assert.doesNotMatch(lastPrompt, /identical to image 1: same color, print, logo, seams, buttons/)
 
+    // ---- 换商品：要商品图、参考图齐全、不能用别人的图、理由按任务过滤
+    verdict = '{"product":true,"scene":true,"limbs":true,"light":true}'
+    const goods = [await up(alice, await photo(200)), await up(alice, await photo(201))]
+    const productInput = { ...input, task: 'product' as const, sceneIds: [mine.id], images: images.slice(0, 2), productFileIds: goods, productName: '碎花裙' }
+    assert.equal(await status(alice.sceneSwap.create({ ...productInput, productFileIds: [] })), 400)
+    assert.equal(await status(alice.sceneSwap.create({ ...productInput, productFileIds: [...goods, ...images.map((image) => image.fileId)] })), 400)
+    assert.equal(await status(bob.sceneSwap.create({ ...productInput })), 404)
+    const replaced = await alice.sceneSwap.create(productInput)
+    let goodsBatch = await done(replaced.id)
+    assert.ok(goodsBatch.items.every((item) => item.status === 'passed' && item.sceneName === '碎花裙'), JSON.stringify(goodsBatch))
+    assert.deepEqual([goodsBatch.task, goodsBatch.mode, goodsBatch.productFileIds, lastRefs], ['product', 'blend', goods, 3])
+    assert.match(lastPrompt, /Replace only the original product/)
+    verdict = '{"product":true,"scene":false,"limbs":true,"light":true}'
+    await alice.sceneSwap.item(replaced.id, goodsBatch.items[0]!.id, 'redo', ['其他地方变了', '不像所选模特'])
+    goodsBatch = await done(replaced.id)
+    assert.equal(goodsBatch.items[0]!.status, 'review')
+    assert.match(lastPrompt, /changed other parts of image 1/)
+    assert.doesNotMatch(lastPrompt, /chosen model/)
+
     // ---- 生成模特图：先主图，其余等主图并带上主图参考；没有背面图不出背面
     verdict = '{"color":true,"pattern":true,"shape":true,"model":true,"limbs":true}'
     const tryInput = { ...input, task: 'tryon' as const, modelId: sysModel.id, shots: ['front', 'side', 'back'] as any, size: '3:4' as const, images: [...images.slice(0, 1), { ...images[1]!, name: 'A108-背.jpg', group: 'A108' }, ...images.slice(2, 3)] }
