@@ -348,7 +348,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
       </div>
 
       <template v-else>
-      <TaskCards :task="task" :tasks="SCENE_SWAP_TASKS" @pick="setTask" />
+      <TaskCards :task="task" :tasks="SCENE_SWAP_TASKS" @pick="setTask" @product="router.push('/plugins/product-replacement')" />
       <div class="garment__work">
         <section class="stage" :class="{ 'is-drop': dragging }" @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="drop">
           <div v-if="!sources.length" class="stage__empty">
@@ -406,7 +406,7 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
             </section>
             <section v-if="task === 'tryon'">
               <h2>{{ k('stepShots') }}<span>{{ shots.length }}</span></h2>
-              <div class="chips"><button v-for="shot in TRYON_SHOTS" :key="shot" type="button" class="chip" :class="{ 'is-on': shots.includes(shot) }" :aria-pressed="shots.includes(shot)" @click="toggleShot(shot)">{{ k(`shot.${shot}`) }}</button></div>
+              <div class="shots"><button v-for="shot in TRYON_SHOTS" :key="shot" type="button" class="shot-chip" :class="{ 'is-on': shots.includes(shot) }" :aria-pressed="shots.includes(shot)" @click="toggleShot(shot)">{{ k(`shot.${shot}`) }}</button></div>
             </section>
             <section v-if="task === 'scene'">
               <h2>{{ k('method') }}</h2>
@@ -508,9 +508,10 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
 .photo__view:hover { background: rgba(0, 0, 0, .85); }
 .stage__tip { color: var(--theme-text-muted); font-size: 12px; margin-bottom: 10px; }
 .stage__group-head em { color: var(--vg-amber); font-size: 12px; font-style: normal; }
-.chips { display: flex; flex-wrap: wrap; gap: 7px; }
-.chip { padding: 4px 12px; border: 1px solid var(--gs-line); border-radius: 7px; background: var(--gs-well); color: var(--theme-text-secondary); font-size: 12.5px; cursor: pointer; }
-.chip.is-on { border-color: var(--vg-accent); background: color-mix(in srgb, var(--vg-accent) 16%, transparent); color: var(--theme-text); }
+.shots { display: flex; flex-wrap: wrap; gap: 7px; }
+.shot-chip { padding: 4px 12px; border: 1px solid var(--gs-line); border-radius: 7px; background: var(--gs-well); color: var(--theme-text-secondary); font-size: 12.5px; cursor: pointer; }
+.shot-chip:hover { color: var(--theme-text); }
+.shot-chip.is-on { border-color: var(--vg-accent); background: color-mix(in srgb, var(--vg-accent) 28%, var(--theme-panel)); color: var(--theme-text); font-weight: 600; }
 .panel__hint--first { margin: 0 0 10px; }
 
 .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--gs-line); border-radius: 12px; background: var(--gs-panel); }

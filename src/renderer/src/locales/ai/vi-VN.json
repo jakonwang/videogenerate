@@ -1153,6 +1153,10 @@
         "hint": "Giữ người và quần áo, chỉ đổi nền",
         "emptyTitle": "Kéo ảnh cần đổi cảnh vào đây",
         "emptyHint": "Tối đa {max} ảnh, tự nhóm theo mã mẫu trong tên tệp. Giữ người mẫu và quần áo, chỉ đổi nền."
+      },
+      "product": {
+        "name": "Đổi sản phẩm",
+        "hint": "Thay sản phẩm, giữ nguyên phần còn lại"
       }
     }
   }

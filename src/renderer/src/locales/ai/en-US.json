@@ -1153,6 +1153,10 @@
         "hint": "Same person and clothes, new background",
         "emptyTitle": "Drop the photos to restage here",
         "emptyHint": "Up to {max} at a time, grouped by the style number in the file name. Model and clothes stay, only the background changes."
+      },
+      "product": {
+        "name": "Swap product",
+        "hint": "Put your product in, keep the rest"
       }
     }
   }

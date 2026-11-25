@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
 
   <main v-else class="m-page m-page--no-tabs swap" data-testid="scene-swap-new">
     <template v-if="step === 1">
-      <div class="tasks" role="group" aria-label="选功能"><button v-for="item in TASKS" :key="item.name" type="button" class="task" :class="{ 'is-on': task === item.name }" :aria-pressed="task === item.name" @click="setTask(item.name)"><strong>{{ item.title }}</strong><span class="m-muted small">{{ item.hint }}</span></button></div>
+      <div class="tasks" role="group" aria-label="选功能"><button v-for="item in TASKS" :key="item.name" type="button" class="task" :class="{ 'is-on': task === item.name }" :aria-pressed="task === item.name" @click="setTask(item.name)"><strong>{{ item.title }}</strong><span class="m-muted small">{{ item.hint }}</span></button><button type="button" class="task" @click="router.push('/product-replace')"><strong>换商品</strong><span class="m-muted small">选商品替换图里的，其他不变</span></button></div>
       <p class="m-muted small">{{ task === 'tryon' ? `选产品实拍图，同一款放一起，每款最多参考 ${TRYON_MAX_PRODUCT_IMAGES} 张。` : task === 'model' ? '选已经穿好衣服的模特图。' : '选要换背景的照片。' }}</p>
       <button type="button" class="m-btn m-btn--block pick" @click="photoInput?.click()"><ImagePlus :size="20" /> 从相册多选（{{ photos.length }}/{{ SCENE_SWAP_MAX_IMAGES }}）</button>
       <input ref="photoInput" type="file" accept="image/*" multiple hidden @change="addPhotos" />
