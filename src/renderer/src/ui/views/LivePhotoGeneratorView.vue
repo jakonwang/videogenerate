@@ -2084,6 +2084,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             <label class="vg-field">
               <span class="vg-field__label">{{ t('livePhoto.workspace.promptContent') }}</span>
               <textarea v-model="promptEditorText" class="vg-textarea lp-prompt" rows="10" spellcheck="false" />
+              <span v-if="promptKind === 'video'" class="vg-field__hint">{{ t('livePhoto.workspace.productRulesHint', { slot: '{product_rules}' }) }}</span>
             </label>
             <footer class="lp-card__foot">
               <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" :disabled="promptVersionBusy || !selectedPromptVersionId" @click="rollbackPromptVersion"><RefreshCcw :size="13" />{{ t('livePhoto.workspace.rollbackVersion') }}</button>

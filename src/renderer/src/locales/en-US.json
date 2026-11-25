@@ -2475,6 +2475,7 @@
       "updateVersion": "Update Version",
       "copyVersion": "Copy As New",
       "activateVersion": "Activate Version",
+      "productRulesHint": "{slot} is filled with the product details. Saved and enabled changes apply from the next video.",
       "rollbackVersion": "Create Rollback Copy",
       "motionStrategy": "Motion Strategy",
       "motionStrategyDesc": "This setting is stored and used by reference tasks, retries, and recovery.",

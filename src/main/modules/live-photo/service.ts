@@ -34,6 +34,8 @@ import { livePhotoRepo } from './repo'
 import {
   DEFAULT_LIVE_PHOTO_REPLACEMENT_PROMPT,
   hashLivePhotoPrompt,
+  fillLivePhotoVideoPrompt,
+  isStillLivePhotoVideoPrompt,
   livePhotoPromptVersionService,
 } from './promptVersions'
 import { submitLivePhotoImageGeneration, type LivePhotoImageProviderAdapter } from './imageGenerationAdapter'
@@ -993,6 +995,29 @@ function livePhotoMotionText(template: LivePhotoMotionTemplate) {
   return 'product fully frozen, with only extremely subtle non-product micro-movement and no push-in'
 }
 
+/** 允许镜头和画面微动时用：只守住商品和画面，不禁止推近 */
+const MOVING_LIVE_PHOTO_NEGATIVE_PROMPT = [
+  'product reconstruction',
+  'product redesign',
+  'wrong product identity',
+  'different product',
+  'product morphing',
+  'product warping',
+  'wrong product scale',
+  'scale drift',
+  'extra product parts',
+  'extra hands',
+  'extra fingers',
+  'distorted hands',
+  'scene change',
+  'hard cut',
+  'camera jitter',
+  'flicker',
+  'text',
+  'watermark',
+  'logo',
+].join(', ')
+
 /**
  * 同款模板: copy the reference clip's camera work and look instead of the default
  * near-static hold. The default negative list bans push-ins, orbits and handheld
@@ -1006,27 +1031,7 @@ function buildStyleReferenceLivePhotoVideoPrompts(input: { item: LivePhotoItem; 
     buildStyleReferenceMotionPrompt({ ...input.styleReference, durationSec: 6, hasLastFrame: false }),
     ...(categorySpecificRules.length ? ['', ...categorySpecificRules] : []),
   ].join('\n')
-  const negativePrompt = [
-    'product reconstruction',
-    'product redesign',
-    'wrong product identity',
-    'different product',
-    'product morphing',
-    'product warping',
-    'wrong product scale',
-    'scale drift',
-    'extra product parts',
-    'extra hands',
-    'extra fingers',
-    'distorted hands',
-    'scene change',
-    'hard cut',
-    'camera jitter',
-    'flicker',
-    'text',
-    'watermark',
-    'logo',
-  ].join(', ')
+  const negativePrompt = MOVING_LIVE_PHOTO_NEGATIVE_PROMPT
   return { positivePrompt, negativePrompt }
 }
 
@@ -1050,60 +1055,8 @@ function buildLivePhotoVideoPrompts(input: {
         `Locked still path: ${referenceImagePath}.`,
       ].join('\n')
     : ''
-  const positivePrompt = [
-    ...(providerRolePrefix ? [providerRolePrefix, ''] : []),
-    'ROLE:',
-    'You are a product-motion video system for a locked still image.',
-    '',
-    'GOAL:',
-    'Create a realistic 6-second product close-up clip with extremely subtle motion.',
-    '',
-    'CORE LOCK:',
-    '',
-    'Keep:',
-    '',
-    '* same crop',
-    '* same pose',
-    '* same framing',
-    '* same scene',
-    '* same visible subject portion',
-    '* same exact visible product instance',
-    '* same exact product size',
-    '',
-    '---',
-    '',
-    'STRUCTURE LOCK:',
-    '',
-    '* Preserve the exact visible structure, silhouette, proportions, connection points, orientation, and local anchor placement from the locked still.',
-    '* Preserve the exact same visible product geometry from the locked still.',
-    '* The product in every frame must remain the same single product instance, not a regenerated approximation.',
-    '* Keep exact clasp logic, hinge logic, connector spacing, stone count, edge rhythm, thickness, and attachment layout when visible.',
-    '* The locked still image is the master product structure reference for the video stage.',
-    '',
-    'NO INFERENCE RULE:',
-    '',
-    '* Do not infer, reconstruct, redesign, beautify, simplify, or generate unseen product parts.',
-    '* Do not average multiple possible shapes.',
-    '* Do not fabricate a cleaner, more symmetric, or more readable version of the product.',
-    '* If a detail is ambiguous, keep the locked-still interpretation instead of inventing a new structure.',
-    '* If motion would require rebuilding the product, suppress motion instead of changing product structure.',
-    '',
-    'FRAME-TO-FRAME IDENTITY LOCK:',
-    '',
-    '* Treat the product as the exact same frozen object instance across all frames.',
-    '* Treat the product pixels as fully frozen across the full clip and do not animate the product body itself.',
-    '* Do not morph, wobble, stretch, re-topologize, thicken, thin, bend, or re-attach any product part between frames.',
-    '* Do not translate, rotate, swing, bounce, breathe, sway, or drift any visible product region.',
-    '* Do not introduce new perspective-derived product geometry that is not already supported by the locked still.',
-    '* If any frame starts to change product silhouette or connector layout, keep the previous frame identity instead.',
-    '',
-    'REFERENCE PRIORITY:',
-    '',
-    '* The locked still image is both the scene anchor and the product identity anchor for the video stage.',
-    '* Do not introduce any alternate product interpretation beyond what is already visible in the locked still image.',
-    '* The locked still anchor controls scene, crop, pose, anchor position, visible product pose, and visible product structure.',
-    '* If motion conflicts with exact product identity, preserve the locked still identity and suppress motion.',
-    '',
+  // 商品特征（分类规则 + 商品分析）填进「视频」提示词的 {product_rules}；提示词里没写就放在最后
+  const productRules = [
     ...(categorySpecificRules.length ? [...categorySpecificRules, ''] : []),
     ...(normalizedAnalysis
       ? [
@@ -1125,166 +1078,10 @@ function buildLivePhotoVideoPrompts(input: {
           '',
         ].filter(Boolean)
       : []),
-    'FAIL-CLOSED PRODUCT IDENTITY RULE:',
-    '',
-    '* Do not add any pearl, pendant, charm, extra dangling drop, extra loop, extra bow layer, extra gemstone cluster, or extra decorative volume that is not clearly present in the locked still image.',
-    '* Do not upscale a petite or small product into a larger statement piece.',
-    '* Do not convert a simple product into a richer, heavier, longer, or more luxurious-looking version.',
-    '* If motion would cause the product to become larger, more decorative, or structurally richer, keep the product exactly as shown in the locked still image and suppress motion further.',
-    '',
-    'SCALE LOCK:',
-    '',
-    '* Keep the exact same product footprint size and product-to-scene ratio from the locked still.',
-    '* Do not enlarge the product for readability, drama, or emphasis.',
-    '* Do not shrink the surrounding scene, face, ear, hand, or body area to make the product appear larger.',
-    '* The apparent product size change across the full clip must remain negligible and must not rely on push-in, pull-back, refocus behavior, or any simulated camera approach.',
-    '* If any frame tends to enlarge, stylize, or simplify the product, keep the earlier locked-still scale instead.',
-    '* Do not move the product relative to the frame, scene anchor, or supporting body anchor at all.',
-    '',
-    '---',
-    '',
-    'CAMERA:',
-    '',
-    'Use ONLY one motion style:',
-    '',
-    '-> locked-camera near-static hold with the product fully frozen and only tiny non-product micro-movement already implied by the still',
-    '',
-    'STRICT RULES:',
-    '',
-    '* keep the camera effectively locked in place',
-    '* total visible movement must be extremely small and barely noticeable',
-    '* apparent size change across the full clip must remain negligible',
-    '* treat the clip as a still image where the product stays fully frozen and only non-product regions may acquire a faint natural sense of life',
-    '* if motion causes any structure drift, reduce motion further until the product stays stable',
-    '* no camera travel',
-    '* no lens breathing feel',
-    '* no floating drift larger than a tiny micro shift',
-    '* no jitter',
-    '* no vibration',
-    '',
-    'FORBIDDEN:',
-    '',
-    '* any push-in motion',
-    '* any pull-back motion',
-    '* zoom in then out',
-    '* noticeable camera travel',
-    '* simulated camera approach',
-    '* simulated camera retreat',
-    '* multi-direction movement',
-    '* side-to-side sway',
-    '* orbiting motion',
-    '* reframing during the clip',
-    '* fast approach toward the product',
-    '* focus breathing',
-    '* rack focus',
-    '* refocusing behavior',
-    '* scale pumping',
-    '',
-    'The video should feel almost static.',
-    '',
-    '---',
-    '',
-    'LIGHTING:',
-    '',
-    '* natural daylight only',
-    '* soft, diffused light',
-    '* stable exposure across entire clip',
-    '',
-    'FORBIDDEN:',
-    '',
-    '* lighting change',
-    '* flicker',
-    '* artificial glow or bloom',
-    '',
-    'ALLOW:',
-    '',
-    '* normal real-world reflections (metal, glass, leather)',
-    '',
-    '---',
-    '',
-    'PRODUCT BEHAVIOR (IMPORTANT):',
-    '',
-    'Adjust based on product type:',
-    '',
-    '* all products -> product body remains fully frozen with no self-motion',
-    '* rigid products -> no deformation',
-    '* flexible products -> allow natural deformation',
-    '* reflective products -> allow natural reflections',
-    '',
-    'DO NOT:',
-    '',
-    '* distort structure',
-    '* redesign product',
-    '* re-interpret the product shape',
-    '* replace the product with a cleaner substitute',
-    '* move the product itself',
-    '* animate the product itself',
-    '',
-    '---',
-    '',
-    'MOTION RULE:',
-    '',
-    '* the product itself must remain completely still across all frames',
-    '* only tiny non-product micro-movement already consistent with the locked still is allowed',
-    '* allowed motion must come from non-product regions only, such as a minute lighting shimmer, hair micro-shift, fabric micro-shift, or body micro-breathing that does not move the product anchor',
-    '* no exaggerated motion',
-    '* no intentional animation',
-    '* do not introduce any new camera move to create energy',
-    '* do not let any allowed ambient motion drag, swing, rotate, deform, or reposition the product',
-    '* do not expand the crop to reveal new visible face regions or new body regions',
-    '* if the starting still has no visible hands or fingers, every frame must remain completely free of added hands, fingers, palms, wrists, forearms, or skin-contact gestures',
-    '* if the starting still is a product-only or flat-lay scene, keep it product-only and do not introduce any new body parts at all',
-    '',
-    'BODY-CONTROL RULE:',
-    '',
-    '* preserve the exact same visible crop boundaries from the starting still',
-    '* do not reveal a full face, eyes, nose, mouth, or a wider identity-bearing portrait view',
-    '* keep the clip as a partial non-identity-bearing crop only',
-    '* do not transform the partial crop into a recognizable real-person portrait',
-    '* do not sharpen, uncover, reconstruct, complete, or reveal identity-bearing face details',
-    '* do not add hands, fingers, palms, wrists, forearms, or skin-contact gestures that are not already visible in the starting still',
-    '* do not introduce holding, pinching, gripping, presenting, or touching actions around the product',
-    '* do not let any hand enter from the edge of the frame later in the clip',
-    '* do not add any off-frame person presence whose body parts newly appear in frame',
-    '',
-    'If a partial body crop already exists:',
-    '',
-    '* keep it partial and non-identity-bearing',
-    '* allow only tiny natural movement without revealing more anatomy',
-    '',
-    '---',
-    '',
-    'STYLE:',
-    '',
-    '* natural product close-up capture',
-    '* clean casual e-commerce realism',
-    '* soft everyday camera feel',
-    '',
-    '---',
-    '',
-    'ANTI-OVERGENERATION:',
-    '',
-    'Do NOT make the product:',
-    '',
-    '* bigger',
-    '* clearer',
-    '* shinier',
-    '* more prominent',
-    '',
-    '---',
-    '',
-    'OUTPUT:',
-    '',
-    '* 6-second video',
-    '* extremely subtle motion',
-    '* visually almost static',
-    '* perfect product consistency',
-    '* no newly revealed identity-bearing face content',
-    '* zero product reconstruction',
-    '* product remains fully frozen',
-    '',
-    'The product must remain visually identical across all frames.',
-  ].join('\n')
+  ].join('\n').trim()
+  const template = livePhotoPromptVersionService.getActive('video').prompt
+  const positivePrompt = [...(providerRolePrefix ? [providerRolePrefix, ''] : []), fillLivePhotoVideoPrompt(template, productRules)].join('\n')
+  if (!isStillLivePhotoVideoPrompt(template)) return { positivePrompt, negativePrompt: MOVING_LIVE_PHOTO_NEGATIVE_PROMPT, moving: true }
   const negativePrompt = [
     'product reconstruction',
     'product redesign',
@@ -1517,9 +1314,13 @@ function buildLivePhotoVideoShotSpec(input: {
       aspectRatio: '9:16',
     },
   }
-  const { positivePrompt, negativePrompt } = buildLivePhotoVideoPrompts({ shot, item: input.item })
+  const prompts: { positivePrompt: string; negativePrompt: string; moving?: boolean } = buildLivePhotoVideoPrompts({ shot, item: input.item })
+  const { positivePrompt, negativePrompt } = prompts
+  // 镜头描述默认写死「锁定不动」，用别的提示词时跟着提示词走
+  const camera = prompts.moving ? 'Follow the camera movement described in the prompt; keep the product unchanged.' : shot.cameraMovement
   return {
     ...shot,
+    ...(prompts.moving ? { cameraDescription: camera, cameraMovement: camera, action: camera, actionDescription: camera, generationPrompt: positivePrompt } : {}),
     promptHint: positivePrompt,
     negativePromptHint: negativePrompt,
     aiPrompt: positivePrompt,
@@ -1529,7 +1330,7 @@ function buildLivePhotoVideoShotSpec(input: {
     prompt: {
       positive: positivePrompt,
       negative: negativePrompt,
-      cameraMotion: 'Locked-camera near-static hold only, with the product fully frozen, no push-in, no pull-back, no refocus, no camera travel, and only faint non-product micro-movement',
+      cameraMotion: camera || '',
       aspectRatio: '9:16',
     },
   }
@@ -4830,7 +4631,8 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
   const referenceImagePaths = template ? [template.firstFramePath] : normalizeLivePhotoScenePaths(input)
   const product = await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
-  const promptVersion = livePhotoPromptVersionService.getActive('video')
+  // 这里存的是「替换商品图」用的图片提示词；视频提示词在提交视频时才用
+  const promptVersion = livePhotoPromptVersionService.getActive('image')
   ensureLivePhotoStrictImageEditProvider(credentials)
   const motionTemplate = input.motionTemplate || 'push_in'
   const retryLimit = await getConfiguredLivePhotoRetryLimit()
@@ -5640,8 +5442,7 @@ export const livePhotoService = {
         })
       : null
     if (input.replacementRegion && !manualReplacementRegion) throw new Error('Invalid Live Photo replacement region')
-    const imagePromptVersion = livePhotoPromptVersionService.getActive('image')
-    const videoPromptVersion = livePhotoPromptVersionService.getActive('video')
+    const activePromptVersion = livePhotoPromptVersionService.getActive('image')
     const preservedStillPath = String(existing.generatedStillPath || '').trim()
     const persistedStage = resolveLivePhotoStage({
       failedStage: existingAutoFlowStatus.failedStage,
@@ -5658,7 +5459,6 @@ export const livePhotoService = {
         String(existing.motionVideoPath || '').trim() ||
         ensureAutoFlowStatus(existing).currentStage === 'video_generation'),
     )
-    const activePromptVersion = videoStageCandidate ? videoPromptVersion : imagePromptVersion
     const promptChanged = Boolean(
       String(existing.promptHash || '').trim() &&
         String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,

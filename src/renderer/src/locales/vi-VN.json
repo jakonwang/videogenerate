@@ -1947,6 +1947,7 @@
       "updateVersion": "Cap Nhat Phien Ban",
       "copyVersion": "Sao Chep Thanh Ban Moi",
       "activateVersion": "Kich Hoat Phien Ban",
+      "productRulesHint": "{slot} sẽ được thay bằng đặc điểm sản phẩm. Lưu và bật xong, áp dụng từ video tiếp theo.",
       "rollbackVersion": "Tao Ban Khoi Phuc",
       "motionStrategy": "Chien Luoc Chuyen Dong",
       "motionStrategyDesc": "Cai dat nay duoc luu va dung cho tac vu tham chieu, thu lai va khoi phuc.",

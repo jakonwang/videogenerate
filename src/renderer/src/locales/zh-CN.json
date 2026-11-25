@@ -3179,6 +3179,7 @@
       "updateVersion": "更新版本",
       "copyVersion": "复制为新版本",
       "activateVersion": "启用版本",
+      "productRulesHint": "{slot} 会自动换成所选商品的特征。改动保存并启用后，从下一个视频开始生效。",
       "rollbackVersion": "回滚副本",
       "motionStrategy": "动作策略",
       "motionStrategyDesc": "该设置会写入数据库，并作用于参考图任务、失败重试和恢复执行。",
