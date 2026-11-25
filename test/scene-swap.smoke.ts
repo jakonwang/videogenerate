@@ -18,6 +18,7 @@ import { canvasFor, composeKeep, maskStats, normalizeSource, readMask } from '..
 import { createCloudClient } from '../src/shared/cloud/client'
 import { createDefaultManagedSettings, maskManagedSettings, mergeManagedSecrets, normalizeManagedSettings, stripManagedSecretsForClient, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
 import { SYNC_COLLECTIONS } from '../src/shared/cloud/sync'
+import { grsAspectRatio } from '../services/cloud/src/generate'
 import { productViewOf, styleGroupOf, tryonProducts, tryonShotsFor } from '../src/shared/sceneSwap'
 
 const W = 120
@@ -143,7 +144,7 @@ async function main() {
         lastPrompt = input.prompt
         refLog.push(lastRefs)
         const outputPath = join(input.outDir, `r_${renders}.png`)
-        await sharp({ create: { width: 90, height: 120, channels: 3, background: { r: renders % 255, g: 120, b: 200 } } }).png().toFile(outputPath)
+        await sharp({ create: { width: input.size === '1024x1024' ? 120 : 90, height: 120, channels: 3, background: { r: renders % 255, g: 120, b: 200 } } }).png().toFile(outputPath)
         return { outputPath } as any
       },
     },
@@ -335,6 +336,15 @@ async function main() {
     assert.ok(goodsBatch.items.every((item) => item.status === 'passed' && item.sceneName === '碎花裙'), JSON.stringify(goodsBatch))
     assert.deepEqual([goodsBatch.task, goodsBatch.mode, goodsBatch.productFileIds, lastRefs], ['product', 'blend', goods, 3])
     assert.match(lastPrompt, /Replace only the original product/)
+    // 尺寸：原尺寸和原图一样大；选了比例就按比例出，提示词里说明补背景
+    const sizeOf = async (batch: any) => { const meta = await sharp(Buffer.from(await (await alice.sync.downloadFile(batch.items[0].outputFileId)).arrayBuffer())).metadata(); return meta.width! / meta.height! }
+    const square = await done((await alice.sceneSwap.create({ ...productInput, size: '1:1' as const })).id)
+    assert.equal(square.size, '1:1')
+    assert.match(lastPrompt, /Output a 1:1 image/)
+    assert.doesNotMatch(lastPrompt, /preserve the original image aspect ratio/)
+    assert.equal(await sizeOf(square), 1)
+    assert.ok(Math.abs((await sizeOf(goodsBatch)) - W / H) < 0.01)
+    assert.deepEqual([grsAspectRatio('gpt-image-2.6', 1320 / 1794), grsAspectRatio('gpt-image-2', 1), grsAspectRatio('', 9 / 16), grsAspectRatio('gpt-image-2-vip', 1)], ['3:4', '1:1', '9:16', undefined])
     verdict = '{"product":true,"scene":false,"limbs":true,"light":true}'
     await alice.sceneSwap.item(replaced.id, goodsBatch.items[0]!.id, 'redo', ['其他地方变了', '不像所选模特'])
     goodsBatch = await done(replaced.id)

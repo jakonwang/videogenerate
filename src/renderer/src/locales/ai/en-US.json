@@ -977,6 +977,7 @@
     "size": "Size",
     "sizeOriginal": "Same as original",
     "matchLight": "Slightly match scene brightness",
+    "productSize": "Other ratios extend the background and avoid cropping.",
     "blendSize": "The model decides the size in Blend mode",
     "history": "Past batches",
     "original": "Original",

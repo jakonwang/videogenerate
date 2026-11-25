@@ -45,7 +45,7 @@ import {
   type SceneSwapScene,
   type SceneSwapSize,
 } from '../../../../src/shared/sceneSwap'
-import { checkKeep, composeKeep, maskStats, normalizeSource, readMask, type MaskStats } from './compose'
+import { canvasFor, checkKeep, composeKeep, maskStats, normalizeSource, readMask, type MaskStats } from './compose'
 import type { Matting } from './matting'
 import { modelCheckKeys, modelInspectPrompt, modelSwapPrompt, productSwapPrompt, tryOnPrompt } from './modelPrompts'
 import { blendPrompt, inspectPrompt, parseInspection, platePrompt } from './prompts'
@@ -589,7 +589,8 @@ export function createSceneSwapService(deps: {
     if (batch.task === 'product') {
       const products = await Promise.all(data.products!.map((product) => ref(product.fileId)))
       refs = [source, ...products]
-      prompt = productSwapPrompt({ products: products.length, reasons })
+      prompt = productSwapPrompt({ products: products.length, size: batch.size, reasons })
+      ;({ width, height } = canvasFor(source.width, source.height, batch.size))
     }
     if (batch.task === 'tryon') {
       const products = data.products ?? []
@@ -611,6 +612,15 @@ export function createSceneSwapService(deps: {
     }
     const output = join(workDir, `out_${randomUUID()}.jpg`)
     let image = sharp(await sharp(rendered).rotate().flatten({ background: '#ffffff' }).toBuffer())
+    if (batch.task === 'product') {
+      // 和原图（或选的比例）一样大；平台比例差太多时保留整张，避免切到商品
+      const meta = await image.metadata()
+      const fit = width / height / (meta.width! / meta.height!)
+      if (Math.min(fit, 1 / fit) >= 0.84) {
+        const scale = Math.min(1, 2048 / Math.max(width, height))
+        image = image.resize(Math.round(width * scale), Math.round(height * scale), { fit: 'cover' })
+      }
+    }
     if (batch.task === 'tryon' && batch.size !== 'original') {
       // 平台只有固定几种比例：差得不多就裁成选的比例，差太多保留整张，避免切到头脚
       const meta = await image.metadata()
@@ -626,7 +636,7 @@ export function createSceneSwapService(deps: {
     await image.jpeg({ quality: 95 }).toFile(output)
     stages.enter('质检')
     const keys = modelCheckKeys(batch.task!, data.shot)
-    const answer = await (async () => deps.inspect(modelInspectPrompt(batch.task!, keys), [await thumb(source.path), await thumb(target.path), await thumb(output)]))().catch(() => '')
+    const answer = await (async () => deps.inspect(modelInspectPrompt(batch.task!, keys, batch.size), [await thumb(source.path), await thumb(target.path), await thumb(output)]))().catch(() => '')
     return { output, checks: parseInspection(keys, answer) }
   }
 

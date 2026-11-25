@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Download, ImagePlus, LoaderCircle, Pause, Play, RefreshCw, Trash2, X } from 'lucide-vue-next'
-import { MODEL_GENDERS, PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, SWAP_MAX_PRODUCT_IMAGES, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, TRYON_SHOT_LABEL, productViewOf, redoReasonsOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapTask, type TryonShot } from '@shared/sceneSwap'
+import { MODEL_GENDERS, PRODUCT_VIEWS, SCENE_SWAP_MAX_IMAGES, SCENE_SWAP_MAX_SCENES, SWAP_MAX_PRODUCT_IMAGES, TRYON_DEFAULT_SHOTS, TRYON_MAX_PRODUCT_IMAGES, TRYON_SHOTS, TRYON_SHOT_LABEL, productViewOf, redoReasonsOf, styleGroupOf, tryonShotsFor, type ProductView, type SceneSwapBatch, type SceneSwapInfo, type SceneSwapItem, type SceneSwapMode, type SceneSwapSize, type SceneSwapTask, type TryonShot } from '@shared/sceneSwap'
 import CloudImage from '@/components/CloudImage.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { saveToGallery, shareTo } from '@/lib/publish'
@@ -20,6 +20,8 @@ const batches = ref<SceneSwapBatch[]>([])
 const photos = ref<Photo[]>([])
 const picked = ref<string[]>([])
 const mode = ref<SceneSwapMode>('keep')
+const SIZES: SceneSwapSize[] = ['original', '3:4', '1:1', '9:16']
+const productSize = ref<SceneSwapSize>('original')
 const step = ref<1 | 2>(1)
 const TASKS: Array<{ name: SceneSwapTask; title: string; hint: string }> = [
   { name: 'tryon', title: '生成模特图', hint: '传产品图，AI 模特穿上' },
@@ -183,7 +185,7 @@ function put(next: SceneSwapBatch) {
 }
 const start = () =>
   guard(async () => {
-    const created = await cloud.sceneSwap.create({ task: task.value, mode: task.value === 'scene' ? mode.value : 'blend', size: task.value === 'tryon' ? '3:4' : 'original', matchLight: true, ...(needModel.value ? { modelId: modelId.value } : {}), ...(task.value === 'product' ? { productFileIds: product.value.fileIds, productName: product.value.name } : {}), ...(task.value === 'tryon' ? { shots: shots.value } : {}), images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group, view: photo.view })), sceneIds: needScene.value ? picked.value : [] })
+    const created = await cloud.sceneSwap.create({ task: task.value, mode: task.value === 'scene' ? mode.value : 'blend', size: task.value === 'tryon' ? '3:4' : task.value === 'product' ? productSize.value : 'original', matchLight: true, ...(needModel.value ? { modelId: modelId.value } : {}), ...(task.value === 'product' ? { productFileIds: product.value.fileIds, productName: product.value.name } : {}), ...(task.value === 'tryon' ? { shots: shots.value } : {}), images: ready.value.map((photo) => ({ fileId: photo.fileId!, name: photo.name, group: photo.group, view: photo.view })), sceneIds: needScene.value ? picked.value : [] })
     put(created)
     photos.value.forEach((photo) => URL.revokeObjectURL(photo.url))
     photos.value = []
@@ -321,6 +323,9 @@ onBeforeUnmount(() => {
         <button v-if="product.fileIds.length < SWAP_MAX_PRODUCT_IMAGES" type="button" class="m-btn m-btn--block" :disabled="busy" @click="productInput?.click()"><ImagePlus :size="18" /> 上传产品图（{{ product.fileIds.length }}/{{ SWAP_MAX_PRODUCT_IMAGES }}）</button>
         <input ref="productInput" type="file" accept="image/*" multiple hidden @change="addProduct" />
         <p class="m-muted small">人物、姿势、背景和其他东西不变，只换商品。</p>
+        <h2 class="m-section__title">尺寸</h2>
+        <div class="chips"><button v-for="name in SIZES" :key="name" type="button" class="chip" :class="{ 'is-on': productSize === name }" :aria-pressed="productSize === name" @click="productSize = name">{{ name === 'original' ? '原尺寸' : name }}</button></div>
+        <p class="m-muted small">选别的比例会自动补出背景，尽量不裁切。</p>
       </template>
       <template v-if="needModel">
         <h2 class="m-section__title">选模特</h2>

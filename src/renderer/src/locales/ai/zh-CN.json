@@ -977,6 +977,7 @@
     "size": "尺寸",
     "sizeOriginal": "跟原图一样",
     "matchLight": "轻微匹配场景亮度",
+    "productSize": "选别的比例会自动补出背景，尽量不裁切。",
     "blendSize": "融合模式的尺寸由模型决定",
     "history": "历史批次",
     "original": "原图",

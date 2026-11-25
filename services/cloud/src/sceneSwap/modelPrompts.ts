@@ -60,13 +60,14 @@ export function modelSwapPrompt(input: { scene: boolean; reasons: string[] }) {
 }
 
 /** 参考图顺序：要改的图 → 新商品（1–4 张） */
-export function productSwapPrompt(input: { products: number; reasons: string[] }) {
+export function productSwapPrompt(input: { products: number; size: SceneSwapSize; reasons: string[] }) {
   return [
-    PRODUCT_REPLACEMENT_PROMPT,
+    input.size === 'original' ? PRODUCT_REPLACEMENT_PROMPT : PRODUCT_REPLACEMENT_PROMPT.replace(' and preserve the original image aspect ratio', ''),
+    input.size === 'original' ? '' : `Output a ${input.size} image. Keep everything in image 1 uncropped and at its original proportions; fill the added area by naturally extending the existing background. Never stretch or distort anything.`,
     `Image${input.products > 1 ? `s 2 to ${input.products + 1} show` : ' 2 shows'} the target product. If image 1 contains several items of that kind, replace only the main one. If a person wears or holds it, keep the same person, pose and way of wearing or holding.`,
     'If the target product photo includes a model, hands or a background, ignore them and use only the product.',
     ...hints(input.reasons),
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
 type Key = SceneSwapCheck['key']
@@ -80,16 +81,17 @@ export function modelCheckKeys(task: SceneSwapTask, shot?: TryonShot): Key[] {
 }
 
 /** 图片顺序：原图或产品图 → 模特 → 成品 */
-export function modelInspectPrompt(task: SceneSwapTask, keys: Key[]) {
+export function modelInspectPrompt(task: SceneSwapTask, keys: Key[], size: SceneSwapSize = 'original') {
   if (task === 'product') {
     return [
       'Image 1 is the original photo; image 2 is the target product; image 3 is image 1 with its main product replaced. Judge image 3 as a strict e-commerce photo reviewer.',
       '"product": true if the product in image 3 matches image 2 in shape, color, material, print and details, and nothing of the original product remains, otherwise false',
       '"scene": true if people, pose, hands, background, framing and all other objects in image 3 are the same as in image 1, otherwise false',
+      size === 'original' ? '' : `Image 3 was deliberately changed to ${size}: background extended beyond the edges of image 1 is fine, but nothing may be cropped, stretched or distorted.`,
       '"limbs": true if any hands, limbs and faces in image 3 are anatomically correct (also true if there are none), otherwise false',
       '"light": true if size, perspective, lighting and shadows of the product look natural, otherwise false',
       'Answer with one JSON object only, with exactly these boolean keys.',
-    ].join('\n')
+    ].filter(Boolean).join('\n')
   }
   const rules: Partial<Record<Key, string>> = {
     color: 'the garment color in image 3 is the same as in image 1',

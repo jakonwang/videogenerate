@@ -256,7 +256,7 @@ async function start() {
     const created = (await api.create({
       task: task.value,
       mode: task.value === 'scene' ? mode.value : 'blend',
-      size: task.value === 'tryon' ? tryonSize.value : task.value === 'scene' ? size.value : 'original',
+      size: task.value === 'tryon' ? tryonSize.value : task.value === 'scene' || task.value === 'product' ? size.value : 'original',
       matchLight: matchLight.value,
       images: ready.value.map((source) => ({ fileId: source.fileId!, name: source.name, group: source.group, view: source.view })),
       sceneIds: task.value === 'product' || (task.value === 'model' && !alsoScene.value) ? [] : [...picked.value],
@@ -285,6 +285,7 @@ function again() {
   const list = old.images ?? [...new Map(old.items.map((item) => [item.sourceFileId, { fileId: item.sourceFileId, name: item.sourceName, group: item.group }])).values()]
   sources.value = list.map((image) => ({ key: `s${(seq += 1)}`, path: '', name: image.name, group: image.group || styleGroupOf(image.name), view: ('view' in image && image.view) || productViewOf(image.name), fileId: image.fileId }))
   task.value = old.task
+  if (old.task === 'product') size.value = old.size
   product.value = { fileIds: [...(old.productFileIds ?? [])], name: old.productName ?? '' }
   if (old.shots?.length) shots.value = [...old.shots]
   modelId.value = info.value?.models.some((item) => item.id === old.modelId) ? old.modelId! : ''
@@ -430,17 +431,18 @@ watch(() => route.query.batch, () => { error.value = ''; notice.value = '' })
               </div>
               <p class="panel__hint">{{ info && !info.keepAvailable ? k('keepUnavailable') : mode === 'keep' ? k('keepHint') : k('blendHint') }}</p>
             </section>
-            <section v-if="task === 'tryon' || task === 'scene'">
+            <section v-if="task !== 'model'">
               <button type="button" class="panel__more" :aria-expanded="more" @click="more = !more">{{ k('more') }}<ChevronDown :size="15" :class="{ 'is-open': more }" /></button>
               <div v-if="more" class="panel__options">
                 <template v-if="task === 'tryon'">
                   <span class="panel__label">{{ k('size') }}</span>
                   <div class="seg"><button v-for="name in SIZES.slice(1)" :key="name" type="button" :class="{ 'is-on': tryonSize === name }" :aria-pressed="tryonSize === name" @click="tryonSize = name">{{ name }}</button></div>
                 </template>
-                <template v-else-if="mode === 'keep'">
+                <template v-else-if="task === 'product' || mode === 'keep'">
                   <span class="panel__label">{{ k('size') }}</span>
                   <div class="seg"><button v-for="name in SIZES" :key="name" type="button" :class="{ 'is-on': size === name }" :aria-pressed="size === name" @click="size = name">{{ name === 'original' ? k('sizeShort') : name }}</button></div>
-                  <label class="panel__check">{{ k('matchLight') }}<input v-model="matchLight" type="checkbox" /></label>
+                  <p v-if="task === 'product'" class="panel__hint">{{ k('productSize') }}</p>
+                  <label v-else class="panel__check">{{ k('matchLight') }}<input v-model="matchLight" type="checkbox" /></label>
                 </template>
                 <p v-else class="panel__hint">{{ k('blendSize') }}</p>
               </div>

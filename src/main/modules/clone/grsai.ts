@@ -163,7 +163,8 @@ async function createGrsImageTaskUnmetered(input: {
   prompt: string
   negativePrompt?: string
   urls: string[]
-  aspectRatio?: '1:1' | '9:16' | '16:9'
+  /** 普通 gpt-image-2 / 2.6 还支持 3:4、2:3 等比例 */
+  aspectRatio?: string
 }) {
   const key = requireGrsKey(input.credentials)
   const host = grsHost(input.credentials)

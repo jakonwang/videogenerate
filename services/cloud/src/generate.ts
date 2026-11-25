@@ -85,6 +85,16 @@ const EXT_BY_MIME: Record<string, string> = { 'image/png': '.png', 'image/jpeg':
 const PUBLIC_LINK_TTL_MS = 2 * 60 * 60 * 1000
 const FILE_LINK_TTL_MS = 12 * 60 * 60 * 1000
 
+/** GRS 普通 gpt-image-2 / 2.5 / 2.6 支持的比例里挑最接近的；vip、flare 等模型不收比例写法，沿用原来的三种 */
+export function grsAspectRatio(model: string, ratio: number) {
+  if (model && !/^gpt-image-2(\.[56])?$/.test(model)) return undefined
+  const off = (name: string) => {
+    const [w, h] = name.split(':').map(Number) as [number, number]
+    return Math.abs(Math.log(ratio / (w / h)))
+  }
+  return ['1:1', '4:5', '5:4', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '1:2', '2:1'].reduce((best, name) => (off(name) < off(best) ? name : best))
+}
+
 export function createGenerationService(deps: {
   db: CloudDb
   now: () => number
@@ -226,7 +236,7 @@ export function createGenerationService(deps: {
     return settings
   }
 
-  type RenderInput = { userId: string; prompt: string; negativePrompt?: string; refs: Array<{ fileId: string; path: string }>; aspectRatio: '1:1' | '9:16' | '16:9'; size?: string; editTimeoutMs?: number; workDir: string }
+  type RenderInput = { userId: string; prompt: string; negativePrompt?: string; refs: Array<{ fileId: string; path: string }>; aspectRatio: string; size?: string; editTimeoutMs?: number; workDir: string }
 
   async function renderWith(credentials: ModelCredentials, input: RenderInput): Promise<string> {
     if (credentials.imageProviderPrimary === 'grsai') {
@@ -255,7 +265,8 @@ export function createGenerationService(deps: {
   async function renderImage(input: { userId: string; prompt: string; refs: Array<{ fileId: string; path: string }>; width: number; height: number; workDir: string }) {
     const ratio = input.width / input.height
     const [aspectRatio, size] = ratio > 1.2 ? (['16:9', '1536x1024'] as const) : ratio > 0.83 ? (['1:1', '1024x1024'] as const) : (['9:16', '1024x1536'] as const)
-    return renderWith(credentialsFrom(assertConfigured('image')), { ...input, aspectRatio, size, editTimeoutMs: SCENE_IMAGE_TIMEOUT_MS })
+    const credentials = credentialsFrom(assertConfigured('image'))
+    return renderWith(credentials, { ...input, aspectRatio: grsAspectRatio(String(credentials.grsaiImageModel || '').trim(), ratio) ?? aspectRatio, size, editTimeoutMs: SCENE_IMAGE_TIMEOUT_MS })
   }
 
   async function execute(row: JobRow) {
