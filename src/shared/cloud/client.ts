@@ -172,12 +172,13 @@ export function createCloudClient(options: CloudClientOptions) {
     },
     /** AI 修图 · 批量换景（批次和队列都在云端） */
     sceneSwap: {
-      info: () => request<SceneSwapInfo>('GET', '/api/v1/scene-swap/info'),
+      // 云端比软件旧时没有 models / task，按空列表和换场景处理
+      info: () => request<SceneSwapInfo>('GET', '/api/v1/scene-swap/info').then((r) => ({ ...r, models: r.models ?? [] })),
       addScene: (input: { fileId: string; name: string; category?: string }) => request<{ scene: SceneSwapScene }>('POST', '/api/v1/scene-swap/scenes', input).then((r) => r.scene),
       removeScene: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/scenes/${encodeURIComponent(id)}`),
       addModel: (input: { fileId: string; name: string; gender?: string; skin?: string; body?: string }) => request<{ model: SwapModel }>('POST', '/api/v1/scene-swap/models', input).then((r) => r.model),
       removeModel: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/models/${encodeURIComponent(id)}`),
-      list: () => request<{ batches: SceneSwapBatch[] }>('GET', '/api/v1/scene-swap/batches').then((r) => r.batches),
+      list: () => request<{ batches: SceneSwapBatch[] }>('GET', '/api/v1/scene-swap/batches').then((r) => r.batches.map((batch) => ({ ...batch, task: batch.task ?? 'scene' }))),
       get: (id: string) => request<{ batch: SceneSwapBatch }>('GET', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}`).then((r) => r.batch),
       create: (input: SceneSwapCreateInput) => request<{ batch: SceneSwapBatch }>('POST', '/api/v1/scene-swap/batches', input, 60_000).then((r) => r.batch),
       remove: (id: string) => request<object>('DELETE', `/api/v1/scene-swap/batches/${encodeURIComponent(id)}`),
