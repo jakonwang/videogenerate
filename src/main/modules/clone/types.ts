@@ -1189,7 +1189,11 @@ export type CloneProject = {
     lastProgressAt?: number
     lastProgressSignature?: string
     idleHeartbeatCount?: number
+    /** 现有分镜图是按哪个商品 / 模特 / 脚本出的；续跑时一致就不重画 */
+    frameSignature?: string
   }
+  /** 云端同步来的版本号：和 updatedAt 相同说明本机没动过，另一端可能正在跑 */
+  syncedUpdatedAt?: number
 }
 
 export type CloneProjectGroup = {

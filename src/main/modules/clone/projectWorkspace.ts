@@ -15,8 +15,10 @@ export function createCloneProjectWorkspaceService(deps: CloneProjectWorkspaceDe
     async getProject(input: { cloneProjectId: string }) {
       let item = await cloneRepo.getProject(input.cloneProjectId)
       if (!item) throw new Error('复刻项目不存在')
+      // 商品快照每次都带新的 updatedAt，只看内容：读取不能顺手写库
+      const contentOf = (snapshot: CloneProject['boundProductSnapshot']) => (snapshot ? { ...snapshot, updatedAt: undefined, boundAt: undefined } : undefined)
       const beforeSync = JSON.stringify({
-        boundProductSnapshot: item.boundProductSnapshot,
+        boundProductSnapshot: contentOf(item.boundProductSnapshot),
         storyboardFrames: item.storyboardFrames,
         blueprintShots: item.blueprint?.shots,
       })
@@ -45,7 +47,7 @@ export function createCloneProjectWorkspaceService(deps: CloneProjectWorkspaceDe
         })
       }
       const afterSync = JSON.stringify({
-        boundProductSnapshot: item.boundProductSnapshot,
+        boundProductSnapshot: contentOf(item.boundProductSnapshot),
         storyboardFrames: item.storyboardFrames,
         blueprintShots: item.blueprint?.shots,
       })

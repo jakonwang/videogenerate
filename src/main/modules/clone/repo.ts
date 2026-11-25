@@ -1,3 +1,4 @@
+import { mergeProjectChanges, trackProject } from './projectMerge'
 import { normalizeCredentials } from './credentials'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -523,6 +524,16 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
     const hasExplicitVideoUrlReset = Object.prototype.hasOwnProperty.call(item, 'videoUrl') && item?.videoUrl === undefined
     const hasExplicitProviderReset = Object.prototype.hasOwnProperty.call(item, 'provider') && item?.provider === undefined
     const hasExplicitModelReset = Object.prototype.hasOwnProperty.call(item, 'model') && item?.model === undefined
+    // 视频已经下载好，同一个任务较早发出的查询才回来（还在跑 / 超时）：不能把成品清掉
+    const isLateAnswerOfSameTask =
+      isCompletedShotVideoStatus(existing?.status) &&
+      Boolean(String(existing?.videoPath ?? existing?.localPath ?? '').trim()) &&
+      !isCompletedShotVideoStatus(item?.status) &&
+      String(item?.sourceEvent ?? '').trim().toLowerCase() !== 'force_regenerate_reset' &&
+      !hasExplicitTaskReset && !hasExplicitVideoPathReset && !hasExplicitLocalPathReset &&
+      Boolean(existingTaskId) && incomingTaskId === existingTaskId &&
+      Number(item?.submissionStartedAt ?? 0) <= Number(existing?.submissionStartedAt ?? 0)
+    if (isLateAnswerOfSameTask && !isPendingRemoteShotVideoStatus(existing?.remoteStatus) && !isPendingRemoteShotVideoStatus(existing?.remoteRaw?.status)) return existing
     const hasPendingReplacementMarkers =
       Boolean(item?.previousTaskIds?.length) ||
       Boolean(item?.submissionStartedAt) ||
@@ -608,6 +619,8 @@ function mergeShotVideoOutputsForPersistence(current: any[] | undefined, incomin
         incomingSourceEvent === 'segment_submit_succeeded'
       )
     const shouldClearCompletedArtifactsForPendingReplacement =
+      // 本身就是做好的成品（可能还带着提交时的标记），不能清
+      !(isCompletedShotVideoStatus(item?.status) && Boolean(String(item?.videoPath ?? item?.localPath ?? '').trim()) && !isPendingRemoteShotVideoStatus(item?.remoteStatus) && !isPendingRemoteShotVideoStatus(item?.remoteRaw?.status)) &&
       (hasPendingReplacementMarkers || incomingIsForceRegenerateReset) &&
       (
         incomingIsForceRegenerateReset ||
@@ -2605,6 +2618,11 @@ function normalizeProject(p: CloneProject): CloneProject {
           lastStartedAt: Number((p as any).autoFlowStatus.lastStartedAt ?? 0) || undefined,
           lastCompletedAt: Number((p as any).autoFlowStatus.lastCompletedAt ?? 0) || undefined,
           lastSummary: String((p as any).autoFlowStatus.lastSummary ?? '').trim() || undefined,
+          lastHeartbeatAt: Number((p as any).autoFlowStatus.lastHeartbeatAt ?? 0) || undefined,
+          lastProgressAt: Number((p as any).autoFlowStatus.lastProgressAt ?? 0) || undefined,
+          lastProgressSignature: String((p as any).autoFlowStatus.lastProgressSignature ?? '').trim() || undefined,
+          idleHeartbeatCount: Number((p as any).autoFlowStatus.idleHeartbeatCount ?? 0) || undefined,
+          frameSignature: String((p as any).autoFlowStatus.frameSignature ?? '').trim() || undefined,
         }
       : undefined,
     finalCompose,
@@ -2858,7 +2876,7 @@ export const cloneRepo = {
         ? normalizeProject({ ...project, runMode: 'auto' as const })
         : normalizeProject(project)
       if (shouldPersistInferredRunMode(project)) upsertCloneProjectInSqlite(normalized)
-      return normalized
+      return trackProject(normalized)
     })
   },
 
@@ -2918,6 +2936,12 @@ export const cloneRepo = {
         throw new Error(`clone project removed: ${safeProjectId}`)
       }
       const normalizedCurrent = current ? normalizeProject(current) : null
+      // 读出来之后别的任务可能已经存过：只写自己改过的部分，不把它们盖回旧的
+      if (normalizedCurrent) {
+        const original = input
+        input = mergeProjectChanges(input, normalizedCurrent) ?? input
+        trackProject(original)
+      }
       const mergedInput =
         normalizedCurrent
           ? {
@@ -2945,17 +2969,20 @@ export const cloneRepo = {
         shotVideoOutputs: debugOutputs,
       })
       upsertCloneProjectInSqlite(next)
-      return next
+      return trackProject(next)
     })
   },
 
-  /** 云端同步来的项目：整份替换（保留来源的 updatedAt）；本机已删除的项目不再导入 */
-  async importSyncedProject(input: CloneProject): Promise<CloneProject | null> {
+  /** 云端同步来的项目：整份替换（保留来源的 updatedAt）；本机已删除的项目不再导入；下载期间本机又改过（和 expectedUpdatedAt 对不上）也不替换 */
+  async importSyncedProject(input: CloneProject, expectedUpdatedAt?: number): Promise<CloneProject | null> {
     return await queueCloneDbMutation(async () => {
       const safeProjectId = String(input?.id || '').trim()
       if (!safeProjectId) throw new Error('clone project id is required')
-      if (!readCloneProjectByIdFromSqlite(safeProjectId) && isRemovedProjectMarked(safeProjectId)) return null
+      const current = readCloneProjectByIdFromSqlite(safeProjectId)
+      if (!current && isRemovedProjectMarked(safeProjectId)) return null
+      if (current && expectedUpdatedAt !== undefined && Number(current.updatedAt || 0) !== expectedUpdatedAt) return null
       const next = normalizeProject(await materializeCloneProjectAssets({ ...input, updatedAt: Number(input.updatedAt) || now() }))
+      next.syncedUpdatedAt = next.updatedAt
       upsertCloneProjectInSqlite(next)
       return next
     })

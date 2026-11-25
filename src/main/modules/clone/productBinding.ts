@@ -2,6 +2,7 @@ import { cloneRepo } from './repo'
 import type { CloneProject } from './types'
 
 export type CloneProductBindingDeps = {
+  assertIdle?: (projectId: string) => void
   bindProjectProductFromLibrary: (project: CloneProject, productId: string) => Promise<unknown>
   refreshProductCanonicalSourceFromLibrary: (input: { productId: string; force?: boolean }) => Promise<unknown>
   refreshProductAnalysisFromLibrary: (input: { productId: string }) => Promise<unknown>
@@ -11,6 +12,7 @@ export type CloneProductBindingDeps = {
 export function createCloneProductBindingService(deps: CloneProductBindingDeps) {
   return {
     async bindProjectProduct(input: { cloneProjectId: string; productId: string }) {
+      deps.assertIdle?.(input.cloneProjectId)
       const project = await cloneRepo.getProject(input.cloneProjectId)
       if (!project) throw new Error('复制项目不存在')
       await deps.bindProjectProductFromLibrary(project, input.productId)

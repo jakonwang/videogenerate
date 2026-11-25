@@ -52,7 +52,7 @@ type BridgeState = {
 export type CloneStore = {
   listProjects(): Promise<CloneProject[]>
   getProject(id: string): Promise<CloneProject | null>
-  importProject(project: CloneProject): Promise<CloneProject | null>
+  importProject(project: CloneProject, expectedUpdatedAt?: number): Promise<CloneProject | null>
   removeProject(id: string): Promise<void>
   summary(project: CloneProject): Promise<Pick<CloneProjectSummary, 'coverAssetPath' | 'finalOutputPath'>>
   listGroups(): Promise<CloneProjectGroup[]>
@@ -64,7 +64,7 @@ export async function defaultCloneStore(): Promise<CloneStore> {
   return {
     listProjects: () => cloneRepo.listRawProjects(),
     getProject: (id) => cloneRepo.getProject(id),
-    importProject: (project) => cloneRepo.importSyncedProject(project),
+    importProject: (project, expectedUpdatedAt) => cloneRepo.importSyncedProject(project, expectedUpdatedAt),
     removeProject: async (id) => void (await cloneRepo.removeProject(id)),
     summary: async (project) => {
       const summary = await cloneService.getProjectSummary({ cloneProjectId: project.id }).catch(() => null)
@@ -332,7 +332,7 @@ async function applyChange(session: Session, state: BridgeState, options: CloneB
     delete project.groupId
     delete project.groupName
   }
-  const saved = await options.store.importProject(project)
+  const saved = await options.store.importProject(project, local ? Number(local.updatedAt || 0) : undefined)
   if (!saved) return false
   state.links[change.id] = { cloudUpdatedAt: change.updatedAt, localUpdatedAt: Number(saved.updatedAt || project.updatedAt), pushedAt: link?.pushedAt }
   return true

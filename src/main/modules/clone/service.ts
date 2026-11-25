@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { canUseMockGeneration } from './mockPolicy'
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -486,6 +486,8 @@ export function pickAutoRunModelIdentity(
 
 function isBackgroundAutoRunRecoverable(project: CloneProject) {
   if (project.runMode !== 'auto') return false
+  // 另一端（网页 / 服务器）同步来、本机没动过的：可能那边正在跑，本机不能再跑一遍
+  if (project.syncedUpdatedAt && project.syncedUpdatedAt === project.updatedAt) return false
   if (!String(project.referenceVideoPath || '').trim()) return false
   const autoFlow = ensureAutoFlowStatus(project)
   if (!autoFlow.enabled) return false
@@ -1165,6 +1167,65 @@ function patchWorkflowV2(
   }
   project.workflowV2 = next
   return next
+}
+
+/** 脚本定好之后：定妆图已经有了就保持完成，没有才算轮到它 */
+function markIdentityStepAfterScript(project: CloneProject) {
+  const ready = Boolean(String(project.projectIdentityGridPath || '').trim())
+  return patchWorkflowV2(project, 'identity_grid', 'identity_grid', ready ? 'done' : 'running')
+}
+
+/** 上游（商品 / 模特 / 脚本）换了：后面的步骤要重新做，已出的文件先留着 */
+function markStepsStale(project: CloneProject, steps: CloneWorkflowV2Step[]) {
+  const current = project.workflowV2 ?? defaultWorkflowV2()
+  const stepStatus = { ...current.stepStatus }
+  for (const step of steps) stepStatus[step] = { status: 'idle', error: '', updatedAt: now() }
+  project.workflowV2 = { ...current, stepStatus, updatedAt: now() }
+}
+
+/** 分镜图是按什么出的：商品图、模特、脚本任一变了就要重画 */
+function storyboardFrameSignature(project: CloneProject, refs: string[]) {
+  const scripts = projectBlueprintShots(project).map((shot) => [shot.id, shot.scriptText, shot.generationPrompt, shot.visualDescription])
+  return createHash('sha1').update(JSON.stringify([project.productId ?? '', refs.map((item) => basename(item)).sort(), resolveAutoRunModelIdentityId(project), project.selectedScriptVariantId ?? '', scripts])).digest('hex')
+}
+
+/** 定妆图是旧商品 / 旧模特的：清掉重做，后面的步骤跟着失效 */
+function clearIdentityGrid(project: CloneProject) {
+  project.projectIdentityGridPath = undefined
+  project.projectIdentityGridStatus = 'idle'
+  project.projectIdentityGridPromptPreview = undefined
+  markStepsStale(project, ['identity_grid', 'storyboard_design', 'storyboard_videos', 'final_compose'])
+}
+
+const gptFramesInFlight = new Set<string>()
+const finalGateInFlight = new Set<string>()
+const gptFrameKey = (projectId: string, shotId: string) => `${projectId}:${shotId}`
+
+/** 自动流程跑到一半换商品 / 模特，前后画面会对不上 */
+function assertAutoRunIdle(projectId: string, internal?: boolean) {
+  if (!internal && autoRunStoryboardVideosInFlight.has(autoRunStoryboardVideosKey(projectId))) throw new Error('这个任务正在自动生成，换商品或模特会让画面对不上；请等这一轮跑完再换')
+}
+
+/** 上次退出时正在做的步骤：没有任务在跑了，不能一直显示「进行中」 */
+function resetInterruptedSteps(project: CloneProject) {
+  let changed = false
+  for (const shot of projectBlueprintShots(project)) {
+    if (shot.gptFrameStatus !== 'generating' || gptFramesInFlight.has(gptFrameKey(project.id, shot.id))) continue
+    const ready = Boolean(String(shot.gptFirstFramePath || shot.generatedFirstFramePath || '').trim())
+    replaceProjectShot(project, shot.id, ready ? { gptFrameStatus: 'done', status: 'ready', error: '', gptFrameError: '' } : { gptFrameStatus: 'failed', status: 'failed', gptFrameError: '上次生成被中断，请重新生成', error: '上次生成被中断，请重新生成' })
+    changed = true
+  }
+  if (changed) rebuildProjectStoryboardFrames(project)
+  if (project.projectIdentityGridStatus === 'generating') {
+    project.projectIdentityGridStatus = String(project.projectIdentityGridPath || '').trim() ? 'done' : 'failed'
+    changed = true
+  }
+  if (project.finalCompose?.status === 'composing' && !finalComposeScheduled.has(project.id)) {
+    syncFinalCompose(project, { status: 'failed', error: '上次合成被中断，请重新合成' })
+    patchWorkflowV2(project, 'final_compose', 'final_compose', 'failed', '上次合成被中断，请重新合成')
+    changed = true
+  }
+  return changed
 }
 
 function advanceAutoRunWorkflow(
@@ -2093,7 +2154,7 @@ function syncFinalCompose(project: CloneProject, patch: Partial<CloneFinalCompos
     nextRoundPlanPath: patch.nextRoundPlanPath ?? project.finalCompose?.nextRoundPlanPath,
     composeHealth: patch.composeHealth ?? project.finalCompose?.composeHealth,
     composeSummary: patch.composeSummary ?? project.finalCompose?.composeSummary,
-    error: patch.status === 'done' ? patch.error : patch.error ?? project.finalCompose?.error,
+    error: 'error' in patch || patch.status !== 'idle' ? patch.error : project.finalCompose?.error,
     updatedAt: now(),
   }
   return project.finalCompose
@@ -2109,12 +2170,10 @@ function getProjectComposeBodyUpgradePlan(project: CloneProject) {
 
 function resetFinalComposeArtifacts(project: CloneProject, reason?: string) {
   ensureCloneFlowState(project)
-  syncFinalCompose(project, {
-    status: 'idle',
-    outputPath: undefined,
-    coverImagePath: undefined,
-    error: reason || undefined,
-  })
+  syncFinalCompose(project, { status: 'idle', error: reason || undefined })
+  // syncFinalCompose 会沿用旧成片，这里要真的清掉，否则改了分镜仍显示旧成片
+  project.finalCompose = { ...project.finalCompose!, outputPath: undefined, coverImagePath: undefined, subtitleOverlay: undefined }
+  markStepsStale(project, ['final_compose'])
   previewPipelinePatch(project, {
     status: 'idle',
     previewOutputPath: undefined,
@@ -4812,6 +4871,13 @@ async function bindProjectProductFromLibrary(project: CloneProject, productId: s
     updatedAt: boundAt,
   }
 
+  if (project.productId && project.productId !== cachedProduct.id) {
+    // 换成另一个商品：旧脚本是写旧商品的，定妆图也是旧商品的
+    project.scriptVariantCandidates = []
+    project.selectedScriptVariantId = undefined
+    markStepsStale(project, ['script_generation'])
+    clearIdentityGrid(project)
+  }
   project.productId = cachedProduct.id
   project.coverAssetPath = coverAssetPath || project.coverAssetPath
   project.boundProductSnapshot = boundProductSnapshot
@@ -8591,6 +8657,62 @@ function isDownloadReadyShotStatus(status: unknown) {
   return normalized === 'downloading' || normalized === 'remote_succeeded_pending_download'
 }
 
+/** 自动流程停在「分镜视频」、又没有任务在等了：收尾或进入合成 */
+async function settleAutoStoryboardVideos(projectId: string) {
+  const key = autoRunStoryboardVideosKey(projectId)
+  if (autoRunStoryboardVideosInFlight.has(key) || storyboardBatchVideoGenerationInFlight.has(storyboardBatchVideoGenerationKey(projectId)) || finalGateInFlight.has(projectId)) return
+  const project = await cloneRepo.getProject(projectId)
+  if (!project?.blueprint) return
+  ensureCloneFlowState(project)
+  const autoFlow = project.autoFlowStatus
+  if (autoFlow?.status !== 'running' || autoFlow.currentStage !== 'storyboard_videos') return
+  if (hasPendingRemoteStoryboardVideoWork(project)) return
+  const shots = projectBlueprintShots(project)
+  if (!shots.length || shots.some((shot) => gptFramesInFlight.has(gptFrameKey(projectId, shot.id)))) return
+  // 刚提交、任务号还没回来的也算在跑
+  if ((project.shotVideoOutputs ?? []).some((output) => Number(output.submissionLockedUntil ?? 0) > now() && !String(output.videoPath || output.localPath || '').trim())) return
+  // 平台收下了但没回任务号：再等一会儿（30 分钟），不马上判失败
+  if (shots.some((shot) => {
+    const output = resolveShotVideoOutput(project, shot)
+    const since = Number(output.submissionStartedAt || output.createdAt || 0)
+    return !String(output.videoPath || output.localPath || '').trim() && Boolean(resolvePendingRemoteState(output.remoteStatus, output.remoteRaw)) && now() - since < 30 * 60_000
+  })) return
+  const hasVideo = (shot: ShotSpec) => {
+    const output = resolveShotVideoOutput(project, shot)
+    return Boolean(String(output.videoPath || output.localPath || shot.generatedClipPath || shot.uploadedAssetPath || '').trim())
+  }
+  const missing = shots.filter((shot) => !hasVideo(shot))
+  if (missing.length) {
+    const summary = `自动流程已停下：${missing.length} 个镜头没有出视频，可点「重新生成失败项」`
+    setAutoFlowStage(project, 'storyboard_videos', 'partial_failed', summary)
+    patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'failed', summary)
+    project.lastError = summary
+    await cloneRepo.upsertProject(project)
+    return
+  }
+  patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'done')
+  if (project.runMode !== 'auto' || String(project.finalCompose?.outputPath || '').trim()) {
+    setAutoFlowStage(project, project.finalCompose?.outputPath ? 'final_compose' : 'storyboard_videos', 'done', '自动流程已完成')
+    if (project.finalCompose?.outputPath) patchWorkflowV2(project, 'final_compose', 'final_compose', 'done')
+    await cloneRepo.upsertProject(project)
+    return
+  }
+  setAutoFlowStage(project, 'final_compose', 'running', '分镜视频已齐，自动进入成片合成')
+  await cloneRepo.upsertProject(project)
+  finalGateInFlight.add(projectId)
+  void cloneService
+    .autoRunCloneToFinalGate({ cloneProjectId: projectId })
+    .catch(async (error: any) => {
+      const latest = await cloneRepo.getProject(projectId)
+      if (!latest) return
+      const message = String(error?.message ?? error ?? '自动合成失败')
+      setAutoFlowStage(latest, 'final_compose', 'failed', message)
+      latest.lastError = message
+      await cloneRepo.upsertProject(latest)
+    })
+    .finally(() => finalGateInFlight.delete(projectId))
+}
+
 async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
   let project = await cloneRepo.getProject(projectId)
   if (!project) throw new Error('复刻项目不存在')
@@ -8680,6 +8802,18 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
         (!normalizedOutputStatus || normalizedOutputStatus === 'idle')
       ) {
         results.push({ shotId: currentShot.id, status: normalizedOutputStatus || 'idle', synced: false })
+        await refreshGenerationQueueRuntime(project.id)
+        return
+      }
+      // 分镜图还在出、视频从没提交过：没有任务可查，不能判成失败
+      const submitEvent = String(output.sourceEvent || '').trim()
+      const neverSubmitted =
+        !output.submissionStartedAt &&
+        !String(output.remoteStatus || '').trim() &&
+        !output.previousTaskIds?.length &&
+        (!submitEvent || submitEvent === 'unspecified')
+      if (neverSubmitted && (!hasStoryboardFrameSource || currentShot.gptFrameStatus === 'generating')) {
+        results.push({ shotId: currentShot.id, status: 'idle', synced: false })
         await refreshGenerationQueueRuntime(project.id)
         return
       }
@@ -8904,6 +9038,7 @@ async function reconcileRemoteStoryboardVideosInternal(projectId: string) {
     results.push({ shotId: currentShot.id, status: polled.status, taskId: recoverTaskId, synced: polled.synced })
     await refreshGenerationQueueRuntime(project.id)
   })
+  await settleAutoStoryboardVideos(projectId)
   const latest = await getReadonlyProjectWithRuntime((await cloneRepo.getProject(projectId)) || project)
   console.log('[clone-debug] shot-video-reconcile:done', {
     projectId,
@@ -8967,6 +9102,7 @@ const cloneProjectWorkspaceService = createCloneProjectWorkspaceService({
 })
 
 const cloneProductBindingService = createCloneProductBindingService({
+  assertIdle: assertAutoRunIdle,
   bindProjectProductFromLibrary,
   refreshProductCanonicalSourceFromLibrary,
   refreshProductAnalysisFromLibrary,
@@ -8992,11 +9128,13 @@ const cloneStoryboardGridWorkflow = createCloneStoryboardGridWorkflow({
 async function recoverLocalStoryboardFrames(project: CloneProject) {
   if (!project.blueprint?.shots?.length) return project
   const projectRoot = join(getAppPaths().dataDir, 'viral-clone', project.id, 'shots')
+  const analyzed = project.workflowV2?.stepStatus?.reference_analysis
+  const analyzedAt = analyzed?.status === 'done' ? Number(analyzed.updatedAt || 0) : 0
   let changed = false
   const recoveredShots = await Promise.all(
     project.blueprint.shots.map(async (shot) => {
       const currentPath = String(shot.gptFirstFramePath || shot.generatedFirstFramePath || '').trim()
-      if (currentPath) return shot
+      if (currentPath || gptFramesInFlight.has(gptFrameKey(project.id, shot.id))) return shot
       const gptFrameDir = join(projectRoot, shot.id, 'gpt-frames')
       try {
         const files = await readdir(gptFrameDir, { withFileTypes: true })
@@ -9016,7 +9154,7 @@ async function recoverLocalStoryboardFrames(project: CloneProject) {
             }),
         )
         const latest = candidates
-          .filter(Boolean)
+          .filter((item) => item && (!analyzedAt || item.mtimeMs >= analyzedAt))
           .sort((a, b) => Number(b?.mtimeMs || 0) - Number(a?.mtimeMs || 0))[0]
         if (!latest?.filePath) return shot
         changed = true
@@ -10001,6 +10139,18 @@ export const cloneService = {
       await cloneRepo.upsertProject(project)
       throw error
     }
+    if (project.baseBlueprint?.shots?.length) {
+      project.scriptVariantCandidates = []
+      project.selectedScriptVariantId = undefined
+      project.storyboardFrames = []
+      project.storyboardGridBatches = []
+      project.continuityPlan = undefined
+      project.promptCache = {}
+      project.frameCache = {}
+      project.shotVideoOutputs = (project.shotVideoOutputs ?? []).map((output) => ({ ...output, status: 'idle', taskId: undefined, videoPath: undefined, localPath: undefined, videoUrl: undefined, provider: undefined, model: undefined, remoteStatus: undefined, remoteRaw: undefined, error: undefined, submissionFingerprint: undefined, submissionStartedAt: undefined, submissionLockedUntil: undefined, sourceEvent: 'force_regenerate_reset', completedAt: undefined }))
+      resetFinalComposeArtifacts(project)
+      if (project.autoFlowStatus) project.autoFlowStatus.frameSignature = undefined
+    }
     project.referenceVideoName = analyzed.referenceVideoName
     if (!String(project.title || '').trim() || String(project.title || '').startsWith('未命名复刻任务 ')) {
       project.title = analyzed.referenceVideoName.replace(/\.[^.]+$/, '') || project.title
@@ -10216,7 +10366,7 @@ export const cloneService = {
       }))
       project.lastError = ''
       patchWorkflowV2(project, 'script_generation', 'script_generation', 'done')
-      patchWorkflowV2(project, 'identity_grid', 'identity_grid', 'running')
+      markIdentityStepAfterScript(project)
       for (const shotScript of defaultCandidate.shotScripts) {
         replaceProjectShot(project, shotScript.shotId, {
           scriptText: shotScript.scriptText,
@@ -10343,7 +10493,7 @@ export const cloneService = {
       selected: item.id === defaultCandidate.id,
     }))
     patchWorkflowV2(latest, 'script_generation', 'script_generation', 'done')
-    patchWorkflowV2(latest, 'identity_grid', 'identity_grid', 'running')
+    markIdentityStepAfterScript(latest)
     for (const shotScript of defaultCandidate.shotScripts) {
       replaceProjectShot(latest, shotScript.shotId, {
         scriptText: shotScript.scriptText,
@@ -10372,6 +10522,7 @@ export const cloneService = {
     ensureCloneFlowState(project)
     const candidate = (project.scriptVariantCandidates ?? []).find((item) => item.id === input.variantId)
     if (!candidate) throw new Error('脚本变体不存在')
+    const scriptChanged = Boolean(project.selectedScriptVariantId) && project.selectedScriptVariantId !== input.variantId
     project.scriptVariantCandidates = (project.scriptVariantCandidates ?? []).map((item) => ({
       ...item,
       selected: item.id === input.variantId,
@@ -10389,7 +10540,8 @@ export const cloneService = {
       })
     }
     patchWorkflowV2(project, 'script_generation', 'script_generation', 'done')
-    patchWorkflowV2(project, 'identity_grid', 'identity_grid', 'running')
+    markIdentityStepAfterScript(project)
+    if (scriptChanged) markStepsStale(project, ['storyboard_design', 'storyboard_videos', 'final_compose'])
     const saved = await cloneRepo.upsertProject(project)
     return {
       project: saved,
@@ -10424,6 +10576,7 @@ export const cloneService = {
       project = await this.selectProjectModelIdentity({
         cloneProjectId: project.id,
         identityId: input.selectedModelIdentityId,
+        internal: true,
       })
     }
     // Started without a model (AI 制片人): pick one now, before the identity grid is drawn for it.
@@ -10458,6 +10611,7 @@ export const cloneService = {
       project = await this.saveProjectProductImages({
         cloneProjectId: project.id,
         productReferenceImagePaths: requestedProductRefs,
+        internal: true,
       })
     }
 
@@ -10480,7 +10634,8 @@ export const cloneService = {
     advanceAutoRunWorkflow(project, 'script_generation')
     setAutoFlowStage(project, 'script_generation', 'running', `自动生成脚本变体并按 ${SCRIPT_VARIANT_AUTO_SELECT_THRESHOLD} 分阈值选择脚本`)
     await cloneRepo.upsertProject(project)
-    if (!project.scriptVariantCandidates?.length) {
+    const hadScripts = Boolean(project.scriptVariantCandidates?.length)
+    if (!hadScripts) {
       const variantResult = await this.generateScriptVariantsForProject({
         cloneProjectId: project.id,
         variantCount: Math.max(1, Math.min(6, Number(input.variantCount ?? 3) || 3)),
@@ -10494,21 +10649,29 @@ export const cloneService = {
       (currentProject.scriptVariantCandidates ?? []).find((item) => item.selected) ||
       currentProject.scriptVariantCandidates?.[0]
     if (!defaultCandidate?.id) throw new Error('脚本候选生成失败，未产出可用候选')
-    const selectedResult = await this.selectScriptVariantForProject({
-      cloneProjectId: currentProject.id,
-      variantId: defaultCandidate.id,
-    })
-    project = selectedResult.project
+    // 续跑时脚本已经选好：不再套一遍，免得盖掉手动改过的台词
+    if (!hadScripts || currentProject.selectedScriptVariantId !== defaultCandidate.id) {
+      project = (await this.selectScriptVariantForProject({ cloneProjectId: currentProject.id, variantId: defaultCandidate.id })).project
+    }
 
     advanceAutoRunWorkflow(project, 'storyboard_design')
     setAutoFlowStage(project, 'storyboard_design', 'running', '自动生成分镜设计图')
     await cloneRepo.upsertProject(project)
-    const frameResult = await this.generateStoryboardGridsForProject({
+    const frameSignature = storyboardFrameSignature(project, boundProductRefs)
+    const savedSignature = project.autoFlowStatus?.frameSignature
+    const allFrames = projectBlueprintShots(project).every((shot) => Boolean(resolveStoryboardFrameSource(shot)))
+    const frameResult = await cloneStoryboardGridWorkflow.generateStoryboardGridsForProject({
       cloneProjectId: project.id,
       productReferenceImagePaths: boundProductRefs,
       selectedModelIdentityId: resolvedModelIdentityId,
+      // 中断后续跑只补没出的；旧版本没记录的，图齐了就当作还能用
+      onlyMissing: hadScripts && (savedSignature ? savedSignature === frameSignature : allFrames),
     })
     project = frameResult.project
+    if (project) {
+      ensureAutoFlowStatus(project).frameSignature = frameSignature
+      project = await cloneRepo.upsertProject(project)
+    }
     if (!project) throw new Error('分镜图片生成后未返回项目快照')
 
     const frameRetryErrors: Array<{ shotId: string; index: number; reason: string }> = []
@@ -10586,7 +10749,7 @@ export const cloneService = {
     } as any)
     project = videoResult.project
     if (!project) throw new Error('分镜视频批量生成后未返回项目快照')
-    const pendingVideoCount = Number(videoResult.queueSummary?.pending ?? 0) + Number(videoResult.queueSummary?.timeout ?? 0)
+    const pendingVideoCount = Number(videoResult.queueSummary?.pending ?? 0)
     const failedVideoCount = Number(videoResult.queueSummary?.failed ?? 0)
     const partialFailureCount = frameRetryErrors.length + failedVideoCount + Number(videoResult.queueSummary?.timeout ?? 0)
     const heartbeat = applyAutoStoryboardHeartbeat(project, {
@@ -10646,6 +10809,18 @@ export const cloneService = {
     autoRunStoryboardVideosInFlight.set(autoRunLockKey, autoRunTask)
     try {
       return await autoRunTask
+    } catch (error: any) {
+      // 出错要落成失败，不能一直停在「进行中」
+      const failedProject = await cloneRepo.getProject(input.cloneProjectId)
+      if (failedProject && failedProject.autoFlowStatus?.status === 'running') {
+        const message = String(error?.message ?? error ?? '自动流程失败').trim() || '自动流程失败'
+        const stage = failedProject.autoFlowStatus.currentStage ?? 'script_generation'
+        setAutoFlowStage(failedProject, stage, 'failed', message)
+        if (failedProject.workflowV2?.stepStatus?.[stage]?.status === 'running') patchWorkflowV2(failedProject, stage, stage, 'failed', message)
+        failedProject.lastError = message
+        await cloneRepo.upsertProject(failedProject)
+      }
+      throw error
     } finally {
       autoRunStoryboardVideosInFlight.delete(autoRunLockKey)
     }
@@ -10752,7 +10927,9 @@ export const cloneService = {
   async saveProjectProductImages(input: {
     cloneProjectId: string
     productReferenceImagePaths?: string[]
+    internal?: boolean
   }) {
+    assertAutoRunIdle(input.cloneProjectId, input.internal)
     const project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project || (!project.baseBlueprint && !project.blueprint)) throw new Error('复刻项目或蓝图不存在')
     const refs = Array.from(new Set((input.productReferenceImagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean)))
@@ -11374,8 +11551,13 @@ export const cloneService = {
     const summaryError = errors.length
       ? `已跳过 ${failed} 个失败分镜，可在分镜视频卡片点击重新生成。`
       : ''
-    patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', failed ? 'failed' : 'done', summaryError)
-    if (!failed) {
+    const missingFrames = projectBlueprintShots(project).filter((shot) => !resolveStoryboardFrameSource(shot)).length
+    const unfinished = pending > 0 || missingFrames > 0
+    patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', failed ? 'failed' : unfinished ? 'running' : 'done', summaryError)
+    if (!failed && unfinished) {
+      project.lastError = ''
+      setProjectErrorContext(project, null)
+    } else if (!failed) {
       patchWorkflowV2(project, 'final_compose', 'final_compose', 'running')
       syncFinalCompose(project, { status: 'ready' })
       project.lastError = ''
@@ -12284,6 +12466,13 @@ export const cloneService = {
   },
 
   async resumePendingRemoteStoryboardVideosOnStartup() {
+    for (const item of await cloneRepo.listProjects()) {
+      if (item.syncedUpdatedAt && item.syncedUpdatedAt === item.updatedAt) continue
+      const project = await cloneRepo.getProject(item.id)
+      if (!project) continue
+      ensureCloneFlowState(project)
+      if (resetInterruptedSteps(project)) await cloneRepo.upsertProject(project)
+    }
     const projects = await cloneRepo.listProjects()
     const resumableProjects = projects
       .filter((project) => {
@@ -12400,10 +12589,13 @@ export const cloneService = {
     return { ok: true }
   },
 
-  async selectProjectModelIdentity(input: { cloneProjectId: string; identityId: string }) {
+  async selectProjectModelIdentity(input: { cloneProjectId: string; identityId: string; internal?: boolean }) {
+    assertAutoRunIdle(input.cloneProjectId, input.internal)
     const project = await cloneRepo.getProject(input.cloneProjectId)
     if (!project) throw new Error('复刻项目不存在')
+    const previousIdentityId = resolveAutoRunModelIdentityId(project)
     await syncProjectSelectedIdentity(project, input.identityId)
+    if (previousIdentityId && previousIdentityId !== resolveAutoRunModelIdentityId(project)) clearIdentityGrid(project)
     const saved = await cloneRepo.upsertProject(project)
     enqueueBackgroundAutoRunIfReady(this, saved.id, 'after_select_model_identity')
     return saved
@@ -13821,6 +14013,17 @@ export const cloneService = {
   },
 
   async generateGptShotFrames(input: GenerateGptShotFramesInput) {
+    const frameKey = gptFrameKey(input.cloneProjectId, input.shotId)
+    if (gptFramesInFlight.has(frameKey)) throw new Error('这个分镜正在出图，请等它完成')
+    gptFramesInFlight.add(frameKey)
+    try {
+      return await this.generateGptShotFramesWithRetry(input)
+    } finally {
+      gptFramesInFlight.delete(frameKey)
+    }
+  },
+
+  async generateGptShotFramesWithRetry(input: GenerateGptShotFramesInput) {
     let lastError: unknown = null
     for (let attempt = 0; attempt <= AUTO_CLONE_IMAGE_RETRY_LIMIT; attempt += 1) {
       try {
@@ -16256,6 +16459,7 @@ export const cloneService = {
 }
 
 export const __cloneServiceInternals = {
+  resetFinalComposeArtifacts,
   ensureAi666SegmentVideoTask,
   isShotVideoSubmissionLocked,
   isShotVideoMissingTaskGraceActive,

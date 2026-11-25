@@ -4,7 +4,7 @@ import type { ShotSpec } from './types'
 
 export type CloneStoryboardGridWorkflowDeps = {
   ensureCloneFlowState: (project: any) => void
-  patchWorkflowV2: (project: any, currentStep: any, step: any, status: any) => void
+  patchWorkflowV2: (project: any, currentStep: any, step: any, status: any, error?: string) => void
   syncProjectSelectedIdentity: (project: any, identityId: string) => Promise<unknown>
   assertStoryboardExtractionReady: (project: any) => void
   selectedIdentityPack: (project: any) => any
@@ -28,6 +28,8 @@ export function createCloneStoryboardGridWorkflow(deps: CloneStoryboardGridWorkf
       cloneProjectId: string
       productReferenceImagePaths?: string[]
       selectedModelIdentityId?: string
+      /** 只补没出的（自动流程续跑用） */
+      onlyMissing?: boolean
     }) {
       console.log('[clone-debug] generate-storyboard-grids-service:start', {
         cloneProjectId: input.cloneProjectId,
@@ -57,7 +59,7 @@ export function createCloneStoryboardGridWorkflow(deps: CloneStoryboardGridWorkf
       await cloneRepo.upsertProject(project)
       const generated = await deps.generateAllShotFrames({
         cloneProjectId: input.cloneProjectId,
-        onlyMissing: false,
+        onlyMissing: Boolean(input.onlyMissing),
         which: 'start',
         shotIds: shots.map((shot) => shot.id),
         productReferenceImagePaths: refs,
@@ -85,7 +87,8 @@ export function createCloneStoryboardGridWorkflow(deps: CloneStoryboardGridWorkf
         }))
       project.storyboardGridBatches = latest.storyboardGridBatches
       project.storyboardFrames = latest.storyboardFrames
-      deps.patchWorkflowV2(project, 'storyboard_design', 'storyboard_design', 'done')
+      const missing = latest.storyboardFrames.filter((frame: any) => !frame.imagePath).length
+      deps.patchWorkflowV2(project, 'storyboard_design', 'storyboard_design', missing ? 'failed' : 'done', missing ? `${missing} 个分镜没有出图` : '')
       deps.patchWorkflowV2(project, 'storyboard_videos', 'storyboard_videos', 'running')
       const saved = await cloneRepo.upsertProject({ ...latest, workflowV2: project.workflowV2 })
       console.log('[clone-debug] generate-storyboard-grids-service:done', {
