@@ -1,6 +1,8 @@
 import { createRelay, type RelayService } from './relay'
 import { engineFilesToCloudRefs, routesToCloneEngine, type CloneEngine } from './cloneEngine'
 import http from 'node:http'
+import { createReadStream } from 'node:fs'
+import type { AdminDataService } from './adminData'
 import { createWebApp } from './webApp'
 import type { CloudConfig } from './config'
 import type { CloudService } from './service'
@@ -31,6 +33,46 @@ type Handler = (ctx: Ctx) => Promise<unknown> | unknown
 /** 处理器返回此类型时按原样输出（支付回调需要特定的响应格式） */
 type RawResponse = { __raw: true; status: number; body: string | Buffer; contentType: string; headers?: Record<string, string> }
 const raw = (status: number, body: string | Buffer, contentType = 'text/plain; charset=utf-8', headers?: Record<string, string>): RawResponse => ({ __raw: true, status, body, contentType, headers })
+
+/** 处理器返回此类型时从磁盘流式输出文件，支持 Range（视频拖动播放不用整段读进内存） */
+type FileResponse = { __file: true; path: string; size: number; mime: string; headers?: Record<string, string> }
+const fileResponse = (file: { path: string; size: number; mime: string }, headers?: Record<string, string>): FileResponse => ({ __file: true, ...file, headers })
+
+function sendFile(req: http.IncomingMessage, res: http.ServerResponse, file: FileResponse) {
+  res.setHeader('Content-Type', file.mime)
+  res.setHeader('Accept-Ranges', 'bytes')
+  for (const [name, value] of Object.entries(file.headers || {})) res.setHeader(name, value)
+  let start = 0
+  let end = file.size - 1
+  const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim())
+  if (range && file.size > 0) {
+    if (range[1] === '' && range[2] !== '') {
+      start = Math.max(0, file.size - Number(range[2]))
+    } else {
+      start = Number(range[1] || 0)
+      if (range[2] !== '') end = Math.min(end, Number(range[2]))
+    }
+    if (start > end || start >= file.size) {
+      res.statusCode = 416
+      res.setHeader('Content-Range', `bytes */${file.size}`)
+      res.end()
+      return
+    }
+    res.statusCode = 206
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${file.size}`)
+  } else {
+    res.statusCode = 200
+  }
+  res.setHeader('Content-Length', String(file.size ? end - start + 1 : 0))
+  if (req.method === 'HEAD' || !file.size) {
+    res.end()
+    return
+  }
+  const stream = createReadStream(file.path, { start, end })
+  stream.on('error', () => res.destroy())
+  res.on('close', () => stream.destroy())
+  stream.pipe(res)
+}
 
 type RouteOptions = { maxBodyBytes?: number }
 
@@ -69,7 +111,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy, sceneSwap?: SceneSwapService) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy, sceneSwap?: SceneSwapService, adminData?: AdminDataService) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -203,8 +245,8 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('POST', '/api/v1/ai/public-urls', (ctx) => generation.publicUrls(member(ctx).id, ctx.body as any))
   // 平台下载参考图用的签名链接（不需要登录，靠签名和有效期）
   route('GET', '/api/v1/public-files/:id', (ctx) => {
-    const file = generation.readPublicFile(ctx.params.id, query(ctx))
-    return raw(200, file.body, file.mime, { 'Cache-Control': 'private, max-age=600' })
+    const userId = generation.verifyPublicLink(ctx.params.id, query(ctx))
+    return fileResponse(sync.fileInfo(userId, ctx.params.id), { 'Cache-Control': 'private, max-age=600' })
   })
 
   /* ---------------------------------------------------------------- 订单 / 兑换 */
@@ -266,6 +308,28 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('DELETE', '/api/v1/admin/config/:key', (ctx) => (service.admin.deleteConfig(admin(ctx), ctx.params.key), {}))
   route('GET', '/api/v1/admin/software-settings', (ctx) => (admin(ctx), service.admin.getManagedSettings()))
   route('PUT', '/api/v1/admin/software-settings', (ctx) => service.admin.saveManagedSettings(admin(ctx), ctx.body.settings))
+  /* 用户数据（只读，仅超级管理员；查看留痕，同一人看同一用户 10 分钟内只记一次） */
+  if (adminData) {
+    const viewed = new Map<string, number>()
+    const superAdmin = (ctx: Ctx, target: string, what: string) => {
+      const current = service.authenticate(ctx.token, { admin: true, superAdmin: true }).user
+      if (current.mustChangePassword) throw new CloudError('FORBIDDEN', '请先修改初始密码再使用管理后台', 403, { reason: 'password_change_required' })
+      const actor = { user: current, ip: ctx.ip }
+      const key = `${current.id}:${target}:${what}`
+      const t = Date.now()
+      if ((viewed.get(key) ?? 0) < t - 10 * 60 * 1000) {
+        viewed.set(key, t)
+        if (viewed.size > 5000) viewed.clear()
+        service.admin.audit(actor, 'admin.userdata.view', target, { what })
+      }
+      return actor
+    }
+    route('GET', '/api/v1/admin/users/:id/data/summary', (ctx) => (superAdmin(ctx, ctx.params.id, 'summary'), { summary: adminData.summary(ctx.params.id) }))
+    route('GET', '/api/v1/admin/users/:id/data/records', (ctx) => (superAdmin(ctx, ctx.params.id, `records:${ctx.url.searchParams.get('collection') || ''}`), adminData.records(ctx.params.id, query(ctx))))
+    route('GET', '/api/v1/admin/users/:id/data/files', (ctx) => (superAdmin(ctx, ctx.params.id, 'files'), adminData.files(ctx.params.id, query(ctx))))
+    route('GET', '/api/v1/admin/generations', (ctx) => (superAdmin(ctx, ctx.url.searchParams.get('userId') || '*', 'generations'), adminData.generations(query(ctx))))
+    route('POST', '/api/v1/admin/file-links', (ctx) => (superAdmin(ctx, '*', 'files'), adminData.fileLinks(ctx.body)))
+  }
   route('GET', '/api/v1/admin/audit', (ctx) => (admin(ctx), service.admin.listAudit(query(ctx))))
 
   function applyCors(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -356,6 +420,10 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
         body,
       }
       const result = await matched.handler(ctx)
+      if (result && typeof result === 'object' && (result as FileResponse).__file) {
+        sendFile(req, res, result as FileResponse)
+        return
+      }
       if (result && typeof result === 'object' && (result as RawResponse).__raw) {
         const r = result as RawResponse
         res.statusCode = r.status

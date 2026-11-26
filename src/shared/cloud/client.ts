@@ -26,6 +26,7 @@ import type {
   CloudUserRole,
 } from './types'
 import type { ManagedSoftwareSettings } from './managedSettings'
+import type { AdminDataFile, AdminDataRecord, AdminFileLinks, AdminGeneration, AdminGenerationQuery, AdminUserDataSummary } from './adminData'
 import type { AiChatRequest, AiChatResponse, AiGenerationJob, AiGenerationRequest, AiUsageResponse } from './ai'
 import type { SyncChange, SyncPullResponse, SyncPushResponse, SyncUploadResponse, SyncUsageResponse } from './sync'
 import type {
@@ -276,6 +277,14 @@ export function createCloudClient(options: CloudClientOptions) {
       saveSoftwareSettings: (settings: ManagedSoftwareSettings) =>
         request<{ settings: ManagedSoftwareSettings; updatedAt: number }>('PUT', '/api/v1/admin/software-settings', { settings }),
       listAudit: (q: { keyword?: string; page?: number }) => request<CloudPage<CloudAuditLog>>('GET', `/api/v1/admin/audit${qs(q)}`),
+      /* 用户数据（只读，仅超级管理员） */
+      userDataSummary: (userId: string) => request<{ summary: AdminUserDataSummary }>('GET', `/api/v1/admin/users/${encodeURIComponent(userId)}/data/summary`),
+      userDataRecords: (userId: string, q: { collection: string; keyword?: string; includeDeleted?: '1' | ''; page?: number }) =>
+        request<CloudPage<AdminDataRecord>>('GET', `/api/v1/admin/users/${encodeURIComponent(userId)}/data/records${qs(q)}`),
+      userDataFiles: (userId: string, q: { kind?: string; page?: number }) =>
+        request<CloudPage<AdminDataFile>>('GET', `/api/v1/admin/users/${encodeURIComponent(userId)}/data/files${qs(q)}`),
+      listGenerations: (q: AdminGenerationQuery) => request<CloudPage<AdminGeneration>>('GET', `/api/v1/admin/generations${qs(q)}`),
+      fileLinks: (files: Array<{ userId: string; fileId: string }>) => request<AdminFileLinks>('POST', '/api/v1/admin/file-links', { files }),
     },
   }
 }

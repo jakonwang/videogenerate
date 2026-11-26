@@ -11,6 +11,7 @@ import {
 import type { BillingService } from './billing'
 import type { CloudDb } from './db'
 import { CloudError } from './security'
+import type { GenerationLog } from './generationLog'
 import { TIKHUB_PARSE_PATHS } from '../../../src/shared/videoParserPlatforms'
 import { TIKHUB_RADAR_PATHS } from '../../../src/shared/competitorRadar'
 
@@ -323,6 +324,8 @@ export function createAiProxy(deps: {
   /** 不扣点但有成本的调用每天上限，0 = 不限 */
   meteredPerDay?: { chat: number; tikhub: number }
   tikhubBaseUrl?: string
+  /** 给总后台留生成记录（可选） */
+  genLog?: GenerationLog
 }) {
   const { db } = deps
   const doFetch = deps.fetchImpl ?? fetch
@@ -373,13 +376,14 @@ export function createAiProxy(deps: {
     db.prepare('INSERT INTO ai_proxy_usage (user_id, day, kind, calls) VALUES (?, ?, ?, 1) ON CONFLICT (user_id, day, kind) DO UPDATE SET calls = calls + 1').run(userId, day, kind)
   }
 
-  function settle(holdId: string, ok: boolean, reason = '') {
+  function settle(holdId: string, ok: boolean, reason = '', json: any = null) {
     try {
       deps.billing.settle(null, holdId, ok, reason.slice(0, 200))
     } catch (error) {
       console.warn('[ai-proxy] 点数结算失败', holdId, (error as Error).message)
     }
     db.prepare("UPDATE ai_proxy_tasks SET status = ?, settled_at = ? WHERE hold_id = ? AND status = 'pending'").run(ok ? 'succeeded' : 'failed', deps.now(), holdId)
+    deps.genLog?.finished(holdId, ok, reason, json)
   }
 
   /** 这个请求是不是在查询某个还没结算的任务 */
@@ -520,8 +524,8 @@ export function createAiProxy(deps: {
           const json = parseJson(responseBody)
           if (json && responseMentions(json, pending.ids)) {
             const status = pickTaskStatus(json)
-            if (status === 'succeeded') settle(pending.holdId, true)
-            else if (status === 'failed') settle(pending.holdId, false, responseLooksFailed(json) || '平台任务失败')
+            if (status === 'succeeded') settle(pending.holdId, true, '', json)
+            else if (status === 'failed') settle(pending.holdId, false, responseLooksFailed(json) || '平台任务失败', json)
           }
         }
         sendBuffered(res, upstreamRes, responseBody)
@@ -535,6 +539,7 @@ export function createAiProxy(deps: {
       const units = extractUnits(body, contentType)
       if (units > MAX_UNITS) throw new CloudError('BAD_REQUEST', `一次最多生成 ${MAX_UNITS} 份`, 400)
       const hold = deps.billing.hold(identity.userId, { capability: decision.capability, platform, model, client, feature: 'ai-proxy' }, { units })
+      deps.genLog?.started({ id: hold.id, userId: identity.userId, capability: decision.capability, platform, model, client, body, contentType })
       let upstreamRes: Response
       let responseBody: Buffer
       try {
@@ -553,11 +558,12 @@ export function createAiProxy(deps: {
         const status = pickTaskStatus(json)
         if (taskId && status !== 'succeeded' && !hasOutput(json)) {
           db.prepare('INSERT OR REPLACE INTO ai_proxy_tasks (hold_id, user_id, platform, task_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(hold.id, identity.userId, platform, taskId, 'pending', deps.now())
+          deps.genLog?.submitted(hold.id, taskId)
         } else {
-          settle(hold.id, true)
+          settle(hold.id, true, '', json)
         }
       } else {
-        settle(hold.id, true)
+        settle(hold.id, true, '', json)
       }
       sendBuffered(res, upstreamRes, responseBody)
       return true

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowLeft, Coins, Crown, Laptop, ReceiptText, ShieldCheck, UserRound } from 'lucide-react'
 
@@ -28,6 +28,9 @@ import {
 } from '@/components/admin/admin-ui'
 import { Button, Input, Switch } from '@/components/admin/controls'
 import { adminClient } from '@/lib/admin-client'
+import { useAdminMe } from '@/components/admin/admin-me'
+import { UserDataPanel } from '@/components/admin/user-data/user-data-panel'
+import { cn } from '@/lib/utils'
 
 function toDateInput(ms: number | null) {
   if (!ms || ms >= PERMANENT_AT) return ''
@@ -39,6 +42,12 @@ function toDateInput(ms: number | null) {
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>()
   const userId = String(params.id)
+  const me = useAdminMe()
+  const router = useRouter()
+  const search = useSearchParams()
+  const canViewData = me?.role === 'super_admin'
+  const tab = canViewData && search.get('tab') === 'data' ? 'data' : 'account'
+  const switchTab = (next: 'account' | 'data') => router.replace(next === 'data' ? `/admin/users/${encodeURIComponent(userId)}?tab=data` : `/admin/users/${encodeURIComponent(userId)}`, { scroll: false })
   const detail = useAdminData(() => adminClient.admin.getUser(userId), [userId])
   const plans = useAdminData(() => adminClient.admin.listPlans(), [])
   const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null)
@@ -144,6 +153,19 @@ export default function AdminUserDetailPage() {
 
           {notice ? <AdminNotice tone={notice.tone}>{notice.text}</AdminNotice> : null}
 
+          {canViewData ? (
+            <div className="vg-tabs">
+              <button type="button" className={cn('vg-tabs__btn', tab === 'account' && 'is-active')} onClick={() => switchTab('account')}>
+                账号与会员
+              </button>
+              <button type="button" className={cn('vg-tabs__btn', tab === 'data' && 'is-active')} onClick={() => switchTab('data')}>
+                生成数据
+              </button>
+            </div>
+          ) : null}
+
+          {tab === 'data' ? <UserDataPanel userId={userId} /> : (
+          <>
           <section className="vg-stats">
             <div className="vg-stat">
               <span className="vg-stat__icon">
@@ -354,6 +376,8 @@ export default function AdminUserDetailPage() {
               ))}
             </AdminTable>
           </AdminPanel>
+          </>
+          )}
         </>
       ) : null}
     </AdminPage>

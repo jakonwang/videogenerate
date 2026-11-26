@@ -113,14 +113,14 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     return Number(row.size)
   }
 
-  function uploadFile(userId: string, body: Buffer, mimeHeader: string) {
+  function uploadFile(userId: string, body: Buffer, mimeHeader: string, options: { skipQuota?: boolean } = {}) {
     const mime = String(mimeHeader || '').split(';')[0].trim().toLowerCase()
     if (!ALLOWED_MIME.test(mime)) throw badRequest(`不支持的文件类型：${mime || '未知'}`)
     if (!body.length) throw badRequest('文件为空')
     const fileId = createHash('sha256').update(body).digest('hex')
     const existing = db.prepare('SELECT size FROM sync_files WHERE user_id = ? AND id = ?').get(userId, fileId) as { size: number } | undefined
     if (existing) return { fileId, size: existing.size, mime }
-    if (usedBytes(userId) + body.length > deps.quotaBytes) {
+    if (!options.skipQuota && usedBytes(userId) + body.length > deps.quotaBytes) {
       throw new CloudError('QUOTA_EXCEEDED', '云端存储空间已满，请清理后再试', 413)
     }
     const dir = userDir(userId)
@@ -133,6 +133,19 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     }
     db.prepare('INSERT OR IGNORE INTO sync_files (user_id, id, mime, size, created_at) VALUES (?, ?, ?, ?, ?)').run(userId, fileId, mime, body.length, now())
     return { fileId, size: body.length, mime }
+  }
+
+  /** 文件在磁盘上的位置（不读内容，大视频走流式输出） */
+  function fileInfo(userId: string, fileId: string): { mime: string; size: number; path: string } {
+    if (!FILE_ID_PATTERN.test(fileId)) throw badRequest('文件 id 不合法')
+    const row = db.prepare('SELECT mime FROM sync_files WHERE user_id = ? AND id = ?').get(userId, fileId) as { mime: string } | undefined
+    if (!row) {
+      const scene = db.prepare('SELECT owner_id FROM scene_swap_scenes WHERE file_id = ? AND is_system = 1 LIMIT 1').get(fileId) as { owner_id: string } | undefined
+      if (scene && scene.owner_id !== userId) return fileInfo(scene.owner_id, fileId)
+    }
+    const path = join(userDir(userId), fileId)
+    if (!row || !existsSync(path)) throw new CloudError('NOT_FOUND', '文件不存在', 404)
+    return { mime: row.mime, size: statSync(path).size, path }
   }
 
   function readFile(userId: string, fileId: string): { mime: string; size: number; body: Buffer } {
@@ -166,6 +179,7 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     for (const row of candidates) byUser.set(row.user_id, [...(byUser.get(row.user_id) || []), row])
     const HEX = /[a-f0-9]{64}/g
     const hasJobs = Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_jobs'").get())
+    const hasGenLogs = Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_gen_logs'").get())
     let removed = 0
     let bytes = 0
     for (const [userId, rows] of byUser) {
@@ -185,6 +199,9 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
         if (row.output_file_id) referenced.add(row.output_file_id)
         for (const match of row.data.match(HEX) || []) referenced.add(match)
       }
+      if (hasGenLogs) {
+        for (const row of db.prepare("SELECT thumb_file_id FROM ai_gen_logs WHERE user_id = ? AND thumb_file_id != ''").all(userId) as Array<{ thumb_file_id: string }>) referenced.add(row.thumb_file_id)
+      }
       for (const row of rows) {
         if (referenced.has(row.id)) continue
         rmSync(join(userDir(userId), row.id), { force: true })
@@ -196,7 +213,12 @@ export function createSyncService(deps: { db: CloudDb; dataDir: string; quotaByt
     return { removed, bytes }
   }
 
-  return { pull, push, uploadFile, readFile, usage, cleanupOrphans }
+  /** 服务器自己替用户存的小文件（生成记录的缩略图）：不受配额限制 */
+  function storeSystemFile(userId: string, body: Buffer, mime: string) {
+    return uploadFile(userId, body, mime, { skipQuota: true })
+  }
+
+  return { pull, push, uploadFile, storeSystemFile, readFile, fileInfo, usage, cleanupOrphans }
 }
 
 export type SyncService = ReturnType<typeof createSyncService>

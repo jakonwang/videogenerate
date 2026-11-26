@@ -44,6 +44,8 @@ type Quota = { assert: (userId: string) => void; record: (userId: string, purpos
 type FileStore = {
   read: (userId: string, fileId: string) => { mime: string; body: Buffer }
   store: (userId: string, body: Buffer, mime: string) => { fileId: string }
+  /** 只查类型不读内容（可选；没有时退回 read） */
+  info?: (userId: string, fileId: string) => { mime: string }
 }
 
 /** Node 自带的 fetch 等响应头最多 300 秒，要比它短 */
@@ -187,8 +189,8 @@ export function createGenerationService(deps: {
     return createHmac('sha256', deps.linkSecret).update(`${userId}:${fileId}:${expiresAt}`).digest('hex')
   }
 
-  /** 校验签名链接并返回文件（平台下载参考图用，不需要登录） */
-  function readPublicFile(fileId: string, query: Record<string, string>) {
+  /** 校验签名链接，返回文件属于哪个用户 */
+  function verifyPublicLink(fileId: string, query: Record<string, string>) {
     const userId = String(query.u || '')
     const expiresAt = Number(query.e || 0)
     const signature = Buffer.from(String(query.s || ''), 'hex')
@@ -196,7 +198,22 @@ export function createGenerationService(deps: {
     if (!userId || expiresAt < now() || signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
       throw new CloudError('FORBIDDEN', '链接无效或已过期', 403)
     }
-    return deps.files.read(userId, fileId)
+    return userId
+  }
+
+  /** 校验签名链接并返回文件（平台下载参考图用，不需要登录） */
+  function readPublicFile(fileId: string, query: Record<string, string>) {
+    return deps.files.read(verifyPublicLink(fileId, query), fileId)
+  }
+
+  function mimeOf(userId: string, fileId: string) {
+    return deps.files.info ? deps.files.info(userId, fileId).mime : deps.files.read(userId, fileId).mime
+  }
+
+  /** 给某个用户的文件签一条站内链接（相对地址） */
+  function signedLink(userId: string, fileId: string, mime: string, expiresAt: number) {
+    const ext = EXT_BY_MIME[mime] || (mime.startsWith('video/') ? '.mp4' : '')
+    return `/api/v1/public-files/${fileId}?u=${encodeURIComponent(userId)}&e=${expiresAt}&s=${sign(userId, fileId, expiresAt)}${ext ? `&t=${ext}` : ''}`
   }
 
   async function publicUrl(credentials: ModelCredentials, userId: string, fileId: string, localPath: string, ttlMs = PUBLIC_LINK_TTL_MS, keyPrefix = 'tiktokcut/mobile') {
@@ -523,12 +540,11 @@ export function createGenerationService(deps: {
     for (const fileId of ids) {
       let mime = ''
       try {
-        mime = deps.files.read(userId, fileId).mime
+        mime = mimeOf(userId, fileId)
       } catch {
         continue
       }
-      const ext = EXT_BY_MIME[mime] || (mime.startsWith('video/') ? '.mp4' : '')
-      links[fileId] = `/api/v1/public-files/${fileId}?u=${encodeURIComponent(userId)}&e=${expiresAt}&s=${sign(userId, fileId, expiresAt)}${ext ? `&t=${ext}` : ''}`
+      links[fileId] = signedLink(userId, fileId, mime, expiresAt)
     }
     return { links, expiresAt }
   }
@@ -538,7 +554,7 @@ export function createGenerationService(deps: {
     while (Object.values(lanes).some((lane) => lane.running || lane.queue.length)) await new Promise((resolve) => setTimeout(resolve, 20))
   }
 
-  return { create, get, list, readPublicFile, publicUrls, fileLinks, renderImage, assertImageConfigured: () => void assertConfigured('image'), idle }
+  return { create, get, list, readPublicFile, verifyPublicLink, signedLink, publicUrls, fileLinks, renderImage, assertImageConfigured: () => void assertConfigured('image'), idle }
 }
 
 export type GenerationService = ReturnType<typeof createGenerationService>

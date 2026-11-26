@@ -175,6 +175,7 @@
     "test:cloud": "tsx test/cloud-service.smoke.ts",
     "test:cloud-billing": "tsx test/cloud-billing.smoke.ts",
     "test:cloud-ai-proxy": "tsx test/cloud-ai-proxy.smoke.ts",
+    "test:cloud-admin-data": "tsx test/cloud-admin-data.smoke.ts",
     "test:cloud-default-admin": "tsx test/cloud-default-admin.smoke.ts",
     "test:cloud-license:e2e": "node test/cloud-license-electron.e2e.cjs"
   },

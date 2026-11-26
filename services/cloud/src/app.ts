@@ -14,11 +14,13 @@ import { createHash } from 'node:crypto'
 import { createCloneEngine } from './cloneEngine'
 import { createRelay } from './relay'
 import { createAiProxy } from './aiProxy'
+import { createFfmpegThumbnailer, createGenerationLog, type Thumbnailer } from './generationLog'
+import { createAdminDataService } from './adminData'
 import { applyManagedSettings, toProxiedManagedSettings } from '../../../src/shared/cloud/managedSettings'
 import { normalizeCredentials } from '../../../src/main/modules/clone/credentials'
 
 /** 组装云端服务（供 server.ts 与测试复用） */
-export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders>; matting?: Matting; inspect?: (prompt: string, images: Buffer[]) => Promise<string>; sceneSwapAttemptLimitMs?: number } = {}) {
+export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { now?: () => number; fetchImpl?: typeof fetch; generationProviders?: Partial<GenerationProviders>; matting?: Matting; inspect?: (prompt: string, images: Buffer[]) => Promise<string>; sceneSwapAttemptLimitMs?: number; genLogThumbnailer?: Thumbnailer | null } = {}) {
   const config = { ...loadCloudConfig(), ...overrides }
   if (config.isProduction && config.mockPay) {
     throw new Error('生产环境禁止开启 CLOUD_PAY_MOCK')
@@ -46,7 +48,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     db,
     now: options.now ?? Date.now,
     readManagedSettings: service.readManagedSettings,
-    files: { read: (userId, fileId) => sync.readFile(userId, fileId), store: (userId, body, mime) => sync.uploadFile(userId, body, mime) },
+    files: { read: (userId, fileId) => sync.readFile(userId, fileId), store: (userId, body, mime) => sync.uploadFile(userId, body, mime), info: (userId, fileId) => sync.fileInfo(userId, fileId) },
     quota: ai.quota,
     billing: service.billing,
     publicBaseUrl: () => config.publicBaseUrl,
@@ -96,6 +98,14 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     renderSlots: config.subtitleRenderSlots,
     fontsDir: config.fontsDir,
   })
+  const ffmpegThumbnailer = options.genLogThumbnailer === undefined && config.genLogThumbnails ? createFfmpegThumbnailer() : null
+  const genLog = createGenerationLog({
+    db,
+    now: options.now ?? Date.now,
+    // 缩略图很小，不受同步空间配额限制（配额满了也要留记录）
+    store: (userId, body, mime) => sync.storeSystemFile(userId, body, mime),
+    thumbnailer: options.genLogThumbnailer !== undefined ? options.genLogThumbnailer : ffmpegThumbnailer,
+  })
   const aiProxy = createAiProxy({
     db,
     readManagedSettings: service.readManagedSettings,
@@ -106,8 +116,10 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     tikhubBaseUrl: config.tikhubBaseUrl,
     meteredPerDay: { chat: config.aiProxyChatPerDay, tikhub: config.aiProxyTikhubPerDay },
     maxBodyBytes: Math.max(1, config.aiProxyMaxBodyMb) * 1024 * 1024,
+    genLog,
   })
-  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap)
+  const adminData = createAdminDataService({ db, now: options.now ?? Date.now, sync, generation })
+  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap, adminData)
   const server = http.createServer((req, res) => void handler(req, res))
 
   // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.
@@ -147,6 +159,8 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     sync,
     cloneEngine,
     sceneSwap,
+    genLog,
+    adminData,
     listen: () =>
       new Promise<number>((resolve, reject) => {
         server.once('error', reject)
@@ -175,6 +189,8 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
         dedupeTimer = null
         cloneEngine.close()
         sceneSwap.close()
+        genLog.close()
+        ffmpegThumbnailer?.stop()
         server.close(() => {
           db.close()
           resolve()

@@ -1072,6 +1072,8 @@ export function createCloudService(deps: {
       return { ...repo.listOrders({ userId: user.id, ...p }), ...p }
     },
     admin: {
+      /** 只读查看类操作留痕（总后台「用户数据」） */
+      audit: (actor: Actor, action: string, target: string, detail?: unknown) => audit(actor, action, target, detail),
       stats: adminStats,
       listUsers: (q: Record<string, string>) => {
         const p = clampPage(q.page, q.pageSize)

@@ -313,6 +313,34 @@ const MIGRATIONS: Array<{ id: number; sql: string }> = [
       );
     `,
   },
+  {
+    // 总后台「用户数据」：电脑端经 AI 代理的每次生成留一条记录（提示词、模型、结果、服务器截的缩略图）；
+    // 全站按集合浏览同步记录时要用的索引
+    id: 11,
+    sql: `
+      CREATE TABLE ai_gen_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        capability TEXT NOT NULL,
+        platform TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        client TEXT NOT NULL DEFAULT '',
+        prompt TEXT NOT NULL DEFAULT '',
+        input_images INTEGER NOT NULL DEFAULT 0,
+        task_id TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        error TEXT NOT NULL DEFAULT '',
+        output_url TEXT NOT NULL DEFAULT '',
+        thumb_file_id TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_ai_gen_logs_user ON ai_gen_logs(user_id, created_at);
+      CREATE INDEX idx_ai_gen_logs_created ON ai_gen_logs(created_at);
+      CREATE INDEX idx_sync_records_collection ON sync_records(collection, server_updated_at);
+      CREATE INDEX IF NOT EXISTS idx_ai_jobs_created ON ai_jobs(created_at);
+    `,
+  },
 ]
 
 export function openCloudDb(path: string): CloudDb {

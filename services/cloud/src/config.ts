@@ -60,6 +60,8 @@ export function loadCloudConfig() {
     ffmpegConcurrency: envInt('CLOUD_FFMPEG_CONCURRENCY', 1),
     /** 每个账号 24 小时内最多几个服务器视频处理任务，0 = 不限 */
     ffmpegPerDay: envInt('CLOUD_FFMPEG_PER_DAY', 60),
+    /** 电脑端生成记录：成功后服务器截一张小缩略图给总后台看（0 = 关闭，只留文字记录） */
+    genLogThumbnails: env('CLOUD_GEN_LOG_THUMBNAILS', '1') !== '0',
     /** 服务器复刻引擎：最多同时几个用户的引擎进程、空闲几分钟后退出 */
     cloneEngineMaxWorkers: envInt('CLOUD_CLONE_ENGINE_MAX_WORKERS', 4),
     cloneEngineIdleMinutes: envInt('CLOUD_CLONE_ENGINE_IDLE_MINUTES', 20),

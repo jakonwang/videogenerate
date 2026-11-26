@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Coins,
   FileClock,
+  GalleryHorizontalEnd,
   Images,
   KeyRound,
   LayoutDashboard,
@@ -24,9 +25,10 @@ import { AdminThemeToggle } from '@/components/admin/admin-theme'
 import { AdminPasswordPanel } from '@/components/admin/admin-password'
 import { AdminAvatar, roleLabel } from '@/components/admin/admin-ui'
 import { adminClient, getAdminToken, setAdminToken } from '@/lib/admin-client'
+import { AdminMeContext } from '@/components/admin/admin-me'
 import { cn } from '@/lib/utils'
 
-type NavItem = { href: string; title: string; icon: LucideIcon }
+type NavItem = { href: string; title: string; icon: LucideIcon; superAdminOnly?: boolean }
 
 const NAV: ReadonlyArray<{ section: string; items: NavItem[] }> = [
   {
@@ -34,6 +36,7 @@ const NAV: ReadonlyArray<{ section: string; items: NavItem[] }> = [
     items: [
       { href: '/admin', title: '数据看板', icon: LayoutDashboard },
       { href: '/admin/users', title: '用户管理', icon: Users },
+      { href: '/admin/generations', title: '生成记录', icon: GalleryHorizontalEnd, superAdminOnly: true },
       { href: '/admin/orders', title: '订单', icon: ReceiptText },
     ],
   },
@@ -160,7 +163,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {NAV.map((group) => (
             <div key={group.section} className="admin-nav__group">
               <div className="admin-nav__section">{group.section}</div>
-              {group.items.map((item) => {
+              {group.items.filter((item) => !item.superAdminOnly || me?.role === 'super_admin').map((item) => {
                 const Icon = item.icon
                 return (
                   <Link
@@ -195,7 +198,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               }}
             />
           ) : me ? (
-            children
+            <AdminMeContext.Provider value={me}>{children}</AdminMeContext.Provider>
           ) : (
             <div className="vg-page">
               <div className="vg-skeleton h-10 w-60" />
