@@ -581,7 +581,10 @@
     "openWorkspace": "打开工作台",
     "letAi": "让 AI 来做",
     "lines": {
-      "muse": {"title":"Muse创意室","desc":"参考图换上你的商品，用 Muse 账号批量出短视频"},
+      "muse": {
+        "title": "Muse创意室",
+        "desc": "参考图换上你的商品，用 Muse 账号批量出短视频"
+      },
       "clone": {
         "title": "复刻",
         "desc": "照着爆款视频的结构，做一条带你商品的完整成片"
@@ -611,6 +614,16 @@
       "gmv": "GMV MAX 优化器",
       "inventory": "店小秘库存分析",
       "all": "全部工具"
+    },
+    "toolDesc": {
+      "parser": "粘贴链接，下载无水印视频",
+      "subtitle": "多条视频一次识别、翻译、压字幕",
+      "materials": "参考图换上你的商品，批量出图",
+      "production": "素材自动拼接，一次出多条不重样",
+      "creators": "合作达人、寄样和带货数据",
+      "gmv": "盯投放素材，该停的停、该加的加",
+      "inventory": "看库存，提醒补货和滞销",
+      "all": "图片、视频、运营工具都在这里"
     },
     "autopilot": {
       "badge": "一个人，一条龙",
@@ -656,11 +669,39 @@
       "range": "近 7 天",
       "all": "查看全部",
       "more": "还有 {count} 个问题",
-      "allGood": "没有发现异常，一切正常"
+      "allGood": "没有发现异常，一切正常",
+      "updated": "更新于 {time}",
+      "previous": "上期 {value}",
+      "compare": "本期 / 上期",
+      "funnel": "内容转化漏斗",
+      "radar": "风险雷达"
+    },
+    "platformTitle": "驱动的视频电商生产平台",
+    "platformSub": "选品 · 出片 · 混剪 · 发布 · 投流 · 一站式提效",
+    "slogan": "让爆款视频，",
+    "slogan2": "更快、更简单！",
+    "quickGenerate": "一键生成视频",
+    "newTask": "新建创作任务",
+    "quickTools": "快捷工具",
+    "funnelTitle": "漏斗转化",
+    "previousShort": "环比：{value}",
+    "trend": {
+      "title": "业绩趋势",
+      "range7": "近7天",
+      "range30": "近30天",
+      "gmv": "GMV",
+      "roi": "ROI",
+      "orders": "订单数",
+      "spend": "花费",
+      "current": "本期 {metric}",
+      "previous": "上期 {metric}",
+      "empty": "连接 GMV MAX 投放账号后，这里显示每天的走势",
+      "syncedTo": "投放数据同步到 {date}",
+      "noData": "未同步"
     }
   },
   "insights": {
-    "title": "数据概览",
+    "title": "数据复盘",
     "desc": "整套系统一眼看清：哪里在增长、哪里出了问题、哪些事等你处理。",
     "days": "{count} 天",
     "generateWeekly": "生成本周复盘",
@@ -723,6 +764,46 @@
         "published": "已发布",
         "orders": "出单"
       }
+    },
+    "dash": {
+      "desc": "经营数据实时监控，洞察增长机会，定位问题并给出 AI 优化建议。",
+      "today": "今日",
+      "last7": "近7天",
+      "last30": "近30天",
+      "custom": "自定义",
+      "lastDays": "近{count}天",
+      "refresh": "刷新",
+      "totalGmv": "总成交 GMV",
+      "totalGmvHint": "投放 GMV + 达人带货 GMV",
+      "previous": "较上期 {value}",
+      "trend": "经营趋势",
+      "trendEmpty": "连接 GMV MAX 投放账号后，这里显示每天的走势",
+      "current": "本期 {metric}",
+      "prev": "上期 {metric}",
+      "spend": "花费",
+      "orders": "订单数",
+      "funnel": "内容转化漏斗",
+      "distribution": "内容产出分布",
+      "totalProduced": "总产出",
+      "diagnosis": "核心诊断 · AI 建议",
+      "noDiagnosis": "没有发现需要处理的问题，一切正常",
+      "viewPlan": "查看方案",
+      "runNow": "一键执行",
+      "viewDetail": "查看详情",
+      "lines": "生产线表现",
+      "trendCol": "趋势",
+      "radar": "风险雷达 ({count})",
+      "high": "高风险",
+      "mid": "中风险",
+      "tip": "提示",
+      "viewAll": "查看全部",
+      "collapse": "收起",
+      "top": "表现最好的商品 TOP5",
+      "topLine": "产出 {produced} | 通过 {approved}",
+      "more": "更多明细",
+      "moreHint": "AI 建议、重做原因、发布情况和历次周复盘",
+      "times": "{value} 倍",
+      "perContent": "{value} 单/条"
     }
   },
   "tools": {

@@ -154,7 +154,7 @@ onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
-  <main class="vg-scope vg-page shops-view" data-testid="shops">
+  <main class="vg-scope vg-page vg-dash shops-view" data-testid="shops">
     <header class="vg-page-head">
       <span class="vg-page-head__icon"><Building2 :size="20" /></span>
       <div class="vg-page-head__text">
@@ -203,7 +203,7 @@ onBeforeUnmount(() => clearInterval(clock))
       </section>
 
       <template v-else-if="overview">
-        <section class="vg-card shops-sum" data-testid="shops-totals">
+        <section class="shops-sum" data-testid="shops-totals">
           <div class="shops-sum__item shops-sum__item--lead">
             <span class="shops-sum__label">{{ t('shops.total.todayGmv') }}</span>
             <strong class="shops-sum__value">{{ money(overview.total.todayGmv, false) }}</strong>
@@ -297,13 +297,37 @@ onBeforeUnmount(() => clearInterval(clock))
 .shops-view__note { font-size: 11.5px; line-height: 1.6; margin: 0; color: var(--theme-text-muted); }
 .shops-view__notice > span { flex: 1; white-space: pre-line; }
 
-.shops-sum { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); padding: 0; overflow: hidden; }
-.shops-sum__item { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px; border-left: 1px solid var(--theme-divider); min-width: 0; }
-.shops-sum__item:first-child { border-left: 0; }
-.shops-sum__label { font-size: 12px; color: var(--theme-text-muted); }
-.shops-sum__value { font-size: 22px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; }
-.shops-sum__item--lead .shops-sum__value { font-size: 26px; }
-.shops-sum__item small { font-size: 11.5px; color: var(--theme-text-muted); }
+.shops-sum { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); gap: 14px; }
+/* Colored tiles, same as the KPI strip on the home page. */
+.shops-sum__item {
+  --tone: #14b8a6;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px 20px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 55%, transparent);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--tone) 55%, transparent), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--tone) 42%, var(--theme-panel)), color-mix(in srgb, var(--tone) 14%, var(--theme-panel)));
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tone) 20%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+  color: #fff;
+}
+.shops-sum__item:nth-child(1) { --tone: #8b5cf6; }
+.shops-sum__item:nth-child(2) { --tone: #14b8a6; }
+.shops-sum__item:nth-child(3) { --tone: #3b82f6; }
+.shops-sum__item:nth-child(4) { --tone: #f97316; }
+.shops-sum__label { font-size: 12.5px; color: color-mix(in srgb, #fff 80%, transparent); }
+.shops-sum__value { font-size: 24px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shops-sum__item--lead .shops-sum__value { font-size: 28px; }
+.shops-sum__item small { font-size: 12px; color: color-mix(in srgb, #fff 72%, transparent); }
+.shops-sum .shops-chg.up { color: #6ee7b7 !important; }
+.shops-sum .shops-chg.down { color: #fca5a5 !important; }
+.shops-sum .shops-chg > span { color: color-mix(in srgb, #fff 65%, transparent); }
 
 .shops-chg { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .shops-chg > span { font-weight: 400; color: var(--theme-text-muted); margin-left: 2px; }
@@ -316,9 +340,9 @@ onBeforeUnmount(() => clearInterval(clock))
 .shop-biz:hover { border-color: color-mix(in srgb, var(--vg-accent) 45%, var(--theme-border)); box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
 .shop-biz:hover .shop-biz__chevron { color: var(--vg-accent); transform: translateX(2px); }
 .shop-biz__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.shop-biz__avatar { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; font-weight: 700; background: var(--theme-panel-soft); border: 1px solid var(--theme-border); color: var(--theme-text-secondary); }
+.shop-biz__avatar { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 800; background: linear-gradient(145deg, color-mix(in srgb, var(--vg-accent) 55%, var(--theme-panel)), color-mix(in srgb, var(--vg-accent) 16%, var(--theme-panel))); border: 1px solid color-mix(in srgb, var(--vg-accent) 45%, transparent); color: #fff; }
 .shop-biz__name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.shop-biz__name strong { font-size: 14px; font-weight: 600; }
+.shop-biz__name strong { font-size: 15px; font-weight: 800; letter-spacing: .01em; }
 .shop-biz__chevron { color: var(--theme-text-muted); transition: transform .15s, color .15s; flex-shrink: 0; }
 .shop-biz__fresh { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--theme-text-muted); }
 .shop-biz__fresh.is-stale { color: var(--vg-amber); }
@@ -327,10 +351,10 @@ onBeforeUnmount(() => clearInterval(clock))
 .shop-biz__main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 42%); align-items: end; gap: 12px; }
 .shop-biz__headline { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shop-biz__label { font-size: 12px; color: var(--theme-text-muted); }
-.shop-biz__gmv { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.shop-biz__gmv { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .shop-biz__vs { font-size: 11.5px; color: var(--theme-text-muted); }
 .shop-biz__spark { width: 100%; height: 44px; overflow: visible; }
-.shop-biz__spark-line { fill: none; stroke: var(--vg-accent); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.shop-biz__spark-line { fill: none; stroke: var(--vg-accent); stroke-width: 2; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--vg-accent) 60%, transparent)); stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .shop-biz__facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; padding: 12px 0; border-top: 1px solid var(--theme-divider); }
 .shop-biz__facts > div { min-width: 0; padding: 0 10px; border-left: 1px solid var(--theme-divider); }
 .shop-biz__facts > div:first-child { padding-left: 0; border-left: 0; }
@@ -349,7 +373,5 @@ onBeforeUnmount(() => clearInterval(clock))
 .shop-biz__more { flex-shrink: 0; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--theme-border); font-size: 11px; color: var(--theme-text-muted); }
 @media (max-width: 960px) {
   .shops-sum { grid-template-columns: 1fr 1fr; }
-  .shops-sum__item:nth-child(3) { border-left: 0; }
-  .shops-sum__item:nth-child(n + 3) { border-top: 1px solid var(--theme-divider); }
 }
 </style>

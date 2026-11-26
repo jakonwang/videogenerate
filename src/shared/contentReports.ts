@@ -11,7 +11,7 @@ export type ReportItem = { ref: string; line: ReportLine; productId?: string; pr
 export type ReportReview = { ref: string; line: ReportLine; decision: 'pending' | 'approved' | 'redo' | 'discarded'; decidedAt?: number }
 export type ReportFeedback = { decision: string; reason?: string; createdAt: number }
 
-export type LineStats = { line: ReportLine; produced: number; approved: number; redo: number; discarded: number; published: number; approvalRate: number }
+export type LineStats = { line: ReportLine; produced: number; approved: number; redo: number; discarded: number; published: number; approvalRate: number; daily?: number[] }
 export type InsightsReport = {
   generatedAt: number
   rangeDays: number
@@ -75,6 +75,10 @@ export function computeInsights(input: { items: ReportItem[]; reviews: Record<st
       discarded,
       published: produced.filter((item) => publishedSources.has(item.ref)).length,
       approvalRate: total ? Math.round((approved / total) * 100) : 0,
+      daily: Array.from({ length: rangeDays }, (_, index) => {
+        const from = since + index * 86_400_000
+        return produced.filter((item) => item.updatedAt >= from && item.updatedAt < from + 86_400_000).length
+      }),
     }
   })
 

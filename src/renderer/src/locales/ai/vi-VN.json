@@ -581,7 +581,10 @@
     "openWorkspace": "Mở không gian làm việc",
     "letAi": "Để AI làm",
     "lines": {
-      "muse": {"title":"Muse Creative","desc":"Thay sản phẩm vào ảnh mẫu và tạo video ngắn bằng tài khoản Muse"},
+      "muse": {
+        "title": "Muse Creative",
+        "desc": "Thay sản phẩm vào ảnh mẫu và tạo video ngắn bằng tài khoản Muse"
+      },
       "clone": {
         "title": "Nhân bản",
         "desc": "Theo cấu trúc video viral để làm thành phẩm với sản phẩm của bạn"
@@ -611,6 +614,16 @@
       "gmv": "GMV MAX",
       "inventory": "Tồn kho",
       "all": "Tất cả công cụ"
+    },
+    "toolDesc": {
+      "parser": "Dán link, tải video không watermark",
+      "subtitle": "Nhận dạng, dịch và gắn phụ đề hàng loạt",
+      "materials": "Ghép sản phẩm của bạn vào ảnh mẫu",
+      "production": "Tự ghép clip thành nhiều video khác nhau",
+      "creators": "Nhà sáng tạo, gửi mẫu và dữ liệu bán hàng",
+      "gmv": "Dừng video lỗ, tăng video tốt",
+      "inventory": "Tồn kho, nhắc nhập hàng và hàng chậm bán",
+      "all": "Mọi công cụ ảnh, video và vận hành"
     },
     "autopilot": {
       "badge": "Một người, trọn quy trình",
@@ -656,7 +669,35 @@
       "range": "7 ngày qua",
       "all": "Xem tất cả",
       "more": "Còn {count} vấn đề",
-      "allGood": "Không phát hiện vấn đề, mọi thứ ổn"
+      "allGood": "Không phát hiện vấn đề, mọi thứ ổn",
+      "updated": "Cập nhật {time}",
+      "previous": "Kỳ trước {value}",
+      "compare": "Kỳ này / kỳ trước",
+      "funnel": "Phễu nội dung",
+      "radar": "Radar rủi ro"
+    },
+    "platformTitle": " — nền tảng sản xuất video thương mại",
+    "platformSub": "Chọn hàng · Ra video · Trộn · Đăng · Quảng cáo · trọn gói",
+    "slogan": "Video bùng nổ,",
+    "slogan2": "nhanh hơn, đơn giản hơn!",
+    "quickGenerate": "Tạo video ngay",
+    "newTask": "Tạo tác vụ mới",
+    "quickTools": "Công cụ nhanh",
+    "funnelTitle": "Phễu chuyển đổi",
+    "previousShort": "Kỳ trước: {value}",
+    "trend": {
+      "title": "Xu hướng",
+      "range7": "7 ngày",
+      "range30": "30 ngày",
+      "gmv": "GMV",
+      "roi": "ROI",
+      "orders": "Đơn hàng",
+      "spend": "Chi tiêu",
+      "current": "Kỳ này {metric}",
+      "previous": "Kỳ trước {metric}",
+      "empty": "Kết nối tài khoản GMV MAX để xem xu hướng theo ngày",
+      "syncedTo": "Dữ liệu quảng cáo đến {date}",
+      "noData": "Chưa đồng bộ"
     }
   },
   "insights": {
@@ -723,6 +764,46 @@
         "published": "Đã đăng",
         "orders": "Đơn hàng"
       }
+    },
+    "dash": {
+      "desc": "Theo dõi kinh doanh theo thời gian thực, tìm cơ hội tăng trưởng, phát hiện vấn đề và nhận gợi ý AI.",
+      "today": "Hôm nay",
+      "last7": "7 ngày",
+      "last30": "30 ngày",
+      "custom": "Tùy chọn",
+      "lastDays": "{count} ngày",
+      "refresh": "Làm mới",
+      "totalGmv": "Tổng GMV",
+      "totalGmvHint": "GMV quảng cáo + GMV nhà sáng tạo",
+      "previous": "Kỳ trước {value}",
+      "trend": "Xu hướng kinh doanh",
+      "trendEmpty": "Kết nối tài khoản GMV MAX để xem xu hướng theo ngày",
+      "current": "Kỳ này {metric}",
+      "prev": "Kỳ trước {metric}",
+      "spend": "Chi phí",
+      "orders": "Đơn hàng",
+      "funnel": "Phễu nội dung",
+      "distribution": "Phân bổ sản lượng",
+      "totalProduced": "Tổng",
+      "diagnosis": "Chẩn đoán · Gợi ý AI",
+      "noDiagnosis": "Không có vấn đề cần xử lý",
+      "viewPlan": "Xem phương án",
+      "runNow": "Thực hiện",
+      "viewDetail": "Chi tiết",
+      "lines": "Hiệu suất dây chuyền",
+      "trendCol": "Xu hướng",
+      "radar": "Radar rủi ro ({count})",
+      "high": "Cao",
+      "mid": "Trung bình",
+      "tip": "Lưu ý",
+      "viewAll": "Xem tất cả",
+      "collapse": "Thu gọn",
+      "top": "Top 5 sản phẩm",
+      "topLine": "Tạo {produced} | Duyệt {approved}",
+      "more": "Chi tiết khác",
+      "moreHint": "Gợi ý AI, lý do làm lại, đăng bài và báo cáo tuần",
+      "times": "gấp {value}",
+      "perContent": "{value} / video"
     }
   },
   "tools": {

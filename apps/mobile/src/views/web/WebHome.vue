@@ -128,15 +128,24 @@ const tools = toolKeys
     </section>
 
     <section class="home-lines">
-      <article v-for="line in lines" :key="line.key" class="vg-card home-line" :class="`home-line--${line.tone}`">
-        <span class="home-line__icon"><component :is="line.icon" :size="20" /></span>
-        <div class="home-line__copy">
+      <article
+        v-for="line in lines"
+        :key="line.key"
+        class="vg-card home-line"
+        :class="`home-line--${line.tone}`"
+        role="link"
+        tabindex="0"
+        @click="router.push(line.to)"
+        @keydown.enter.self="router.push(line.to)"
+      >
+        <div class="home-line__head">
+          <span class="home-line__icon"><component :is="line.icon" :size="18" /></span>
           <strong>{{ line.title }}</strong>
-          <small>{{ line.desc }}</small>
         </div>
+        <small class="home-line__desc">{{ line.desc }}</small>
         <div class="home-line__actions">
-          <button type="button" class="vg-btn vg-btn--sm" @click="router.push(line.to)">打开工作台</button>
-          <button type="button" class="vg-btn vg-btn--sm vg-btn--soft" @click="router.push({ path: '/producer', query: { prompt: line.prompt } })"><Wand2 :size="13" /> 让 AI 来做</button>
+          <span class="home-line__go">打开工作台 <ArrowRight :size="13" /></span>
+          <button type="button" class="vg-btn vg-btn--sm vg-btn--ghost home-line__ai" @click.stop="router.push({ path: '/producer', query: { prompt: line.prompt } })"><Wand2 :size="13" /> 让 AI 来做</button>
         </div>
       </article>
     </section>
@@ -252,14 +261,19 @@ const tools = toolKeys
 .home-goal__input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text); font-size: 14px; }
 
 .home-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.home-line { --tone: var(--vg-accent); display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.home-line { --tone: var(--vg-accent); display: flex; flex-direction: column; gap: 8px; padding: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+.home-line:hover, .home-line:focus-visible { border-color: color-mix(in srgb, var(--vg-accent) 45%, transparent); background: color-mix(in srgb, var(--vg-accent) 4%, var(--theme-panel)); outline: none; }
 .home-line--violet { --tone: var(--vg-violet); }
 .home-line--red { --tone: var(--vg-red); }
-.home-line__icon { width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
-.home-line__copy { display: flex; flex-direction: column; gap: 4px; }
-.home-line__copy strong { font-size: 15px; }
-.home-line__copy small { font-size: 12.5px; color: var(--theme-text-secondary); line-height: 1.55; }
-.home-line__actions { display: flex; gap: 8px; margin-top: auto; }
+.home-line__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.home-line__head strong { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-line__icon { width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tone) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
+.home-line__desc { font-size: 12.5px; color: var(--theme-text-secondary); line-height: 1.55; }
+.home-line__actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 4px; }
+.home-line__go { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--vg-accent); transition: gap .15s; }
+.home-line:hover .home-line__go { gap: 7px; }
+.home-line__ai { color: var(--theme-text-secondary); }
+.home-line__ai:hover { color: var(--vg-accent); }
 
 .home-lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .home-brief__ok { color: var(--vg-green); flex-shrink: 0; }

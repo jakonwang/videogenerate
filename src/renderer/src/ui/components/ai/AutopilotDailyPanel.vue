@@ -160,7 +160,10 @@ onBeforeUnmount(() => window.clearTimeout(timer))
 .apd__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .apd__copy strong { font-size: 14px; color: var(--theme-text); display: flex; align-items: center; gap: 8px; }
 .apd__copy small { font-size: 12px; color: var(--theme-text-muted); }
-.apd__sr { position: absolute; opacity: 0; width: 1px; height: 1px; }
+/* Kept on top of its own switch: without a positioned parent the hidden box sat somewhere else on the
+ * page, and focusing it on click scrolled the whole window there. */
+.apd .vg-switch { position: relative; }
+.apd__sr { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .apd__settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--theme-panel-soft); font-size: 12.5px; color: var(--theme-text); }
 .apd__settings label { display: inline-flex; align-items: center; gap: 6px; }
 .apd__settings small { flex-basis: 100%; font-size: 11.5px; }

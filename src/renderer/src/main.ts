@@ -16,6 +16,7 @@ import './design-system/live-photo.css'
 import './design-system/live-slicer.css'
 import './design-system/unified.css'
 import './design-system/unified-modules.css'
+import './design-system/dashboard.css'
 
 window.addEventListener('error', (event) => {
   console.error('[renderer-error]', {

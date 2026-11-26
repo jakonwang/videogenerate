@@ -26,3 +26,18 @@ export function kpiDeltaTone(kpi: OverviewKpi) {
   if (kpi.change === null || kpi.change === 0 || kpi.goodWhenUp === null) return ''
   return (kpi.change > 0) === kpi.goodWhenUp ? 'green' : 'red'
 }
+
+/** Signals built before ids were cleaned may still quote "「product-card:123」"; show it as 商品卡. */
+export function cleanSignalText(text?: string) {
+  return (text || '').replace(/[「[]\s*product-card:\d+\s*[」\]]/g, '「商品卡」')
+}
+
+/**
+ * Change against the previous period for KPI tiles: "3.6%", "54%", and for jumps of 10x or more "75 倍"
+ * (a "+7400%" is hard to read). Sign is left to the caller's arrow.
+ */
+export function compactChange(change: number, locale: string, t: Translate) {
+  const abs = Math.abs(change)
+  if (change > 0 && abs >= 900) return t('ai.insights.dash.times', { value: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(1 + change / 100) })
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: abs >= 100 ? 0 : 1 }).format(abs)}%`
+}

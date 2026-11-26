@@ -1,0 +1,79 @@
+/*
+ * Dashboard look — the visual language of the home page and the data overview, for any page whose
+ * root carries `.vg-dash` (shops, ...). It only restyles the shared vg- kit inside that root:
+ * glassy accent-lit panels, pill tabs and segments that glow when active, quieter table headers.
+ * Unlayered and prefixed like unified.css (`html[data-app-theme] body #app`), which otherwise
+ * repaints every .vg-card / .vg-tabs flat; loaded after it in main.ts.
+ */
+
+  html[data-app-theme] body #app .vg-dash {
+    --dash-line: color-mix(in srgb, var(--vg-accent) 16%, var(--theme-border));
+    --dash-glow: color-mix(in srgb, var(--vg-accent) 45%, transparent);
+  }
+
+  /* Page title */
+  html[data-app-theme] body #app .vg-dash .vg-page-head__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--vg-accent) 62%, var(--theme-panel)), color-mix(in srgb, var(--vg-accent) 18%, var(--theme-panel)));
+    border-color: color-mix(in srgb, var(--vg-accent) 55%, transparent);
+    color: #fff;
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--vg-accent) 25%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 25%, transparent);
+  }
+  html[data-app-theme] body #app .vg-dash .vg-page-head h1 { font-size: 22px; font-weight: 800; letter-spacing: .01em; }
+
+  /* Panels */
+  html[data-app-theme] body #app .vg-dash .vg-card:not(.is-active, .is-selected, .vg-card--soft) {
+    border-color: var(--dash-line);
+    border-radius: 16px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--vg-accent) 5%, var(--theme-panel)), var(--theme-panel));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--vg-accent) 14%, transparent);
+  }
+  html[data-app-theme] body #app .vg-dash .vg-card__title,
+  html[data-app-theme] body #app .vg-dash .vg-section-title { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  html[data-app-theme] body #app .vg-dash .vg-card__title > svg:first-child,
+  html[data-app-theme] body #app .vg-dash .vg-section-title > svg:first-child { color: var(--vg-accent); }
+
+  /* Tabs become one pill group */
+  html[data-app-theme] body #app .vg-dash .vg-tabs {
+    align-self: flex-start;
+    width: fit-content;
+    max-width: 100%;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--theme-border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--theme-text) 4%, transparent);
+  }
+  html[data-app-theme] body #app .vg-dash .vg-tabs__btn { height: 32px; padding: 0 18px; border-radius: 9px; color: var(--theme-text-secondary); font-weight: 600; transition: background .15s, color .15s; }
+  html[data-app-theme] body #app .vg-dash .vg-tabs__btn:hover { color: var(--theme-text); }
+  html[data-app-theme] body #app .vg-dash .vg-tabs__btn.is-active { background: var(--vg-accent); color: #04221b; font-weight: 700; box-shadow: 0 2px 12px var(--dash-glow); }
+  html[data-app-theme] body #app .vg-dash .vg-tabs__btn.is-active::after { display: none; }
+
+  /* Segmented buttons: same pill group, a size smaller */
+  html[data-app-theme] body #app .vg-dash .vg-seg { gap: 2px; padding: 3px; border: 1px solid var(--theme-border); border-radius: 10px; background: color-mix(in srgb, var(--theme-text) 4%, transparent); }
+  html[data-app-theme] body #app .vg-dash .vg-seg__btn { height: 28px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; font-weight: 600; }
+  html[data-app-theme] body #app .vg-dash .vg-seg__btn:hover:not(:disabled) { border-color: transparent; }
+  html[data-app-theme] body #app .vg-dash .vg-seg__btn.is-active { background: var(--vg-accent); color: #04221b; box-shadow: 0 2px 10px var(--dash-glow); }
+  html[data-app-theme] body #app .vg-dash .vg-seg__btn.is-active .vg-count { background: #04221b; color: var(--vg-accent); }
+  html[data-app-theme] body #app .vg-dash .vg-seg--sm .vg-seg__btn { height: 26px; padding: 0 12px; }
+
+  /* Primary action glows like the home page's */
+  html[data-app-theme] body #app .vg-dash .vg-btn--primary {
+    border-color: transparent;
+    background: linear-gradient(100deg, #5eead4, var(--vg-accent));
+    color: #04221b;
+    font-weight: 700;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--vg-accent) 32%, transparent), inset 0 1px 0 rgba(255, 255, 255, .4);
+  }
+  html[data-app-theme] body #app .vg-dash .vg-btn--primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+  /* Tables */
+  html[data-app-theme] body #app .vg-dash .vg-table th { background: color-mix(in srgb, var(--theme-panel) 94%, var(--vg-accent)); border-bottom-color: var(--dash-line); font-size: 11.5px; letter-spacing: .03em; }
+  html[data-app-theme] body #app .vg-dash .vg-table td { border-bottom-color: color-mix(in srgb, var(--theme-text) 6%, transparent); }
+  html[data-app-theme] body #app .vg-dash .vg-table tbody tr { transition: background .12s; }
+  html[data-app-theme] body #app .vg-dash .vg-table tbody tr:hover { background: color-mix(in srgb, var(--vg-accent) 6%, transparent); }
+
+/* Clickable panels keep a hover cue (their own scoped hover loses to the rule above). */
+html[data-app-theme] body #app .vg-dash :is(button, a).vg-card:hover { border-color: color-mix(in srgb, var(--vg-accent) 45%, var(--theme-border)); box-shadow: 0 8px 26px rgba(0, 0, 0, .22), inset 0 1px 0 color-mix(in srgb, var(--vg-accent) 18%, transparent); }

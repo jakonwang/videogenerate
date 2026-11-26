@@ -53,6 +53,10 @@ export type OverviewReport = {
   sources: { ads: boolean; creators: boolean; inventory: boolean }
   /** Ad accounts in another currency than the one shown; their money is not in the totals. */
   adsOtherCurrencies: string[]
+  /** Ads totals per day (GMV MAX), null when no ad account is connected. */
+  trend?: OverviewTrend | null
+  /** Recent ads ROI per library product (product spine window), for the top products list. */
+  productRoi?: Record<string, number>
 }
 
 export type AdsTotals = { spend: number; revenue: number; orders: number }
@@ -63,7 +67,13 @@ export type OverviewAdsInput = {
   campaigns: Array<{ id: string; name: string; current: AdsTotals; previous: AdsTotals }>
   pendingActions: number
   otherCurrencies?: string[]
+  /** Day by day totals for the trend chart; previous[i] is the same weekday position one range earlier. */
+  trend?: OverviewTrend
 }
+/** hasCurrent / hasPrevious: false when no ad data has been synced for that day yet (the totals are then 0, not real zeros). */
+export type OverviewTrendDay = { date: string; current: AdsTotals; previous: AdsTotals; hasCurrent?: boolean; hasPrevious?: boolean }
+/** lastDataDate: the newest day that has synced ad data, so the UI can say how far the numbers go. */
+export type OverviewTrend = { currency: string; days: OverviewTrendDay[]; lastDataDate?: string }
 export type OverviewCreatorsInput = {
   gmv: number
   previousGmv?: number
@@ -80,6 +90,8 @@ export type OverviewProductInput = {
   productName: string
   adsSpend: number
   newContent: number
+  /** Recent ads ROI of the product, when it has ad spend. */
+  adsRoi?: number | null
   signals: Array<{ key: string; params: Record<string, string | number> }>
 }
 export type OverviewHealthInput = Array<{ level: 'ok' | 'warning' | 'error'; title: string; detail: string; route?: string }>
@@ -137,6 +149,12 @@ function roiOf(totals: AdsTotals) {
 function money(value: number, currency?: string) {
   const text = Math.abs(value) >= 1000 ? Math.round(value).toLocaleString('en-US') : String(round(value))
   return currency ? `${text} ${currency}` : text
+}
+
+/** GMV Max names product-card traffic "product-card:<id>"; that id means nothing to a reader. */
+export function creativeLabel(name: unknown) {
+  const text = String(name ?? '').trim()
+  return /^\[?product-card:\d+\]?$/.test(text) ? '商品卡' : text
 }
 
 function signed(value: number) {
@@ -286,7 +304,7 @@ export function computeOverview(input: OverviewInput): OverviewReport {
       push({ id: `product.${product.productId}.stale`, kind: 'problem', level: 'warning', area: 'product', title: `「${name}」在投放但没有新素材`, detail: `近 ${rangeDays} 天没有产出新内容，素材会越跑越疲劳。`, route, aiPrompt: `为商品「${name}」规划并生成一批新素材，参考它投放里表现最好的视频` })
     }
     for (const signal of product.signals) {
-      const p = signal.params
+      const p: Record<string, string | number> = { ...signal.params, name: creativeLabel(signal.params.name) }
       if (signal.key === 'ads_winner') push({ id: `product.${product.productId}.winner`, kind: 'growth', level: 'success', area: 'product', title: `「${name}」跑出爆款素材`, detail: `「${p.name}」ROI ${p.roi}，高于平均 ${p.avgRoi}，${p.orders} 单。照着它多做几条变体。`, route, aiPrompt: `商品「${name}」的素材「${p.name}」ROI 很高，照着它做几条变体` })
       else if (signal.key === 'creator_winner') push({ id: `product.${product.productId}.creator`, kind: 'growth', level: 'success', area: 'product', title: `「${name}」有达人视频在出单`, detail: `@${p.creator} 的视频带来 ${p.orders} 单，可以参考它做自有素材。`, route })
       else if (signal.key === 'ads_fatigue') push({
@@ -354,6 +372,7 @@ export function computeOverview(input: OverviewInput): OverviewReport {
     funnel,
     sources: { ads: !!ads, creators: !!creators, inventory: !!inventory },
     adsOtherCurrencies: ads?.otherCurrencies || [],
+    productRoi: Object.fromEntries((input.products || []).filter((row) => row.adsSpend > 0 && typeof row.adsRoi === 'number').map((row) => [row.productId, row.adsRoi as number])),
   }
 }
 

@@ -151,7 +151,7 @@ onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
-  <main class="vg-scope vg-page shop-detail" data-testid="shop-detail">
+  <main class="vg-scope vg-page vg-dash shop-detail" data-testid="shop-detail">
     <header class="vg-page-head">
       <button type="button" class="vg-icon-btn" :title="t('shops.backToShops')" @click="router.push('/shops')"><ChevronLeft :size="18" /></button>
       <div class="vg-page-head__text">

@@ -98,6 +98,21 @@ export function readAdsInput(rangeDays: number, now: number): OverviewAdsInput |
   }
   let pendingActions = 0
   for (const count of gmvMaxRepo.pendingRecommendationCountsByCampaign().values()) pendingActions += count
+
+  const byDate = new Map<string, AdsTotals>()
+  for (const row of metrics) {
+    if ((currencyByAdvertiser.get(String(row.advertiserId)) || '') !== currency) continue
+    const date = String(row.statDate).slice(0, 10)
+    const totals = byDate.get(date) || emptyTotals()
+    addTo(totals, row)
+    byDate.set(date, totals)
+  }
+  const days = Array.from({ length: rangeDays }, (_, index) => {
+    const date = localDate(now - (rangeDays - 1 - index) * DAY)
+    const previousDate = localDate(now - (rangeDays * 2 - 1 - index) * DAY)
+    return { date, current: byDate.get(date) || emptyTotals(), previous: byDate.get(previousDate) || emptyTotals(), hasCurrent: byDate.has(date), hasPrevious: byDate.has(previousDate) }
+  })
+
   return {
     currency,
     current,
@@ -105,6 +120,7 @@ export function readAdsInput(rangeDays: number, now: number): OverviewAdsInput |
     campaigns: [...campaigns.values()],
     pendingActions,
     otherCurrencies: ranked.slice(1).filter(Boolean),
+    trend: { currency, days, lastDataDate: [...byDate.keys()].sort().pop() },
   }
 }
 
@@ -157,6 +173,7 @@ async function readProductsInput(items: ReportItem[], rangeDays: number, now: nu
       productId: product.id,
       productName: product.name,
       adsSpend: spine.ads?.spend || 0,
+      adsRoi: spine.ads ? spine.ads.roi : null,
       newContent: items.filter((item) => item.productId === product.id && item.line !== 'publish' && item.status === 'ready' && item.updatedAt >= since).length,
       signals: spine.signals.map((signal) => ({ key: signal.key, params: signal.params })),
     })
@@ -165,7 +182,7 @@ async function readProductsInput(items: ReportItem[], rangeDays: number, now: nu
 }
 
 export async function buildBusinessOverview(rangeDays = 7, now = Date.now()): Promise<OverviewReport> {
-  const days = [7, 14, 30, 90].includes(rangeDays) ? rangeDays : 7
+  const days = [1, 7, 14, 30, 90].includes(rangeDays) ? rangeDays : 7
   const [items, reviewDb, memory, counts] = await Promise.all([
     contentIndex.listAll() as Promise<unknown> as Promise<ReportItem[]>,
     reviewStore.read(),
@@ -177,7 +194,7 @@ export async function buildBusinessOverview(rangeDays = 7, now = Date.now()): Pr
   const inventory = await safely(() => readInventoryInput(now), null)
   const products = await safely(() => readProductsInput(items, days, now), [])
   const health = await safely(async () => (await getHealthReport(30 * 60_000)).items, [])
-  return computeOverview({
+  const report = computeOverview({
     rangeDays: days,
     now,
     content: {
@@ -192,6 +209,7 @@ export async function buildBusinessOverview(rangeDays = 7, now = Date.now()): Pr
     products,
     health,
   })
+  return { ...report, trend: ads?.trend ?? null }
 }
 
 /** How long a built overview is reused. Ads and creator syncs land in their own stores, so a short
