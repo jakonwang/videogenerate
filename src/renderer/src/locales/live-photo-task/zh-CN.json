@@ -124,6 +124,7 @@
     "rawError": "原始错误",
     "imagePrompt": "图片提示词",
     "videoPrompt": "视频提示词",
+    "videoPromptSent": "实际发送：",
     "negative": "反向提示词",
     "recentLogs": "最近日志",
     "noLogs": "暂无日志"

@@ -176,7 +176,14 @@ export const livePhotoRepo = {
 
   async upsert(item: LivePhotoItem): Promise<LivePhotoItem> {
     await ensureLivePhotoSqliteReady()
-    const normalized = normalizeItem(await materializeLivePhotoInputAsset(item))
+    // 视频提示词在提交那一刻单独记下；后面拿旧对象整条覆盖时别把它丢了
+    // （重试时旧对象里还带着上一次的记录，所以按提交时间取新的那份）
+    const storedSent = readLivePhotoItemByIdFromSqlite(String(item.id || '').trim())?.videoPromptSent
+    const withSentPrompt =
+      storedSent && Number(storedSent.sentAt || 0) > Number(item.videoPromptSent?.sentAt || 0)
+        ? { ...item, videoPromptSent: storedSent }
+        : item
+    const normalized = normalizeItem(await materializeLivePhotoInputAsset(withSentPrompt))
     upsertLivePhotoItemInSqlite(normalized)
     return normalized
   },

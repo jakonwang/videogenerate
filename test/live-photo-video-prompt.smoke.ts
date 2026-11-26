@@ -22,7 +22,8 @@ async function main() {
   const mine = livePhotoPromptVersionService.save({ name: 'mine', prompt: 'Slow push-in.', kind: 'video' })
   livePhotoPromptVersionService.activate(mine.id)
   assert.equal(livePhotoPromptVersionService.getActive('video').prompt, 'Slow push-in.')
-  assert.equal(fillLivePhotoVideoPrompt('Slow push-in.', 'RULES'), 'Slow push-in.\n\nRULES')
+  // 没写 {product_rules} 就原样发送，不在后面追加系统文字
+  assert.equal(fillLivePhotoVideoPrompt('Slow push-in.', 'RULES'), 'Slow push-in.')
   assert.equal(fillLivePhotoVideoPrompt('a\n\n{product_rules}\n\nb', 'RULES'), 'a\n\nRULES\n\nb')
   assert.equal(fillLivePhotoVideoPrompt('a\n\n{product_rules}\n\nb', ''), 'a\n\nb')
   // 短版：自带一条、默认不启用；改过之后不会被盖回去

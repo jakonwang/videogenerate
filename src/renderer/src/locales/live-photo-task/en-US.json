@@ -124,6 +124,7 @@
     "rawError": "Raw error",
     "imagePrompt": "Image prompt",
     "videoPrompt": "Video prompt",
+    "videoPromptSent": "sent with",
     "negative": "Negative prompt",
     "recentLogs": "Recent log",
     "noLogs": "No log yet"

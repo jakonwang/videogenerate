@@ -244,7 +244,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               </template>
             </div>
             <div v-if="item.videoPromptPreview?.prompt">
-              <h4>{{ t('lpTask.detail.videoPrompt') }} <span class="lpd__muted">{{ item.videoPromptPreview.provider || '' }} / {{ item.videoPromptPreview.model || '' }}</span></h4>
+              <h4>
+                {{ t('lpTask.detail.videoPrompt') }}
+                <span class="lpd__muted">{{ item.videoPromptPreview.provider || '' }} / {{ item.videoPromptPreview.model || '' }}</span>
+                <span v-if="item.videoPromptPreview.sentAt" class="lpd__muted">
+                  · {{ t('lpTask.detail.videoPromptSent') }}<template v-if="item.videoPromptPreview.promptVersion"> V{{ item.videoPromptPreview.promptVersion }}</template><template v-if="item.videoPromptPreview.promptVersionName"> {{ item.videoPromptPreview.promptVersionName }}</template>
+                </span>
+              </h4>
               <pre>{{ item.videoPromptPreview.prompt }}</pre>
             </div>
           </div>

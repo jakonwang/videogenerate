@@ -677,6 +677,7 @@ function toLivePhotoItemSummary(item: LivePhotoItem): LivePhotoItemSummary {
     promptPreview: _promptPreview,
     imagePromptPreview: _imagePromptPreview,
     videoPromptPreview: _videoPromptPreview,
+    videoPromptSent: _videoPromptSent,
     ...summary
   } = hydrated
   return {
@@ -1044,18 +1045,8 @@ function buildLivePhotoVideoPrompts(input: {
   const categorySpecificRules = input.item.productSnapshot
     ? buildLivePhotoCategorySpecificPromptRules(input.item.productSnapshot, 'video')
     : []
-  const referenceImagePath = String(input.item.generatedStillPath || input.item.referenceImagePath || '').trim()
-  const providerRolePrefix = referenceImagePath
-    ? [
-        'PROVIDER INPUT ROLE LOCK:',
-        'The uploaded image array contains exactly 1 image.',
-        'The uploaded image is the locked still scene and product anchor image.',
-        'Treat this single image as the only visual truth for every frame in the video.',
-        'Do not consult, infer, blend, or synthesize any alternate product view.',
-        `Locked still path: ${referenceImagePath}.`,
-      ].join('\n')
-    : ''
-  // 商品特征（分类规则 + 商品分析）填进「视频」提示词的 {product_rules}；提示词里没写就放在最后
+  // 商品特征（分类规则 + 商品分析）只填进「视频」提示词里写了 {product_rules} 的位置；没写就不加。
+  // 提示词版本原样发送，前面不再拼任何系统文字（以前会加一段 PROVIDER INPUT ROLE LOCK 和本机图片路径）
   const productRules = [
     ...(categorySpecificRules.length ? [...categorySpecificRules, ''] : []),
     ...(normalizedAnalysis
@@ -1080,7 +1071,7 @@ function buildLivePhotoVideoPrompts(input: {
       : []),
   ].join('\n').trim()
   const template = livePhotoPromptVersionService.getActive('video').prompt
-  const positivePrompt = [...(providerRolePrefix ? [providerRolePrefix, ''] : []), fillLivePhotoVideoPrompt(template, productRules)].join('\n')
+  const positivePrompt = fillLivePhotoVideoPrompt(template, productRules)
   if (!isStillLivePhotoVideoPrompt(template)) return { positivePrompt, negativePrompt: MOVING_LIVE_PHOTO_NEGATIVE_PROMPT, moving: true }
   const negativePrompt = [
     'product reconstruction',
@@ -1336,6 +1327,30 @@ function buildLivePhotoVideoShotSpec(input: {
   }
 }
 
+/** 记下这一次真正提交给视频模型的提示词和版本，任务详情显示它（不是按当前版本重新拼一份） */
+async function recordLivePhotoVideoPromptSent(input: { item: LivePhotoItem; shot: ShotSpec; stillPath: string; provider?: string; model?: string }) {
+  try {
+    const latest = await livePhotoRepo.get(input.item.id)
+    if (!latest) return
+    const version = input.item.styleReference ? undefined : livePhotoPromptVersionService.getActive('video')
+    await livePhotoRepo.upsert({
+      ...latest,
+      videoPromptSent: {
+        provider: String(input.provider || '').trim() || undefined,
+        model: String(input.model || '').trim() || undefined,
+        prompt: input.shot.prompt?.positive || input.shot.compiledPrompt || '',
+        negativePrompt: input.shot.prompt?.negative || input.shot.compiledNegativePrompt || '',
+        referenceImagePaths: [input.stillPath].filter(Boolean),
+        promptVersion: version?.version,
+        promptVersionName: input.item.styleReference ? `同款模板: ${input.item.styleReference.videoName || ''}`.trim() : version?.name,
+        sentAt: now(),
+      },
+    })
+  } catch (error) {
+    console.warn('[live-photo] record sent video prompt failed', (error as Error)?.message || error)
+  }
+}
+
 async function generateAiMotionVideoFromStill(input: {
   item: LivePhotoItem
   product?: LivePhotoProductSnapshot
@@ -1349,6 +1364,13 @@ async function generateAiMotionVideoFromStill(input: {
     product: input.product,
     template: input.template,
     startFramePath: input.stillPath,
+  })
+  await recordLivePhotoVideoPromptSent({
+    item: input.item,
+    shot,
+    stillPath: input.stillPath,
+    provider: livePhotoVideoProviderChain(credentials)[0],
+    model: String(credentials.videoModelPrimary || credentials.videoModelFallback || credentials.grsaiVideoModel || '').trim() || undefined,
   })
   const generated = await livePhotoDeps.generateShotVideoByProviderChain({
     shot,
@@ -3132,6 +3154,9 @@ async function submitLivePhotoVideoTask(input: {
   const chain = livePhotoVideoProviderChain(credentials)
   const provider = chain[0]
   const providerModel = resolveLivePhotoVideoModel(credentials, provider)
+  if (provider === 'apifox_hub' || provider === 'grsai') {
+    await recordLivePhotoVideoPromptSent({ item: input.item, shot, stillPath: input.stillPath, provider, model: providerModel })
+  }
   if (provider === 'apifox_hub') {
     const firstFrameUrl = await toPublicUrlViaQiniu(credentials, input.stillPath, 'cloud-video-input/live-photo-first-frame')
     const requestCapability = 'video_image_to_video'
@@ -5101,7 +5126,8 @@ export const livePhotoService = {
     return {
       ...hydrated,
       imagePromptPreview: resolveLivePhotoImagePreview(hydrated, credentials),
-      videoPromptPreview: resolveLivePhotoVideoPreview(hydrated, credentials),
+      // 已提交过就显示当时真正发出去的；还没到视频这步才按当前启用的版本预览
+      videoPromptPreview: hydrated.videoPromptSent?.prompt ? hydrated.videoPromptSent : resolveLivePhotoVideoPreview(hydrated, credentials),
     }
   },
 

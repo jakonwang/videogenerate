@@ -261,12 +261,11 @@ export const isStillLivePhotoVideoPrompt = (prompt: string) => prompt.replace(/\
 /** 5.0.125 起页面上显示的占位短句，从来没有用在视频上：没改过的换成真正在用的完整提示词 */
 const PLACEHOLDER_VIDEO_PROMPT = 'Create a realistic six-second product close-up video with subtle natural motion while preserving the exact product identity and composition.'
 
+/** 用户的视频提示词原样发送：只有写了 {product_rules} 的地方才换成商品特征，没写就不额外加任何内容 */
 export function fillLivePhotoVideoPrompt(template: string, productRules: string) {
   const slotLine = `${LIVE_PHOTO_PRODUCT_RULES_SLOT}\n\n`
-  if (template.includes(LIVE_PHOTO_PRODUCT_RULES_SLOT)) {
-    return productRules ? template.split(LIVE_PHOTO_PRODUCT_RULES_SLOT).join(productRules) : template.split(slotLine).join('').split(LIVE_PHOTO_PRODUCT_RULES_SLOT).join('')
-  }
-  return [template, productRules].filter(Boolean).join('\n\n')
+  if (!template.includes(LIVE_PHOTO_PRODUCT_RULES_SLOT)) return template
+  return productRules ? template.split(LIVE_PHOTO_PRODUCT_RULES_SLOT).join(productRules) : template.split(slotLine).join('').split(LIVE_PHOTO_PRODUCT_RULES_SLOT).join('')
 }
 
 export function hashLivePhotoPrompt(prompt: string) {

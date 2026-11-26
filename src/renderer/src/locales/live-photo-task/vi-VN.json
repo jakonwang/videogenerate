@@ -124,6 +124,7 @@
     "rawError": "Lỗi gốc",
     "imagePrompt": "Prompt ảnh",
     "videoPrompt": "Prompt video",
+    "videoPromptSent": "đã gửi theo",
     "negative": "Prompt loại trừ",
     "recentLogs": "Nhật ký gần đây",
     "noLogs": "Chưa có nhật ký"

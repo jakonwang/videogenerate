@@ -9,6 +9,7 @@ import StyleReferenceCard, { type StyleReference } from '../components/StyleRefe
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import LivePhotoTaskCard, { type LivePhotoCardAction, type LivePhotoCardCaps } from './live-photo/LivePhotoTaskCard.vue'
 import LivePhotoTaskDetail from './live-photo/LivePhotoTaskDetail.vue'
+import ChPager from './creator-hub/ChPager.vue'
 // The page brings its own stylesheets so the web version (which reuses this page) gets them too.
 import type { LivePhotoItem, LivePhotoQualityReport } from './live-photo/types'
 import '@/design-system/live-photo.css'
@@ -1204,6 +1205,14 @@ function goToLibraryPage(nextPage: number) {
   void refreshLibraryItems(true)
 }
 
+function changeLibraryPageSize(size: number) {
+  const next = Math.max(1, Math.min(200, Number(size || 24) || 24))
+  if (next === libraryPageSize.value) return
+  libraryPageSize.value = next
+  libraryPage.value = 1
+  void refreshLibraryItems(true)
+}
+
 watch(libraryFilter, () => {
   libraryPage.value = 1
   void refreshLibraryItems()
@@ -2160,13 +2169,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           />
         </div>
 
-        <footer v-if="filteredLibraryItems.length" class="vg-pager lp-pager">
-          <span class="vg-num">{{ libraryTotal || filteredLibraryItems.length }} {{ uiText.itemUnit }}</span>
-          <div class="vg-pager__group">
-            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.previousPage')" :disabled="libraryPage <= 1" @click="goToLibraryPage(libraryPage - 1)"><ChevronLeft :size="14" /></button>
-            <span class="vg-num lp-pager__pos">{{ libraryPage }} / {{ libraryTotalPages }}</span>
-            <button class="vg-pg" type="button" :aria-label="t('livePhoto.workspace.nextPage')" :disabled="libraryPage >= libraryTotalPages" @click="goToLibraryPage(libraryPage + 1)"><ChevronRight :size="14" /></button>
-          </div>
+        <!-- 右下角有悬浮的「任务日志」按钮，翻页放左边，避免被挡住 -->
+        <footer v-if="filteredLibraryItems.length" class="lp-pager" data-testid="live-photo-pager">
+          <ChPager
+            :total="libraryTotal || filteredLibraryItems.length"
+            :page="libraryPage"
+            :page-size="libraryPageSize"
+            :page-sizes="[24, 48, 96]"
+            @update:page="goToLibraryPage"
+            @update:page-size="changeLibraryPageSize"
+          />
         </footer>
       </section>
     </div>

@@ -151,9 +151,9 @@ async function main() {
     assert.match(String(capturedVideoBody?.prompt || ''), /STRUCTURE LOCK:/i)
     assert.match(String(capturedVideoBody?.prompt || ''), /NO INFERENCE RULE:/i)
     assert.match(String(capturedVideoBody?.prompt || ''), /SCALE LOCK:/i)
-    assert.match(String(capturedVideoBody?.prompt || ''), /PROVIDER INPUT ROLE LOCK:/i)
-    assert.match(String(capturedVideoBody?.prompt || ''), /The uploaded image array contains exactly 1 image\./i)
-    assert.match(String(capturedVideoBody?.prompt || ''), /The uploaded image is the locked still scene and product anchor image\./i)
+    // 提示词版本原样发送：开头就是版本内容，不再拼系统文字和本机路径
+    assert.doesNotMatch(String(capturedVideoBody?.prompt || ''), /PROVIDER INPUT ROLE LOCK:|Locked still path:/i)
+    assert.ok(String(capturedVideoBody?.prompt || '').startsWith('ROLE:'))
     assert.match(String(capturedVideoBody?.prompt || ''), /The locked still image is both the scene anchor and the product identity anchor for the video stage\./i)
     assert.match(String(capturedVideoBody?.prompt || ''), /partial non-identity-bearing crop only/i)
     assert.match(String(capturedVideoBody?.prompt || ''), /locked-camera near-static hold/i)

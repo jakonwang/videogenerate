@@ -188,4 +188,8 @@ html[data-app-theme='dark-teal'] .lp-head::before { content: ''; position: absol
 .lp-items--list .lp-item__icons { justify-content: flex-end; flex-wrap: nowrap; }
 
 .lp-pager { padding: 4px 20px 16px; }
+/* 右下角是悬浮的「任务日志」按钮：页码靠左排，右边留出位置 */
+.lp-pager .vg-pager { justify-content: flex-start; padding-right: 200px; }
+.lp-pager .vg-pager > .vg-pager__group:empty { display: none; }
+@media (max-width: 720px) { .lp-pager .vg-pager { padding-right: 0; padding-bottom: 56px; } }
 .lp-pager__pos { min-width: 52px; text-align: center; color: var(--theme-text); }

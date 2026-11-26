@@ -44,6 +44,10 @@ export type LivePhotoItem = {
     prompt: string
     negativePrompt?: string
     referenceImagePaths: string[]
+    /** 有 sentAt 表示这是提交时真正发出去的提示词 */
+    promptVersion?: number
+    promptVersionName?: string
+    sentAt?: number
   }
   imageTaskId?: string
   imageTaskProvider?: string

@@ -47,6 +47,10 @@ export type LivePhotoRequestPreview = {
   prompt: string
   negativePrompt?: string
   referenceImagePaths: string[]
+  /** 实际发出去时用的提示词版本（只有「已发送」的记录才有） */
+  promptVersion?: number
+  promptVersionName?: string
+  sentAt?: number
 }
 
 export type LivePhotoPromptVersion = {
@@ -225,6 +229,8 @@ export type LivePhotoItem = {
   promptPreview?: LivePhotoPromptPreview
   imagePromptPreview?: LivePhotoRequestPreview
   videoPromptPreview?: LivePhotoRequestPreview
+  /** 视频这一步真正提交给模型的提示词（提交时记下，详情里显示它，而不是按当前版本重新拼） */
+  videoPromptSent?: LivePhotoRequestPreview
   imageTaskId?: string
   imageTaskProvider?: string
   imageTaskModel?: string
@@ -255,7 +261,7 @@ export type LivePhotoItem = {
 
 export type LivePhotoItemSummary = Omit<
   LivePhotoItem,
-  'logs' | 'promptPreview' | 'imagePromptPreview' | 'videoPromptPreview'
+  'logs' | 'promptPreview' | 'imagePromptPreview' | 'videoPromptPreview' | 'videoPromptSent'
 > & {
   /** 当前这一步开始的时间（摘要不带日志，界面用它显示「已等 x 秒」） */
   stageStartedAt?: number
