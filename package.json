@@ -148,6 +148,7 @@
     "test:product-spine": "tsx test/product-spine.smoke.ts",
     "test:product-spine:e2e": "node test/product-spine.e2e.cjs",
     "test:autopilot-pipeline": "tsx test/autopilot-pipeline.smoke.ts",
+    "test:product-launch": "tsx test/product-launch.smoke.ts",
     "test:feishu-brief-push": "tsx test/feishu-brief-push.smoke.ts",
     "test:clone-cross-line-shots": "tsx test/clone-cross-line-shots.smoke.ts",
     "test:cloud-web-app": "tsx test/cloud-web-app.smoke.ts",

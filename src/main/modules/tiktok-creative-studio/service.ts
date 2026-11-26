@@ -127,6 +127,11 @@ function isLegacyPageCreationFailure(shot: TiktokCreativeShotTask) {
     && /intercepts pointer events/i.test(message)
 }
 
+function shotPrompt(base: string, suffix: unknown) {
+  const extra = String(suffix || '').trim()
+  return extra ? `${base}\n${extra}` : base
+}
+
 function resolveOfficialVideoPrompt(prompt: unknown) {
   const value = String(prompt || '').trim()
   if (!value) throw new Error('TikTok video prompt is required')
@@ -1037,7 +1042,7 @@ export const tiktokCreativeStudioService = {
     })
   },
 
-  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number; styleReferenceId?: string }) {
+  async createFromReference(input: { referenceImagePaths: string[]; productId: string; prompt?: string; /** 一键上新：每条视频追加一句不同的拍法（按参考图顺序） */ shotPromptSuffixes?: string[]; promptKind?: 'image' | 'video'; promptVersionId?: string; durationSec?: number; mode?: 'reference_to_video' | 'image_to_video'; zoomPercent?: number; styleReferenceId?: string }) {
     const styleReference = input.styleReferenceId ? await styleReferenceService.get(input.styleReferenceId) : undefined
     if (input.styleReferenceId && !styleReference) throw new Error('同款模板不存在，请重新上传参考视频')
     const referenceImagePaths = styleReference
@@ -1077,7 +1082,7 @@ export const tiktokCreativeStudioService = {
       sourceType: 'reference_image',
       mode,
       zoomPercent,
-      prompt: effectiveVideoPrompt,
+      prompt: shotPrompt(effectiveVideoPrompt, input.shotPromptSuffixes?.[index]),
       durationSec,
       ...(styleReference ? {
         styleReferenceId: styleReference.id,

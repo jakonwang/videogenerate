@@ -110,8 +110,8 @@ function proxyFor(ns: RelayNamespace, webOwn?: Methods) {
       if (/^on[A-Z]/.test(method)) return own ?? (() => () => undefined)
       if (!relayAllows(ns, method)) return own ?? (async () => { throw new Error('这个操作需要在电脑端完成') })
       const call = async (...args: unknown[]) => {
-        // clone / livePhoto always run on the server engine (services/cloud/src/cloneEngine.ts)
-        const toServer = ns === 'clone' || ns === 'livePhoto' || serverTargets.has(ns)
+        // clone / livePhoto / productLaunch always run on the server engine (services/cloud/src/cloneEngine.ts)
+        const toServer = ns === 'clone' || ns === 'livePhoto' || ns === 'productLaunch' || serverTargets.has(ns)
         if (!toServer && own && desktopRelayOnline.value === false) return own(...args)
         try {
           const result = await cloud.relay.call(ns, method, args, serverTargets.has(ns) ? 'server' : undefined)

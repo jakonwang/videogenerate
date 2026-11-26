@@ -5,7 +5,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clapperboard, FolderOpen, House, PanelLeftClose, PanelLeftOpen, Scissors, Settings, Wrench } from 'lucide-vue-next'
+import { Clapperboard, FolderOpen, House, PanelLeftClose, PanelLeftOpen, Scissors, Settings, Wrench, Zap } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { lastSectionTab, sectionActive } from '@desktop-src/ui/navigation/sectionTabs'
 import DsMainLayout from '@design/layout/MainLayout.vue'
@@ -55,7 +55,7 @@ const navItems = computed(() => [
 // the pages switch with tabs on top (SectionTabs).
 const SECTIONS: Array<{ title: string; keys: string[] }> = [
   { title: '找商品', keys: ['research', 'products'] },
-  { title: '做内容', keys: ['assets', 'garment-studio', 'ai-video', 'production', 'works'] },
+  { title: '做内容', keys: ['launch', 'assets', 'garment-studio', 'ai-video', 'production', 'works'] },
   { title: '卖出去', keys: ['publish', 'shops', 'insights'] },
 ]
 /** Sidebar-only labels (the phone grid keeps the module names in lib/modules.ts). */
@@ -73,6 +73,8 @@ const MERGED: Record<string, { name: string; icon: Component; group: 'aiVideo' |
   assets: { name: '素材管理', icon: FolderOpen, group: 'library' },
   production: { name: '批量混剪', icon: Scissors, group: 'production' },
 }
+/** 一键上新：只在网页（电脑端同一个页面，跑在服务器引擎上），手机 App 的模块宫格里没有 */
+const LAUNCH_MODULE = { key: 'launch', name: '一键上新', icon: Zap, route: '/launch', group: 'create', phase: 1, description: '' } as MobileModule
 const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/sales', '/business?tab=creators', '/business?tab=inventory']
 const byKey = new Map(MODULES.map((item) => [item.key, item]))
 const sections = computed(() =>
@@ -80,6 +82,7 @@ const sections = computed(() =>
     title: section.title,
     items: section.keys
       .map((key) => {
+        if (key === 'launch') return isWeb ? LAUNCH_MODULE : undefined
         const merged = MERGED[key]
         if (!merged) return byKey.get(key)
         // Route of the tab used last (desktop paths redirect to the web pages).

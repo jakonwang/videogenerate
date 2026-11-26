@@ -597,6 +597,14 @@ export function registerCloudLicenseIpc() {
     }
   })
 
+  ipcMain.handle('cloud:pricing', async () => {
+    try {
+      return { ok: true as const, ...(await client.pricing()) }
+    } catch (error) {
+      return errorPayload(error)
+    }
+  })
+
   ipcMain.handle('cloud:getConfig', async () => {
     try {
       return { ok: true as const, ...(await client.getConfig()) }

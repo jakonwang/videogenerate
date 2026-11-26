@@ -47,6 +47,8 @@ const CHANNEL_PREFIX: Record<string, string> = {
   fonts: 'fonts:',
   // 商品库（网页上是电脑端同一个页面）：读写商品、提示词版本、AI 分析 / 标准源图
   products: 'products:',
+  // 一键上新（网页上是电脑端同一个页面）：出图、写各国文案、图生视频
+  productLaunch: 'productLaunch:',
 }
 const READ_ONLY = /^(get|list|describe)[A-Z]/
 
@@ -200,6 +202,7 @@ async function init(message: InitMessage) {
   registerLivePhotoIpc(host as never)
   await registerTemplateHandlers()
   await registerProductHandlers()
+  await registerProductLaunchHandlers()
   for (const channel of SERVER_BLOCKED) handlers.delete(channel)
 
   // The first sync brings in projects / products made on the computer; don't keep the page waiting too long for it.
@@ -244,6 +247,24 @@ async function registerProductHandlers() {
   handlers.set('products:localIdOf', async (_e, id) => sync.localProductIdForCloud(String(id ?? '')))
 }
 
+/**
+ * 一键上新：和电脑端同一个流水线。服务器上没有 TikTok 创意账号，只开放图生视频；
+ * 「进审核收件箱」换成同步一次（图生视频成片由 publishLivePhotoOutputs 发到作品库 / 审核收件箱）。
+ */
+async function registerProductLaunchHandlers() {
+  const [{ configureProductLaunch }, { registerProductLaunchIpc }] = await Promise.all([
+    import('../../../src/main/modules/product-launch/service'),
+    import('../../../src/main/ipc/registerProductLaunchIpc'),
+  ])
+  configureProductLaunch({ videoEngines: ['livePhoto'], syncInbox: () => runSync() })
+  registerProductLaunchIpc({ handle: (channel: string, handler: Handler) => void handlers.set(channel, handler) } as never)
+}
+
+async function productLaunchBusy() {
+  const { productLaunchService } = await import('../../../src/main/modules/product-launch/service')
+  return await productLaunchService.busy().catch(() => false)
+}
+
 /** 有图生视频任务在跑（或 3 分钟内有改动）时不退出：任务在这个进程里后台执行 */
 async function livePhotoBusy() {
   const { livePhotoService } = await import('../../../src/main/modules/live-photo/service')
@@ -269,7 +290,7 @@ async function maybeExit(idleMs: number) {
   const { cloneRepo } = await import('../../../src/main/modules/clone/repo')
   const projects = await cloneRepo.listRawProjects().catch(() => [])
   const busy = projects.some((project) => project.status === 'generating' || Date.now() - Number(project.updatedAt || 0) < 3 * 60_000)
-  if (busy || (await livePhotoBusy())) return
+  if (busy || (await livePhotoBusy()) || (await productLaunchBusy())) return
   await runSync()
   process.exit(0)
 }

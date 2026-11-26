@@ -1,4 +1,5 @@
 import type { MuseAccount, MuseCreateInput, MuseJob, MusePromptKind, MusePromptVersion, MuseQueue, MuseSettings } from '../main/modules/muse-creative-studio/types'
+import type { LaunchCreateInput, LaunchJob, LaunchJobStatus, LaunchStage, LaunchVideoEngine } from '../shared/productLaunch'
 import type { SceneSwapBatch, SceneSwapCreateInput, SceneSwapInfo, SceneSwapScene, SwapModel } from '../shared/sceneSwap'
 import type { MatrixAccountSettings } from '../shared/publishMatrix'
 import type { PublishProfitReport } from '../shared/publishProfit'
@@ -29,7 +30,7 @@ import type { CloudLicenseStatus } from '../main/lib/cloudLicense'
 import type { CloudSyncStatus } from '../main/modules/cloud-sync/service'
 import type { CloudDevice, CloudMeResponse, CloudOrder, CloudPage, CloudPayChannel, CloudPlansResponse } from '../shared/cloud/types'
 import type { CloudRedeemResult } from '../shared/cloud/client'
-import type { CreditsResponse } from '../shared/cloud/billing'
+import type { CreditsResponse, PricingResponse } from '../shared/cloud/billing'
 
 type CloudIpcResult<T> = ({ ok: true } & T) | { ok: false; error: string; code: string; details?: unknown }
 type CloudActivation = { ok: true } | { ok: false; reason: CloudLicenseStatus['reason']; message: string; devices?: CloudDevice[]; maxDevices?: number }
@@ -916,6 +917,17 @@ const api = {
       ipcRenderer.invoke('plugin:productImageMaterials:exportMaterials', payload),
     listProducts: () => ipcRenderer.invoke('plugin:productImageMaterials:listProducts'),
   },
+  /** 一键上新：商品图 → 各国标题详情 → 视频 → 审核收件箱 */
+  productLaunch: {
+    info: () => ipcRenderer.invoke('productLaunch:info') as Promise<{ videoEngines: LaunchVideoEngine[] }>,
+    list: () => ipcRenderer.invoke('productLaunch:list') as Promise<Array<LaunchJob & { status: LaunchJobStatus }>>,
+    get: (id: string) => ipcRenderer.invoke('productLaunch:get', id) as Promise<(LaunchJob & { status: LaunchJobStatus }) | null>,
+    create: (input: LaunchCreateInput) => ipcRenderer.invoke('productLaunch:create', input) as Promise<LaunchJob & { status: LaunchJobStatus }>,
+    retry: (input: { jobId: string; itemId: string; stage: LaunchStage }) => ipcRenderer.invoke('productLaunch:retry', input) as Promise<(LaunchJob & { status: LaunchJobStatus }) | null>,
+    skip: (input: { jobId: string; itemId: string; stage: LaunchStage }) => ipcRenderer.invoke('productLaunch:skip', input) as Promise<(LaunchJob & { status: LaunchJobStatus }) | null>,
+    setPaused: (input: { jobId: string; paused: boolean }) => ipcRenderer.invoke('productLaunch:setPaused', input) as Promise<(LaunchJob & { status: LaunchJobStatus }) | null>,
+    remove: (id: string) => ipcRenderer.invoke('productLaunch:remove', id) as Promise<{ ok: true }>,
+  },
   /** AI 修图 · 批量换景 */
   sceneSwap: {
     pick: (kind: 'files' | 'folder') => ipcRenderer.invoke('sceneSwap:pick', kind) as Promise<Array<{ path: string; name: string }>>,
@@ -1611,6 +1623,7 @@ const api = {
     redeem: (code: string) =>
       ipcRenderer.invoke('cloud:redeem', code) as Promise<CloudIpcResult<{ status: CloudLicenseStatus; redeemed: CloudRedeemResult['redeemed']; credits: number }>>,
     credits: (page?: number) => ipcRenderer.invoke('cloud:credits', page) as Promise<CloudIpcResult<CreditsResponse>>,
+    pricing: () => ipcRenderer.invoke('cloud:pricing') as Promise<CloudIpcResult<PricingResponse>>,
     getConfig: () => ipcRenderer.invoke('cloud:getConfig') as Promise<CloudIpcResult<{ values: Record<string, unknown>; version: string }>>,
     onStatusChanged: (handler: (status: CloudLicenseStatus) => void) => {
       const listener = (_event: unknown, status: CloudLicenseStatus) => handler(status)

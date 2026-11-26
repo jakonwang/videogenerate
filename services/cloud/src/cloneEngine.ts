@@ -205,6 +205,8 @@ export function routesToCloneEngine(engine: CloneEngine, userId: string, body: {
   if (ns === 'clone') return !DESKTOP_CLONE_METHODS.has(method)
   // 图生视频、批量字幕（电脑端本地 Web API）：网页和电脑端同一个页面，在服务器引擎上执行
   if (ns === 'livePhoto' || ns === 'webApi') return true
+  // 一键上新：出图、写文案、图生视频都在服务器引擎上跑，电脑关着也能用
+  if (ns === 'productLaunch') return true
   // 模板库：模板在引擎里编辑并经云端和电脑互通；素材下拉列表网页先问电脑，电脑不在线再指定服务器
   if (ns === 'templates') return body?.target === 'server'
   if (ns === 'luts' || ns === 'stickers' || ns === 'fonts') return body?.target === 'server'

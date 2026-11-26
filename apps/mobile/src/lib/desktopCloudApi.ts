@@ -48,6 +48,7 @@ export function installDesktopCloudApi() {
         return { status: statusFromSession(), redeemed: result.redeemed, credits: result.credits }
       }),
     credits: (page?: number) => wrap(() => cloud.credits(page ?? 1)),
+    pricing: () => wrap(() => cloud.pricing()),
     unbindDevice: (deviceId: string) =>
       wrap(async () => {
         const { devices } = await cloud.unbindDevice(deviceId)

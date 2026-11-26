@@ -21,6 +21,7 @@ import {
   X,
   ArrowLeft,
   Check,
+  Zap,
 } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import TitleBar from "./components/TitleBar.vue";
@@ -95,6 +96,7 @@ const allSections = computed(() => [
   {
     title: t("ai.nav.groupContent"),
     items: [
+      { to: "/launch", icon: Zap, label: t("ai.nav.launch"), active: route.path.startsWith("/launch") },
       { to: lastSectionTab("library").to, icon: Images, label: t("ai.nav.assets"), active: sectionActive("library", route.path) },
       { to: "/garment-studio", icon: Shirt, label: t("ai.nav.garmentStudio"), active: route.path.startsWith("/garment-studio") },
       { to: lastSectionTab("aiVideo").to, icon: Clapperboard, label: t("ai.nav.aiVideo"), active: sectionActive("aiVideo", route.path) },

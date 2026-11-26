@@ -114,6 +114,8 @@ export const router = createRouter({
     isWeb
       ? { path: '/image-to-video', ...desktopPage(() => import('@desktop-views/LivePhotoGeneratorView.vue'), () => import('./lib/desktopApi/livePhoto')), meta: { tabs: false } }
       : { path: '/image-to-video', component: () => import('./views/ImageToVideoView.vue'), meta: { tabs: false } },
+    // Web: 一键上新 is the desktop page itself, run on the server engine (only 图生视频 for videos there).
+    ...(isWeb ? [{ path: '/launch', ...desktopPage(() => import('@desktop-views/ProductLaunchView.vue'), () => import('./lib/desktopApi/productLaunch')), meta: { tabs: false } }] : []),
     isWeb ? { path: '/review', ...desktopPage(() => import('@desktop-views/ReviewInboxView.vue')), meta: { tabs: false } } : { path: '/review', component: () => import('./views/ReviewView.vue'), meta: { tabs: false } },
     { path: '/insights', ...desktopPage(() => import('@desktop-views/InsightsView.vue')), meta: { tabs: false }, beforeEnter: () => (isWeb ? true : '/business?tab=insights') },
     // Web: 复刻 is the desktop page through the computer when it is online (cloud 复刻 when it is not).

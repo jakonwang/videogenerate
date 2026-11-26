@@ -50,6 +50,8 @@ export const RELAY_MODULES = {
   clone: { channel: 'clone:', blocked: ['debugLog'] },
   /** 图生视频：网页上由服务器引擎执行（cloneEngine.ts 总是转给引擎，不会到电脑） */
   livePhoto: { channel: 'plugin:livePhoto:' },
+  /** 一键上新：网页上由服务器引擎执行（出图、写文案、图生视频都在服务器；tk创意室 只在电脑端） */
+  productLaunch: { channel: 'productLaunch:' },
   /** 批量字幕：电脑端页面调用的本地 Web API，网页上由服务器引擎里的同一个 API 处理（总是交给引擎） */
   webApi: { channel: 'webApi:', only: ['request'] },
   /** 网页显示电脑端页面里的本地图片 / 视频：电脑把文件传到云端（只限软件数据目录） */

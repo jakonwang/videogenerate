@@ -55,6 +55,7 @@ import { registerAssetLibraryIpc } from './ipc/registerAssetLibraryIpc'
 import { registerMixPoolIpc, registerMixStudioIpc } from './ipc/registerMixPoolIpc'
 import { registerProductReplacementIpc } from './ipc/registerProductReplacementIpc'
 import { registerSceneSwapIpc } from './ipc/registerSceneSwapIpc'
+import { registerProductLaunchIpc } from './ipc/registerProductLaunchIpc'
 import { registerProductResearchIpc } from './ipc/registerProductResearchIpc'
 import { registerCloudSyncIpc } from './ipc/registerCloudSyncIpc'
 import { startCloudSync, stopCloudSync } from './modules/cloud-sync/service'
@@ -842,6 +843,7 @@ function wireIpc() {
   registerAssetLibraryIpc(ipcMain)
   registerProductReplacementIpc(ipcMain)
   registerSceneSwapIpc(ipcMain)
+  registerProductLaunchIpc(ipcMain)
   registerProductResearchIpc(ipcMain)
   registerCloudSyncIpc(ipcMain)
   void productReplacementService.recoverOnStartup()
