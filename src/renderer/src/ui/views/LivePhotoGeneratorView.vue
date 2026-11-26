@@ -153,7 +153,6 @@ const uiText = computed(() => ({
   perPage: t('livePhoto.workspace.perPage'),
   referenceQueuedSuffix: t('livePhoto.workspace.referenceQueuedSuffix'),
   pendingTasks: t('livePhoto.workspace.pendingTasks'),
-  referenceTaskList: t('livePhoto.workspace.referenceTaskList'),
   missingImage: t('livePhoto.workspace.missingImage'),
   product: t('livePhoto.reference.product'),
   delete: t('common.remove'),
@@ -451,9 +450,6 @@ const referenceTaskRows = computed(() =>
     missing: referenceMissingPaths.value.includes(path),
   })),
 )
-const referenceCreatedItems = computed(() =>
-  items.value.filter((item) => item.sourceType === 'reference_replace').slice(0, 8),
-)
 const unboundMaterialOptions = computed(() =>
   productImageMaterials.value.filter((item) => item.materialOrigin === 'derived' && String(item.localImagePath || '').trim()),
 )
@@ -558,15 +554,6 @@ function itemStatusLabel(status: LivePhotoItem['packagingStatus']) {
   return t('livePhoto.status.draft')
 }
 
-function workflowStepLabel(step?: LivePhotoItem['workflow']['currentStep']) {
-  if (step === 'image_generation') return t('autoUi.k_1f6a9dab8b96')
-  if (step === 'image_validation') return t('autoUi.k_6e03657a1a84')
-  if (step === 'video_generation') return t('autoUi.k_19978a8da5e2')
-  if (step === 'live_photo_packaging') return t('autoUi.k_089c8515d929')
-  if (step === 'completed') return t('autoUi.k_e99b48a29bdf')
-  return t('autoUi.k_4dcbbcfa6154')
-}
-
 function liveTaskStatusLabel(item: LivePhotoItem) {
   const autoStatus = String(item.autoFlowStatus?.status || '').trim()
   if (item.packagingStatus === 'completed' || autoStatus === 'done') return t('autoUi.k_e99b48a29bdf')
@@ -594,45 +581,6 @@ function lpTone(item: LivePhotoItem) {
   if (tone === 'is-danger') return 'lp-state--err'
   if (tone === 'is-warning') return 'lp-state--warn'
   if (tone === 'is-running') return 'lp-state--run'
-  return ''
-}
-
-function liveTaskErrorSummary(item: LivePhotoItem) {
-  const text = String(item.error || item.autoFlowStatus?.lastError || '').trim()
-  if (!text) return ''
-  if (text.includes('[remote_pending]')) {
-    const taskId = extractLivePhotoTaskId(item)
-    return taskId ? t('autoUi.k_2f271848d90e', { p0: taskId }) : t('autoUi.k_c350ef6948db')
-  }
-  const stage = item.autoFlowStatus?.failedStage === 'video'
-    ? 'video_generation'
-    : item.autoFlowStatus?.failedStage === 'image'
-      ? 'image_validation'
-      : item.workflow?.currentStep
-  const summary = sanitizeVisibleText(text, t('autoUi.k_160f09e2ed5d'))
-  return stage === 'video_generation' || stage === 'image_validation'
-    ? `${workflowStepLabel(stage)}: ${summary}`
-    : summary
-}
-
-function liveTaskMetaSummary(item: LivePhotoItem) {
-  const errorText = String(item.error || '').trim()
-  if (errorText) return liveTaskErrorSummary(item)
-  return sanitizeVisibleText(item.referenceImagePath || item.sourceType, '--')
-}
-
-function extractLivePhotoTaskId(item: LivePhotoItem) {
-  if (String(item.videoTaskId || '').trim()) return String(item.videoTaskId || '').trim()
-  if (String(item.imageTaskId || '').trim()) return String(item.imageTaskId || '').trim()
-  const candidates = [
-    String(item.error || '').trim(),
-    String(item.autoFlowStatus?.lastError || '').trim(),
-    ...(Array.isArray(item.logs) ? item.logs.map((log) => String(log.message || '').trim()) : []),
-  ].filter(Boolean)
-  for (const candidate of candidates) {
-    const match = candidate.match(/(?:taskId|askId)=([^\s,]+)/i)
-    if (match?.[1]) return match[1]
-  }
   return ''
 }
 
@@ -1224,10 +1172,6 @@ function openRuntimeLogs(item: LivePhotoItem) {
     runtimeLogs.value = Array.isArray(detailedItem.logs) ? [...detailedItem.logs].slice().reverse() : []
     runtimeDialogOpen.value = true
   })()
-}
-
-function referenceTaskTitle(item: LivePhotoItem) {
-  return fileNameOf(item.referenceImagePath) || item.productSnapshot?.name || item.id
 }
 
 function mergeLivePhotoItems(nextItems: LivePhotoItem[]) {
@@ -2217,27 +2161,6 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 {{ creatingReference ? t('livePhoto.actions.creating') : styleReference ? `生成 ${styleProductIds.length} 条同款视频` : `${uiText.createTaskPrefix} (${referenceImagePaths.length || 0})` }}
               </button>
             </footer>
-          </article>
-
-          <article v-if="referenceCreatedItems.length" class="lp-card lp-card--flush">
-            <header class="lp-card__bar">
-              <h3>{{ uiText.referenceTaskList }}<em>{{ referenceCreatedItems.length }}</em></h3>
-              <button class="vg-btn vg-btn--sm vg-btn--ghost" type="button" @click="activeTab = 'library'">{{ uiText.tabLibrary }}<ChevronRight :size="14" /></button>
-            </header>
-            <div class="lp-recent">
-              <div v-for="item in referenceCreatedItems" :key="item.id" class="lp-recent__row">
-                <span class="lp-recent__thumb">
-                  <img v-if="livePhotoThumbnailPath(item)" :src="previewSrc(livePhotoThumbnailPath(item))" alt="" loading="lazy" decoding="async" />
-                  <FileImage v-else :size="15" />
-                </span>
-                <div class="lp-recent__main">
-                  <strong :title="referenceTaskTitle(item)">{{ referenceTaskTitle(item) }}</strong>
-                  <small>{{ item.productSnapshot?.name || '--' }} · {{ liveTaskMetaSummary(item) }}</small>
-                </div>
-                <span class="vg-num lp-recent__time">{{ formatTime(item.updatedAt) }}</span>
-                <span class="lp-state" :class="lpTone(item)"><i />{{ itemStatusLabel(item.packagingStatus) }}</span>
-              </div>
-            </div>
           </article>
         </div>
 

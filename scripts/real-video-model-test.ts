@@ -38,6 +38,12 @@ async function main() {
     console.error('用法：npx tsx scripts/real-video-model-test.ts <keys.json> <首帧URL> <模型id,...> [尾帧推近%]')
     process.exit(2)
   }
+  // 首帧写成 file:<本地路径> 时，读本地图片转 base64（小扳手、GRS 收 base64；高瑞只收 URL）
+  if (firstFrameUrl.startsWith('file:')) {
+    const buffer = await readFile(firstFrameUrl.slice(5))
+    const mime = /\.png$/i.test(firstFrameUrl) ? 'image/png' : 'image/jpeg'
+    firstFrameUrl = `data:${mime};base64,${buffer.toString('base64')}`
+  }
   // 首帧写成 b64:<URL> 时，先下载再转成 base64 data URI（排查平台是否不认外链）
   if (firstFrameUrl.startsWith('b64:')) {
     const res = await fetch(firstFrameUrl.slice(4))
@@ -53,7 +59,9 @@ async function main() {
   }
   const outDir = join(process.cwd(), 'test', 'artifacts', 'real-video-model-test')
   await mkdir(outDir, { recursive: true })
-  const prompt = 'The product stays still and sharp; soft daylight; very slow gentle camera push-in; no new objects.'
+  // 环境变量 VIDEO_PROMPT 可以换提示词；OUT_TAG 用来区分同一模型的多次对照
+  const prompt = process.env.VIDEO_PROMPT || 'The product stays still and sharp; soft daylight; very slow gentle camera push-in; no new objects.'
+  const outTag = process.env.OUT_TAG ? `_${process.env.OUT_TAG}` : ''
   const results: any[] = []
 
   for (const modelId of modelArg.split(',').map((item) => item.trim()).filter(Boolean)) {
@@ -86,7 +94,7 @@ async function main() {
       row.totalSec = Math.round((Date.now() - startedAt) / 1000)
       if (snapshot.status === 'succeeded' && snapshot.url) {
         const res = await fetch(snapshot.url)
-        const file = join(outDir, `${modelId.replace(/[:/]/g, '_')}.mp4`)
+        const file = join(outDir, `${modelId.replace(/[:/]/g, '_')}${outTag}.mp4`)
         await writeFile(file, Buffer.from(await res.arrayBuffer()))
         row.ok = true
         row.file = file

@@ -99,6 +99,8 @@ type LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs: typeof analyzeProductStructureWithGrs
   reviewReferenceReplacementStillStrict: typeof reviewReferenceReplacementStillStrict
   reviewReferenceReplacementStillVisual: typeof reviewReferenceReplacementStillVisual
+  /** 下载重试间隔（测试里设短一点） */
+  downloadRetryDelaysMs?: number[]
 }
 
 const LIVE_PHOTO_QUALITY_CHECKER_VERSION = 'disabled'
@@ -745,12 +747,52 @@ async function ensureDir(path: string) {
   await mkdir(path, { recursive: true })
 }
 
+/** 下载失败属于临时问题（网关超时、限流、断网），远端结果还在，可以稍后再下 */
+export class TransientDownloadError extends Error {
+  readonly transient = true
+}
+
+function isTransientDownloadStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+/**
+ * 下载远端结果到本地。平台的文件服务器偶尔返回 502/504 或断流（2026-11-26 小扳手 CDN 504 导致成片被判失败），
+ * 所以临时错误重试几次；仍失败抛 TransientDownloadError，调用方应当「稍后再下」而不是判任务失败。
+ */
 async function downloadUrlToFile(input: { url: string; filePath: string }) {
-  const res = await fetch(input.url)
-  if (!res.ok) throw new Error(`Download failed HTTP ${res.status}: ${input.url}`)
-  const buffer = Buffer.from(await res.arrayBuffer())
-  await writeFile(input.filePath, buffer)
-  return input.filePath
+  const delays = livePhotoDeps.downloadRetryDelaysMs ?? [2000, 6000, 15000]
+  let lastError: unknown
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delays[attempt - 1]))
+    try {
+      const res = await fetch(input.url, { signal: AbortSignal.timeout(180_000) })
+      if (!res.ok) {
+        const message = `Download failed HTTP ${res.status}: ${input.url}`
+        if (!isTransientDownloadStatus(res.status)) throw new Error(message)
+        lastError = new TransientDownloadError(message)
+        continue
+      }
+      const buffer = Buffer.from(await res.arrayBuffer())
+      if (!buffer.length) {
+        lastError = new TransientDownloadError(`Download returned empty body: ${input.url}`)
+        continue
+      }
+      await writeFile(input.filePath, buffer)
+      return input.filePath
+    } catch (error) {
+      if (error instanceof Error && !(error instanceof TransientDownloadError) && /^Download failed HTTP/.test(error.message)) throw error
+      lastError = error instanceof TransientDownloadError ? error : new TransientDownloadError(`Download interrupted: ${String((error as Error)?.message || error)} ${input.url}`)
+    }
+  }
+  throw lastError
+}
+
+/** 远端已出结果但下载暂时失败：当作「还在等」，下次轮询再下，不计入生成失败 */
+function isTransientDownloadFailure(error: unknown) {
+  if (error instanceof TransientDownloadError) return true
+  const message = String((error as Error)?.message || error || '')
+  return /Download failed HTTP (408|425|429|5\d\d)\b|Download interrupted|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(message)
 }
 
 async function renderPosterFromVideo(input: { videoPath: string; posterPath: string }) {
@@ -1503,7 +1545,12 @@ async function pollLivePhotoVideoTask(input: {
     if (snapshot.status !== 'succeeded' || !snapshot.url) return { synced: false as const, outputPath: undefined, raw: snapshot }
     await ensureDir(input.outputDir)
     const outputPath = join(input.outputDir, `live_photo_${Date.now()}_${randomUUID()}.mp4`)
-    await downloadUrlToFile({ url: snapshot.url, filePath: outputPath })
+    try {
+      await downloadUrlToFile({ url: snapshot.url, filePath: outputPath })
+    } catch (error) {
+      if (isTransientDownloadFailure(error)) return { synced: false as const, outputPath: undefined, raw: { ...snapshot, downloadPending: String((error as Error)?.message || error) } }
+      throw error
+    }
     return { synced: true as const, outputPath, raw: snapshot }
   }
   if (String(input.item.videoTaskProvider || '').trim() === 'grsai') {
@@ -1514,19 +1561,28 @@ async function pollLivePhotoVideoTask(input: {
     if (!snapshot.outputUrl) return { synced: false as const, outputPath: undefined, raw: snapshot.raw }
     await ensureDir(input.outputDir)
     const outputPath = join(input.outputDir, `live_photo_${Date.now()}_${randomUUID()}.mp4`)
-    await downloadUrlToFile({ url: snapshot.outputUrl, filePath: outputPath })
+    try {
+      await downloadUrlToFile({ url: snapshot.outputUrl, filePath: outputPath })
+    } catch (error) {
+      if (isTransientDownloadFailure(error)) return { synced: false as const, outputPath: undefined, raw: snapshot.raw }
+      throw error
+    }
     return { synced: true as const, outputPath, raw: snapshot.raw }
   }
-  const synced = await syncRemoteTaskResult({
-    credentials: input.credentials,
-    taskId,
-    outDir: input.outputDir,
-    provider: input.item.videoTaskProvider,
-    baseUrl: input.item.videoTaskBaseUrl,
-    endpointStyle: input.item.videoTaskEndpointStyle,
-    model: input.item.videoTaskModel,
-  })
-  return synced
+  try {
+    return await syncRemoteTaskResult({
+      credentials: input.credentials,
+      taskId,
+      outDir: input.outputDir,
+      provider: input.item.videoTaskProvider,
+      baseUrl: input.item.videoTaskBaseUrl,
+      endpointStyle: input.item.videoTaskEndpointStyle,
+      model: input.item.videoTaskModel,
+    })
+  } catch (error) {
+    if (isTransientDownloadFailure(error)) return { synced: false as const, outputPath: undefined, raw: { downloadPending: String((error as Error)?.message || error) } }
+    throw error
+  }
 }
 
 async function buildProductSnapshot(productId: string): Promise<LivePhotoProductSnapshot> {
@@ -1544,7 +1600,6 @@ async function buildProductSnapshot(productId: string): Promise<LivePhotoProduct
   if (!authoritativeProductReferencePath) {
     throw new Error('Selected product does not have a valid authoritative Live Photo reference image.')
   }
-  const productAnalysis = await ensureLivePhotoProductAnalysis(product, authoritativeProductReferencePath)
   const coverImagePath = authoritativeProductReferencePath || imagePaths[0] || undefined
   return {
     id: product.id,
@@ -1553,7 +1608,7 @@ async function buildProductSnapshot(productId: string): Promise<LivePhotoProduct
     coverImagePath,
     authoritativeProductReferencePath,
     imagePaths: [authoritativeProductReferencePath],
-    productAnalysis,
+    // 不再带商品分析：图生视频不用它
   }
 }
 
@@ -1581,169 +1636,28 @@ async function drainLivePhotoAutoFlowForTests() {
   ])
 }
 
-function toCloneProductType(productType: string): CloneProductType {
-  const normalized = String(productType || '').trim().toLowerCase()
-  if (normalized === 'earrings' || normalized === 'earring') return 'earrings'
-  if (normalized === 'phone_case') return 'phone_case'
-  if (normalized === 'clothes') return 'clothes'
-  if (normalized === 'toy') return 'toy'
-  return 'general'
-}
-
-function containsCjkText(value: string) {
-  return /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(String(value || ''))
-}
-
-function shouldRefreshLivePhotoProductAnalysis(product: Product, productAnalysis: any) {
-  if (!productAnalysis || typeof productAnalysis !== 'object') return false
-  const expectedType = toCloneProductType(String(product.type || '').trim())
-  const normalizedCategory = String(productAnalysis?.category || '').trim().toLowerCase()
-  const normalizedSummary = String(productAnalysis?.summary || '').trim().toLowerCase()
-  const normalizedCoreSubject = String(productAnalysis?.coreSubject || '').trim().toLowerCase()
-  const normalizedConnection = String(productAnalysis?.connectionStructure || '').trim().toLowerCase()
-  const normalizedGeometry = String(productAnalysis?.geometryDetails || '').trim().toLowerCase()
-  const fields = [
-    productAnalysis.summary,
-    productAnalysis.coreSubject,
-    productAnalysis.connectionStructure,
-    productAnalysis.materialDetails,
-    productAnalysis.wearingPosition,
-    productAnalysis.surfaceDetails,
-    productAnalysis.colorDetails,
-    productAnalysis.geometryDetails,
-    productAnalysis.sizeScale,
-    productAnalysis.rawDescription,
-    ...(Array.isArray(productAnalysis.matchingRules) ? productAnalysis.matchingRules : []),
-  ]
-  const joined = fields.map((item) => String(item || '').trim()).filter(Boolean).join('\n')
-  if (!joined) return false
-  if (containsCjkText(joined)) return true
-  if (expectedType === 'earrings' && normalizedCategory !== 'earrings') return true
-  const looksGenericFallback =
-    normalizedCategory === 'general' &&
-    (
-      normalizedSummary.includes('single-source product dna for the same product') ||
-      normalizedCoreSubject.includes('the same single product instance with no replacement and no redesign') ||
-      normalizedConnection.includes('keep all stable connection points') ||
-      normalizedGeometry.includes('keep silhouette, thickness, length, proportions, curvature, component count, and relative placement')
-    )
-  return looksGenericFallback
-}
-
-async function ensureLivePhotoProductAnalysis(product: Product, authoritativeProductReferencePath: string) {
-  const currentAnalysis = (product as any).productAnalysis
-  if (!shouldRefreshLivePhotoProductAnalysis(product, currentAnalysis)) {
-    return currentAnalysis
-  }
-  const fallbackType = toCloneProductType(String(product.type || '').trim())
-  const analyzed = await livePhotoDeps.analyzeProductStructureWithGrs({
-    credentials: await cloneRepo.getCredentials(),
-    productReferenceImagePaths: [authoritativeProductReferencePath],
-    productCategory: fallbackType,
-    locale: 'zh-CN',
-  })
-  const normalized = {
-    category: String(analyzed.category || fallbackType).trim().toLowerCase() === 'earring' ? 'earrings' : String(analyzed.category || fallbackType).trim(),
-    summary: String(analyzed.summary || '').trim(),
-    coreSubject: String(analyzed.coreSubject || '').trim(),
-    connectionStructure: String(analyzed.connectionStructure || '').trim(),
-    materialDetails: String(analyzed.materialDetails || '').trim(),
-    wearingPosition: String(analyzed.wearingPosition || '').trim(),
-    surfaceDetails: String(analyzed.surfaceDetails || '').trim(),
-    colorDetails: String(analyzed.colorDetails || '').trim(),
-    geometryDetails: String(analyzed.geometryDetails || '').trim(),
-    sizeScale: String(analyzed.sizeScale || '').trim(),
-    matchingRules: Array.isArray(analyzed.matchingRules) ? analyzed.matchingRules.map((item) => String(item || '').trim()).filter(Boolean) : [],
-    rawDescription: String(analyzed.rawDescription || '').trim(),
-    updatedAt: now(),
-  }
-  await productsRepo.upsert({
-    ...product,
-    productAnalysis: normalized,
-  } as any)
-  return normalized
-}
-
-function normalizeLivePhotoProductAnalysis(input: LivePhotoProductSnapshot['productAnalysis']) {
-  if (!input) return undefined
-  return {
-    category: String(input.category || '').trim(),
-    summary: String(input.summary || '').trim(),
-    coreSubject: String(input.coreSubject || '').trim(),
-    connectionStructure: String(input.connectionStructure || '').trim(),
-    materialDetails: String(input.materialDetails || '').trim(),
-    wearingPosition: String(input.wearingPosition || '').trim(),
-    surfaceDetails: String(input.surfaceDetails || '').trim(),
-    colorDetails: String(input.colorDetails || '').trim(),
-    geometryDetails: String(input.geometryDetails || '').trim(),
-    sizeScale: String(input.sizeScale || '').trim(),
-    matchingRules: Array.isArray(input.matchingRules) ? input.matchingRules.map((item) => String(item || '').trim()).filter(Boolean) : [],
-    rawDescription: String(input.rawDescription || '').trim(),
-  }
+/**
+ * 商品分析不再用在图生视频的任何提示词里（2026-11-26 用户要求）。
+ * 所有提示词都经这里读分析，统一返回「没有分析」；旧任务快照里存着的分析也不会再写进提示词。
+ */
+function normalizeLivePhotoProductAnalysis(_input: LivePhotoProductSnapshot['productAnalysis']): LivePhotoProductSnapshot['productAnalysis'] | undefined {
+  return undefined
 }
 
 function isEarringLikeLivePhotoProduct(product: Pick<LivePhotoProductSnapshot, 'type' | 'productAnalysis'>) {
   const normalizedType = String(product.type || '').trim().toLowerCase()
-  const normalizedCategory = String(product.productAnalysis?.category || '').trim().toLowerCase()
-  const analysisHints = [
-    product.productAnalysis?.summary,
-    product.productAnalysis?.coreSubject,
-    product.productAnalysis?.connectionStructure,
-    product.productAnalysis?.geometryDetails,
-    ...(Array.isArray(product.productAnalysis?.matchingRules) ? product.productAnalysis?.matchingRules : []),
-  ]
-    .map((item) => String(item || '').trim().toLowerCase())
-    .filter(Boolean)
-    .join('\n')
-  return (
-    normalizedType === 'earring' ||
-    normalizedType === 'earrings' ||
-    normalizedCategory === 'earring' ||
-    normalizedCategory === 'earrings' ||
-    analysisHints.includes(' earring') ||
-    analysisHints.startsWith('earring') ||
-    analysisHints.includes('earrings') ||
-    analysisHints.includes('hoop earring')
-  )
+  return normalizedType === 'earring' || normalizedType === 'earrings'
 }
 
 function isRingLikeLivePhotoProduct(product: Pick<LivePhotoProductSnapshot, 'type' | 'productAnalysis'>) {
   const normalizedType = String(product.type || '').trim().toLowerCase()
-  const normalizedCategory = String(product.productAnalysis?.category || '').trim().toLowerCase()
-  const analysisHints = [
-    product.productAnalysis?.summary,
-    product.productAnalysis?.coreSubject,
-    product.productAnalysis?.connectionStructure,
-    product.productAnalysis?.geometryDetails,
-    product.productAnalysis?.rawDescription,
-    ...(Array.isArray(product.productAnalysis?.matchingRules) ? product.productAnalysis.matchingRules : []),
-  ]
-    .map((item) => String(item || '').trim().toLowerCase())
-    .filter(Boolean)
-    .join('\n')
-  return (
-    normalizedType === 'ring' ||
-    normalizedType === 'rings' ||
-    normalizedCategory === 'ring' ||
-    normalizedCategory === 'rings' ||
-    analysisHints.includes(' ring') ||
-    analysisHints.startsWith('ring') ||
-    analysisHints.includes('rings') ||
-    analysisHints.includes('band ring')
-  )
+  return normalizedType === 'ring' || normalizedType === 'rings'
 }
 
+/** 是否佩戴类商品：只看商品类型（不再参考商品分析） */
 function isWearableLikeLivePhotoProduct(product: Pick<LivePhotoProductSnapshot, 'type' | 'productAnalysis'>) {
-  const analysis = normalizeLivePhotoProductAnalysis(product.productAnalysis)
-  const normalizedCategory = String(analysis?.category || '').trim().toLowerCase()
-  return Boolean(
-    analysis?.wearingPosition ||
-      normalizedCategory === 'jewelry' ||
-      normalizedCategory === 'earrings' ||
-      normalizedCategory === 'rings' ||
-      analysis?.sizeScale ||
-      analysis?.connectionStructure,
-  )
+  const normalizedType = String(product.type || '').trim().toLowerCase()
+  return ['earring', 'earrings', 'ring', 'rings', 'necklace', 'bracelet', 'anklet', 'jewelry', 'watch', 'hair_accessory'].includes(normalizedType)
 }
 
 function isStructuralLivePhotoMatchingRule(rule: string) {
@@ -2764,7 +2678,6 @@ async function bindPreparedLivePhotoReplacementInputs(input: {
     variant: resolveLivePhotoProductReferenceVariant(input.item),
     hint: {
       type: input.product.type,
-      category: input.product.productAnalysis?.category,
     },
   })
   if (livePhotoDeps.generateGptShotFrameImage !== generateGptShotFrameImage) {
@@ -4054,11 +3967,41 @@ async function finalizeReferenceItem(input: {
         'Reference live photo packaging',
       )
     } else {
+      const existingMotion = String(imageDoneItem.motionVideoPath || '').trim()
+      let videoSourcePath = existingMotion && existsSync(existingMotion) ? existingMotion : undefined
+      if (!videoSourcePath) {
+        // 从视频这步重来（例如手动重试清掉了旧任务）：按任务选的模型正常提交一次。
+        // 以前这里直接进打包，打包发现没视频就用旧的生成链现做——不看所选模型、失败还会换平台多次提交，
+        // 而且套在打包超时里：超时判失败后后台仍在生成，最后视频做好了任务却停在「失败」。
+        const submitted = await submitLivePhotoVideoTask({
+          item: imageDoneItem,
+          product: input.product,
+          stillPath: String(imageDoneItem.generatedStillPath || '').trim(),
+          template: input.motionTemplate,
+        })
+        if (submitted.mode === 'remote') {
+          await livePhotoRepo.upsert({
+            ...appendLivePhotoLogs(imageDoneItem, [
+              buildLivePhotoLog(`[live-photo] video task submitted: provider=${submitted.provider} taskId=${submitted.taskId}`),
+            ]),
+            videoTaskId: submitted.taskId,
+            videoTaskProvider: submitted.provider,
+            videoTaskModel: submitted.model,
+            videoTaskBaseUrl: submitted.baseUrl,
+            videoTaskEndpointStyle: submitted.endpointStyle,
+            workflow: patchWorkflow(imageDoneItem.workflow, 'video_generation', 'video_generation', 'running'),
+            autoFlowStatus: patchAutoFlowStatus(imageDoneItem, 'video_generation', 'running'),
+            updatedAt: now(),
+          })
+          throw new Error(buildRemotePendingError('video', submitted.taskId))
+        }
+        videoSourcePath = submitted.outputPath
+      }
       materialized = await withTimeout(
         materializeItem({
           item: imageDoneItem,
           stillSourcePath: String(imageDoneItem.generatedStillPath || '').trim(),
-          videoSourcePath: String(imageDoneItem.motionVideoPath || '').trim() || undefined,
+          videoSourcePath,
           motionTemplate: input.motionTemplate,
           product: input.product,
         }),
@@ -5151,6 +5094,7 @@ export const livePhotoService = {
     if (input.analyzeProductStructureWithGrs) livePhotoDeps.analyzeProductStructureWithGrs = input.analyzeProductStructureWithGrs
     if (input.reviewReferenceReplacementStillStrict) livePhotoDeps.reviewReferenceReplacementStillStrict = input.reviewReferenceReplacementStillStrict
     if (input.reviewReferenceReplacementStillVisual) livePhotoDeps.reviewReferenceReplacementStillVisual = input.reviewReferenceReplacementStillVisual
+    if (input.downloadRetryDelaysMs) livePhotoDeps.downloadRetryDelaysMs = input.downloadRetryDelaysMs
   },
 
   async resetTestDependencies() {
@@ -5161,6 +5105,7 @@ export const livePhotoService = {
     livePhotoDeps.analyzeProductStructureWithGrs = analyzeProductStructureWithGrs
     livePhotoDeps.reviewReferenceReplacementStillStrict = reviewReferenceReplacementStillStrict
     livePhotoDeps.reviewReferenceReplacementStillVisual = reviewReferenceReplacementStillVisual
+    livePhotoDeps.downloadRetryDelaysMs = undefined
     clearLivePhotoPendingTimers()
     livePhotoAutoFlowScheduled.clear()
     livePhotoAutoFlowLastQueuedAt.clear()
@@ -5747,11 +5692,17 @@ export const livePhotoService = {
       processingItem.imageTaskModel = undefined
       processingItem.imageTaskBaseUrl = undefined
       processingItem.imageTaskEndpointStyle = undefined
-      processingItem.videoTaskId = undefined
-      processingItem.videoTaskProvider = undefined
-      processingItem.videoTaskModel = undefined
-      processingItem.videoTaskBaseUrl = undefined
-      processingItem.videoTaskEndpointStyle = undefined
+      // 上次是远端已出片、只是下载失败（例如文件服务器 504）：保留远端任务，重试只重新下载，不重新生成扣费
+      const keepRemoteVideoTask =
+        Boolean(String(existing.videoTaskId || '').trim()) &&
+        isTransientDownloadFailure(existing.error || ensureAutoFlowStatus(existing).lastError)
+      if (!keepRemoteVideoTask) {
+        processingItem.videoTaskId = undefined
+        processingItem.videoTaskProvider = undefined
+        processingItem.videoTaskModel = undefined
+        processingItem.videoTaskBaseUrl = undefined
+        processingItem.videoTaskEndpointStyle = undefined
+      }
       processingItem.workflow = patchWorkflow(
         patchWorkflow(existing.workflow, 'video_generation', 'image_generation', 'done'),
         'video_generation',
