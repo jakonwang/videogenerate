@@ -81,15 +81,23 @@ const allNavItems = computed(() => [
   },
 ]);
 
-// 侧边栏按「做内容 → 卖出去 → 资料」排；复刻 / tk创意室 / 图生视频合成「AI 出片」，模特库并进素材库、
+// 侧边栏按业务链路排：找商品（选品 → 商品）→ 做内容（素材 → 修图 → 出片 → 混剪）→ 卖出去（发布 → 店铺 → 复盘）。
+// 中文名统一四个字。复刻 / tk创意室 / 图生视频合成「智能出片」，模特库并进素材管理、
 // 模板库并进批量混剪，在页面上方用标签切换（navigation/sectionTabs.ts，地址都不变）。
 const allSections = computed(() => [
   {
-    title: t("ai.nav.groupContent"),
+    title: t("ai.nav.groupProduct"),
     items: [
       { to: "/product-research", icon: SearchCheck, label: t("nav.productResearch"), active: route.path.startsWith("/product-research") },
-      { to: lastSectionTab("aiVideo").to, icon: Clapperboard, label: t("ai.nav.aiVideo"), active: sectionActive("aiVideo", route.path) },
+      { to: "/products", icon: FolderOpen, label: t("ai.nav.products"), active: route.path.startsWith("/products") },
+    ],
+  },
+  {
+    title: t("ai.nav.groupContent"),
+    items: [
+      { to: lastSectionTab("library").to, icon: Images, label: t("ai.nav.assets"), active: sectionActive("library", route.path) },
       { to: "/garment-studio", icon: Shirt, label: t("ai.nav.garmentStudio"), active: route.path.startsWith("/garment-studio") },
+      { to: lastSectionTab("aiVideo").to, icon: Clapperboard, label: t("ai.nav.aiVideo"), active: sectionActive("aiVideo", route.path) },
       { to: "/production", icon: Scissors, label: t("ai.nav.production"), active: sectionActive("production", route.path) },
     ],
   },
@@ -99,13 +107,6 @@ const allSections = computed(() => [
       { to: "/publish", icon: Send, label: t("ai.nav.publish"), active: route.path.startsWith("/publish") },
       { to: "/shops", icon: Building2, label: t("ai.nav.shops"), active: route.path.startsWith("/shops") },
       { to: "/insights", icon: BarChart3, label: t("ai.nav.insights"), active: route.path.startsWith("/insights") },
-    ],
-  },
-  {
-    title: t("ai.nav.groupLibrary"),
-    items: [
-      { to: "/products", icon: FolderOpen, label: t("ai.nav.products"), active: route.path.startsWith("/products") },
-      { to: lastSectionTab("library").to, icon: Images, label: t("ai.nav.assets"), active: sectionActive("library", route.path) },
     ],
   },
   {

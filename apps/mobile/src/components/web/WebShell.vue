@@ -47,20 +47,30 @@ function isActive(to: string) {
 
 // Same structure as the desktop sidebar (src/renderer/src/ui/MainLayout.vue): 创作 / 资产 / 工具箱.
 const navItems = computed(() => [
-  { to: '/', label: '工作台', icon: House, active: isActive('/') },
+  { to: '/', label: '工作总览', icon: House, active: isActive('/') },
 ])
 
-// Same structure as the desktop sidebar: 做内容 / 卖出去 / 资料. 复刻 / tk创意室 / 图生视频 are one entry (AI 出片),
-// 模特库 sits under 素材库 and 模板库 under 批量混剪 — the pages switch with tabs on top (SectionTabs).
+// Same structure as the desktop sidebar, in business order: 找商品 / 做内容 / 卖出去, every label four characters.
+// 复刻 / tk创意室 / 图生视频 are one entry (智能出片), 模特库 sits under 素材管理 and 模板库 under 批量混剪 —
+// the pages switch with tabs on top (SectionTabs).
 const SECTIONS: Array<{ title: string; keys: string[] }> = [
-  { title: '做内容', keys: ['research', 'ai-video', 'garment-studio', 'production'] },
+  { title: '找商品', keys: ['research', 'products'] },
+  { title: '做内容', keys: ['assets', 'garment-studio', 'ai-video', 'production', 'works'] },
   { title: '卖出去', keys: ['publish', 'shops', 'insights'] },
-  { title: '资料', keys: ['products', 'assets', 'works'] },
 ]
+/** Sidebar-only labels (the phone grid keeps the module names in lib/modules.ts). */
+const NAV_LABELS: Record<string, string> = {
+  research: '数据选品',
+  products: '商品管理',
+  'garment-studio': '智能修图',
+  works: '作品管理',
+  shops: '店铺管理',
+  insights: '数据复盘',
+}
 /** 合并入口：侧边栏一项，进入后在页面上方切换 */
 const MERGED: Record<string, { name: string; icon: Component; group: 'aiVideo' | 'library' | 'production' }> = {
-  'ai-video': { name: 'AI 出片', icon: Clapperboard, group: 'aiVideo' },
-  assets: { name: '素材库', icon: FolderOpen, group: 'library' },
+  'ai-video': { name: '智能出片', icon: Clapperboard, group: 'aiVideo' },
+  assets: { name: '素材管理', icon: FolderOpen, group: 'library' },
   production: { name: '批量混剪', icon: Scissors, group: 'production' },
 }
 const TOOL_ROUTES = ['/toolbox', '/tools/', '/product-images', '/product-replace', '/product-watermark', '/listings', '/gmv', '/creators', '/inventory', '/sales', '/business?tab=creators', '/business?tab=inventory']
@@ -82,11 +92,11 @@ const sections = computed(() =>
         if (merged) return { to: item.route, label: item.name, icon: item.icon, active: sectionActive(merged.group, route.path) }
         // Web 选品 = the desktop's 选品方案 (schemes + SOP); the phone capture page stays in the App.
         const to = isWeb && item.key === 'research' ? '/product-research' : item.route
-        return { to, label: item.name, icon: item.icon, active: isActive(to) }
+        return { to, label: NAV_LABELS[item.key] || item.name, icon: item.icon, active: isActive(to) }
       }),
   }))
     .filter((section) => section.items.length)
-    .concat([{ title: '', items: [{ to: '/toolbox', label: '工具箱', icon: Wrench, active: TOOL_ROUTES.some((to) => (to.includes('?') ? isActive(to) : route.path.startsWith(to))) }] }]),
+    .concat([{ title: '', items: [{ to: '/toolbox', label: '更多工具', icon: Wrench, active: TOOL_ROUTES.some((to) => (to.includes('?') ? isActive(to) : route.path.startsWith(to))) }] }]),
 )
 
 const userName = computed(() => session.user?.displayName || session.user?.account || '我的账号')
