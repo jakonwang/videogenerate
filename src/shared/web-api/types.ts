@@ -541,26 +541,6 @@ export type CloneModelCredentialsPayload = {
     defaultPollIntervalMs?: number
     defaultTimeoutMs?: number
   }
-  vectorEngineHub?: {
-    enabled?: boolean
-    baseUrl?: string
-    apiKey?: string
-    chatProvider?: 'openai' | 'anthropic' | 'gemini'
-    chatModel?: string
-    chatEndpointStyle?: 'openai_chat' | 'anthropic_native' | 'gemini_native'
-    imageProvider?: 'openai' | 'gemini' | 'jimeng' | 'midjourney'
-    imageModel?: string
-    imageEditModel?: string
-    imageEndpointStyle?: 'openai_images' | 'official_rest' | 'midjourney_task'
-    videoProvider?: 'openai_video' | 'sora' | 'veo' | 'grok' | 'jimeng' | 'vidu' | 'kling' | 'seedance2' | 'xibapi' | 'gaorui'
-    textToVideoModel?: string
-    imageToVideoModel?: string
-    startEndVideoModel?: string
-    referenceVideoModel?: string
-    videoEndpointStyle?: 'openai_video' | 'official_rest'
-    defaultPollIntervalMs?: number
-    defaultTimeoutMs?: number
-  }
   xibapiHub?: {
     enabled?: boolean
     baseUrl?: string

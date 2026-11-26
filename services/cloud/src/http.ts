@@ -308,6 +308,7 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
   route('DELETE', '/api/v1/admin/config/:key', (ctx) => (service.admin.deleteConfig(admin(ctx), ctx.params.key), {}))
   route('GET', '/api/v1/admin/software-settings', (ctx) => (admin(ctx), service.admin.getManagedSettings()))
   route('PUT', '/api/v1/admin/software-settings', (ctx) => service.admin.saveManagedSettings(admin(ctx), ctx.body.settings))
+  route('POST', '/api/v1/admin/software-settings/reveal', (ctx) => service.admin.revealManagedSecret(admin(ctx), ctx.body.field))
   /* 用户数据（只读，仅超级管理员；查看留痕，同一人看同一用户 10 分钟内只记一次） */
   if (adminData) {
     const viewed = new Map<string, number>()

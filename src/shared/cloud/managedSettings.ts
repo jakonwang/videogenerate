@@ -4,8 +4,9 @@
  * 映射规则与桌面端「设置」页完全一致（见 SettingsView.vue 的 platform / model binding）。
  */
 import type { ChatPlatformProfile, ImagePlatformProfile, PlatformProfile } from '../platformSettings'
+import { findVideoModelSpec, normalizeVideoModelSwitches } from '../videoModels'
 
-export const MANAGED_PLATFORM_KEYS = ['grsai', 'ai666', 'vectorengine', 'xibapi', 'gaorui'] as const
+export const MANAGED_PLATFORM_KEYS = ['grsai', 'ai666', 'xibapi', 'gaorui'] as const
 export type ManagedPlatformKey = (typeof MANAGED_PLATFORM_KEYS)[number]
 
 export type ManagedPlatformCredential = { apiKey: string; baseUrl: string }
@@ -16,7 +17,11 @@ export type ManagedSoftwareSettings = {
   platforms: Record<ManagedPlatformKey, ManagedPlatformCredential>
   tikhubApiKey: string
   capabilities: {
-    video: { platform: PlatformProfile; model: string }
+    /**
+     * platform / model：AI 复刻等旧功能用的视频平台与模型。
+     * modelSwitches / defaultModelId：图生视频的模型清单开关和默认模型（清单 id，见 src/shared/videoModels.ts）。
+     */
+    video: { platform: PlatformProfile; model: string; modelSwitches: Record<string, boolean>; defaultModelId: string }
     image: { platform: ImagePlatformProfile; model: string; quality: 'low' | 'medium' | 'high' }
     chat: { platform: ChatPlatformProfile; model: string }
   }
@@ -31,32 +36,64 @@ export type ManagedMatting = { secretId: string; secretKey: string; bucket: stri
 /** 管理后台读取时，密钥字段只返回掩码 */
 export const SECRET_MASK_PREFIX = '••••'
 
+/** 管理后台「查看密钥」可以读的字段：platform.<key>、tikhubApiKey、qiniu.accessKey 等 */
+export type ManagedSecretField =
+  | `platform.${ManagedPlatformKey}`
+  | 'tikhubApiKey'
+  | 'qiniu.accessKey'
+  | 'qiniu.secretKey'
+  | 'matting.secretId'
+  | 'matting.secretKey'
+
+/** 按字段名取出明文密钥；字段不认识时返回 null */
+export function readManagedSecret(settings: ManagedSoftwareSettings, field: string): string | null {
+  if (field.startsWith('platform.')) {
+    const key = field.slice('platform.'.length) as ManagedPlatformKey
+    return (MANAGED_PLATFORM_KEYS as readonly string[]).includes(key) ? settings.platforms[key].apiKey : null
+  }
+  switch (field) {
+    case 'tikhubApiKey':
+      return settings.tikhubApiKey
+    case 'qiniu.accessKey':
+      return settings.qiniu.accessKey
+    case 'qiniu.secretKey':
+      return settings.qiniu.secretKey
+    case 'matting.secretId':
+      return settings.matting.secretId
+    case 'matting.secretKey':
+      return settings.matting.secretKey
+    default:
+      return null
+  }
+}
+
 export const MANAGED_PLATFORM_LABELS: Record<ManagedPlatformKey, { label: string; hostPlaceholder: string; desc: string }> = {
   grsai: { label: 'GRS.AI', hostPlaceholder: 'https://grsaiapi.com', desc: '视频、图片、对话' },
-  ai666: { label: 'AI666', hostPlaceholder: 'https://your-ai666-host', desc: '视频、图片、对话' },
-  vectorengine: { label: 'VectorEngine', hostPlaceholder: 'https://your-vector-engine-host', desc: '视频、图片、对话' },
-  xibapi: { label: 'XIBAPI', hostPlaceholder: 'https://xibapi.com', desc: '仅视频' },
-  gaorui: { label: 'GaoruiAPI', hostPlaceholder: 'https://gaorui.cc', desc: '仅视频（Veo）' },
+  ai666: { label: 'AI666', hostPlaceholder: 'https://your-ai666-host', desc: '图片、对话' },
+  xibapi: { label: '小扳手', hostPlaceholder: 'https://5208.ai', desc: '视频' },
+  gaorui: { label: '高瑞', hostPlaceholder: 'https://gaorui.cc', desc: '视频' },
 }
 
 export function createDefaultManagedSettings(): ManagedSoftwareSettings {
   const empty = (): ManagedPlatformCredential => ({ apiKey: '', baseUrl: '' })
   return {
     enabled: false,
-    platforms: { grsai: empty(), ai666: empty(), vectorengine: empty(), xibapi: empty(), gaorui: empty() },
+    platforms: { grsai: empty(), ai666: empty(), xibapi: empty(), gaorui: empty() },
     tikhubApiKey: '',
     capabilities: {
-      video: { platform: 'vectorengine', model: '' },
-      image: { platform: 'vectorengine', model: '', quality: 'high' },
-      chat: { platform: 'vectorengine', model: '' },
+      video: { platform: 'grsai', model: '', modelSwitches: {}, defaultModelId: '' },
+      image: { platform: 'grsai', model: '', quality: 'high' },
+      chat: { platform: 'grsai', model: '' },
     },
     qiniu: { accessKey: '', secretKey: '', bucket: '', domain: '', uploadHost: '', prefix: '' },
     matting: { secretId: '', secretKey: '', bucket: '', region: '', type: 'AIPicMatting' },
   }
 }
 
-const VIDEO_PLATFORMS: PlatformProfile[] = ['grsai', 'ai666', 'vectorengine', 'xibapi', 'gaorui']
-const IMAGE_CHAT_PLATFORMS: ImagePlatformProfile[] = ['grsai', 'ai666', 'vectorengine']
+// VectorEngine 已删除：旧设置里选了它的，normalize 时落到默认 GRS.AI
+const VIDEO_PLATFORMS: PlatformProfile[] = ['grsai', 'ai666', 'xibapi', 'gaorui']
+const IMAGE_PLATFORMS: ImagePlatformProfile[] = ['grsai', 'ai666', 'xibapi', 'gaorui']
+const CHAT_PLATFORMS: ChatPlatformProfile[] = ['grsai', 'ai666', 'xibapi', 'gaorui']
 
 const str = (value: unknown, max = 500) => String(value ?? '').trim().slice(0, max)
 
@@ -71,8 +108,8 @@ export function normalizeManagedSettings(input: unknown): ManagedSoftwareSetting
   }
   const cap = src.capabilities ?? ({} as any)
   const videoPlatform = VIDEO_PLATFORMS.includes(cap.video?.platform) ? cap.video.platform : base.capabilities.video.platform
-  const imagePlatform = IMAGE_CHAT_PLATFORMS.includes(cap.image?.platform) ? cap.image.platform : base.capabilities.image.platform
-  const chatPlatform = IMAGE_CHAT_PLATFORMS.includes(cap.chat?.platform) ? cap.chat.platform : base.capabilities.chat.platform
+  const imagePlatform = IMAGE_PLATFORMS.includes(cap.image?.platform) ? cap.image.platform : base.capabilities.image.platform
+  const chatPlatform = CHAT_PLATFORMS.includes(cap.chat?.platform) ? cap.chat.platform : base.capabilities.chat.platform
   const quality = ['low', 'medium', 'high'].includes(cap.image?.quality) ? cap.image.quality : 'high'
   const q = src.qiniu ?? ({} as any)
   const m = src.matting ?? ({} as any)
@@ -83,7 +120,12 @@ export function normalizeManagedSettings(input: unknown): ManagedSoftwareSetting
     platforms,
     tikhubApiKey: str(src.tikhubApiKey, 1000),
     capabilities: {
-      video: { platform: videoPlatform, model: str(cap.video?.model, 120) },
+      video: {
+        platform: videoPlatform,
+        model: str(cap.video?.model, 120),
+        modelSwitches: normalizeVideoModelSwitches(cap.video?.modelSwitches),
+        defaultModelId: findVideoModelSpec(cap.video?.defaultModelId)?.id ?? '',
+      },
       image: { platform: imagePlatform, model: str(cap.image?.model, 120), quality },
       chat: { platform: chatPlatform, model: str(cap.chat?.model, 120) },
     },
@@ -175,16 +217,16 @@ export type LocalModelCredentials = {
   imageApifoxHubProfile?: string
   chatApifoxHubProfile?: string
   ai666Hub?: HubLike
-  vectorEngineHub?: HubLike
   xibapiHub?: HubLike
   gaoruiHub?: HubLike
   apifoxHub?: HubLike
+  videoModelSwitches?: Record<string, boolean>
+  videoDefaultModelId?: string
   [key: string]: unknown
 }
 
-const HUB_FIELD: Record<Exclude<ManagedPlatformKey, 'grsai'>, 'ai666Hub' | 'vectorEngineHub' | 'xibapiHub' | 'gaoruiHub'> = {
+const HUB_FIELD: Record<Exclude<ManagedPlatformKey, 'grsai'>, 'ai666Hub' | 'xibapiHub' | 'gaoruiHub'> = {
   ai666: 'ai666Hub',
-  vectorengine: 'vectorEngineHub',
   xibapi: 'xibapiHub',
   gaorui: 'gaoruiHub',
 }
@@ -204,16 +246,21 @@ export function applyManagedSettings(current: LocalModelCredentials, managed: Ma
   // 平台 Key / 地址
   next.grsaiApiKey = managed.platforms.grsai.apiKey
   next.grsaiHost = managed.platforms.grsai.baseUrl
-  for (const key of ['ai666', 'vectorengine', 'xibapi', 'gaorui'] as const) {
+  for (const key of ['ai666', 'xibapi', 'gaorui'] as const) {
     const h = hub(key)
     h.apiKey = managed.platforms[key].apiKey
     h.baseUrl = managed.platforms[key].baseUrl
     if (key === 'xibapi' || key === 'gaorui') h.videoProvider = key
   }
   next.tikhubApiKey = managed.tikhubApiKey
+  // VectorEngine 已删除，清掉旧配置里残留的 Key
+  delete next.vectorEngineHub
 
   // 视频
   const video = managed.capabilities.video
+  // 图生视频模型清单：后台的开关和默认模型原样下发
+  next.videoModelSwitches = { ...(video.modelSwitches ?? {}) }
+  next.videoDefaultModelId = video.defaultModelId || undefined
   if (video.platform === 'grsai') {
     next.videoProviderPrimary = 'grsai'
     next.videoProviderFallback = 'grsai'

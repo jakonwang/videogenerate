@@ -256,7 +256,7 @@ export function registerManagedCredentialsBridge(bridge: ManagedCredentialsBridg
   if (managedSyncPending) void syncManagedSettings()
 }
 
-const HUB_FIELDS = ['ai666Hub', 'vectorEngineHub', 'xibapiHub', 'gaoruiHub', 'apifoxHub'] as const
+const HUB_FIELDS = ['ai666Hub', 'xibapiHub', 'gaoruiHub', 'apifoxHub'] as const
 const FLAT_SECRET_FIELDS = ['grsaiApiKey', 'tikhubApiKey', 'qiniuAccessKey', 'qiniuSecretKey'] as const
 
 /** 托管模式下给渲染进程的凭据：后台下发的密钥只给掩码 */

@@ -307,7 +307,7 @@ async function safeModelSnapshot() {
   return {
     chat: {
       profile: text(credentials.chatApifoxHubProfile),
-      model: text((credentials as any)?.vectorEngineHub?.chatModel || (credentials as any)?.ai666Hub?.chatModel || credentials.grsaiAnalysisModel),
+      model: text((credentials as any)?.ai666Hub?.chatModel || credentials.grsaiAnalysisModel),
     },
     image: {
       profile: text(credentials.imageApifoxHubProfile || credentials.imageProviderPrimary),

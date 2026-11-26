@@ -1,7 +1,8 @@
 /**
  * 模型凭据归一化（纯函数，无数据库依赖）：桌面端读写凭据、云端 AI 网关都用同一套规则。
  */
-import { mapPlatformToStoredProvider, normalizeIncomingPlatformProfile, resolveCapabilityPlatform, type PlatformProfile } from '../../../shared/platformSettings'
+
+import { findVideoModelSpec, normalizeVideoModelSwitches } from '../../../shared/videoModels'
 import type { AiProviderName, ApifoxHubCredentials, ImageProviderName, ModelCredentials } from './types'
 
 function normalizeVideoProvider(v: unknown, fallback: AiProviderName): AiProviderName {
@@ -39,11 +40,11 @@ export function normalizeAi666VideoModel(value: unknown, fallback: string) {
   return mapped || fallback
 }
 
-function normalizeVectorEngineBaseUrl(value: unknown) {
+function normalizeHubBaseUrl(value: unknown) {
   return String(value ?? '').trim().replace(/\/+$/, '')
 }
 
-/** 中转平台已下线 gpt-image-1（2026-11 VectorEngine 报 No available channel），旧设置自动换成 gpt-image-2 */
+/** 中转平台已下线 gpt-image-1（2026-11 中转平台报 No available channel），旧设置自动换成 gpt-image-2 */
 export const DEFAULT_HUB_IMAGE_MODEL = 'gpt-image-2'
 const RETIRED_HUB_IMAGE_MODELS = new Set(['gpt-image-1'])
 
@@ -57,7 +58,7 @@ export function normalizeHubImageModel(value: unknown, fallback: string | null =
 function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
   return {
     enabled: Boolean(parsed?.enabled ?? true),
-    baseUrl: normalizeVectorEngineBaseUrl(parsed?.baseUrl),
+    baseUrl: normalizeHubBaseUrl(parsed?.baseUrl),
     apiKey: String(parsed?.apiKey ?? '').trim() || undefined,
     chatProvider:
       parsed?.chatProvider === 'anthropic' || parsed?.chatProvider === 'gemini'
@@ -100,63 +101,55 @@ function normalizeApifoxHubCredentials(parsed: any): ApifoxHubCredentials {
   }
 }
 
-function hasOwnHubPayload(parsed: any, key: 'ai666Hub' | 'vectorEngineHub' | 'xibapiHub' | 'gaoruiHub') {
+function hasOwnHubPayload(parsed: any, key: 'ai666Hub' | 'xibapiHub' | 'gaoruiHub') {
   return Boolean(parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, key))
 }
+
+const HUB_PROFILES = ['ai666', 'xibapi', 'gaorui'] as const
+type HubProfile = (typeof HUB_PROFILES)[number]
+const isHubProfile = (value: unknown): value is HubProfile => (HUB_PROFILES as readonly unknown[]).includes(value)
+/** 对话能用的 hub 平台 */
+const isChatHubProfile = (value: unknown): value is HubProfile => isHubProfile(value)
+/** 旧版把平台名直接写在 provider 字段里；VectorEngine 已删除（2026-11-26），但旧配置里还会读到 */
+const isLegacyPlatformName = (value: unknown) => value === 'vectorengine' || isHubProfile(value)
 
 export function normalizeCredentials(parsed: any): ModelCredentials {
   const legacySharedHub = parsed?.apifoxHub
   const ai666Hub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'ai666Hub') ? parsed?.ai666Hub : legacySharedHub)
-  const vectorEngineHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'vectorEngineHub') ? parsed?.vectorEngineHub : legacySharedHub)
   const xibapiHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'xibapiHub') ? parsed?.xibapiHub : legacySharedHub)
   const gaoruiHub = normalizeApifoxHubCredentials(hasOwnHubPayload(parsed, 'gaoruiHub') ? parsed?.gaoruiHub : legacySharedHub)
-  const rawVideoProviderPrimary = normalizeCapabilityProvider(parsed?.videoProviderPrimary, 'apifox_hub')
-  const rawImageProviderPrimary = normalizeImageProvider(parsed?.imageProviderPrimary, 'openai')
-  const rawChatProviderPrimary = parsed?.chatProviderPrimary === 'grsai' ? 'grsai' : 'apifox_hub'
   const normalizedVideoModelPrimary = normalizeAi666VideoModel(parsed?.videoModelPrimary, 'veo_3_1-lite')
-  const legacyVideoPlatform =
-    parsed?.videoProviderPrimary === 'ai666' || parsed?.videoProviderPrimary === 'vectorengine' || parsed?.videoProviderPrimary === 'xibapi' || parsed?.videoProviderPrimary === 'gaorui'
-      ? parsed.videoProviderPrimary
-      : parsed?.videoProviderFallback === 'ai666' || parsed?.videoProviderFallback === 'vectorengine' || parsed?.videoProviderFallback === 'xibapi' || parsed?.videoProviderFallback === 'gaorui'
-        ? parsed.videoProviderFallback
-        : undefined
+
+  const legacyVideoPlatform = [parsed?.videoProviderPrimary, parsed?.videoProviderFallback].find(isLegacyPlatformName)
   const legacyImagePlatform = parsed?.imageProviderPrimary === 'ai666' || parsed?.imageProviderPrimary === 'vectorengine' ? parsed.imageProviderPrimary : undefined
   const legacyChatPlatform = parsed?.chatProviderPrimary === 'ai666' || parsed?.chatProviderPrimary === 'vectorengine' ? parsed.chatProviderPrimary : undefined
-  const rawVideoProfile = parsed?.videoApifoxHubProfile === 'ai666' || parsed?.videoApifoxHubProfile === 'vectorengine' || parsed?.videoApifoxHubProfile === 'xibapi' || parsed?.videoApifoxHubProfile === 'gaorui'
-    ? parsed.videoApifoxHubProfile
-    : undefined
-  const rawImageProfile = parsed?.imageApifoxHubProfile === 'ai666' || parsed?.imageApifoxHubProfile === 'vectorengine'
-    ? parsed.imageApifoxHubProfile
-    : undefined
-  const rawChatProfile = parsed?.chatApifoxHubProfile === 'ai666' || parsed?.chatApifoxHubProfile === 'vectorengine'
-    ? parsed.chatApifoxHubProfile
-    : undefined
-  const sharedFallbackProfile = normalizeIncomingPlatformProfile('video', legacyVideoPlatform ?? 'vectorengine', 'vectorengine') as PlatformProfile
-  const videoPlatform = normalizeIncomingPlatformProfile('video', rawVideoProfile ?? legacyVideoPlatform ?? sharedFallbackProfile, sharedFallbackProfile) as PlatformProfile
-  const imagePlatform = normalizeIncomingPlatformProfile('image', rawImageProfile ?? legacyImagePlatform ?? sharedFallbackProfile, sharedFallbackProfile) as 'ai666' | 'vectorengine'
-  const chatPlatform = normalizeIncomingPlatformProfile('chat', rawChatProfile ?? legacyChatPlatform ?? sharedFallbackProfile, sharedFallbackProfile) as 'ai666' | 'vectorengine'
-  const normalizedVideoProviderPrimary = legacyVideoPlatform
-    ? (mapPlatformToStoredProvider(videoPlatform).provider as 'grsai' | 'apifox_hub')
-    : normalizeVideoProvider(rawVideoProviderPrimary, 'apifox_hub')
-  const normalizedImageProviderPrimary = legacyImagePlatform
-    ? (mapPlatformToStoredProvider(imagePlatform).provider as 'grsai' | 'apifox_hub')
-    : normalizeImageProvider(rawImageProviderPrimary, 'apifox_hub')
-  const normalizedChatProviderPrimary = legacyChatPlatform
-    ? (mapPlatformToStoredProvider(chatPlatform).provider as 'grsai' | 'apifox_hub')
-    : rawChatProviderPrimary
-  const persistedVideoProfile = videoPlatform as 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
-  const persistedImageProfile = imagePlatform as 'ai666' | 'vectorengine'
-  const persistedChatProfile = chatPlatform as 'ai666' | 'vectorengine'
-  const activeVideoProfile = resolveCapabilityPlatform(normalizedVideoProviderPrimary as 'grsai' | 'apifox_hub', videoPlatform, 'video') as PlatformProfile
+
+  // 每种能力原来指向哪个 hub 平台；没写过 = 旧默认 VectorEngine
+  const storedVideoProfile = parsed?.videoApifoxHubProfile ?? legacyVideoPlatform ?? parsed?.apifoxHubProfile ?? 'vectorengine'
+  const storedImageProfile = parsed?.imageApifoxHubProfile ?? legacyImagePlatform ?? parsed?.apifoxHubProfile ?? 'vectorengine'
+  const storedChatProfile = parsed?.chatApifoxHubProfile ?? legacyChatPlatform ?? parsed?.apifoxHubProfile ?? 'vectorengine'
+
+  // provider：旧版平台名一律算 apifox_hub；新装默认 GRS.AI
+  let normalizedVideoProviderPrimary: AiProviderName = legacyVideoPlatform
+    ? 'apifox_hub'
+    : normalizeVideoProvider(normalizeCapabilityProvider(parsed?.videoProviderPrimary, 'grsai'), 'grsai')
+  let normalizedImageProviderPrimary: ImageProviderName = legacyImagePlatform ? 'apifox_hub' : normalizeImageProvider(parsed?.imageProviderPrimary, 'grsai')
+  let normalizedChatProviderPrimary: 'grsai' | 'apifox_hub' = legacyChatPlatform
+    ? 'apifox_hub'
+    : parsed?.chatProviderPrimary === 'apifox_hub'
+      ? 'apifox_hub'
+      : 'grsai'
+  // 原来用的是 VectorEngine（或别的已不存在的 hub 平台）：改走 GRS.AI
+  if (normalizedVideoProviderPrimary === 'apifox_hub' && !isHubProfile(storedVideoProfile)) normalizedVideoProviderPrimary = 'grsai'
+  if (normalizedImageProviderPrimary === 'apifox_hub' && !isHubProfile(storedImageProfile)) normalizedImageProviderPrimary = 'grsai'
+  if (normalizedChatProviderPrimary === 'apifox_hub' && !isChatHubProfile(storedChatProfile)) normalizedChatProviderPrimary = 'grsai'
+
+  // hub 平台档位：以后切回 apifox_hub 时用；没有可用值就落到 AI666
+  const persistedVideoProfile: HubProfile = isHubProfile(storedVideoProfile) ? storedVideoProfile : 'ai666'
+  const persistedImageProfile: HubProfile = isHubProfile(storedImageProfile) ? storedImageProfile : 'ai666'
+  const persistedChatProfile: HubProfile = isChatHubProfile(storedChatProfile) ? storedChatProfile : 'ai666'
   const profile = persistedVideoProfile
-  const activeHub =
-    activeVideoProfile === 'ai666'
-      ? ai666Hub
-      : activeVideoProfile === 'xibapi'
-        ? xibapiHub
-        : activeVideoProfile === 'gaorui'
-          ? gaoruiHub
-          : vectorEngineHub
+  const activeHub = persistedVideoProfile === 'xibapi' ? xibapiHub : persistedVideoProfile === 'gaorui' ? gaoruiHub : ai666Hub
   return {
     seedanceApiKey: String(parsed?.seedanceApiKey ?? '').trim() || undefined,
     seedanceHost: String(parsed?.seedanceHost ?? '').trim() || 'https://ark.ap-southeast.bytepluses.com',
@@ -192,9 +185,10 @@ export function normalizeCredentials(parsed: any): ModelCredentials {
     imageApifoxHubProfile: persistedImageProfile,
     chatApifoxHubProfile: persistedChatProfile,
     ai666Hub,
-    vectorEngineHub,
     xibapiHub,
     gaoruiHub,
     apifoxHub: activeHub,
+    videoModelSwitches: parsed?.videoModelSwitches && typeof parsed.videoModelSwitches === 'object' ? normalizeVideoModelSwitches(parsed.videoModelSwitches) : undefined,
+    videoDefaultModelId: findVideoModelSpec(parsed?.videoDefaultModelId)?.id,
   }
 }

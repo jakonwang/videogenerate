@@ -13,6 +13,7 @@ import type { CloudDb } from './db'
 import { CloudError } from './security'
 import type { GenerationLog } from './generationLog'
 import { TIKHUB_PARSE_PATHS } from '../../../src/shared/videoParserPlatforms'
+import { isCatalogVideoModelName } from '../../../src/shared/videoModels'
 import { TIKHUB_RADAR_PATHS } from '../../../src/shared/competitorRadar'
 
 /**
@@ -92,6 +93,15 @@ export function classifyProxyRequest(input: {
   if (method !== 'POST') return { kind: 'unknown' }
   if (/\/v1\/(audio\/transcriptions|embeddings)$/.test(path)) return { kind: 'free', metered: 'chat' }
   if (FREE_POST.some((re) => re.test(path))) return { kind: 'free' }
+  // 高瑞 / 小扳手的异步图片也走 /v1/videos，GRS 的 /v1/api/generate 图片视频共用：按模型名分
+  if (/\/v1\/videos$/.test(path) || /\/v1\/api\/generate$/.test(path)) {
+    const model = input.model
+    if (model && !isCatalogVideoModelName(model) && !input.isVideoModel?.(model) && (input.isImageModel?.(model) || IMAGE_MODEL_RE.test(model))) {
+      return { kind: 'charge', capability: 'image', track: true }
+    }
+    if (/\/v1\/api\/generate$/.test(path) && !model) return { kind: 'unknown' }
+    return { kind: 'charge', capability: 'video', track: true }
+  }
   if (VIDEO_SUBMIT.some((re) => re.test(path))) return { kind: 'charge', capability: 'video', track: true }
   if (IMAGE_SUBMIT.some((re) => re.test(path))) return { kind: 'charge', capability: 'image', track: true }
   // grsai：/v1/draw/<模型> 是图片，/v1/video/<模型> 是视频
@@ -220,7 +230,7 @@ export function pickTaskIdFromResponse(json: any): string {
 }
 
 const SUCCESS = new Set(['completed', 'complete', 'succeeded', 'success', 'succeed', 'done', 'finish', 'finished'])
-const FAILURE = new Set(['failed', 'fail', 'failure', 'error', 'cancelled', 'canceled', 'expired', 'rejected', 'timeout'])
+const FAILURE = new Set(['failed', 'fail', 'failure', 'error', 'cancelled', 'canceled', 'expired', 'rejected', 'timeout', 'violation'])
 
 export function pickTaskStatus(json: any): 'succeeded' | 'failed' | 'running' {
   const raw = [

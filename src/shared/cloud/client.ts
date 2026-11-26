@@ -25,7 +25,7 @@ import type {
   CloudUser,
   CloudUserRole,
 } from './types'
-import type { ManagedSoftwareSettings } from './managedSettings'
+import type { ManagedSecretField, ManagedSoftwareSettings } from './managedSettings'
 import type { AdminDataFile, AdminDataRecord, AdminFileLinks, AdminGeneration, AdminGenerationQuery, AdminUserDataSummary } from './adminData'
 import type { AiChatRequest, AiChatResponse, AiGenerationJob, AiGenerationRequest, AiUsageResponse } from './ai'
 import type { SyncChange, SyncPullResponse, SyncPushResponse, SyncUploadResponse, SyncUsageResponse } from './sync'
@@ -276,6 +276,7 @@ export function createCloudClient(options: CloudClientOptions) {
       getSoftwareSettings: () => request<{ settings: ManagedSoftwareSettings; updatedAt: number }>('GET', '/api/v1/admin/software-settings'),
       saveSoftwareSettings: (settings: ManagedSoftwareSettings) =>
         request<{ settings: ManagedSoftwareSettings; updatedAt: number }>('PUT', '/api/v1/admin/software-settings', { settings }),
+      revealSoftwareSecret: (field: ManagedSecretField) => request<{ value: string }>('POST', '/api/v1/admin/software-settings/reveal', { field }),
       listAudit: (q: { keyword?: string; page?: number }) => request<CloudPage<CloudAuditLog>>('GET', `/api/v1/admin/audit${qs(q)}`),
       /* 用户数据（只读，仅超级管理员） */
       userDataSummary: (userId: string) => request<{ summary: AdminUserDataSummary }>('GET', `/api/v1/admin/users/${encodeURIComponent(userId)}/data/summary`),

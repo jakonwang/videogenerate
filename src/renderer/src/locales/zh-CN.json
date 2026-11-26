@@ -2591,11 +2591,8 @@
         "ai666": {
           "desc": "用于 AI666 平台凭证配置。"
         },
-        "vectorengine": {
-          "desc": "用于 VectorEngine 平台凭证配置。"
-        },
         "xibapi": {
-          "desc": "用于 XIBAPI 平台凭证配置。"
+          "desc": "小扳手（5208.ai）视频平台。"
         },
         "replicate": {
           "desc": "用于本地 clone 图片工作流。"
@@ -2677,7 +2674,7 @@
       "title": "使用说明",
       "items": {
         "credentialsReuse": "先在“平台”中配置凭证，再到“能力”中选择这些凭证的使用方式。",
-        "xibapiIndependent": "XIBAPI 现在是独立的视频平台，不再归入 VectorEngine。",
+        "xibapiIndependent": "小扳手（5208.ai）是独立的视频平台。",
         "reloadAfterSave": "保存后会从桌面端重新读取最新配置，确保界面与运行时状态一致。",
         "imageQualityForwarded": "图片质量会传递到相关图片生成流程中。"
       }
@@ -3500,7 +3497,7 @@
     "missingKey": {
       "atlas": "请先在设置中心配置 AtlasCloud API Key",
       "grsai": "请先在设置中心配置 GRS.AI API Key",
-      "vector": "请先在设置中心配置 VectorEngine 图片 API Key",
+      "vector": "请先在设置中心配置图片平台的 API Key",
       "image": "请先在设置中心配置图片生成 API Key"
     },
     "typeTags": {

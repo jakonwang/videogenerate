@@ -3101,9 +3101,6 @@
         "ai666": {
           "desc": "Used for AI666 platform credentials."
         },
-        "vectorengine": {
-          "desc": "Used for VectorEngine platform credentials."
-        },
         "xibapi": {
           "desc": "Used for XIBAPI platform credentials."
         },
@@ -3222,7 +3219,7 @@
       "title": "Usage Notes",
       "items": {
         "credentialsReuse": "Configure each platform credential once under Platforms, then choose its usage under Capabilities.",
-        "xibapiIndependent": "XIBAPI is now an independent video platform and no longer grouped under VectorEngine.",
+        "xibapiIndependent": "XIBAPI is an independent video platform.",
         "reloadAfterSave": "Saving reloads the latest settings from the desktop side to keep UI and runtime aligned.",
         "imageQualityForwarded": "Image quality is forwarded to image generation related flows."
       }
@@ -3513,7 +3510,7 @@
     "missingKey": {
       "atlas": "Configure the AtlasCloud API Key in Settings first",
       "grsai": "Configure the GRS.AI API Key in Settings first",
-      "vector": "Configure the VectorEngine image API Key in Settings first",
+      "vector": "Configure the image platform API Key in Settings first",
       "image": "Configure an image generation API Key in Settings first"
     },
     "typeTags": {

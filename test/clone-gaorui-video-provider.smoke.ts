@@ -68,7 +68,7 @@ async function main() {
     assert.equal(calls[0]?.body?.model, 'veo_3_1')
     assert.equal(calls[0]?.body?.aspect_ratio, '16:9')
     assert.equal(calls[0]?.body?.resolution, '720p')
-    assert.equal(calls[0]?.body?.negative_prompt, 'oversized product, identity drift')
+    assert.ok(!('negative_prompt' in (calls[0]?.body || {})), 'video requests carry no negative prompt')
     assert.ok(!('size' in (calls[0]?.body || {})))
     assert.ok(!('images' in (calls[0]?.body || {})))
 
@@ -85,7 +85,7 @@ async function main() {
     assert.equal(refTask.taskId, 'gaorui_task_1')
     assert.equal(calls[1]?.body?.model, 'veo_3_1-components')
     assert.equal(calls[1]?.body?.aspect_ratio, '9:16')
-    assert.equal(calls[1]?.body?.negative_prompt, 'clear real-person face, oversized product')
+    assert.ok(!('negative_prompt' in (calls[1]?.body || {})), 'video requests carry no negative prompt')
     assert.deepEqual(calls[1]?.body?.images, [
       'https://example.com/first.png',
       'https://example.com/last.png',

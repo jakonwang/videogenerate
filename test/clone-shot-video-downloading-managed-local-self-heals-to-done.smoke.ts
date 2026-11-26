@@ -66,6 +66,20 @@ async function main() {
     },
   } as any)
 
+  // 不走外网：拦下收尾下载（以前直接请求 example.com，它改成 404 后这个测试就挂了）
+  // 下载后会用 ffprobe 校验，所以返回一段真的 1 秒 mp4
+  const { runFfmpeg } = await import('../src/main/modules/ffmpeg/runner')
+  const { readFile } = await import('node:fs/promises')
+  const fixtureVideoPath = join(root, 'fixture.mp4')
+  await runFfmpeg({ args: ['-y', '-f', 'lavfi', '-i', 'color=c=#6699cc:s=720x1280:d=1', '-pix_fmt', 'yuv420p', fixtureVideoPath] })
+  const fixtureVideo = await readFile(fixtureVideoPath)
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (input: any, init?: any) => {
+    if (String(input) === 'https://example.com/video.mp4') {
+      return new Response(new Uint8Array(fixtureVideo), { status: 200, headers: { 'Content-Type': 'video/mp4' } })
+    }
+    return await originalFetch(input, init)
+  }) as typeof fetch
   const reconciled = await cloneService.reconcileRemoteStoryboardVideos({ cloneProjectId: project.id } as any)
   const result = Array.isArray(reconciled?.results) ? reconciled.results[0] : null
   assert.ok(result)

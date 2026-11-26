@@ -1359,9 +1359,6 @@
         "ai666": {
           "desc": "Dung cho thong tin nen tang AI666."
         },
-        "vectorengine": {
-          "desc": "Dung cho thong tin nen tang VectorEngine."
-        },
         "xibapi": {
           "desc": "Dung cho thong tin nen tang XIBAPI."
         },
@@ -1480,7 +1477,7 @@
       "title": "Luu Y Su Dung",
       "items": {
         "credentialsReuse": "Cau hinh thong tin moi nen tang mot lan trong muc Nen tang, sau do chon cach su dung trong muc Nang luc.",
-        "xibapiIndependent": "XIBAPI hien la nen tang video doc lap va khong con gom chung voi VectorEngine.",
+        "xibapiIndependent": "XIBAPI la nen tang video doc lap.",
         "reloadAfterSave": "Sau khi luu, giao dien se tai lai cai dat moi nhat tu desktop de dong bo voi runtime.",
         "imageQualityForwarded": "Chat luong hinh anh se duoc chuyen tiep vao cac quy trinh tao hinh anh lien quan."
       }
@@ -2234,7 +2231,7 @@
     "missingKey": {
       "atlas": "Hay cau hinh AtlasCloud API Key trong Cai dat",
       "grsai": "Hay cau hinh GRS.AI API Key trong Cai dat",
-      "vector": "Hay cau hinh VectorEngine image API Key trong Cai dat",
+      "vector": "Hay cau hinh API Key cua nen tang anh trong Cai dat",
       "image": "Hay cau hinh API Key tao anh trong Cai dat"
     },
     "typeTags": {

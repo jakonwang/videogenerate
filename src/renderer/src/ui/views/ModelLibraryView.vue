@@ -948,7 +948,7 @@ async function generateModel() {
         : imageProviderPrimary.value === 'grsai'
           ? '请先配置 GRS.AI API Key'
           : imageProviderPrimary.value === 'apifox_hub'
-            ? '请先配置 VectorEngine 图片 API Key'
+            ? '请先配置图片平台的 API Key'
             : '请先配置 OpenAI API Key'
     return
   }
@@ -1020,7 +1020,7 @@ async function generateModelsBatch() {
         : imageProviderPrimary.value === 'grsai'
           ? '请先配置 GRS.AI API Key'
           : imageProviderPrimary.value === 'apifox_hub'
-            ? '请先配置 VectorEngine 图片 API Key'
+            ? '请先配置图片平台的 API Key'
             : '请先配置 OpenAI API Key'
     return
   }

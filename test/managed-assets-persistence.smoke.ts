@@ -221,7 +221,10 @@ async function main() {
   } finally {
     delete process.env.VIDEOGENERATE_USER_DATA_DIR
     delete process.env.VIDEOGENERATE_DATA_DIR
-    await rm(root, { recursive: true, force: true })
+    // Windows 关库后句柄可能还没放：多试几次，仍删不掉只提示（断言都已通过，留个临时目录不影响结果）
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch((error) => {
+      console.warn('[managed-assets-persistence] temp cleanup skipped:', (error as Error)?.message || error)
+    })
   }
 }
 

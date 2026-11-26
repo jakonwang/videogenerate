@@ -67,8 +67,8 @@ async function main() {
 
     const settings = createDefaultManagedSettings()
     settings.enabled = true
-    settings.platforms.vectorengine = { apiKey: 'sk-secret', baseUrl: 'https://ve.example.com/' }
-    settings.capabilities.chat = { platform: 'vectorengine', model: 'gpt-4.1-mini' }
+    settings.platforms.ai666 = { apiKey: 'sk-secret', baseUrl: 'https://ve.example.com/' }
+    settings.capabilities.chat = { platform: 'ai666', model: 'gpt-4.1-mini' }
     app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: settings, scope: 'private', description: '', updatedBy: null, now: Date.now() })
 
     // routed to the configured platform, with the account's own image attached

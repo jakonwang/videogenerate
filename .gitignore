@@ -56,3 +56,6 @@ resources/live-photo-quality/__pycache__/
 
 # cloud service runtime data (sqlite db, signing keys)
 /services/cloud/data/
+
+# 真实视频模型测试用的平台 Key（scripts/real-video-model-test.ts），不要提交
+video-test-keys.json

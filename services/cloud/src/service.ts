@@ -30,6 +30,7 @@ import {
   maskManagedSettings,
   mergeManagedSecrets,
   normalizeManagedSettings,
+  readManagedSecret,
   stripManagedSecretsForClient,
   type ManagedSoftwareSettings,
 } from '../../../src/shared/cloud/managedSettings'
@@ -664,6 +665,16 @@ export function createCloudService(deps: {
     return { settings: maskManagedSettings(settings), updatedAt }
   }
 
+  /** 查看单个密钥明文：仅超级管理员，每次都留痕 */
+  function adminRevealManagedSecret(actor: Actor, field: unknown) {
+    if (actor.user.role !== 'super_admin') throw forbidden('仅超级管理员可查看密钥')
+    const name = String(field || '')
+    const value = readManagedSecret(readManagedSettings().settings, name)
+    if (value === null) throw new CloudError('BAD_REQUEST', '不支持的密钥字段', 400)
+    audit(actor, 'admin.software.reveal_secret', MANAGED_SETTINGS_KEY, { field: name })
+    return { value }
+  }
+
   function adminSaveManagedSettings(actor: Actor, input: unknown) {
     if (actor.user.role !== 'super_admin') throw forbidden('仅超级管理员可修改软件设置')
     const previous = readManagedSettings().settings
@@ -1107,6 +1118,7 @@ export function createCloudService(deps: {
       listConfig: () => repo.listConfig().filter((entry) => !entry.key.startsWith(RESERVED_CONFIG_PREFIX)),
       getManagedSettings: adminGetManagedSettings,
       saveManagedSettings: adminSaveManagedSettings,
+      revealManagedSecret: adminRevealManagedSecret,
       upsertConfig: adminUpsertConfig,
       deleteConfig: adminDeleteConfig,
       listAudit: (q: Record<string, string>) => {

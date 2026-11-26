@@ -11,6 +11,7 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
   )
   ipcMain.handle('plugin:livePhoto:get', async (_e, id: string) => await livePhotoService.get(id))
   ipcMain.handle('plugin:livePhoto:getSettings', async () => await livePhotoService.getSettings())
+  ipcMain.handle('plugin:livePhoto:listVideoModels', async () => await livePhotoService.listVideoModels())
   ipcMain.handle('plugin:livePhoto:saveSettings', async (_e, payload) => await livePhotoService.saveSettings(payload))
   ipcMain.handle(
     'plugin:livePhoto:listPromptVersions',

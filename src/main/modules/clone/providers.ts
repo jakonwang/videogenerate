@@ -680,7 +680,6 @@ async function createKlingTask(input: {
   const body: AnyJson = {
     model,
     prompt: input.prompt,
-    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     image: input.startFrameUrl,
     aspect_ratio: shotAspectRatio(input.shot),
     duration: atlasCloudDuration(model, input.shot.durationSec),

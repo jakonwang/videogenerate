@@ -36,9 +36,9 @@ async function main() {
 
   try {
     const credentials = {
-      videoApifoxHubProfile: 'vectorengine',
-      apifoxHubProfile: 'vectorengine',
-      vectorEngineHub: {
+      videoApifoxHubProfile: 'ai666',
+      apifoxHubProfile: 'ai666',
+      ai666Hub: {
         enabled: true,
         baseUrl: 'https://vector.example.com',
         apiKey: 'test-vector-key',

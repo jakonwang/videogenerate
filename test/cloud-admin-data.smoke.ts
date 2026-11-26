@@ -102,9 +102,9 @@ async function main() {
   await owner.admin.saveBillingDefaults({ points: { video: 10, image: 2 }, refundPerDay: 50 })
   const managed = createDefaultManagedSettings()
   managed.enabled = true
-  managed.platforms.vectorengine = { apiKey: 'sk-REAL', baseUrl: `${up}/ve` }
-  managed.capabilities.video = { platform: 'vectorengine', model: 'veo3.1-fast' }
-  managed.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
+  managed.platforms.ai666 = { apiKey: 'sk-REAL', baseUrl: `${up}/ve` }
+  managed.capabilities.video = { platform: 'ai666', model: 'veo3.1-fast' }
+  managed.capabilities.image = { platform: 'ai666', model: 'gpt-image-1', quality: 'high' }
   app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: managed, scope: 'private', description: '', updatedBy: null, now })
 
   const reg = clientFor()
@@ -117,8 +117,8 @@ async function main() {
   await desk.client.activateDevice({ machineId: 'm-1', deviceName: 'pc', platform: 'win32', appVersion: '9.9.9' })
   const proxyToken = (await desk.client.getManagedSettings('m-1')).proxyToken!
   const post = (path: string, body: unknown) =>
-    fetch(`${base}/api/v1/ai-proxy/vectorengine${path}`, { method: 'POST', headers: { Authorization: `Bearer ${proxyToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  const get = (path: string) => fetch(`${base}/api/v1/ai-proxy/vectorengine${path}`, { headers: { Authorization: `Bearer ${proxyToken}` } })
+    fetch(`${base}/api/v1/ai-proxy/ai666${path}`, { method: 'POST', headers: { Authorization: `Bearer ${proxyToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const get = (path: string) => fetch(`${base}/api/v1/ai-proxy/ai666${path}`, { headers: { Authorization: `Bearer ${proxyToken}` } })
 
   // ---- 电脑端生成：图片成功、图片失败、视频异步任务
   assert.equal((await post('/v1/images/generations', { model: 'gpt-image-1', prompt: '白底连衣裙主图' })).status, 200)

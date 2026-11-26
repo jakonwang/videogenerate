@@ -5,15 +5,15 @@ import { downloadAtlasToFile, getAtlasJson, pickAtlasOutputUrl } from './atlasRe
 import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import type { ModelCredentials, UnifiedCapability } from './types'
 import { withUsageCharge, type UsageCharge } from './usageMeter'
+import { buildVideoSubmitRequest, findVideoModelSpec, resolveVideoParams } from '../../../shared/videoModels'
 
-const VECTOR_ENGINE_LABEL = 'VectorEngine'
 
 function providerLabel(credentials: ModelCredentials) {
   const profile = resolveApifoxHubProfile(credentials, 'video')
   if (profile === 'ai666') return 'AI666'
-  if (profile === 'xibapi') return 'XIBAPI'
-  if (profile === 'gaorui') return 'GaoruiAPI'
-  return 'VectorEngine'
+  if (profile === 'xibapi') return '小扳手'
+  if (profile === 'gaorui') return '高瑞'
+  return 'AI666'
 }
 
 function baseUrl(credentials: ModelCredentials) {
@@ -52,10 +52,9 @@ function resolveHistoricalVideoHub(input: {
   }
 
   const ai666 = input.credentials.ai666Hub ?? input.credentials.apifoxHub
-  const vectorengine = input.credentials.vectorEngineHub ?? input.credentials.apifoxHub
   const xibapi = input.credentials.xibapiHub ?? input.credentials.apifoxHub
   const gaorui = input.credentials.gaoruiHub ?? input.credentials.apifoxHub
-  const hubs = [ai666, vectorengine, xibapi, gaorui].filter(Boolean)
+  const hubs = [ai666, xibapi, gaorui].filter(Boolean)
   if (requestedBaseUrl) {
     const matchedByBaseUrl = hubs.find(
       (hub) => String(hub?.baseUrl || '').trim().replace(/\/+$/, '') === requestedBaseUrl,
@@ -97,6 +96,8 @@ function pickFallbackModels(input: {
   capability: UnifiedCapability
 }): string[] {
   const primary = modelForCapability(input.cfg, input.capability)
+  // 高瑞 / 小扳手：只用配置的模型。换成别家的 veo 名字只会提交到错的模型
+  if (input.cfg.videoProvider === 'gaorui' || input.cfg.videoProvider === 'xibapi') return primary ? [primary] : []
   const candidates = [
     primary,
     'veo_3_1',
@@ -181,7 +182,8 @@ function ai666KlingVideoQueryUrl(root: string, taskId: string) {
 function buildAuthHeaders(key: string) {
   const raw = String(key || '').trim()
   return {
-    Authorization: /^bearer\s+/i.test(raw) || /^sk[-_]/i.test(raw) ? raw : `Bearer ${raw}`,
+    // 三家文档都要求 `Bearer sk-…`，sk- 开头也要加 Bearer
+    Authorization: /^bearer\s+/i.test(raw) ? raw : `Bearer ${raw}`,
     'x-api-key': raw,
   }
 }
@@ -310,7 +312,8 @@ function normalizeTaskStatus(raw: any) {
   ).toLowerCase()
   if (rawStatus === 'completed' || rawStatus === 'succeeded' || rawStatus === 'success' || rawStatus === 'done' || rawStatus === 'finish' || rawStatus === 'finished') return 'succeeded'
   if (rawStatus === 'queued' || rawStatus === 'processing') return 'running'
-  if (rawStatus === 'failed' || rawStatus === 'error' || rawStatus === 'failure' || rawStatus === 'cancelled' || rawStatus === 'canceled') return 'failed'
+  // violation：GRS.AI 内容违规，不认的话任务会一直显示生成中直到超时
+  if (rawStatus === 'failed' || rawStatus === 'error' || rawStatus === 'failure' || rawStatus === 'cancelled' || rawStatus === 'canceled' || rawStatus === 'violation') return 'failed'
   return 'running'
 }
 
@@ -495,6 +498,9 @@ function pickOutputUrl(json: any) {
         json?.video?.url ??
         json?.videos?.[0]?.url ??
         json?.url ??
+        // 火山 Seedance（高瑞）/ GRS.AI 的返回
+        json?.content?.video_url ??
+        json?.results?.[0]?.url ??
         '',
     ).trim()
   )
@@ -700,7 +706,7 @@ export async function queryAsyncTask(input: {
 
     let json: any
     try {
-      json = await getAtlasJson(url, key, `${VECTOR_ENGINE_LABEL} 查询视频任务 ${candidateTaskId}`)
+      json = await getAtlasJson(url, key, `查询视频任务 ${candidateTaskId}`)
     } catch (error) {
       const message = String((error as any)?.message ?? error ?? '')
       console.warn('[vectorengine-debug] query-video-task:error', {
@@ -862,7 +868,7 @@ export async function syncRemoteTaskResult(input: {
   }
   if (task.status !== 'succeeded' || !task.outputUrls[0]) return { task, outputPath: undefined as string | undefined, synced: false }
   await mkdir(input.outDir, { recursive: true })
-  const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+  const out = join(input.outDir, `hub_video_${Date.now()}_${randomUUID()}.mp4`)
   await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
   return { task, outputPath: out, synced: true }
 }
@@ -921,7 +927,6 @@ async function createVideoTaskUnmetered(input: {
       let body: Record<string, any> = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       aspect_ratio: aspectRatio,
       duration: durationSec,
       resolution: '720p',
@@ -934,7 +939,6 @@ async function createVideoTaskUnmetered(input: {
         body = {
           model,
           prompt: input.prompt,
-          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
           aspect_ratio: aspectRatio,
           duration: durationSec,
           ...(input.image ? { image: input.image } : {}),
@@ -946,7 +950,6 @@ async function createVideoTaskUnmetered(input: {
         body = {
           model,
           prompt: input.prompt,
-          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
           images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
           enhance_prompt: enhancePrompt,
           aspect_ratio: aspectRatio,
@@ -959,7 +962,6 @@ async function createVideoTaskUnmetered(input: {
         body = {
           model,
           prompt: input.prompt,
-          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
           image_url: input.image,
           last_image_url: input.lastImage,
           metadata: {
@@ -974,7 +976,6 @@ async function createVideoTaskUnmetered(input: {
           model,
           content: [
             { type: 'text', text: input.prompt },
-            ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
           ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
           ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
           ...referenceImages.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
@@ -990,7 +991,6 @@ async function createVideoTaskUnmetered(input: {
         body = {
           model,
           prompt: input.prompt,
-          negative_prompt: String(input.negativePrompt || '').trim() || undefined,
           ...(input.image ? { image: input.image } : {}),
           ...(input.lastImage ? { last_image: input.lastImage } : {}),
           aspect_ratio: aspectRatio,
@@ -1029,7 +1029,6 @@ async function createVideoTaskUnmetered(input: {
       body = {
         model,
         prompt: input.prompt,
-        negative_prompt: String(input.negativePrompt || '').trim() || undefined,
         duration: durationSec,
         resolution: '720p',
         aspect_ratio: gaoruiAspectRatio(aspectRatio),
@@ -1043,7 +1042,6 @@ async function createVideoTaskUnmetered(input: {
           ? {
               model,
               prompt: input.prompt,
-              negative_prompt: String(input.negativePrompt || '').trim() || undefined,
               images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
               aspect_ratio: aspectRatio,
               enhance_prompt: enhancePrompt,
@@ -1053,7 +1051,6 @@ async function createVideoTaskUnmetered(input: {
           : {
               model,
               prompt: input.prompt,
-              negative_prompt: String(input.negativePrompt || '').trim() || undefined,
               ...(input.image ? { image: input.image } : {}),
               ...(input.lastImage ? { last_image: input.lastImage } : {}),
               aspect_ratio: aspectRatio,
@@ -1111,6 +1108,24 @@ async function createVideoTaskUnmetered(input: {
           weight: motionStrength,
         },
       }
+    }
+
+    // 高瑞 / 小扳手：模型在清单里且有首帧，就按清单的请求格式发（Veo / Kling / Grok / Omni / Seedance 等字段各不相同）
+    const catalogSpec =
+      (cfg.videoProvider === 'gaorui' || cfg.videoProvider === 'xibapi') && input.image
+        ? findVideoModelSpec(`${cfg.videoProvider}:${model}`)
+        : undefined
+    if (catalogSpec) {
+      body = buildVideoSubmitRequest(
+        catalogSpec,
+        resolveVideoParams(catalogSpec, {
+          prompt: input.prompt,
+          firstFrameUrl: input.image!,
+          lastFrameUrl: input.lastImage,
+          durationSec: input.durationSec,
+          aspectRatio,
+        }),
+      ).body
     }
 
     console.log('[vectorengine-debug] create-video-task', {
@@ -1225,7 +1240,6 @@ async function generateVideoUnmetered(input: {
   let body: Record<string, any> = {
     model,
     prompt: input.prompt,
-    negative_prompt: String(input.negativePrompt || '').trim() || undefined,
     aspect_ratio: aspectRatio,
     duration: durationSec,
     resolution: '720p',
@@ -1238,7 +1252,6 @@ async function generateVideoUnmetered(input: {
     body = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       aspect_ratio: aspectRatio,
       duration: durationSec,
       ...(input.image ? { image: input.image } : {}),
@@ -1250,7 +1263,6 @@ async function generateVideoUnmetered(input: {
     body = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
       enhance_prompt: enhancePrompt,
       aspect_ratio: aspectRatio,
@@ -1263,7 +1275,6 @@ async function generateVideoUnmetered(input: {
     body = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       image_url: input.image,
       last_image_url: input.lastImage,
       metadata: {
@@ -1278,7 +1289,6 @@ async function generateVideoUnmetered(input: {
       model,
       content: [
         { type: 'text', text: input.prompt },
-        ...(input.negativePrompt ? [{ type: 'text', text: `Negative constraints: ${input.negativePrompt}` }] : []),
         ...(input.image ? [{ type: 'image_url', image_url: { url: input.image } }] : []),
         ...(input.lastImage ? [{ type: 'image_url', image_url: { url: input.lastImage } }] : []),
         ...referenceImages.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
@@ -1294,7 +1304,6 @@ async function generateVideoUnmetered(input: {
     body = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       ...(input.image ? { image: input.image } : {}),
       ...(input.lastImage ? { last_image: input.lastImage } : {}),
       aspect_ratio: aspectRatio,
@@ -1333,7 +1342,6 @@ async function generateVideoUnmetered(input: {
     body = {
       model,
       prompt: input.prompt,
-      negative_prompt: String(input.negativePrompt || '').trim() || undefined,
       duration: durationSec,
       resolution: '720p',
       aspect_ratio: gaoruiAspectRatio(aspectRatio),
@@ -1347,7 +1355,6 @@ async function generateVideoUnmetered(input: {
         ? {
             model,
             prompt: input.prompt,
-            negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             images: [input.image, input.lastImage, ...referenceImages].filter(Boolean),
             aspect_ratio: aspectRatio,
             enhance_prompt: enhancePrompt,
@@ -1357,7 +1364,6 @@ async function generateVideoUnmetered(input: {
         : {
             model,
             prompt: input.prompt,
-            negative_prompt: String(input.negativePrompt || '').trim() || undefined,
             ...(input.image ? { image: input.image } : {}),
             ...(input.lastImage ? { last_image: input.lastImage } : {}),
             aspect_ratio: aspectRatio,
@@ -1417,6 +1423,24 @@ async function generateVideoUnmetered(input: {
     }
   }
 
+  // 高瑞 / 小扳手：模型在清单里且有首帧，按清单的请求格式发（和 createVideoTask 一致）
+  const catalogSpec =
+    (cfg.videoProvider === 'gaorui' || cfg.videoProvider === 'xibapi') && input.image
+      ? findVideoModelSpec(`${cfg.videoProvider}:${model}`)
+      : undefined
+  if (catalogSpec) {
+    body = buildVideoSubmitRequest(
+      catalogSpec,
+      resolveVideoParams(catalogSpec, {
+        prompt: input.prompt,
+        firstFrameUrl: input.image!,
+        lastFrameUrl: input.lastImage,
+        durationSec: input.durationSec,
+        aspectRatio,
+      }),
+    ).body
+  }
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -1438,7 +1462,7 @@ async function generateVideoUnmetered(input: {
   const taskId = pickTaskId(json)
   if (!taskId && directOutputUrl) {
     await mkdir(input.outDir, { recursive: true })
-    const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+    const out = join(input.outDir, `hub_video_${Date.now()}_${randomUUID()}.mp4`)
     await downloadAtlasToFile(directOutputUrl, out, `${providerName} 视频下载`)
     return {
       provider: 'apifox_hub',
@@ -1477,7 +1501,7 @@ async function generateVideoUnmetered(input: {
     if (task.status === 'failed') throw new Error(task.errorMessage || `${providerName} 视频任务失败: ${taskId}`)
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
-      const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+      const out = join(input.outDir, `hub_video_${Date.now()}_${randomUUID()}.mp4`)
       await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
       return {
         provider: 'apifox_hub',
@@ -1501,7 +1525,7 @@ async function generateVideoUnmetered(input: {
     })
     if (task.status === 'succeeded' && task.outputUrls[0]) {
       await mkdir(input.outDir, { recursive: true })
-      const out = join(input.outDir, `vectorengine_video_${Date.now()}_${randomUUID()}.mp4`)
+      const out = join(input.outDir, `hub_video_${Date.now()}_${randomUUID()}.mp4`)
       await downloadAtlasToFile(task.outputUrls[0], out, `${providerName} 视频下载`)
       return {
         provider: 'apifox_hub',

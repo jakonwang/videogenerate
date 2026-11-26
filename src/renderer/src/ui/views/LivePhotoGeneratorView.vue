@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import SubtitleStudioDialog, { type SubtitleDialogSubmit } from '@/ui/components/subtitle/SubtitleStudioDialog.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useCloudAuthStore } from '@/stores/cloudAuth'
 import { useI18n } from 'vue-i18n'
 import BatchDeleteDialog from '../components/BatchDeleteDialog.vue'
 import ProductSelectDialog from '../components/ProductSelectDialog.vue'
 import StyleReferenceCard, { type StyleReference } from '../components/StyleReferenceCard.vue'
+import UiModelSelect, { type UiModelSelectGroup } from '../components/UiModelSelect.vue'
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import LivePhotoTaskCard, { type LivePhotoCardAction, type LivePhotoCardCaps } from './live-photo/LivePhotoTaskCard.vue'
 import LivePhotoTaskDetail from './live-photo/LivePhotoTaskDetail.vue'
@@ -118,6 +120,11 @@ type SubtitleCaptionStyle = {
 }
 
 const router = useRouter()
+const route = useRoute()
+const cloudAuth = useCloudAuthStore()
+void cloudAuth.ensureLoaded()
+/** 电脑端本地模式（没登录）：后台配置的模型要登录后才会下发 */
+const cloudSignedOut = computed(() => cloudAuth.status?.loggedIn === false)
 const { t, locale } = useI18n()
 
 const uiText = computed(() => ({
@@ -190,6 +197,125 @@ const lpText = computed(() => {
 
 const loading = ref(false)
 const creatingReference = ref(false)
+
+/* 图生视频模型：后台打开、平台有 Key 的模型；每次生成选一个 */
+type LivePhotoVideoModelOption = {
+  id: string
+  label: string
+  platform: string
+  platformLabel: string
+  lastFrame: boolean
+  durations: number[]
+  defaultDuration: number
+  resolutions: string[]
+  defaultResolution: string
+  note?: string
+}
+/** 尾帧推近比例（同 tk创意室）；0 = 只传首帧 */
+const videoZoomOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80] as const
+const VIDEO_MODEL_STORAGE_KEY = 'livePhoto.videoModel'
+const videoModels = ref<LivePhotoVideoModelOption[]>([])
+const selectedVideoModelId = ref('')
+const selectedVideoDurationSec = ref(0)
+const selectedVideoResolution = ref('')
+const selectedVideoZoomPercent = ref<number>(20)
+const selectedVideoModel = computed(() => videoModels.value.find((item) => item.id === selectedVideoModelId.value))
+
+function readSavedVideoChoice(): { id?: string; duration?: number; resolution?: string; zoom?: number } {
+  try {
+    return JSON.parse(localStorage.getItem(VIDEO_MODEL_STORAGE_KEY) || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+
+function saveVideoChoice() {
+  try {
+    localStorage.setItem(
+      VIDEO_MODEL_STORAGE_KEY,
+      JSON.stringify({ id: selectedVideoModelId.value, duration: selectedVideoDurationSec.value, resolution: selectedVideoResolution.value, zoom: selectedVideoZoomPercent.value }),
+    )
+  } catch {
+    // 本机记不住上次的选择也不影响生成
+  }
+}
+
+async function loadVideoModels() {
+  try {
+    const result = await window.api.livePhoto.listVideoModels()
+    videoModels.value = Array.isArray(result?.models) ? result.models : []
+    const saved = readSavedVideoChoice()
+    const pick = videoModels.value.find((item) => item.id === saved.id) ?? videoModels.value.find((item) => item.id === result?.defaultModelId)
+    selectedVideoModelId.value = pick?.id ?? ''
+    const sameModel = Boolean(pick && saved.id === pick.id)
+    selectedVideoDurationSec.value = pick && sameModel && pick.durations.includes(Number(saved.duration)) ? Number(saved.duration) : pick?.defaultDuration ?? 0
+    selectedVideoResolution.value = pick && sameModel && pick.resolutions.includes(String(saved.resolution)) ? String(saved.resolution) : pick?.defaultResolution ?? ''
+    selectedVideoZoomPercent.value = (videoZoomOptions as readonly number[]).includes(Number(saved.zoom)) ? Number(saved.zoom) : 20
+  } catch {
+    videoModels.value = []
+  }
+}
+
+function reloadVideoModelsIfEmpty() {
+  if (!videoModels.value.length) void loadVideoModels()
+}
+
+// 登录状态变了（登录 / 退出）就重新取模型清单
+watch(() => cloudAuth.status?.loggedIn, (now, before) => {
+  if (before !== undefined && now !== before) void loadVideoModels()
+})
+
+/** 模型按平台分组给选择器；右侧小字是时长 */
+const videoModelGroups = computed<UiModelSelectGroup[]>(() => {
+  const groups = new Map<string, UiModelSelectGroup>()
+  for (const model of videoModels.value) {
+    const group = groups.get(model.platform) ?? { key: model.platform, title: model.platformLabel, items: [] }
+    const d = model.durations
+    const meta = d.length === 1 ? `${d[0]} 秒` : `${d[0]}–${d[d.length - 1]} 秒`
+    group.items.push({ value: model.id, label: model.label, meta })
+    groups.set(model.platform, group)
+  }
+  return [...groups.values()]
+})
+const videoDurationItems = computed(() => (selectedVideoModel.value?.durations ?? []).map((sec) => ({ value: String(sec), label: `${sec} 秒` })))
+const videoResolutionItems = computed(() => (selectedVideoModel.value?.resolutions ?? []).map((res) => ({ value: res, label: res === 'lite' ? '轻量' : res })))
+const videoDurationValue = computed({
+  get: () => String(selectedVideoDurationSec.value || ''),
+  set: (value: string) => {
+    selectedVideoDurationSec.value = Number(value) || 0
+    saveVideoChoice()
+  },
+})
+const videoResolutionValue = computed({
+  get: () => selectedVideoResolution.value,
+  set: (value: string) => {
+    selectedVideoResolution.value = value
+    saveVideoChoice()
+  },
+})
+
+function setVideoZoomPercent(value: number) {
+  selectedVideoZoomPercent.value = value
+  saveVideoChoice()
+}
+
+function onVideoModelChange() {
+  const model = selectedVideoModel.value
+  if (model && !model.durations.includes(selectedVideoDurationSec.value)) selectedVideoDurationSec.value = model.defaultDuration
+  if (model && !model.resolutions.includes(selectedVideoResolution.value)) selectedVideoResolution.value = model.defaultResolution
+  saveVideoChoice()
+}
+
+/** 提交任务时带上选的模型和时长；没选 = 沿用设置里的视频接口 */
+function videoChoicePayload() {
+  if (!selectedVideoModel.value) return {}
+  return {
+    videoModelId: selectedVideoModel.value.id,
+    videoDurationSec: selectedVideoDurationSec.value || undefined,
+    videoResolution: selectedVideoResolution.value || undefined,
+    videoZoomPercent: selectedVideoModel.value.lastFrame ? selectedVideoZoomPercent.value : undefined,
+  }
+}
 const exporting = ref(false)
 const notice = ref('')
 const errorText = ref('')
@@ -1376,7 +1502,7 @@ async function createStyleReferenceItems() {
   errorText.value = ''
   notice.value = ''
   try {
-    const result = await window.api.livePhoto.createFromStyleReference({ styleReferenceId: template.id, productIds })
+    const result = await window.api.livePhoto.createFromStyleReference({ styleReferenceId: template.id, productIds, ...videoChoicePayload() })
     notice.value = `已提交 ${result?.count ?? productIds.length} 条同款视频`
     styleProductIds.value = []
     activeTab.value = 'library'
@@ -1416,6 +1542,7 @@ async function createReferenceItem() {
       existingPaths.some((path) => materialIdsFromPaths([path]).includes(materialId)),
     ))]
     const selectedProductIdSnapshot = selectedProductId.value
+    const videoChoiceSnapshot = videoChoicePayload()
     notice.value =
       existingPaths.length > 1
         ? `${uiText.value.referenceCreatedPrefix} ${existingPaths.length} ${uiText.value.referenceCreatedSuffix}`
@@ -1440,6 +1567,7 @@ async function createReferenceItem() {
         referenceImagePaths: referencePathsSnapshot,
         productId: selectedProductIdSnapshot,
         motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
+        ...videoChoiceSnapshot,
       })
       const createdItems = (Array.isArray(created) ? created : [created]).filter(Boolean) as LivePhotoItem[]
       mergeLivePhotoItems(createdItems)
@@ -1833,7 +1961,10 @@ function toggleLibrarySelection(id: string) {
 onMounted(async () => {
   await loadAll()
   await loadLivePhotoSettings()
+  void loadVideoModels()
   window.addEventListener('focus', refreshLibraryItemsWithWarmup)
+  // 刚登录时后台设置是异步下发的，回到窗口时再取一次模型清单
+  window.addEventListener('focus', reloadVideoModelsIfEmpty)
   document.addEventListener('visibilitychange', handleVisibilityRefresh)
 })
 
@@ -1847,6 +1978,7 @@ onBeforeUnmount(() => {
     pageVisibleRefreshTimer = null
   }
   window.removeEventListener('focus', refreshLibraryItemsWithWarmup)
+  window.removeEventListener('focus', reloadVideoModelsIfEmpty)
   document.removeEventListener('visibilitychange', handleVisibilityRefresh)
 })
 
@@ -1939,7 +2071,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
             </header>
 
             <div class="lp-field">
-              <StyleReferenceCard v-model="styleReference" bare />
+              <StyleReferenceCard v-model="styleReference" bare :uses-last-frame="Boolean(selectedVideoModel?.lastFrame)" />
             </div>
 
             <div v-if="!styleReference" class="lp-field">
@@ -2012,6 +2144,68 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                     <strong v-else>{{ t('livePhoto.workspace.primaryImageRequired') }}</strong>
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div class="lp-field" data-testid="live-photo-video-model">
+              <div class="lp-field__label">
+                <span>视频模型</span>
+                <small v-if="selectedVideoModel?.note">{{ selectedVideoModel.note }}</small>
+              </div>
+              <!-- 没有可用模型：一般是视频平台还没填 Key（本地模式），告诉用户去哪里配 -->
+              <div v-if="!videoModels.length && cloudSignedOut" class="lp-video-model-empty">
+                <span>还没有可用的视频模型。当前是本地模式，登录账号后会自动用后台配置的视频模型。</span>
+                <button class="vg-btn vg-btn--sm" type="button" @click="router.push({ path: '/login', query: { next: route.fullPath } })">去登录</button>
+              </div>
+              <div v-else-if="!videoModels.length" class="lp-video-model-empty">
+                <span>还没有可用的视频模型。填好高瑞、小扳手或 GRS.AI 的 API Key 后，这里就能选模型；不选会用设置里的视频接口生成。</span>
+                <button class="vg-btn vg-btn--sm" type="button" @click="router.push({ path: '/settings', query: { section: 'platforms' } })">去设置</button>
+              </div>
+              <div v-else class="lp-row lp-video-model">
+                <UiModelSelect
+                  v-model="selectedVideoModelId"
+                  class="lp-video-model__model"
+                  :groups="videoModelGroups"
+                  searchable
+                  placeholder="选择视频模型"
+                  @change="onVideoModelChange"
+                />
+                <UiModelSelect
+                  v-if="selectedVideoModel"
+                  v-model="videoDurationValue"
+                  class="lp-video-model__duration"
+                  :items="videoDurationItems"
+                  caption="时长"
+                  :disabled="videoDurationItems.length < 2"
+                />
+                <UiModelSelect
+                  v-if="selectedVideoModel"
+                  v-model="videoResolutionValue"
+                  class="lp-video-model__resolution"
+                  :items="videoResolutionItems"
+                  caption="清晰度"
+                  :disabled="videoResolutionItems.length < 2"
+                />
+              </div>
+            </div>
+
+            <div v-if="selectedVideoModel?.lastFrame" class="lp-field" data-testid="live-photo-video-last-frame">
+              <div class="lp-field__label">
+                <span>尾帧</span>
+                <small v-if="styleReference">用同款模板的结尾画面，换上商品</small>
+                <small v-else-if="selectedVideoZoomPercent">把首帧放大 {{ selectedVideoZoomPercent }}% 当尾帧，镜头慢慢推近</small>
+                <small v-else>只传首帧，动作交给模型</small>
+              </div>
+              <div v-if="!styleReference" class="lp-seg" role="group" aria-label="尾帧推近">
+                <button
+                  v-for="option in videoZoomOptions"
+                  :key="option"
+                  type="button"
+                  :class="{ 'is-on': selectedVideoZoomPercent === option }"
+                  @click="setVideoZoomPercent(option)"
+                >
+                  {{ option ? `${option}%` : '只用首帧' }}
+                </button>
               </div>
             </div>
 

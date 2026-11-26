@@ -22,7 +22,7 @@ async function main() {
     videoProviderFallback: 'xibapi' as any,
     imageProviderPrimary: 'ai666' as any,
     chatProviderPrimary: 'vectorengine' as any,
-    apifoxHubProfile: 'vectorengine',
+    apifoxHubProfile: 'vectorengine' as any,
     ai666Hub: {
       enabled: true,
       baseUrl: 'https://ai666.example.com',
@@ -43,7 +43,7 @@ async function main() {
       defaultPollIntervalMs: 2000,
       defaultTimeoutMs: 600000,
     },
-    vectorEngineHub: {
+    vectorEngineHub: {  // 已删除的平台：旧配置里可能还有
       enabled: true,
       baseUrl: 'https://vectorengine.example.com',
       apiKey: 'vector-key',
@@ -89,14 +89,16 @@ async function main() {
   assert.equal(saved.videoProviderPrimary, 'apifox_hub')
   assert.equal(saved.videoProviderFallback, 'apifox_hub')
   assert.equal(saved.imageProviderPrimary, 'apifox_hub')
-  assert.equal(saved.chatProviderPrimary, 'apifox_hub')
+  // VectorEngine 已删除：旧配置里对话用的是它，读出来改走 GRS.AI
+  assert.equal(saved.chatProviderPrimary, 'grsai')
   assert.equal(saved.videoApifoxHubProfile, 'xibapi')
   assert.equal(saved.imageApifoxHubProfile, 'ai666')
-  assert.equal(saved.chatApifoxHubProfile, 'vectorengine')
+  assert.equal(saved.chatApifoxHubProfile, 'ai666')
+  assert.equal((saved as any).vectorEngineHub, undefined, 'removed platform credentials are dropped')
   assert.equal(saved.apifoxHubProfile, 'xibapi')
   assert.equal(resolveApifoxHubProfile(saved, 'video'), 'xibapi')
   assert.equal(resolveApifoxHubProfile(saved, 'image'), 'ai666')
-  assert.equal(resolveApifoxHubProfile(saved, 'chat'), 'vectorengine')
+  assert.equal(resolveApifoxHubProfile(saved, 'chat'), 'ai666')
 
   await cloneRepo.setCredentials({
     ...saved,
@@ -106,7 +108,7 @@ async function main() {
     chatProviderPrimary: 'grsai',
     videoApifoxHubProfile: 'xibapi',
     imageApifoxHubProfile: 'ai666',
-    chatApifoxHubProfile: 'vectorengine',
+    chatApifoxHubProfile: 'vectorengine' as any,
   })
 
   const grsSaved = await cloneRepo.getCredentials()
@@ -115,10 +117,10 @@ async function main() {
   assert.equal(grsSaved.chatProviderPrimary, 'grsai')
   assert.equal(resolveApifoxHubProfile(grsSaved, 'video'), 'xibapi')
   assert.equal(resolveApifoxHubProfile(grsSaved, 'image'), 'ai666')
-  assert.equal(resolveApifoxHubProfile(grsSaved, 'chat'), 'vectorengine')
+  assert.equal(resolveApifoxHubProfile(grsSaved, 'chat'), 'ai666')
   assert.equal(grsSaved.videoApifoxHubProfile, 'xibapi')
   assert.equal(grsSaved.imageApifoxHubProfile, 'ai666')
-  assert.equal(grsSaved.chatApifoxHubProfile, 'vectorengine')
+  assert.equal(grsSaved.chatApifoxHubProfile, 'ai666')
 
   await cloneRepo.setCredentials({
     ...grsSaved,

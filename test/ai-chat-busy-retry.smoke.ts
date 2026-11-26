@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { generateChatCompletion, setChatBusyRetryDelaysForTests } from '../src/main/modules/clone/unifiedChat'
 
-const credentials = { vectorEngineHub: { enabled: true, baseUrl: 'https://ai.example', apiKey: 'k', chatModel: 'gpt-4.1', chatEndpointStyle: 'openai_compatible' } } as never
+const credentials = { ai666Hub: { enabled: true, baseUrl: 'https://ai.example', apiKey: 'k', chatModel: 'gpt-4.1', chatEndpointStyle: 'openai_compatible' } } as never
 const BUSY = JSON.stringify({ error: { message: 'Current group upstream load is saturated, please try again later (request id: x)', type: 'new_api_error' } })
 const OK = JSON.stringify({ choices: [{ message: { content: 'Sáng lấp lánh ✨' } }] })
 
@@ -62,7 +62,7 @@ async function main() {
   assert.equal(calls.length, 1, 'no retry for non-busy errors')
   console.log('✓ non-busy errors are not retried')
 
-  // 后台「脚本分析 / 对话」选了 GRS.AI：对话走 GRS 和后台设的模型，不再去调 VectorEngine
+  // 后台「脚本分析 / 对话」选了 GRS.AI：对话走 GRS 和后台设的模型，不再去调 AI666
   const grsCredentials = {
     ...(credentials as object),
     chatProviderPrimary: 'grsai',

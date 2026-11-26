@@ -17,9 +17,9 @@ import {
 } from '../../../../shared/platformSettings'
 
 type ProviderKey = 'kling' | 'grsai' | 'apifox_hub'
-export type PlatformKey = 'grsai' | 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
-type CapabilityPlatformKey = 'grsai' | 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
-type ChatPlatformKey = 'grsai' | 'ai666' | 'vectorengine'
+export type PlatformKey = 'grsai' | 'ai666' | 'xibapi' | 'gaorui'
+type CapabilityPlatformKey = 'grsai' | 'ai666' | 'xibapi' | 'gaorui'
+type ChatPlatformKey = 'grsai' | 'ai666' | 'xibapi' | 'gaorui'
 type ApifoxProfileKey = PlatformProfile
 type ApifoxImageProfileKey = ImagePlatformProfile
 export type SecretKey =
@@ -27,7 +27,6 @@ export type SecretKey =
   | 'grsaiApiKey'
   | 'tikhubApiKey'
   | 'ai666ApiKey'
-  | 'vectorEngineApiKey'
   | 'xibapiApiKey'
   | 'gaoruiApiKey'
   | 'replicateApiToken'
@@ -85,7 +84,6 @@ type ModelCredentialsView = {
   grsaiImageModel: string
   grsaiAnalysisModel: string
   ai666Hub: HubCredentials
-  vectorEngineHub: HubCredentials
   xibapiHub: HubCredentials
   gaoruiHub: HubCredentials
   apifoxHub: HubCredentials
@@ -137,15 +135,14 @@ function createDefaultCredentials(): ModelCredentialsView {
     imageProviderPrimary: 'apifox_hub',
     openaiImageQuality: 'high',
     chatProviderPrimary: 'apifox_hub',
-    apifoxHubProfile: 'vectorengine',
-    videoApifoxHubProfile: 'vectorengine',
-    imageApifoxHubProfile: 'vectorengine',
-    chatApifoxHubProfile: 'vectorengine',
+    apifoxHubProfile: 'ai666',
+    videoApifoxHubProfile: 'ai666',
+    imageApifoxHubProfile: 'ai666',
+    chatApifoxHubProfile: 'ai666',
     klingImageModel: '',
     grsaiImageModel: '',
     grsaiAnalysisModel: '',
     ai666Hub: createHubDefaults(),
-    vectorEngineHub: createHubDefaults(),
     xibapiHub: createHubDefaults({
       videoProvider: 'xibapi',
       textToVideoModel: 'veo_3_1-fast',
@@ -174,7 +171,6 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     grsaiApiKey: false,
     tikhubApiKey: false,
     ai666ApiKey: false,
-    vectorEngineApiKey: false,
     xibapiApiKey: false,
     gaoruiApiKey: false,
     replicateApiToken: false,
@@ -196,20 +192,14 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
       hostPlaceholder: 'https://your-ai666-host',
       keyName: 'ai666ApiKey',
     },
-    vectorengine: {
-      label: 'VectorEngine',
-      hostLabel: 'Base URL',
-      hostPlaceholder: 'https://your-vector-engine-host',
-      keyName: 'vectorEngineApiKey',
-    },
     xibapi: {
-      label: 'XIBAPI',
+      label: '小扳手',
       hostLabel: 'Base URL',
-      hostPlaceholder: 'https://xibapi.com',
+      hostPlaceholder: 'https://5208.ai',
       keyName: 'xibapiApiKey',
     },
     gaorui: {
-      label: 'GaoruiAPI',
+      label: '高瑞',
       hostLabel: 'Base URL',
       hostPlaceholder: 'https://gaorui.cc',
       keyName: 'gaoruiApiKey',
@@ -251,19 +241,14 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
       target === 'videoProviderPrimary'
         ? normalizeIncomingPlatformProfile('video', platform)
         : target === 'imageProviderPrimary'
-          ? normalizeIncomingPlatformProfile('image', platform, 'vectorengine')
-          : normalizeIncomingPlatformProfile('chat', platform, 'vectorengine')
+          ? normalizeIncomingPlatformProfile('image', platform)
+          : normalizeIncomingPlatformProfile('chat', platform)
     const stored = mapPlatformToStoredProvider(normalizedPlatform)
     ;(modelCredentials.value[target] as ProviderKey | 'grsai') = stored.provider as ProviderKey | 'grsai'
     if (stored.profile) {
       if (stored.profile === 'ai666') modelCredentials.value.ai666Hub.enabled = true
-      if (stored.profile === 'vectorengine') modelCredentials.value.vectorEngineHub.enabled = true
       if (stored.profile === 'xibapi') modelCredentials.value.xibapiHub.enabled = true
       if (stored.profile === 'gaorui') modelCredentials.value.gaoruiHub.enabled = true
-      if (profileKey === 'chatApifoxHubProfile' && (stored.profile === 'xibapi' || stored.profile === 'gaorui')) {
-        modelCredentials.value.chatApifoxHubProfile = 'vectorengine'
-        return
-      }
       ;(modelCredentials.value[profileKey] as ApifoxProfileKey | ApifoxImageProfileKey) = stored.profile as ApifoxProfileKey
     }
   }
@@ -297,7 +282,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     if (profile === 'ai666') return modelCredentials.value.ai666Hub
     if (profile === 'xibapi') return modelCredentials.value.xibapiHub
     if (profile === 'gaorui') return modelCredentials.value.gaoruiHub
-    return modelCredentials.value.vectorEngineHub
+    return modelCredentials.value.ai666Hub
   }
 
   const videoPrimaryModelBinding = computed({
@@ -415,21 +400,15 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
       icon: Server,
     },
     {
-      provider: 'vectorengine' as PlatformKey,
-      title: 'VectorEngine',
-      desc: t('settings.platforms.cards.vectorengine.desc'),
-      icon: Server,
-    },
-    {
       provider: 'xibapi' as PlatformKey,
-      title: 'XIBAPI',
+      title: '小扳手',
       desc: t('settings.platforms.cards.xibapi.desc'),
       icon: Server,
     },
     {
       provider: 'gaorui' as PlatformKey,
-      title: 'GaoruiAPI',
-      desc: 'OpenAI-compatible async Veo video platform',
+      title: '高瑞',
+      desc: '视频（Veo、Kling、Seedance 等）',
       icon: Server,
     },
   ])
@@ -447,7 +426,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     if (provider === 'ai666') return modelCredentials.value.ai666Hub.apiKey
     if (provider === 'xibapi') return modelCredentials.value.xibapiHub.apiKey
     if (provider === 'gaorui') return modelCredentials.value.gaoruiHub.apiKey
-    return modelCredentials.value.vectorEngineHub.apiKey
+    return ''
   }
 
   function providerHost(provider: PlatformKey) {
@@ -455,7 +434,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     if (provider === 'ai666') return modelCredentials.value.ai666Hub.baseUrl
     if (provider === 'xibapi') return modelCredentials.value.xibapiHub.baseUrl
     if (provider === 'gaorui') return modelCredentials.value.gaoruiHub.baseUrl
-    return modelCredentials.value.vectorEngineHub.baseUrl
+    return ''
   }
 
   function assignProviderApiKey(provider: PlatformKey, value: string) {
@@ -473,9 +452,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     }
     if (provider === 'gaorui') {
       modelCredentials.value.gaoruiHub.apiKey = value
-      return
     }
-    modelCredentials.value.vectorEngineHub.apiKey = value
   }
 
   function assignProviderHost(provider: PlatformKey, value: string) {
@@ -495,9 +472,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     if (provider === 'gaorui') {
       modelCredentials.value.gaoruiHub.baseUrl = value
       modelCredentials.value.gaoruiHub.videoProvider = 'gaorui'
-      return
     }
-    modelCredentials.value.vectorEngineHub.baseUrl = value
   }
 
   function normalizeIncomingCredentials(next: any): ModelCredentialsView {
@@ -510,7 +485,6 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
       videoProviderPrimary: normalizedVideoProviderPrimary ?? defaults.videoProviderPrimary,
       imageProviderPrimary: normalizedImageProviderPrimary ?? defaults.imageProviderPrimary,
       ai666Hub: createHubDefaults(next?.ai666Hub),
-      vectorEngineHub: createHubDefaults(next?.vectorEngineHub),
       xibapiHub: createHubDefaults({
         ...next?.xibapiHub,
         videoProvider: next?.xibapiHub?.videoProvider || 'xibapi',
@@ -550,6 +524,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
     settingsMessage.value = ''
     try {
       const payload = JSON.parse(JSON.stringify(modelCredentials.value)) as ModelCredentialsView & Record<string, any>
+      delete payload.vectorEngineHub
       payload.videoProviderFallback = payload.videoProviderPrimary
       payload.videoModelFallback = payload.videoModelPrimary
       payload.apifoxHubProfile =
@@ -559,7 +534,7 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
             ? 'xibapi'
             : payload.videoApifoxHubProfile === 'gaorui'
               ? 'gaorui'
-            : 'vectorengine'
+              : 'ai666'
       payload.apifoxHub =
         payload.apifoxHubProfile === 'ai666'
           ? { ...payload.ai666Hub }
@@ -567,15 +542,12 @@ export function useModelSettings(options: { t: (key: string, values?: Record<str
             ? { ...payload.xibapiHub, videoProvider: 'xibapi' }
             : payload.apifoxHubProfile === 'gaorui'
               ? { ...payload.gaoruiHub, videoProvider: 'gaorui' }
-            : { ...payload.vectorEngineHub }
+              : { ...payload.ai666Hub }
       if (payload.videoApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
-      if (payload.videoApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
       if (payload.videoApifoxHubProfile === 'xibapi') payload.xibapiHub.enabled = true
       if (payload.videoApifoxHubProfile === 'gaorui') payload.gaoruiHub.enabled = true
       if (payload.imageApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
-      if (payload.imageApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
       if (payload.chatApifoxHubProfile === 'ai666') payload.ai666Hub.enabled = true
-      if (payload.chatApifoxHubProfile === 'vectorengine') payload.vectorEngineHub.enabled = true
       await window.api.clone.setModelCredentials(payload as Parameters<typeof window.api.clone.setModelCredentials>[0])
       const confirmed = await window.api.clone.getModelCredentials() as Partial<ModelCredentialsView>
       modelCredentials.value = normalizeIncomingCredentials(confirmed)

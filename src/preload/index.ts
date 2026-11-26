@@ -688,7 +688,6 @@ const api = {
         imageApifoxHubProfile?: ImagePlatformProfile
         chatApifoxHubProfile?: ChatPlatformProfile
         ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
-        vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         gaoruiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
@@ -729,7 +728,6 @@ const api = {
       imageApifoxHubProfile?: ImagePlatformProfile
       chatApifoxHubProfile?: ChatPlatformProfile
       ai666Hub?: import('../main/modules/clone/types').ApifoxHubCredentials
-      vectorEngineHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       xibapiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       gaoruiHub?: import('../main/modules/clone/types').ApifoxHubCredentials
       apifoxHub?: import('../main/modules/clone/types').ApifoxHubCredentials
@@ -1277,6 +1275,8 @@ const api = {
     listSummaries: (payload?: { page?: number; pageSize?: number; filter?: 'all' | 'failed' | 'running' | 'paused' | 'success_not_exported' | 'success_exported' | 'success_not_subtitled' }) => ipcRenderer.invoke('plugin:livePhoto:listSummaries', payload),
     get: (id: string) => ipcRenderer.invoke('plugin:livePhoto:get', id),
     getSettings: () => ipcRenderer.invoke('plugin:livePhoto:getSettings'),
+    /** 图生视频可选模型（后台打开 + 平台有 Key）和默认模型 */
+    listVideoModels: () => ipcRenderer.invoke('plugin:livePhoto:listVideoModels'),
     saveSettings: (payload: {
       referenceMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
       cloneMotionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
@@ -1293,19 +1293,19 @@ const api = {
     updatePromptVersion: (payload: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:updatePromptVersion', payload),
     activatePromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:activatePromptVersion', payload),
     rollbackPromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:rollbackPromptVersion', payload),
-    enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:enqueueReference', payload),
     startReference: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:startReference', payload),
-    enqueueClone: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    enqueueClone: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:enqueueClone', payload),
     startClone: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:startClone', payload),
-    createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromReference', payload),
-    createFromStyleReference: (payload: { styleReferenceId: string; productIds: string[] }) =>
+    createFromStyleReference: (payload: { styleReferenceId: string; productIds: string[]; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromStyleReference', payload),
-    createFromCloneShots: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    createFromCloneShots: (payload: { cloneProjectId: string; shotIds: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromCloneShots', payload),
     applySubtitleVideoToItem: (payload: { id: string; subtitleVideoPath: string; subtitleCoverImagePath?: string }) =>
       ipcRenderer.invoke('plugin:livePhoto:applySubtitleVideoToItem', payload),
@@ -1378,6 +1378,10 @@ const api = {
       motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'
       replacementRegion?: { x: number; y: number; width: number; height: number }
       retryMode?: 'auto' | 'manual_once'
+      videoModelId?: string
+      videoDurationSec?: number
+      videoResolution?: string
+      videoZoomPercent?: number
     }) =>
       ipcRenderer.invoke('plugin:livePhoto:retry', payload),
     exportItems: (payload: {

@@ -204,7 +204,6 @@ async function createGrsVideoTaskUnmetered(input: {
   const body = {
     model: String(input.model || input.credentials.grsaiVideoModel || '').trim() || 'veo3.1-fast',
     prompt: input.prompt,
-    negativePrompt: String(input.negativePrompt || '').trim() || undefined,
     firstFrameUrl: input.firstFrameUrl,
     lastFrameUrl: input.lastFrameUrl || '',
     urls: [],

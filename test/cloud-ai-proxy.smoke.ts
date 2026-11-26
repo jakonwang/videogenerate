@@ -49,7 +49,7 @@ const upstream = http.createServer((req, res) => {
     }
     const parsed = body && String(req.headers['content-type'] || '').includes('json') ? JSON.parse(body) : {}
     const p = url.pathname
-    // VectorEngine 风格
+    // AI666 风格
     if (req.method === 'POST' && p === '/ve/v1/video/generations') {
       if (parsed.model === 'hard-fail') return json(500, { error: { message: 'channel down' } })
       if (parsed.model === 'soft-fail') return json(200, { code: 500, msg: 'prompt rejected' })
@@ -135,11 +135,11 @@ async function main() {
   await owner.admin.saveBillingDefaults({ points: { video: 10, image: 2 }, refundPerDay: 50 })
   const managed = createDefaultManagedSettings()
   managed.enabled = true
-  managed.platforms.vectorengine = { apiKey: 'sk-REAL-VE-KEY', baseUrl: `${up}/ve` }
+  managed.platforms.ai666 = { apiKey: 'sk-REAL-VE-KEY', baseUrl: `${up}/ve` }
   managed.platforms.grsai = { apiKey: 'sk-REAL-GRS-KEY', baseUrl: `${up}/grs` }
   managed.tikhubApiKey = 'REAL-TIKHUB-KEY'
-  managed.capabilities.video = { platform: 'vectorengine', model: 'veo3.1-fast' }
-  managed.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
+  managed.capabilities.video = { platform: 'ai666', model: 'veo3.1-fast' }
+  managed.capabilities.image = { platform: 'ai666', model: 'gpt-image-1', quality: 'high' }
   managed.qiniu = { accessKey: 'REAL-AK', secretKey: 'REAL-SK', bucket: 'bkt', domain: 'cdn.example.com', uploadHost: `${up}/qiniu-upload`, prefix: 'vg' }
   app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: managed, scope: 'private', description: '', updatedBy: null, now: Date.now() })
 
@@ -173,19 +173,19 @@ async function main() {
   const post = (platform: string, path: string, body: unknown, auth?: string) => proxy(platform, path, { method: 'POST', body: JSON.stringify(body) }, auth)
 
   // ---- 令牌鉴权
-  assert.equal((await post('vectorengine', '/v1/video/generations', { model: 'veo3.1-fast' }, 'sk-whatever')).status, 401)
+  assert.equal((await post('ai666', '/v1/video/generations', { model: 'veo3.1-fast' }, 'sk-whatever')).status, 401)
   const forged = token.split('.')
   forged[1] = Buffer.from(JSON.stringify({ v: 1, sub: 'u_x', sh: 'x', mid: 'machine-1', exp: Date.now() + 1e9 })).toString('base64url')
-  assert.equal((await post('vectorengine', '/v1/video/generations', { model: 'veo3.1-fast' }, forged.join('.'))).status, 401)
+  assert.equal((await post('ai666', '/v1/video/generations', { model: 'veo3.1-fast' }, forged.join('.'))).status, 401)
   assert.equal((await post('xibapi', '/v1/videos', { model: 'x' })).status, 403, '后台没配 Key 的平台')
   assert.equal((await post('unknown', '/v1/videos', {})).status, 404)
-  assert.equal((await proxy('vectorengine', '/v1/..%2f..%2fadmin')).status, 400)
+  assert.equal((await proxy('ai666', '/v1/..%2f..%2fadmin')).status, 400)
   assert.equal(seen.length, 0, '鉴权失败的请求不会到平台')
   assert.equal(await balance(), 100)
   console.log('  ✓ 代理令牌：随便填 / 伪造 / 未配置平台 / 越界路径都被拒，不碰平台不扣点')
 
   // ---- 视频：提交扣点，平台只看到后台 Key
-  let res = await post('vectorengine', '/v1/video/generations', { model: 'veo3.1-fast', prompt: 'cat' })
+  let res = await post('ai666', '/v1/video/generations', { model: 'veo3.1-fast', prompt: 'cat' })
   assert.equal(res.status, 200)
   const t1 = (await res.json()).id as string
   assert.equal(seen.at(-1)!.auth, 'Bearer sk-REAL-VE-KEY')
@@ -193,7 +193,7 @@ async function main() {
   assert.equal(await balance(), 90)
   // 查询进度不扣点；成功 → 确认
   taskStatus.set(t1, 'completed')
-  res = await proxy('vectorengine', `/v1/video/generations/${t1}`)
+  res = await proxy('ai666', `/v1/video/generations/${t1}`)
   assert.equal((await res.json()).status, 'completed')
   assert.equal(await balance(), 90)
   let holds = (await desk.client.credits()).ledger.items
@@ -203,35 +203,35 @@ async function main() {
   console.log('  ✓ 视频提交在云端扣点，平台只看到后台 Key，查询进度免费，成功后确认')
 
   // 平台直接报错 / 2xx 但说失败 → 立即退点
-  assert.equal((await post('vectorengine', '/v1/video/generations', { model: 'hard-fail' })).status, 500)
+  assert.equal((await post('ai666', '/v1/video/generations', { model: 'hard-fail' })).status, 500)
   assert.equal(await balance(), 90)
-  assert.equal((await post('vectorengine', '/v1/video/generations', { model: 'soft-fail' })).status, 200)
+  assert.equal((await post('ai666', '/v1/video/generations', { model: 'soft-fail' })).status, 200)
   assert.equal(await balance(), 90)
   console.log('  ✓ 平台报错（HTTP 失败或返回体里说失败）立即退点')
 
   // 异步任务后来失败 → 查询时退点；拿别的失败任务号来骗退点无效
-  const t2 = (await (await post('vectorengine', '/v1/video/generations', { model: 'veo3.1-fast' })).json()).id as string
+  const t2 = (await (await post('ai666', '/v1/video/generations', { model: 'veo3.1-fast' })).json()).id as string
   assert.equal(await balance(), 80)
   // 伪造：路径查一个不存在（平台说 failed）的任务，参数里塞上 t2
-  await proxy('vectorengine', `/v1/video/generations/ghost-task?ref=${t2}`)
+  await proxy('ai666', `/v1/video/generations/ghost-task?ref=${t2}`)
   assert.equal(await balance(), 80, '响应里没有 t2，不退点')
   taskStatus.set(t2, 'failed')
-  await proxy('vectorengine', `/v1/video/generations/${t2}`)
+  await proxy('ai666', `/v1/video/generations/${t2}`)
   assert.equal(await balance(), 90, '任务失败退点')
   hold = app.db.prepare('SELECT status FROM usage_holds WHERE id = (SELECT hold_id FROM ai_proxy_tasks WHERE task_id = ?)').get(t2) as any
   assert.equal(hold.status, 'released')
   console.log('  ✓ 异步任务失败时查询进度自动退点，拿别的任务号骗退点无效')
 
   // ---- 图片：同步返回结果直接确认
-  res = await post('vectorengine', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x' })
+  res = await post('ai666', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x' })
   assert.equal(res.status, 200)
   assert.equal(await balance(), 88)
   // 对话：普通模型免费，图片模型扣点；流式原样转发
-  await (await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', messages: [] })).json()
+  await (await post('ai666', '/v1/chat/completions', { model: 'gpt-4o-mini', messages: [] })).json()
   assert.equal(await balance(), 88)
-  await (await post('vectorengine', '/v1/chat/completions', { model: 'gemini-2.5-flash-image', messages: [] })).json()
+  await (await post('ai666', '/v1/chat/completions', { model: 'gemini-2.5-flash-image', messages: [] })).json()
   assert.equal(await balance(), 86)
-  res = await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', stream: true, messages: [] })
+  res = await post('ai666', '/v1/chat/completions', { model: 'gpt-4o-mini', stream: true, messages: [] })
   assert.match(String(res.headers.get('content-type')), /event-stream/)
   const streamed = await res.text()
   assert.ok(streamed.includes('"你"') && streamed.includes('"好"') && streamed.includes('[DONE]'))
@@ -241,18 +241,18 @@ async function main() {
   // ---- 绕过扣点的尝试：去掉 / 改掉 Content-Type、模型写在查询串、多个模型字段打架、对话不写模型
   const imageBody = JSON.stringify({ model: 'gemini-2.5-flash-image', messages: [] })
   for (const contentType of ['text/plain', 'application/x-www-form-urlencoded', '']) {
-    res = await proxy('vectorengine', '/v1/chat/completions', { method: 'POST', body: imageBody, headers: { 'Content-Type': contentType } })
+    res = await proxy('ai666', '/v1/chat/completions', { method: 'POST', body: imageBody, headers: { 'Content-Type': contentType } })
     await res.text()
   }
   assert.equal(await balance(), 80, '改 Content-Type 照样按图片模型扣点（3 次 × 2 点）')
-  res = await post('vectorengine', '/v1/chat/completions?model=gemini-2.5-flash-image', { messages: [] })
+  res = await post('ai666', '/v1/chat/completions?model=gemini-2.5-flash-image', { messages: [] })
   await res.text()
   assert.equal(await balance(), 78, '模型写在查询串里也扣点')
   const beforeConflict = seen.length
-  res = await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', model_name: 'gemini-2.5-flash-image', messages: [] })
+  res = await post('ai666', '/v1/chat/completions', { model: 'gpt-4o-mini', model_name: 'gemini-2.5-flash-image', messages: [] })
   assert.equal(res.status, 400)
   assert.match((await res.json()).error.message, /多个模型/)
-  res = await post('vectorengine', '/v1/chat/completions', { messages: [] })
+  res = await post('ai666', '/v1/chat/completions', { messages: [] })
   assert.equal(res.status, 403, '对话不写模型：看不出是不是生成，拒绝')
   await res.text()
   assert.equal(seen.length, beforeConflict, '被拒的请求不会到平台')
@@ -262,7 +262,7 @@ async function main() {
 
   // ---- 未知 / 敏感接口
   const before = seen.length
-  res = await post('vectorengine', '/v1/some/new/generate', { model: 'x' })
+  res = await post('ai666', '/v1/some/new/generate', { model: 'x' })
   assert.equal(res.status, 403)
   assert.match((await res.json()).error.message, /暂不支持/)
   assert.equal((await post('grsai', '/client/grsai/getCredits', {})).status, 403)
@@ -288,7 +288,7 @@ async function main() {
   // ---- 点数不足：代理直接拒绝，不碰平台
   app.db.prepare('UPDATE users SET credits = 3 WHERE account = ?').run('alice@example.com')
   const n = seen.length
-  res = await post('vectorengine', '/v1/video/generations', { model: 'veo3.1-fast' })
+  res = await post('ai666', '/v1/video/generations', { model: 'veo3.1-fast' })
   assert.equal(res.status, 402)
   assert.match((await res.json()).error.message, /点数不足/)
   assert.equal(seen.length, n)
@@ -330,10 +330,10 @@ async function main() {
   assert.equal((await fetch(tikUrl, { headers: { Authorization: `Bearer ${creds.tikhubApiKey}` } })).status, 429)
   await owner.admin.adjustCredits((await desk.client.me()).user.id, 50, '份数')
   const beforeMulti = await balance()
-  const multiRes = await post('vectorengine', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x', n: 3 })
+  const multiRes = await post('ai666', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x', n: 3 })
   assert.equal(multiRes.status, 200)
   assert.equal(beforeMulti - (await balance()), 6, 'n=3 costs three images')
-  assert.equal((await post('vectorengine', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x', n: 99 })).status, 400)
+  assert.equal((await post('ai666', '/v1/images/generations', { model: 'gpt-image-1', prompt: 'x', n: 99 })).status, 400)
   console.log('  ✓ TikHub / 对话每天有上限，一次多份按份扣点')
 
   console.log('  ✓ TikHub 走云端代理，不扣点，Key 只在服务器')
@@ -343,7 +343,7 @@ async function main() {
   const engineSession = app.service.issueEngineSession(aliceId)
   const engineToken = app.service.issueEngineProxyToken(aliceId, engineSession)
   const balanceBeforeEngine = await balance()
-  res = await proxy('vectorengine', '/v1/images/generations', { method: 'POST', body: JSON.stringify({ model: 'gpt-image-1', prompt: 'x' }), headers: { 'x-vg-client': 'web' } }, engineToken)
+  res = await proxy('ai666', '/v1/images/generations', { method: 'POST', body: JSON.stringify({ model: 'gpt-image-1', prompt: 'x' }), headers: { 'x-vg-client': 'web' } }, engineToken)
   assert.equal(res.status, 200)
   await res.text()
   assert.equal(seen.at(-1)!.auth, 'Bearer sk-REAL-VE-KEY', '平台看到的是后台 Key，引擎只有代理令牌')
@@ -353,19 +353,19 @@ async function main() {
   const engineGrant = app.service.engineQiniuUploadGrant(aliceId, { fileName: 'a.png', keyPrefix: 'grsai-input/images' })
   assert.match(engineGrant.key, /^vg\/grsai-input\/images\//, '引擎不用设备也能拿七牛单次凭证')
   app.service.revokeSessionToken(engineSession)
-  res = await proxy('vectorengine', '/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'gpt-4o-mini', messages: [] }) }, engineToken)
+  res = await proxy('ai666', '/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'gpt-4o-mini', messages: [] }) }, engineToken)
   assert.equal(res.status, 401, '子进程退出（会话撤销）后引擎令牌失效')
   await res.text()
   console.log('  ✓ 服务器复刻引擎走代理：不绑设备、只扣一次点、会话撤销即失效')
 
   // ---- 退出登录 / 解绑后令牌立即失效
   await desk.client.logout()
-  res = await post('vectorengine', '/v1/chat/completions', { model: 'gpt-4o-mini', messages: [] })
+  res = await post('ai666', '/v1/chat/completions', { model: 'gpt-4o-mini', messages: [] })
   assert.equal(res.status, 401)
   console.log('  ✓ 退出登录后代理令牌立即失效')
 
   // ---- 路径分类表
-  const c = (method: string, path: string, model = '', platform: any = 'vectorengine') => classifyProxyRequest({ platform, method, path, model })
+  const c = (method: string, path: string, model = '', platform: any = 'ai666') => classifyProxyRequest({ platform, method, path, model })
   assert.deepEqual(c('POST', '/vidu/ent/v2/img2video'), { kind: 'charge', capability: 'video', track: true })
   assert.deepEqual(c('POST', '/api/v1/model/generateVideo'), { kind: 'charge', capability: 'video', track: true })
   assert.deepEqual(c('POST', '/model/generateVideo'), { kind: 'charge', capability: 'video', track: true })

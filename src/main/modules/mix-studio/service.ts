@@ -181,7 +181,7 @@ export const mixStudioService = {
     let winnerRefs = 0
     if (input.mode === 'ai') {
       const target = resolveVisionTarget(await cloneService.getModelCredentials().catch(() => null))
-      if (!target) throw new Error('AI 混剪需要先在设置里配置对话模型（VectorEngine 或 GRS.AI），或改用自动混剪')
+      if (!target) throw new Error('AI 混剪需要先在设置里配置对话模型（GRS.AI 或 AI666），或改用自动混剪')
       scriptModel = target.model
       const styles = winner?.hookStyle ? drafts.map(() => winner.hookStyle!) : pickHookStyles(drafts.length, useLearned ? learned!.hookStyle : null)
       const winners = useLearned ? await mixLedger.winners(input.productId, 3) : []

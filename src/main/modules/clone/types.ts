@@ -1324,10 +1324,13 @@ export type ModelCredentials = {
   imageApifoxHubProfile?: ImagePlatformProfile
   chatApifoxHubProfile?: ChatPlatformProfile
   ai666Hub?: ApifoxHubCredentials
-  vectorEngineHub?: ApifoxHubCredentials
   xibapiHub?: ApifoxHubCredentials
   gaoruiHub?: ApifoxHubCredentials
   apifoxHub?: ApifoxHubCredentials
+  /** 图生视频模型开关（清单 id → 开 / 关），由后台下发；没有 = 用清单默认值。见 src/shared/videoModels.ts */
+  videoModelSwitches?: Record<string, boolean>
+  /** 图生视频默认模型（清单 id） */
+  videoDefaultModelId?: string
 }
 
 export type ApifoxChatProvider = 'openai' | 'anthropic' | 'gemini'

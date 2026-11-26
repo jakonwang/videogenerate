@@ -2,7 +2,7 @@ import type { ApifoxHubCredentials, ModelCredentials } from './types'
 import { normalizeIncomingPlatformProfile, type CapabilityKey } from '../../../shared/platformSettings'
 
 export type ApifoxCapability = CapabilityKey
-export type ApifoxProfile = 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
+export type ApifoxProfile = 'ai666' | 'xibapi' | 'gaorui'
 
 export function resolveApifoxHubProfile(credentials: ModelCredentials | undefined, capability: ApifoxCapability): ApifoxProfile {
   const profile =
@@ -11,7 +11,7 @@ export function resolveApifoxHubProfile(credentials: ModelCredentials | undefine
       : capability === 'image'
         ? credentials?.imageApifoxHubProfile
         : credentials?.chatApifoxHubProfile
-  return normalizeIncomingPlatformProfile(capability, profile ?? credentials?.apifoxHubProfile, 'vectorengine') as ApifoxProfile
+  return normalizeIncomingPlatformProfile(capability, profile ?? credentials?.apifoxHubProfile, 'ai666') as ApifoxProfile
 }
 
 export function resolveApifoxHubCredentials(
@@ -28,7 +28,7 @@ export function resolveApifoxHubCredentials(
         ? credentials.xibapiHub
         : profile === 'gaorui'
           ? credentials.gaoruiHub
-        : credentials.vectorEngineHub
+          : credentials.ai666Hub
   if (!scoped) return shared
   if (!shared) return scoped
   return {

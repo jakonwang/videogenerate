@@ -2,7 +2,7 @@ import { cleanAiText, extractModelMessageContent } from './aiResponse'
 import { resolveApifoxHubCredentials } from './apifoxProfile'
 import type { ModelCredentials } from './types'
 
-const VECTOR_ENGINE_LABEL = 'VectorEngine'
+const HUB_LABEL = '对话平台'
 
 function baseUrl(credentials: ModelCredentials) {
   return String(resolveApifoxHubCredentials(credentials, 'chat')?.baseUrl || '').trim().replace(/\/+$/, '')
@@ -11,7 +11,7 @@ function baseUrl(credentials: ModelCredentials) {
 function apiKey(credentials: ModelCredentials) {
   const cfg = resolveApifoxHubCredentials(credentials, 'chat')
   const key = String(cfg?.apiKey || '').trim()
-  if (!cfg?.enabled || !key) throw new Error(`Missing ${VECTOR_ENGINE_LABEL} chat model or API Key`)
+  if (!cfg?.enabled || !key) throw new Error(`Missing ${HUB_LABEL} chat model or API Key`)
   return key
 }
 
@@ -204,7 +204,7 @@ export async function generateChatCompletion(input: {
 }) {
   const images = (input.images ?? []).filter((item) => item && item.base64 && item.mimeType)
   // 后台「脚本分析 / 对话」选了 GRS.AI：走 GRS 和后台设的模型（例如 gpt-5.6-sol）。
-  // 以前这里只认 VectorEngine，AI 制片人等功能会无视后台设置去调 gemini-3.1-pro。
+  // 以前这里只认 AI 平台（hub），AI 制片人等功能会无视后台设置去调 gemini-3.1-pro。
   if (input.credentials.chatProviderPrimary === 'grsai' && String(input.credentials.grsaiApiKey || '').trim()) {
     return generateGrsChatCompletion({ ...input, images })
   }
@@ -296,7 +296,7 @@ export async function generateChatCompletion(input: {
     for (let attempt = 0; ; attempt += 1) {
       const controller = timeoutMs ? new AbortController() : undefined
       const timer = controller
-        ? setTimeout(() => controller.abort(new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
+        ? setTimeout(() => controller.abort(new Error(`${HUB_LABEL} chat request timed out after ${timeoutMs}ms`)), timeoutMs)
         : undefined
       try {
         res = await fetch(url, {
@@ -308,7 +308,7 @@ export async function generateChatCompletion(input: {
         text = await res.text()
       } catch (error) {
         if (controller?.signal.aborted) {
-          throw new Error(`${VECTOR_ENGINE_LABEL} chat request timed out after ${timeoutMs}ms`)
+          throw new Error(`${HUB_LABEL} chat request timed out after ${timeoutMs}ms`)
         }
         throw error
       } finally {
@@ -328,7 +328,7 @@ export async function generateChatCompletion(input: {
       if (isUpstreamBusy(res.status, text)) {
         throw new Error(`AI 服务现在太忙（模型 ${model}，HTTP ${res.status}），已自动重试 ${busyRetryDelaysMs.length} 次仍未成功，请过一两分钟再试。上游说明：${upstreamErrorMessage(text)}`)
       }
-      throw new Error(`${VECTOR_ENGINE_LABEL} AI 请求失败（模型 ${model}，HTTP ${res.status}）：${upstreamErrorMessage(text)}`)
+      throw new Error(`${HUB_LABEL} AI 请求失败（模型 ${model}，HTTP ${res.status}）：${upstreamErrorMessage(text)}`)
     }
 
     return {
@@ -342,5 +342,5 @@ export async function generateChatCompletion(input: {
     }
   }
 
-  throw new Error(`${VECTOR_ENGINE_LABEL} AI 请求失败（HTTP ${lastFailureStatus || 503}）：${upstreamErrorMessage(lastFailureText || 'all fallback chat models unavailable')}`)
+  throw new Error(`${HUB_LABEL} AI 请求失败（HTTP ${lastFailureStatus || 503}）：${upstreamErrorMessage(lastFailureText || 'all fallback chat models unavailable')}`)
 }

@@ -8,6 +8,7 @@ import PQueue from 'p-queue'
 import { getFfmpegExecutable } from '../../lib/binariesPath'
 import { getAppPaths } from '../../lib/paths'
 import { cloneRepo } from './repo'
+import { getCapabilityPlatformLabel } from '../../../shared/platformSettings'
 import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import { analyzeReferenceVideo } from './analyzer'
 import { analyzeProductStructureWithGrs, analyzeReferenceScriptWithGrs, applyScriptAnalysisToShots } from './aiScriptAnalyzer'
@@ -1936,9 +1937,9 @@ function videoProviderLabel(credentials: ModelCredentials) {
   if (p === 'apifox_hub') {
     const profile = resolveApifoxHubProfile(credentials, 'video')
     if (profile === 'ai666') return 'AI666'
-    if (profile === 'xibapi') return 'XIBAPI'
-    if (profile === 'gaorui') return 'GaoruiAPI'
-    return 'VectorEngine'
+    if (profile === 'xibapi') return '小扳手'
+    if (profile === 'gaorui') return '高瑞'
+    return 'AI666'
   }
   return 'Seedance'
 }
@@ -2680,8 +2681,8 @@ function imageProviderLabel(credentials: ModelCredentials) {
   const p = imageProviderName(credentials)
   if (p === 'kling') return 'AtlasCloud 图片'
   if (p === 'grsai') return 'GRS.AI 图片'
-  if (p === 'apifox_hub') return `${resolveApifoxHubProfile(credentials, 'image') === 'ai666' ? 'AI666' : 'VectorEngine'} 图片`
-  return 'VectorEngine 图片'
+  if (p === 'apifox_hub') return `${getCapabilityPlatformLabel(resolveApifoxHubProfile(credentials, 'image'))} 图片`
+  return '图片平台'
 }
 
 function imageProviderModel(credentials: ModelCredentials) {
@@ -3259,7 +3260,7 @@ function assertImageProviderKey(credentials: ModelCredentials, action: string) {
   }
   if (String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim()) return
   if (String(credentials.openaiApiKey ?? '').trim()) return
-  throw new Error(`未配置 VectorEngine API Key，无法${action}。当前图片供应商解析为 ${p}。`)
+  throw new Error(`未配置图片平台的 API Key，无法${action}。当前图片供应商解析为 ${p}。`)
 }
 
 function isLocalMockTestMode(credentials: ModelCredentials) {
@@ -3297,7 +3298,7 @@ function assertAnalysisBoardImageProviderReady(credentials: ModelCredentials) {
     throw new Error('当前图片供应商为 GRS.AI，但未配置 GRS.AI API Key，无法生成商品分析画板。')
   }
   if (provider === 'apifox_hub' && !String(resolveApifoxHubCredentials(credentials, 'image')?.apiKey ?? '').trim()) {
-    throw new Error('当前图片供应商为 VectorEngine/AI666，但未配置图片 API Key，无法生成商品分析画板。')
+    throw new Error('当前图片供应商为中转平台，但未配置图片 API Key，无法生成商品分析画板。')
   }
   if (provider === 'openai' && !String(credentials.openaiApiKey ?? '').trim()) {
     throw new Error('当前图片供应商为 OpenAI，但未配置 OpenAI API Key，无法生成商品分析画板。')
@@ -7297,10 +7298,10 @@ function isMissingRemoteVideoTask(input: { errorMessage?: string; raw?: any }) {
 }
 
 function ai666PollingTimeoutMessage() {
-  return '本地等待超时，但 VectorEngine 云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
+  return '本地等待超时，但云端视频任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。'
 }
 
-function videoPollingTimeoutMessage(providerName = 'VectorEngine') {
+function videoPollingTimeoutMessage(providerName = '视频平台') {
   return `本地等待超时，但 ${providerName} 云端任务可能仍在生成或已完成，可继续查询，不会重新扣费生成。`
 }
 
@@ -7918,7 +7919,7 @@ async function pollExistingSegmentTask(input: {
         const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
         await mkdir(outDir, { recursive: true })
         const outPath = join(outDir, 'generated_clip.mp4')
-        await downloadAtlasToFile(lastTask.outputUrls[0], outPath, 'VectorEngine 继续查询下载')
+        await downloadAtlasToFile(lastTask.outputUrls[0], outPath, '视频继续查询下载')
         const saved = await saveSegmentDone({
           project: latestProject,
           shot: latestShot,
@@ -7936,7 +7937,7 @@ async function pollExistingSegmentTask(input: {
         return { project: saved, task: lastTask, synced: true, status: 'done' as const }
       }
       if (lastTask.status === 'failed' || isCloudTerminalFailure(lastTask.raw?.status ?? lastTask.raw?.data?.status)) {
-        const reason = lastTask.errorMessage || `VectorEngine 视频任务失败: ${taskId}`
+        const reason = lastTask.errorMessage || `视频任务失败: ${taskId}`
         const missingRemoteTask = isMissingRemoteVideoTask(lastTask)
         const classifiedReason = `[${missingRemoteTask ? 'missing_task' : 'remote_failed'}] ${reason}`
         replaceProjectShot(latestProject, latestShot.id, {
@@ -8141,7 +8142,7 @@ async function downloadCompletedSegmentTask(input: {
     const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
     await mkdir(outDir, { recursive: true })
     const outPath = join(outDir, 'generated_clip.mp4')
-    await downloadAtlasToFile(videoUrl, outPath, 'VectorEngine 下载收尾')
+    await downloadAtlasToFile(videoUrl, outPath, '视频下载收尾')
     const saved = await saveSegmentDone({
       project: latestProject,
       shot: latestShot,
@@ -8413,7 +8414,7 @@ async function forceRecoverSingleShotVideoResult(input: {
     const outDir = join(getAppPaths().dataDir, 'viral-clone', latestProject.id, 'shots', latestShot.id)
     await mkdir(outDir, { recursive: true })
     const outPath = join(outDir, 'generated_clip.mp4')
-    await downloadAtlasToFile(task.outputUrls[0], outPath, 'VectorEngine 单镜头强制回写下载')
+    await downloadAtlasToFile(task.outputUrls[0], outPath, '单镜头强制回写下载')
     const saved = await saveSegmentDone({
       project: latestProject,
       shot: latestShot,
@@ -8432,7 +8433,7 @@ async function forceRecoverSingleShotVideoResult(input: {
   }
 
   if (task.status === 'failed' || isCloudTerminalFailure(task.raw?.status ?? task.raw?.data?.status)) {
-    const reason = `[remote_failed] ${task.errorMessage || `VectorEngine 视频任务失败: ${taskId}`}`
+    const reason = `[remote_failed] ${task.errorMessage || `视频任务失败: ${taskId}`}`
     syncSegmentVideoOutput(latestProject, latestShot, {
       status: 'failed_terminal',
       taskId,

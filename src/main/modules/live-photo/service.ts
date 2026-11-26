@@ -24,6 +24,8 @@ import { toPublicUrlViaQiniu } from '../clone/qiniu'
 import { resolveApifoxHubCredentials } from '../clone/apifoxProfile'
 import { generateImage as generateApifoxImage } from '../clone/unifiedImage'
 import { Ai666TaskTimeoutError, createVideoTask, queryAsyncTask, syncRemoteTaskResult } from '../clone/unifiedVideo'
+import { createTiktokZoomedLastFrame } from '../tiktok-creative-studio/imageAspect'
+import { CATALOG_VIDEO_PROVIDER, listAvailableCatalogVideoModels, pickCatalogVideoModel, queryCatalogVideoTask, submitCatalogVideoTask } from '../clone/catalogVideo'
 import { extractJsonObjectText, extractModelMessageContent } from '../clone/aiResponse'
 import { canUseMockGeneration } from '../clone/mockPolicy'
 import { generateThumbnailJpg } from '../media/thumbnail'
@@ -659,6 +661,13 @@ function getLivePhotoExportSourcePath(item: LivePhotoItem) {
   const subtitleSourcePath = subtitleOutputPath || overlaySubtitleOutputPath
   if (subtitleSourcePath) {
     return existsSync(subtitleSourcePath) ? subtitleSourcePath : ''
+  }
+  // 复刻分镜：视频就是复刻里的原片，导出原片；livePhotoVideoPath 是重新编码、补了黑边的版本
+  if (item.sourceType === 'clone_shot') {
+    const original = [String(item.cloneShotSnapshot?.videoPath || '').trim(), String(item.originalMotionVideoPath || '').trim()].find(
+      (candidate) => candidate && existsSync(candidate),
+    )
+    if (original) return original
   }
   return (
     [
@@ -1386,6 +1395,101 @@ async function generateAiMotionVideoFromStill(input: {
   return generated.outputFilePath
 }
 
+/**
+ * 任务用哪个图生视频模型：选了就校验（被后台关掉 / 平台没 Key 会直接报错），
+ * 没选就用后台默认模型；都没有 = 沿用设置里的视频接口（旧逻辑）。
+ */
+function resolveLivePhotoVideoChoice(
+  credentials: ModelCredentials,
+  input: { videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number },
+) {
+  const requested = String(input.videoModelId || '').trim()
+  const spec = requested
+    ? pickCatalogVideoModel(credentials, requested)
+    : credentials.videoDefaultModelId
+      ? pickCatalogVideoModelSafe(credentials, credentials.videoDefaultModelId)
+      : undefined
+  const duration = Number(input.videoDurationSec)
+  const resolution = String(input.videoResolution || '').trim()
+  return {
+    videoModelId: spec?.id,
+    videoDurationSec: spec && Number.isFinite(duration) && duration > 0 ? Math.round(duration) : undefined,
+    videoResolution: spec && spec.resolutions.includes(resolution) ? resolution : undefined,
+    videoZoomPercent: spec?.lastFrame ? normalizeLivePhotoZoomPercent(input.videoZoomPercent) : undefined,
+  }
+}
+
+/** 尾帧放大比例：0（只传首帧）或 10–80；没传按 tk创意室默认 20 */
+const LIVE_PHOTO_ZOOM_OPTIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80]
+function normalizeLivePhotoZoomPercent(value: unknown) {
+  if (value === undefined || value === null || value === '') return 20
+  const numeric = Number(value)
+  return LIVE_PHOTO_ZOOM_OPTIONS.includes(numeric) ? numeric : 20
+}
+
+/**
+ * 图生视频的尾帧（参考 tk创意室）：
+ * - 用了同款模板：把模板结尾帧换上商品，模型在两张真实画面之间过渡；换失败就退回放大首帧；
+ * - 没用模板：把首帧放大 videoZoomPercent% 当尾帧，做出镜头推近；0 = 只传首帧。
+ */
+async function resolveLivePhotoClosingFrame(input: { item: LivePhotoItem; stillPath: string }): Promise<string | undefined> {
+  const cached = String(input.item.videoLastFramePath || '').trim()
+  if (cached && existsSync(cached)) return cached
+  const zoomPercent = normalizeLivePhotoZoomPercent(input.item.videoZoomPercent)
+  const outputDir = join(livePhotoRoot(input.item.id), 'last-frame')
+  let closingPath = ''
+  const template = input.item.styleReference?.id ? await styleReferenceService.get(input.item.styleReference.id).catch(() => undefined) : undefined
+  const templateClosing = String((template as { lastFramePath?: string } | undefined)?.lastFramePath || '').trim()
+  if (templateClosing && existsSync(templateClosing) && input.item.productId) {
+    try {
+      const settings = await livePhotoRepo.getSettings()
+      let state: ExternalReferenceImagePreparationState | undefined
+      const deadline = Date.now() + 15 * 60 * 1000
+      while (Date.now() < deadline) {
+        const prepared = await prepareReferenceImageForExternalWorkflow({
+          workflowId: `${input.item.id}-last`,
+          referenceImagePath: templateClosing,
+          productId: input.item.productId,
+          outputRoot: outputDir,
+          state,
+          promptVersion: livePhotoPromptVersionService.getActive('image'),
+          qualityCheckerEnabled: settings.qualityCheckerEnabled,
+        })
+        state = prepared.state
+        if (prepared.failed) throw new Error(prepared.error || '模板结尾帧换商品失败')
+        if (!prepared.pending && prepared.preparedImagePath) {
+          closingPath = prepared.preparedImagePath
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10_000))
+      }
+      if (!closingPath) throw new Error('模板结尾帧换商品超时')
+    } catch (error: any) {
+      const latest = await livePhotoRepo.get(input.item.id)
+      if (latest) await livePhotoRepo.upsert(appendLivePhotoLogs(latest, [buildLivePhotoLog(`模板结尾帧换商品失败，改用放大首帧当尾帧：${String(error?.message || error)}`, 'error')]))
+    }
+  }
+  if (!closingPath) {
+    // 模板换失败时也要有尾帧：选了「只传首帧」就按默认 20% 推近
+    const zoom = templateClosing ? zoomPercent || 20 : zoomPercent
+    if (!zoom) return undefined
+    closingPath = (await createTiktokZoomedLastFrame(input.stillPath, outputDir, zoom)).path
+  }
+  // 调用方之后会拿手里这个任务对象整体保存，所以对象本身也要带上，不然会被覆盖
+  input.item.videoLastFramePath = closingPath
+  const latest = await livePhotoRepo.get(input.item.id)
+  if (latest) await livePhotoRepo.upsert({ ...latest, videoLastFramePath: closingPath, updatedAt: now() })
+  return closingPath
+}
+
+function pickCatalogVideoModelSafe(credentials: ModelCredentials, id: string) {
+  try {
+    return pickCatalogVideoModel(credentials, id)
+  } catch {
+    return undefined
+  }
+}
+
 async function pollLivePhotoVideoTask(input: {
   item: LivePhotoItem
   credentials: ModelCredentials
@@ -1393,6 +1497,15 @@ async function pollLivePhotoVideoTask(input: {
 }) {
   const taskId = String(input.item.videoTaskId || '').trim()
   if (!taskId) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
+  if (String(input.item.videoTaskProvider || '').trim() === CATALOG_VIDEO_PROVIDER) {
+    const snapshot = await queryCatalogVideoTask({ credentials: input.credentials, modelId: String(input.item.videoTaskModel || ''), taskId })
+    if (snapshot.status === 'failed') throw new Error(snapshot.error || `视频任务失败：${taskId}`)
+    if (snapshot.status !== 'succeeded' || !snapshot.url) return { synced: false as const, outputPath: undefined, raw: snapshot }
+    await ensureDir(input.outputDir)
+    const outputPath = join(input.outputDir, `live_photo_${Date.now()}_${randomUUID()}.mp4`)
+    await downloadUrlToFile({ url: snapshot.url, filePath: outputPath })
+    return { synced: true as const, outputPath, raw: snapshot }
+  }
   if (String(input.item.videoTaskProvider || '').trim() === 'grsai') {
     const snapshot = await queryGrsTask(input.credentials, taskId)
     if (snapshot.status === 'failed' || snapshot.status === 'error' || snapshot.status === 'cancelled' || snapshot.status === 'canceled') {
@@ -3151,6 +3264,35 @@ async function submitLivePhotoVideoTask(input: {
     template: input.template,
     startFramePath: input.stillPath,
   })
+  // 选了清单里的模型：按模型自己的平台和请求格式提交
+  const catalogSpec = input.item.videoModelId ? pickCatalogVideoModel(credentials, input.item.videoModelId) : undefined
+  if (catalogSpec) {
+    await recordLivePhotoVideoPromptSent({ item: input.item, shot, stillPath: input.stillPath, provider: CATALOG_VIDEO_PROVIDER, model: catalogSpec.id })
+    const firstFrameUrl = await toPublicUrlViaQiniu(credentials, input.stillPath, 'cloud-video-input/live-photo-first-frame')
+    const lastFramePath = catalogSpec.lastFrame ? await resolveLivePhotoClosingFrame({ item: input.item, stillPath: input.stillPath }) : undefined
+    const lastFrameUrl = lastFramePath ? await toPublicUrlViaQiniu(credentials, lastFramePath, 'cloud-video-input/live-photo-last-frame') : undefined
+    const created = await submitCatalogVideoTask({
+      credentials,
+      spec: catalogSpec,
+      params: {
+        prompt: shot.prompt?.positive || shot.compiledPrompt || '',
+        firstFrameUrl,
+        lastFrameUrl,
+        durationSec: input.item.videoDurationSec,
+        resolution: input.item.videoResolution,
+        aspectRatio: '9:16',
+      },
+    })
+    if (created.snapshot.status === 'succeeded' && created.snapshot.url) {
+      const outputDir = join(livePhotoRoot(input.item.id), 'generated-video')
+      await ensureDir(outputDir)
+      const outputPath = join(outputDir, `live_photo_video_${Date.now()}_${randomUUID()}.mp4`)
+      await downloadUrlToFile({ url: created.snapshot.url, filePath: outputPath })
+      return { mode: 'direct' as const, outputPath, provider: CATALOG_VIDEO_PROVIDER, model: catalogSpec.id }
+    }
+    if (!created.taskId) throw new Error(`${catalogSpec.label} 没有返回任务 id，无法查询结果`)
+    return { mode: 'remote' as const, taskId: created.taskId, provider: CATALOG_VIDEO_PROVIDER, model: catalogSpec.id }
+  }
   const chain = livePhotoVideoProviderChain(credentials)
   const provider = chain[0]
   const providerModel = resolveLivePhotoVideoModel(credentials, provider)
@@ -4656,6 +4798,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
   const referenceImagePaths = template ? [template.firstFramePath] : normalizeLivePhotoScenePaths(input)
   const product = await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
+  const videoChoice = resolveLivePhotoVideoChoice(credentials, input)
   // 这里存的是「替换商品图」用的图片提示词；视频提示词在提交视频时才用
   const promptVersion = livePhotoPromptVersionService.getActive('image')
   ensureLivePhotoStrictImageEditProvider(credentials)
@@ -4678,6 +4821,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
       productSnapshot: product,
       referenceImagePath,
       styleReference,
+      ...videoChoice,
       packagingStatus: 'processing',
       promptPreview: buildReferencePromptPreview({ product, referenceImagePath }),
       imagePromptPreview: imagePromptPreview,
@@ -4937,6 +5081,7 @@ async function createCloneProcessingItems(input: CreateCloneShotLivePhotosInput)
   const project = await cloneRepo.getProject(String(input.cloneProjectId || '').trim())
   if (!project) throw new Error('Clone project does not exist')
   const credentials = await cloneRepo.getCredentials()
+  const videoChoice = resolveLivePhotoVideoChoice(credentials, input)
   const shotIds = Array.isArray(input.shotIds) ? input.shotIds.map((item) => String(item || '').trim()).filter(Boolean) : []
   if (!shotIds.length) throw new Error('Shot ids are required')
   const motionTemplate = input.motionTemplate || 'ambient_sway'
@@ -4953,6 +5098,7 @@ async function createCloneProcessingItems(input: CreateCloneShotLivePhotosInput)
       sourceShotLabel: snapshot.shotLabel,
       cloneShotSnapshot: snapshot,
       referenceImagePath: snapshot.imagePath,
+      ...videoChoice,
       packagingStatus: 'processing',
       videoPromptPreview: buildVideoRequestPreview({
         item: {
@@ -5207,6 +5353,11 @@ export const livePhotoService = {
     return { ok: true as const, queued: items.length }
   },
 
+  /** 图生视频可选模型：后台打开了、平台有 Key 的；页面用它做模型下拉 */
+  async listVideoModels() {
+    return listAvailableCatalogVideoModels(await cloneRepo.getCredentials())
+  },
+
   async createFromReference(input: CreateReferenceLivePhotoInput) {
     const queued = await createReferenceProcessingItems(input)
     startReferenceCompletionBatch(queued)
@@ -5214,12 +5365,21 @@ export const livePhotoService = {
   },
 
   /** 同款批量：one item per product, all copying the same reference clip. */
-  async createFromStyleReference(input: { styleReferenceId: string; productIds: string[] }) {
+  async createFromStyleReference(input: { styleReferenceId: string; productIds: string[]; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) {
     const productIds = Array.from(new Set((Array.isArray(input.productIds) ? input.productIds : []).map((id) => String(id || '').trim()).filter(Boolean)))
     if (!productIds.length) throw new Error('请至少选择一个商品')
     const batches = []
     for (const productId of productIds) {
-      batches.push(await createReferenceProcessingItems({ productId, styleReferenceId: input.styleReferenceId }))
+      batches.push(
+        await createReferenceProcessingItems({
+          productId,
+          styleReferenceId: input.styleReferenceId,
+          videoModelId: input.videoModelId,
+          videoDurationSec: input.videoDurationSec,
+          videoResolution: input.videoResolution,
+          videoZoomPercent: input.videoZoomPercent,
+        }),
+      )
     }
     batches.forEach((queued) => startReferenceCompletionBatch(queued))
     return { count: batches.length, ids: batches.flatMap((queued) => queued.created.map((item) => item.id)) }
@@ -5457,6 +5617,32 @@ export const livePhotoService = {
     if (!id) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
     const existing = await livePhotoRepo.get(id)
     if (!existing) throw new Error('Please generate or assign a structured product reference before creating a Live Photo task.')
+    // 重试时换了模型 / 时长：记下新选择，丢掉旧的视频任务，视频这一步重新提交
+    if (input.videoModelId !== undefined || input.videoDurationSec !== undefined || input.videoResolution !== undefined || input.videoZoomPercent !== undefined) {
+      const choice = resolveLivePhotoVideoChoice(await cloneRepo.getCredentials(), {
+        videoModelId: input.videoModelId ?? existing.videoModelId,
+        videoDurationSec: input.videoDurationSec ?? existing.videoDurationSec,
+        videoResolution: input.videoResolution ?? existing.videoResolution,
+        videoZoomPercent: input.videoZoomPercent ?? existing.videoZoomPercent,
+      })
+      const changed =
+        choice.videoModelId !== existing.videoModelId ||
+        choice.videoDurationSec !== existing.videoDurationSec ||
+        choice.videoResolution !== existing.videoResolution ||
+        choice.videoZoomPercent !== existing.videoZoomPercent
+      if (changed) {
+        Object.assign(existing, choice, {
+          videoLastFramePath: choice.videoZoomPercent !== existing.videoZoomPercent ? undefined : existing.videoLastFramePath,
+          videoTaskId: undefined,
+          videoTaskProvider: undefined,
+          videoTaskModel: undefined,
+          videoTaskBaseUrl: undefined,
+          videoTaskEndpointStyle: undefined,
+          updatedAt: now(),
+        })
+        await livePhotoRepo.upsert(existing)
+      }
+    }
     const imageRetryMode = input.retryMode === 'manual_once' ? 'manual_once' : 'auto'
     const existingAutoFlowStatus = ensureAutoFlowStatus(existing)
     const manualReplacementRegion = input.replacementRegion
@@ -5489,8 +5675,13 @@ export const livePhotoService = {
       String(existing.promptHash || '').trim() &&
         String(existing.promptHash || '').trim() !== activePromptVersion.promptHash,
     )
+    // 视频那步失败、但首帧图已经不在（比如任务文件被清理）：没法只重做视频，
+    // 以前这里直接报错，任务就再也救不回来了；现在从生成图片那步重做，并记一笔日志
     if (existingAutoFlowStatus.failedStage === 'video' && (!preservedStillPath || !existsSync(preservedStillPath))) {
-      throw new Error('The validated still image is missing; regenerate the image before retrying video.')
+      existing.logs = [
+        ...(Array.isArray(existing.logs) ? existing.logs : []),
+        buildLivePhotoLog('[live-photo] 首帧图已不在，重试改为从生成图片开始重做', 'error'),
+      ].slice(-200)
     }
     const canRetryFromVideoStage = videoStageCandidate && !promptChanged
     const credentials = await cloneRepo.getCredentials()

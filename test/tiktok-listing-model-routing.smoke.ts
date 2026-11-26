@@ -23,10 +23,10 @@ function buildBaseCredentials(): ModelCredentials {
     imageProviderPrimary: 'apifox_hub',
     klingImageModel: 'openai/gpt-image-1/edit',
     grsaiImageModel: 'gpt-image-2',
-    apifoxHubProfile: 'vectorengine',
-    videoApifoxHubProfile: 'vectorengine',
-    imageApifoxHubProfile: 'vectorengine',
-    chatApifoxHubProfile: 'vectorengine',
+    apifoxHubProfile: 'ai666',
+    videoApifoxHubProfile: 'ai666',
+    imageApifoxHubProfile: 'ai666',
+    chatApifoxHubProfile: 'ai666',
     ai666Hub: {
       enabled: true,
       baseUrl: 'https://ai666.example.com',
@@ -37,26 +37,6 @@ function buildBaseCredentials(): ModelCredentials {
       imageProvider: 'openai',
       imageModel: 'ai666-image',
       imageEditModel: 'ai666-image-edit',
-      imageEndpointStyle: 'openai_images',
-      videoProvider: 'veo',
-      textToVideoModel: 'veo_3_1-lite',
-      imageToVideoModel: 'veo_3_1-lite',
-      startEndVideoModel: 'veo_3_1-lite',
-      referenceVideoModel: 'veo_3_1-lite',
-      videoEndpointStyle: 'official_rest',
-      defaultPollIntervalMs: 2000,
-      defaultTimeoutMs: 600000,
-    },
-    vectorEngineHub: {
-      enabled: true,
-      baseUrl: 'https://vector.example.com',
-      apiKey: 'vector-key',
-      chatProvider: 'openai',
-      chatModel: 'vector-chat',
-      chatEndpointStyle: 'openai_chat',
-      imageProvider: 'openai',
-      imageModel: 'vector-image',
-      imageEditModel: 'vector-image-edit',
       imageEndpointStyle: 'openai_images',
       videoProvider: 'veo',
       textToVideoModel: 'veo_3_1-lite',
@@ -94,10 +74,10 @@ async function main() {
   const apifoxCreds = buildBaseCredentials()
   const apifoxRouting = resolveTiktokListingGenerationConfig(apifoxCreds)
   assert.equal(apifoxRouting.image.provider, 'apifox_hub')
-  assert.equal(apifoxRouting.image.profile, 'vectorengine')
-  assert.equal(apifoxRouting.image.model, 'vector-image-edit')
+  assert.equal(apifoxRouting.image.profile, 'ai666')
+  assert.equal(apifoxRouting.image.model, 'ai666-image-edit')
   assert.equal(apifoxRouting.chat.provider, 'apifox_hub')
-  assert.equal(apifoxRouting.chat.model, 'vector-chat')
+  assert.equal(apifoxRouting.chat.model, 'ai666-chat')
 
   const grsCreds = {
     ...buildBaseCredentials(),

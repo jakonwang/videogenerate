@@ -779,7 +779,6 @@ export async function handleWebApiRequest(req: http.IncomingMessage, res: http.S
         chatApifoxHubProfile: normalizedProfiles.chatApifoxHubProfile,
         apifoxHub: parseApifoxHubInput(body.apifoxHub),
         ai666Hub: parseApifoxHubInput(body.ai666Hub),
-        vectorEngineHub: parseApifoxHubInput(body.vectorEngineHub),
         xibapiHub: parseApifoxHubInput(body.xibapiHub),
         gaoruiHub: parseApifoxHubInput(body.gaoruiHub),
       })

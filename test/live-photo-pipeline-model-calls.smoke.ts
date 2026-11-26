@@ -135,7 +135,7 @@ async function main() {
     const { classifyProxyRequest } = await import('../services/cloud/src/aiProxy')
     assert.deepEqual(classifyProxyRequest({ platform: 'grsai', method: 'POST', path: '/v1/draw/completions', model: 'gpt-image-2' }), { kind: 'charge', capability: 'image', track: true })
     assert.deepEqual(classifyProxyRequest({ platform: 'grsai', method: 'POST', path: '/v1/draw/result', model: '' }), { kind: 'free' })
-    assert.deepEqual(classifyProxyRequest({ platform: 'grsai', method: 'POST', path: '/v1/chat/completions', model: 'gpt-5.6-sol' }), { kind: 'free' })
+    assert.deepEqual(classifyProxyRequest({ platform: 'grsai', method: 'POST', path: '/v1/chat/completions', model: 'gpt-5.6-sol' }), { kind: 'free', metered: 'chat' })
     assert.deepEqual(classifyProxyRequest({ platform: 'grsai', method: 'POST', path: '/v1/video/veo', model: 'veo3.1-fast' }), { kind: 'charge', capability: 'video', track: true })
 
     // —— 同一张参考图再建一个任务：定位结果复用，不再调用对话模型

@@ -67,7 +67,8 @@ async function main() {
       canonicalSourceStatus: 'done',
     } as any)
 
-    await productImageMaterialsRepoModule.productImageMaterialsRepo.upsertMaterial({
+    // 入库时图片会复制进软件自己的素材目录；页面选素材时传的是复制后的路径
+    const material = await productImageMaterialsRepoModule.productImageMaterialsRepo.upsertMaterial({
       id: 'mat-live-photo-used',
       userId: 'desktop-local',
       batchId: 'batch-live-photo-used',
@@ -85,7 +86,7 @@ async function main() {
     })
 
     const queued = await livePhotoService.enqueueReferenceItems({
-      referenceImagePath: referenceImage,
+      referenceImagePath: material.localImagePath,
       productId: product.id,
       motionTemplate: 'push_in',
     })

@@ -94,11 +94,11 @@ async function main() {
     // not configured
     await expectError(alice.ai.createJob({ kind: 'image', prompt: 'scene', imageFileIds: [photo.fileId] }), 503)
 
-    // ---- image via VectorEngine (OpenAI images edit with the product photo as reference)
+    // ---- image via AI666 (OpenAI images edit with the product photo as reference)
     saveSettings((s) => {
-      s.platforms.vectorengine = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
-      s.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
-      s.capabilities.video = { platform: 'vectorengine', model: 'veo_3_1-fast' }
+      s.platforms.ai666 = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
+      s.capabilities.image = { platform: 'ai666', model: 'gpt-image-1', quality: 'high' }
+      s.capabilities.video = { platform: 'ai666', model: 'veo_3_1-fast' }
     })
     const created = (await alice.ai.createJob({ kind: 'image', prompt: '白色大理石台面上的耳环', imageFileIds: [photo.fileId], purpose: 'product-image' })).job
     assert.ok(['queued', 'running'].includes(created.status))
@@ -106,7 +106,7 @@ async function main() {
     assert.equal(job.status, 'succeeded', job.error)
     assert.equal(job.outputMime, 'image/png')
     assert.equal(seen.image.capability, 'image_edit')
-    assert.equal(seen.image.platform, 'vectorengine')
+    assert.equal(seen.image.platform, 'ai666')
     assert.deepEqual(seen.image.refs[0], PNG, 'reference written to disk for the provider')
     const output = Buffer.from(await (await alice.sync.downloadFile(job.outputFileId!)).arrayBuffer())
     assert.ok(output.toString().endsWith('generated'), 'result stored in the account files')

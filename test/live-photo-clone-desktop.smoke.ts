@@ -6,10 +6,12 @@ import { execFileSync } from 'node:child_process'
 import { _electron as electron } from 'playwright'
 import ffmpegPath from 'ffmpeg-static'
 
-async function waitFor(condition: () => boolean | Promise<boolean>, timeoutMs: number, intervalMs = 250) {
+/** 等到条件成立，返回条件的值（调用方会用它拿到等到的任务对象） */
+async function waitFor<T>(condition: () => T | Promise<T>, timeoutMs: number, intervalMs = 250): Promise<NonNullable<T>> {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
-    if (await condition()) return true
+    const value = await condition()
+    if (value) return value as NonNullable<T>
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
   }
   throw new Error(`Timed out after ${timeoutMs}ms`)

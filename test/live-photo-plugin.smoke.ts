@@ -478,7 +478,13 @@ async function main() {
     assert.equal(generatedStillCalls[0]?.outputSize, '1024x1024')
     assert.equal(generatedStillCalls[0]?.imagePaths.length, 2)
     assert.ok(generatedVideoCalls.length >= 1)
-    assert.deepEqual(referenceItem.videoPromptPreview?.referenceImagePaths || [], [String(referenceItem.generatedStillPath || '')])
+    // 详情显示实际发给视频模型的那张首帧（发送时的路径）；之后成片整理会把同一张图另存为 still.png
+    const sentStillPaths = referenceItem.videoPromptPreview?.referenceImagePaths || []
+    assert.equal(sentStillPaths.length, 1)
+    assert.ok(
+      sentStillPaths[0] === String(referenceItem.generatedStillPath || '') || /generated-still[\\/]/.test(sentStillPaths[0]),
+      `video preview should reference the locked still, got ${sentStillPaths[0]}`,
+    )
     assert.match(generatedVideoCalls[0]?.prompt || '', /You are a product-motion video system for a locked still image/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /Create a realistic 6-second product close-up clip with extremely subtle motion/i)
     assert.match(generatedVideoCalls[0]?.prompt || '', /STRUCTURE LOCK:/i)
@@ -977,18 +983,10 @@ async function main() {
     const inlineEscalationItem = await waitForItemCompleted(inlineEscalationQueued.id)
     assert.equal(inlineEscalationItem.packagingStatus, 'completed')
     const inlineEscalationCalls = generatedStillCalls.slice(inlineEscalationStartIndex)
-    assert.equal(inlineEscalationCalls.length, 2)
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    assert.equal(inlineEscalationCalls.length, 1)
     assert.equal(inlineEscalationCalls[0]?.outputSize, '1024x1024')
-    assert.equal(inlineEscalationCalls[1]?.outputSize, '1024x1024')
     assert.match(inlineEscalationCalls[0]?.prompt || '', /erase-first replacement/i)
-    assert.match(inlineEscalationCalls[1]?.prompt || '', /This is a local anchor replacement/i)
-    const inlineEscalationLogText = Array.isArray(inlineEscalationItem.logs)
-      ? inlineEscalationItem.logs.map((log: any) => String(log?.message || '')).join('\n')
-      : ''
-    assert.match(
-      inlineEscalationLogText,
-      /(image validation requested inline anchor-closeup escalation|image validation passed after inline escalation|marked retryable failure: retry 1\/2)/i,
-    )
 
     const resumable = await livePhotoService.createFromReference({
       referenceImagePath: refImage,
@@ -1430,28 +1428,11 @@ async function main() {
     const validationRetryCompleted = await waitForItemCompleted(validationRetryReference.id, 30000)
     assert.equal(validationRetryCompleted.packagingStatus, 'completed')
     assert.equal(validationRetryCompleted.autoFlowStatus?.status, 'done')
-    assert.equal(validationRetryStillCallCount, 2)
-    assert.equal(validationRetryAnalysisCount, 2)
-    assert.equal(validationRetryStrictReviewCount, 2)
-    assert.equal(validationRetryVisualReviewCount, 2)
-    const validationRetryCalls = generatedStillCalls.slice(validationRetryStartIndex)
-    assert.ok(validationRetryCalls.length >= 2)
-    const validationRetryLogText = Array.isArray(validationRetryCompleted.logs)
-      ? validationRetryCompleted.logs.map((log: any) => String(log?.message || '')).join('\n')
-      : ''
-    for (const marker of [
-      '[validation_category:original_product_retained]',
-      '[validation_category:wrong_product_identity]',
-      '[validation_category:source_contamination]',
-      '[validation_category:material_color_drift]',
-      '[validation_category:attachment_drift]',
-      '[validation_category:oversized_product]',
-      '[validation_category:missing_structure]',
-      '[validation_category:geometry_drift]',
-      '[image_validation_failed]',
-    ]) {
-      assert.match(validationRetryLogText, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-    }
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    assert.equal(validationRetryStillCallCount, 1)
+    assert.equal(validationRetryStrictReviewCount, 0)
+    assert.equal(validationRetryVisualReviewCount, 0)
+    assert.equal(generatedStillCalls.slice(validationRetryStartIndex).length, 1)
     let noAnalysisVisualReviewCount = 0
     let noAnalysisStillCallCount = 0
     livePhotoService.setTestDependencies({
@@ -1518,8 +1499,9 @@ async function main() {
     })
     const noAnalysisCompleted = await waitForItemCompleted(noAnalysisQueued.id, 30000)
     assert.equal(noAnalysisCompleted.packagingStatus, 'completed')
-    assert.equal(noAnalysisStillCallCount, 2)
-    assert.equal(noAnalysisVisualReviewCount, 2)
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    assert.equal(noAnalysisStillCallCount, 1)
+    assert.equal(noAnalysisVisualReviewCount, 0)
 
     let missingChecksStillCallCount = 0
     let missingChecksVisualReviewCount = 0
@@ -1584,14 +1566,9 @@ async function main() {
     })
     const missingChecksCompleted = await waitForItemCompleted(missingChecksQueued.id, 30000)
     assert.equal(missingChecksCompleted.packagingStatus, 'completed')
-    assert.equal(missingChecksStillCallCount, 2)
-    assert.equal(missingChecksVisualReviewCount, 2)
-    assert.ok(
-      Array.isArray(missingChecksCompleted.logs) &&
-        missingChecksCompleted.logs.some((log: any) =>
-          String(log?.message || '').includes('visual_check_missing:scale'),
-        ),
-    )
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    assert.equal(missingChecksStillCallCount, 1)
+    assert.equal(missingChecksVisualReviewCount, 0)
 
     let multiRetryStillCallCount = 0
     const multiRetryPrompts: string[] = []
@@ -1661,14 +1638,9 @@ async function main() {
     })
     const multiRetryCompleted = await waitForItemCompleted(multiRetryReference.id, 30000)
     assert.equal(multiRetryCompleted.packagingStatus, 'completed')
-    assert.ok(multiRetryStillCallCount >= 2)
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    assert.equal(multiRetryStillCallCount, 1)
     assert.ok(multiRetryPrompts.every((prompt) => prompt.startsWith(EXPECTED_IMAGE_REPLACEMENT_PROMPT)))
-    assert.ok(multiRetryPrompts.slice(1).some((prompt) => /RETRY CORRECTION RULES:/i.test(prompt)))
-    const multiRetryLogText = Array.isArray(multiRetryCompleted.logs)
-      ? multiRetryCompleted.logs.map((log: any) => String(log?.message || '')).join('\n')
-      : ''
-    assert.match(multiRetryLogText, /\[image_validation_failed\]/i)
-    assert.match(multiRetryLogText, /(image validation requested inline anchor-closeup escalation|marked retryable failure: retry 1\/2)/i)
 
     await livePhotoService.resetTestDependencies()
 
@@ -1731,18 +1703,11 @@ async function main() {
       productId: product.id,
       motionTemplate: 'push_in',
     })
-    const reviewOverloadPending = await waitForItemCondition(
-      reviewOverloadReference.id,
-      (item) => String(item?.error || '').includes('[remote_pending]'),
-      12000,
-    )
-    assert.equal(reviewOverloadPending?.packagingStatus, 'processing')
-    assert.equal(reviewOverloadPending?.autoFlowStatus?.retryCount, 0)
-    assert.ok(reviewOverloadStillCallCount >= 1)
-    const reviewOverloadLogText = Array.isArray(reviewOverloadPending?.logs)
-      ? reviewOverloadPending.logs.map((log: any) => String(log?.message || '')).join('\n')
-      : ''
-    assert.match(reviewOverloadLogText, /\[review_unavailable\].*\[remote_pending\]/i)
+    // 商品图质检在 v5.0.125 已关闭（validateGeneratedStillWithPipeline 一律判通过），不再因质检不过而重生成
+    // 质检服务过载也就不会影响出片：直接完成
+    const reviewOverloadCompleted = await waitForItemCompleted(reviewOverloadReference.id, 30000)
+    assert.equal(reviewOverloadCompleted.packagingStatus, 'completed')
+    assert.equal(reviewOverloadStillCallCount, 1)
     await livePhotoService.remove(reviewOverloadReference.id)
 
     await livePhotoService.resetTestDependencies()

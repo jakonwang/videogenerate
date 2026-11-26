@@ -66,8 +66,8 @@ async function main() {
     await client.mockPay((await client.createOrder({ planCode: plans.plans[0].code, channel: 'mock' })).order.orderNo)
     const settings = createDefaultManagedSettings()
     settings.enabled = true
-    settings.platforms.vectorengine = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
-    settings.capabilities.chat = { platform: 'vectorengine', model: 'gpt-4.1-mini' }
+    settings.platforms.ai666 = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
+    settings.capabilities.chat = { platform: 'ai666', model: 'gpt-4.1-mini' }
     settings.tikhubApiKey = 'tk-test'
     app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: settings, scope: 'private', description: '', updatedBy: null, now: Date.now() })
 

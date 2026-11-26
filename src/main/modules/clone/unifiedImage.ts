@@ -3,16 +3,17 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { downloadAtlasToBuffer, pickAtlasOutputUrl } from './atlasRetry'
+import { getCapabilityPlatformLabel } from '../../../shared/platformSettings'
 import { resolveApifoxHubCredentials, resolveApifoxHubProfile } from './apifoxProfile'
 import { toPublicUrlViaQiniu } from './qiniu'
 import type { ModelCredentials, UnifiedCapability } from './types'
 import { withUsageCharge } from './usageMeter'
 
 function providerLabel(credentials: ModelCredentials) {
-  return resolveApifoxHubProfile(credentials, 'image') === 'ai666' ? 'AI666' : 'VectorEngine'
+  return getCapabilityPlatformLabel(resolveApifoxHubProfile(credentials, 'image'))
 }
 
-const VECTOR_ENGINE_LABEL = 'VectorEngine'
+const HUB_LABEL = '图片平台'
 
 function baseUrl(credentials: ModelCredentials) {
   return String(resolveApifoxHubCredentials(credentials, 'image')?.baseUrl || '').trim().replace(/\/+$/, '')
@@ -25,7 +26,7 @@ function officialRestBaseUrl(root: string) {
 function apiKey(credentials: ModelCredentials) {
   const cfg = resolveApifoxHubCredentials(credentials, 'image')
   const key = String(cfg?.apiKey || '').trim()
-  if (!cfg?.enabled || !key) throw new Error(`未启用 ${VECTOR_ENGINE_LABEL} 图片能力或缺少 API Key`)
+  if (!cfg?.enabled || !key) throw new Error(`未启用 ${HUB_LABEL} 图片能力或缺少 API Key`)
   return key
 }
 
@@ -108,7 +109,7 @@ async function ensurePublicRefs(credentials: ModelCredentials, paths: string[] |
         : await toPublicUrlViaQiniu(
             credentials,
             ref,
-            resolveApifoxHubProfile(credentials, 'image') === 'ai666' ? 'ai666-input/images' : 'vectorengine-input/images',
+            `${resolveApifoxHubProfile(credentials, 'image')}-input/images`,
           ),
     )
   }
@@ -125,7 +126,7 @@ async function buildImageEditFormData(input: {
   size?: string
 }) {
   const refs = (input.imagePaths ?? []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
-  if (!refs.length) throw new Error(`${VECTOR_ENGINE_LABEL} 图片编辑缺少参考图`)
+  if (!refs.length) throw new Error(`${HUB_LABEL} 图片编辑缺少参考图`)
   const form = new FormData()
   form.set('model', input.model)
   form.set('prompt', input.prompt)
@@ -148,7 +149,7 @@ async function buildImageEditFormData(input: {
         timeoutMs: 90_000,
         retries: 2,
       })
-      if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 参考图下载失败 HTTP ${res.status}: ${ref}`)
+      if (!res.ok) throw new Error(`${HUB_LABEL} 参考图下载失败 HTTP ${res.status}: ${ref}`)
       const arrayBuffer = await res.arrayBuffer()
       const contentType = String(res.headers.get('content-type') || '').trim() || mimeByPath(ref)
       form.append('image', new Blob([arrayBuffer], { type: contentType }), fileName)
@@ -172,7 +173,7 @@ async function fetchTaskJson(url: string, key: string) {
   } catch {
     json = { raw: text }
   }
-  if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 图片任务查询失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  if (!res.ok) throw new Error(`${HUB_LABEL} 图片任务查询失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
   return json
 }
 
@@ -186,7 +187,7 @@ function normalizeTaskStatus(raw: any) {
 async function saveOutputImage(input: { outUrl: string; outDir: string; filePrefix: string }) {
   await mkdir(input.outDir, { recursive: true })
   const filePath = join(input.outDir, `${input.filePrefix}_${Date.now()}_${randomUUID()}.png`)
-  await writeFile(filePath, await downloadAtlasToBuffer(input.outUrl, `${VECTOR_ENGINE_LABEL} 图片下载`))
+  await writeFile(filePath, await downloadAtlasToBuffer(input.outUrl, `${HUB_LABEL} 图片下载`))
   return filePath
 }
 
@@ -270,7 +271,7 @@ async function generateImageUnmetered(input: {
     } catch {
       json = { raw: text }
     }
-    if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+    if (!res.ok) throw new Error(`${HUB_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
     const taskId = String(json?.result ?? json?.id ?? json?.task_id ?? '').trim()
     if (!taskId) throw new Error(`Midjourney 任务创建成功但缺少 task id: ${text.slice(0, 400)}`)
     const started = Date.now()
@@ -300,9 +301,9 @@ async function generateImageUnmetered(input: {
   }
 
   if (cfg.imageEndpointStyle === 'openai_images' && input.capability === 'image_edit') {
-    if (!refs.length) throw new Error(`${VECTOR_ENGINE_LABEL} 图片编辑缺少参考图，已阻止退化为 JSON 请求。`)
+    if (!refs.length) throw new Error(`${HUB_LABEL} 图片编辑缺少参考图，已阻止退化为 JSON 请求。`)
     const url = `${root}/v1/images/edits`
-    console.log('[clone-debug] vectorengine-image-edit-request', {
+    console.log('[clone-debug] hub-image-edit-request', {
       url,
       endpointStyle: cfg.imageEndpointStyle,
       model,
@@ -320,7 +321,7 @@ async function generateImageUnmetered(input: {
     })
     const res = await fetchWithRetry({
       url,
-      label: 'vectorengine-image-edit',
+      label: 'hub-image-edit',
       timeoutMs: input.editTimeoutMs ?? 120_000,
       retryOnTimeout: input.editTimeoutMs === undefined,
       retries: 2,
@@ -341,14 +342,14 @@ async function generateImageUnmetered(input: {
     } catch {
       json = { raw: text }
     }
-    if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+    if (!res.ok) throw new Error(`${HUB_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
     const outUrl = pickAtlasOutputUrl(json) || json?.data?.[0]?.url || json?.imageUrl
     const outBase64 = pickBase64Output(json)
     const taskId = String(json?.data?.id ?? json?.id ?? json?.task_id ?? json?.taskId ?? '').trim()
     if (!outUrl && taskId) {
-      throw new Error(`${VECTOR_ENGINE_LABEL} 图片任务返回了 taskId 但没有可下载链接: ${text.slice(0, 400)}`)
+      throw new Error(`${HUB_LABEL} 图片任务返回了 taskId 但没有可下载链接: ${text.slice(0, 400)}`)
     }
-    if (!outUrl && !outBase64) throw new Error(`${VECTOR_ENGINE_LABEL} 图片结果为空: ${text.slice(0, 400)}`)
+    if (!outUrl && !outBase64) throw new Error(`${HUB_LABEL} 图片结果为空: ${text.slice(0, 400)}`)
     return {
       provider: 'apifox_hub',
       model,
@@ -409,14 +410,14 @@ async function generateImageUnmetered(input: {
   } catch {
     json = { raw: text }
   }
-  if (!res.ok) throw new Error(`${VECTOR_ENGINE_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
+  if (!res.ok) throw new Error(`${HUB_LABEL} 图片请求失败 HTTP ${res.status}: ${text.slice(0, 500)}`)
 
   let outUrl = pickAtlasOutputUrl(json) || json?.data?.[0]?.url || json?.imageUrl
   let outBase64 = pickBase64Output(json)
   const taskId = String(json?.data?.id ?? json?.id ?? json?.task_id ?? json?.taskId ?? '').trim()
 
   if (!outUrl && !outBase64 && cfg.imageEndpointStyle === 'official_rest') {
-    if (!taskId) throw new Error(`${VECTOR_ENGINE_LABEL} 图片任务缺少 task id: ${text.slice(0, 400)}`)
+    if (!taskId) throw new Error(`${HUB_LABEL} 图片任务缺少 task id: ${text.slice(0, 400)}`)
     const started = Date.now()
     const pollMs = cfg.defaultPollIntervalMs || 2000
     const timeoutMs = cfg.defaultTimeoutMs || 600000
@@ -432,13 +433,13 @@ async function generateImageUnmetered(input: {
         break
       }
       if (status === 'failed') {
-        throw new Error(String(taskJson?.data?.error ?? taskJson?.error ?? taskJson?.message ?? `${VECTOR_ENGINE_LABEL} 图片生成失败`))
+        throw new Error(String(taskJson?.data?.error ?? taskJson?.error ?? taskJson?.message ?? `${HUB_LABEL} 图片生成失败`))
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs))
     }
   }
 
-  if (!outUrl && !outBase64) throw new Error(`${VECTOR_ENGINE_LABEL} 图片结果为空: ${text.slice(0, 400)}`)
+  if (!outUrl && !outBase64) throw new Error(`${HUB_LABEL} 图片结果为空: ${text.slice(0, 400)}`)
   return {
     provider: 'apifox_hub',
     model,

@@ -384,7 +384,7 @@ async function main() {
 
     // 后台再次保存时密钥仍是掩码 → 不能被覆盖成掩码
     const masked = saved.json.settings
-    masked.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'medium' }
+    masked.capabilities.image = { platform: 'grsai', model: 'gpt-image-1', quality: 'medium' }
     await call('PUT', '/api/v1/admin/software-settings', { token: adminToken, body: { settings: masked } })
 
     // 通用配置接口不能读写软件设置
@@ -421,14 +421,15 @@ async function main() {
     assert.equal(applied.videoApifoxHubProfile, 'ai666')
     assert.equal(applied.ai666Hub?.apiKey, client.json.proxyToken)
     assert.equal(applied.ai666Hub?.baseUrl, 'https://cloud.example.com/api/v1/ai-proxy/ai666')
-    assert.equal(applied.vectorEngineHub?.apiKey, '', '后台没配 Key 的平台不给令牌')
+    assert.equal(applied.xibapiHub?.apiKey, '', '后台没配 Key 的平台不给令牌')
+    assert.equal((applied as any).vectorEngineHub, undefined, '已删除的平台不再下发')
     assert.equal(applied.tikhubApiKey, client.json.proxyToken)
     assert.equal(applied.qiniuAccessKey, '')
     assert.equal(applied.ai666Hub?.enabled, true)
     assert.equal(applied.ai666Hub?.startEndVideoModel, 'veo3-fast')
     assert.equal(applied.ai666Hub?.chatModel, 'keep-me')
-    assert.equal(applied.imageApifoxHubProfile, 'vectorengine')
-    assert.equal(applied.vectorEngineHub?.imageModel, 'gpt-image-1')
+    assert.equal(applied.imageProviderPrimary, 'grsai')
+    assert.equal(applied.grsaiImageModel, 'gpt-image-1')
     assert.equal(applied.openaiImageQuality, 'medium')
     assert.equal(applied.qiniuBucket, 'b1')
     assert.equal(applied.someLocalField, 'x')

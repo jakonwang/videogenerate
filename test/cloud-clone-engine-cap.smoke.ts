@@ -25,7 +25,7 @@ async function main() {
   assert.equal(isMeteredRequest('https://api.example.com/v1/videos/abc', 'GET', cloud), false, 'GET never counts')
   assert.equal(isMeteredRequest('https://up-z2.qiniup.com/', 'POST', cloud), false, 'storage upload does not count')
   assert.equal(isMeteredRequest(`${cloud}/api/v1/sync/push`, 'POST', cloud), false, 'the cloud itself does not count')
-  assert.equal(isMeteredRequest(`${cloud}/api/v1/ai-proxy/vectorengine/v1/chat/completions`, 'POST', cloud), true, 'generation through the cloud AI proxy counts')
+  assert.equal(isMeteredRequest(`${cloud}/api/v1/ai-proxy/ai666/v1/chat/completions`, 'POST', cloud), true, 'generation through the cloud AI proxy counts')
   assert.equal(isMeteredRequest(`${cloud}/api/v1/ai-proxy/grsai/v1/draw/result`, 'POST', cloud), false, 'polling through the proxy does not count')
   console.log('✓ only generation requests to AI platforms are counted')
 
@@ -53,14 +53,14 @@ async function main() {
   const app = createCloudApp({ dataDir: join(root, 'cloud'), dbPath: join(root, 'cloud', 'cloud.sqlite'), entitlementPrivateKeyPath: keyPath, allowRegistration: true, mockPay: true, port: 0, cloneEnginePerDay: 2 })
   const settings = createDefaultManagedSettings()
   settings.enabled = true
-  for (const key of ['grsai', 'ai666', 'vectorengine'] as const) settings.platforms[key] = { apiKey: 'test-key', baseUrl: fakeBase }
-  settings.capabilities.chat = { platform: 'vectorengine', model: 'gpt-4.1-mini' }
-  settings.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
-  settings.capabilities.video = { platform: 'vectorengine', model: 'veo_3_1-fast' }
+  for (const key of ['grsai', 'ai666', 'ai666'] as const) settings.platforms[key] = { apiKey: 'test-key', baseUrl: fakeBase }
+  settings.capabilities.chat = { platform: 'ai666', model: 'gpt-4.1-mini' }
+  settings.capabilities.image = { platform: 'ai666', model: 'gpt-image-1', quality: 'high' }
+  settings.capabilities.video = { platform: 'ai666', model: 'veo_3_1-fast' }
   app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: settings, scope: 'private', description: '', updatedBy: null, now: Date.now() })
   let proxied = 0
   app.server.on('request', (req) => {
-    if (String(req.url || '').startsWith('/api/v1/ai-proxy/vectorengine/')) proxied += 1
+    if (String(req.url || '').startsWith('/api/v1/ai-proxy/ai666/')) proxied += 1
   })
   await app.listen()
   const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`

@@ -173,7 +173,9 @@ async function main() {
     assert.equal(downloadCount, 1, 'Expected live photo flow to download the direct provider output exactly once')
     assert.ok(capturedVideoBody, 'Expected direct-output video request body to be captured')
     assert.equal(String(capturedVideoBody?.model || ''), 'veo_3_1-fl')
-    assert.equal(Number(capturedVideoBody?.duration || 0), 6)
+    // 高瑞 Veo 时长固定 8 秒、没有时长参数；视频请求不带反向提示词
+    assert.equal('duration' in capturedVideoBody, false)
+    assert.equal('negative_prompt' in capturedVideoBody, false)
     assert.equal(Boolean(capturedVideoBody?.enhance_prompt), false)
     assert.ok(Array.isArray(capturedVideoBody?.images), 'Expected single locked-still images payload')
     assert.equal(capturedVideoBody.images.length, 1)

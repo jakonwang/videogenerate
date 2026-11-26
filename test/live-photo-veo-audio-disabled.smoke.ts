@@ -51,9 +51,9 @@ async function main() {
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
       videoProviderPrimary: 'apifox_hub',
-      videoApifoxHubProfile: 'vectorengine',
-      apifoxHubProfile: 'vectorengine',
-      vectorEngineHub: {
+      videoApifoxHubProfile: 'ai666',
+      apifoxHubProfile: 'ai666',
+      ai666Hub: {
         enabled: true,
         baseUrl: 'https://vector.example.com',
         apiKey: 'test-vector-key',

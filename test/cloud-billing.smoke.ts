@@ -83,9 +83,9 @@ async function main() {
   // 后台启用平台密钥（云端任务用这个模型计价）
   const managed = createDefaultManagedSettings()
   managed.enabled = true
-  managed.platforms.vectorengine = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
-  managed.capabilities.video = { platform: 'vectorengine', model: 'veo3.1-fast' }
-  managed.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-1', quality: 'high' }
+  managed.platforms.ai666 = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
+  managed.capabilities.video = { platform: 'ai666', model: 'veo3.1-fast' }
+  managed.capabilities.image = { platform: 'ai666', model: 'gpt-image-1', quality: 'high' }
   app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: managed, scope: 'private', description: '', updatedBy: null, now: Date.now() })
 
   // ---- 老套餐默认「不限」：升级后已付费用户不受影响
@@ -108,16 +108,16 @@ async function main() {
 
   // ---- 默认价格与模型价目
   await owner.admin.saveBillingDefaults({ points: { video: 10, image: 2 }, refundPerDay: 2 })
-  await owner.admin.saveModel({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro', label: 'Veo 高清', points: 30 })
+  await owner.admin.saveModel({ capability: 'video', platform: 'ai666', model: 'veo3.1-pro', label: 'Veo 高清', points: 30 })
   await owner.admin.saveModel({ capability: 'video', platform: '*', model: 'sora-2', label: 'Sora 2', points: 50, enabled: false })
   await owner.admin.saveModel({ capability: 'video', platform: '*', model: 'kling-master', label: '可灵大师', points: 40, planCodes: ['year'] })
   await expectError(ops.admin.saveModel({ capability: 'video', model: 'x', points: 1 }), 'FORBIDDEN', 403)
-  await expectError(owner.admin.saveModel({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro', points: 1 }), 'CONFLICT', 409)
+  await expectError(owner.admin.saveModel({ capability: 'video', platform: 'ai666', model: 'veo3.1-pro', points: 1 }), 'CONFLICT', 409)
   console.log('  ✓ 模型价目：只有超管能改，同平台同模型不能重复')
 
   // ---- 购买套餐：到账加时长 + 点数
   const alice = await register('alice@example.com')
-  await expectError(alice.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' }), 'NO_ENTITLEMENT', 402)
+  await expectError(alice.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' }), 'NO_ENTITLEMENT', 402)
   const order = (await alice.createOrder({ planCode: 'pro', channel: 'mock' })).order
   assert.equal(order.credits, 100)
   await alice.mockPay(order.orderNo)
@@ -127,7 +127,7 @@ async function main() {
   console.log('  ✓ 支付成功发放套餐点数')
 
   // ---- 视频：每次扣点（默认价 10），失败退回
-  const hold = (await alice.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast', client: 'desktop', feature: 'clone' })).hold
+  const hold = (await alice.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast', client: 'desktop', feature: 'clone' })).hold
   assert.equal(hold.source, 'credits')
   assert.equal(hold.points, 10)
   assert.equal((await alice.credits()).balance, 90)
@@ -136,7 +136,7 @@ async function main() {
   const again = await alice.settleUsage(hold.id, true)
   assert.equal(again.hold.status, 'released', 'settle is idempotent')
   // 覆盖价
-  const pro = (await alice.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro' })).hold
+  const pro = (await alice.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-pro' })).hold
   assert.equal(pro.points, 30)
   await alice.settleUsage(pro.id, true)
   assert.equal((await alice.credits()).balance, 70)
@@ -147,7 +147,7 @@ async function main() {
 
   // ---- 每日退还上限（测试里设为 2 次；上面已经退过 1 次）
   for (let i = 0; i < 3; i += 1) {
-    const h = (await alice.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' })).hold
+    const h = (await alice.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' })).hold
     const settled = (await alice.settleUsage(h.id, false, 'boom')).hold
     if (i === 0) assert.equal(settled.status, 'released')
     else {
@@ -159,7 +159,7 @@ async function main() {
   console.log('  ✓ 每天失败退还次数有上限，超出后不再退点')
 
   // ---- 图片：每月免费 2 次，之后扣点
-  const img = async () => (await alice.holdUsage({ capability: 'image', platform: 'vectorengine', model: 'gpt-image-1' })).hold
+  const img = async () => (await alice.holdUsage({ capability: 'image', platform: 'ai666', model: 'gpt-image-1' })).hold
   const i1 = await img()
   const i2 = await img()
   assert.deepEqual([i1.source, i1.points, i2.source], ['free', 0, 'free'])
@@ -178,7 +178,7 @@ async function main() {
 
   // ---- 点数不足
   app.db.prepare('UPDATE users SET credits = 5 WHERE account = ?').run('alice@example.com')
-  const short = await expectError(alice.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' }), 'INSUFFICIENT_CREDITS', 402, /点数不足/)
+  const short = await expectError(alice.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' }), 'INSUFFICIENT_CREDITS', 402, /点数不足/)
   assert.deepEqual((short as CloudClientError).details, { needed: 10, balance: 5 })
   console.log('  ✓ 点数不足时拒绝并说明需要多少点')
 
@@ -209,7 +209,7 @@ async function main() {
   const carol = await register('carol@example.com')
   const liteCard = await owner.admin.generateRedeemCodes({ kind: 'plan', planCode: 'lite', count: 1 })
   await carol.redeem(liteCard.codes[0])
-  await expectError(carol.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' }), 'FORBIDDEN', 403, /不包含视频生成/)
+  await expectError(carol.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' }), 'FORBIDDEN', 403, /不包含视频生成/)
   console.log('  ✓ 套餐不包含的生成类型被拒')
 
   // ---- 超管 / 不受限账号不扣点
@@ -234,7 +234,7 @@ async function main() {
   const dave = await register('dave@example.com')
   const dOrder = (await dave.createOrder({ planCode: 'pro', channel: 'mock' })).order
   await dave.mockPay(dOrder.orderNo)
-  const daveHold = (await dave.holdUsage({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro' })).hold
+  const daveHold = (await dave.holdUsage({ capability: 'video', platform: 'ai666', model: 'veo3.1-pro' })).hold
   await dave.settleUsage(daveHold.id, true)
   await owner.admin.refundOrder(dOrder.orderNo, { revokeDays: true, note: 'test' })
   assert.equal((await dave.credits()).balance, 0, 'refund takes back what is left, never below zero')
@@ -278,7 +278,7 @@ async function main() {
   const erin = await register('erin@example.com')
   await erin.redeem((await owner.admin.generateRedeemCodes({ kind: 'plan', planCode: 'open', count: 1 })).codes[0])
   const erinId = (await erin.me()).user.id
-  const video = { capability: 'video' as const, platform: 'vectorengine', model: 'veo3.1-fast' }
+  const video = { capability: 'video' as const, platform: 'ai666', model: 'veo3.1-fast' }
   const e1 = (await erin.holdUsage(video)).hold
   assert.equal(e1.source, 'included')
   const e2 = (await erin.holdUsage(video)).hold
@@ -291,7 +291,7 @@ async function main() {
   assert.throws(() => app.service.billing.hold(erinId, { capability: 'image', platform: 'p', model: 'm' }, { units: 2 }), /最多 5 次/)
   await expectError(erin.settleUsage(img4.id, false, '骗退'), 'FORBIDDEN', 403, /云端自动结算/)
   const paid4 = await owner.admin.adjustCredits(aliceId, 100, '份数测试')
-  const multi = app.service.billing.hold(aliceId, { capability: 'video', platform: 'vectorengine', model: 'veo3.1-pro' }, { units: 2 })
+  const multi = app.service.billing.hold(aliceId, { capability: 'video', platform: 'ai666', model: 'veo3.1-pro' }, { units: 2 })
   assert.equal(multi.points, 60)
   assert.equal(paid4.credits - (await alice.credits()).balance, 60)
   app.service.billing.settle(null, multi.id, false)
@@ -322,7 +322,7 @@ async function main() {
     settle: async (id, ok) => void events.push(`settle:${id}:${ok}`),
   })
   await runWithUsageFeature('clone', () =>
-    withUsageCharge({ capability: 'video', platform: 'vectorengine', model: 'm' }, () => withUsageCharge({ capability: 'image', platform: 'p', model: 'inner' }, async () => 'ok')),
+    withUsageCharge({ capability: 'video', platform: 'ai666', model: 'm' }, () => withUsageCharge({ capability: 'image', platform: 'p', model: 'inner' }, async () => 'ok')),
   )
   await assert.rejects(withUsageCharge({ capability: 'image', platform: 'p', model: 'm2' }, async () => Promise.reject(new Error('nope'))), /nope/)
   await new Promise((resolve) => setTimeout(resolve, 10))
@@ -337,8 +337,8 @@ async function main() {
   tokenClient.setToken((await tokenClient.client.login({ account: 'alice@example.com', password: 'password-123', client: 'web' })).sessionToken)
   await owner.admin.adjustCredits(aliceId, 10, '挂钩测试')
   setUsageMeter(createCloudUsageMeter({ client: () => tokenClient.client, clientKind: 'desktop' }))
-  await withUsageCharge({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' }, async () => 'done')
-  await assert.rejects(withUsageCharge({ capability: 'video', platform: 'vectorengine', model: 'veo3.1-fast' }, async () => 'x'), /点数不足/)
+  await withUsageCharge({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' }, async () => 'done')
+  await assert.rejects(withUsageCharge({ capability: 'video', platform: 'ai666', model: 'veo3.1-fast' }, async () => 'x'), /点数不足/)
   setUsageMeter(null)
   console.log('  ✓ 电脑端挂钩：嵌套只扣一次，失败退回，用户自己的 Key 不计费')
 

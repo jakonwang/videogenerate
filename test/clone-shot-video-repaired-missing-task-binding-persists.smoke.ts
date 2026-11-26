@@ -43,7 +43,7 @@ async function main() {
         index: 3,
         status: 'failed_retryable',
         taskId: 'veo_3_1-fast-4K:task_repaired',
-        provider: 'VectorEngine',
+        provider: 'AI666',
         model: 'veo_3_1-fast-4K',
         remoteStatus: 'created',
         error: '[missing_task] repaired task id can continue polling',

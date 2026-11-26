@@ -141,9 +141,9 @@ async function main() {
 
     assert.ok(capturedVideoBody, 'Expected live photo video request body to be captured')
     assert.equal(String(capturedVideoBody?.model || ''), 'veo_3_1-fl')
-    assert.equal(Number(capturedVideoBody?.motion_strength || 0), 1)
-    assert.equal(Number(capturedVideoBody?.weight || 0), 1)
-    assert.equal(Number(capturedVideoBody?.duration || 0), 6)
+    // 高瑞 Veo 按模型清单的格式发：时长固定 8 秒没有时长参数，也不带文档里没有的字段
+    assert.deepEqual(Object.keys(capturedVideoBody).sort(), ['aspect_ratio', 'images', 'model', 'prompt', 'resolution'])
+    assert.equal(capturedVideoBody.aspect_ratio, '9:16')
     assert.equal(Boolean(capturedVideoBody?.enhance_prompt), false)
     assert.ok(Array.isArray(capturedVideoBody?.images), 'Expected images array in live photo video request')
     assert.equal(capturedVideoBody.images.length, 1, 'Expected locked still image only in live photo video request')
@@ -167,11 +167,8 @@ async function main() {
     assert.match(String(capturedVideoBody?.prompt || ''), /same exact visible product instance/i)
     assert.doesNotMatch(String(capturedVideoBody?.prompt || ''), /Image 2/i)
     assert.doesNotMatch(String(capturedVideoBody?.prompt || ''), /Image 1/i)
-    assert.ok(String(capturedVideoBody?.negative_prompt || '').trim().length > 0, 'Expected gaorui negative prompt to be populated')
-    assert.match(String(capturedVideoBody?.negative_prompt || ''), /no duplicate product/i)
-    assert.match(String(capturedVideoBody?.negative_prompt || ''), /no redesigned product/i)
-    assert.match(String(capturedVideoBody?.negative_prompt || ''), /product movement/i)
-    assert.match(String(capturedVideoBody?.negative_prompt || ''), /product rotation/i)
+    // 视频请求都不再带反向提示词
+    assert.equal('negative_prompt' in capturedVideoBody, false)
 
     globalThis.fetch = originalFetch
     console.log('live photo video request lock smoke test passed')

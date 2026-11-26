@@ -241,6 +241,19 @@ export type LivePhotoItem = {
   videoTaskModel?: string
   videoTaskBaseUrl?: string
   videoTaskEndpointStyle?: string
+  /** 图生视频选的模型（清单 id，见 src/shared/videoModels.ts）；没有 = 沿用设置里的视频接口 */
+  videoModelId?: string
+  /** 图生视频时长（秒），会收敛到模型支持的值 */
+  videoDurationSec?: number
+  /** 图生视频清晰度（如 720p），会收敛到模型支持的值 */
+  videoResolution?: string
+  /**
+   * 尾帧（参考 tk创意室）：模型支持首尾帧时，没用同款模板就把首帧放大这个百分比当尾帧（镜头推近）；
+   * 0 = 只传首帧。用了同款模板时尾帧是模板结尾帧换上商品，换失败再按这个放大。
+   */
+  videoZoomPercent?: number
+  /** 已经做好的尾帧，重试时直接复用 */
+  videoLastFramePath?: string
   promptVersionId?: string
   promptVersion?: number
   promptHash?: string
@@ -274,12 +287,20 @@ export type CreateReferenceLivePhotoInput = {
   motionTemplate?: LivePhotoMotionTemplate
   /** 同款模板: use its opening frame as the scene and its camera work as the motion. */
   styleReferenceId?: string
+  videoModelId?: string
+  videoDurationSec?: number
+  videoResolution?: string
+  videoZoomPercent?: number
 }
 
 export type CreateCloneShotLivePhotosInput = {
   cloneProjectId: string
   shotIds: string[]
   motionTemplate?: LivePhotoMotionTemplate
+  videoModelId?: string
+  videoDurationSec?: number
+  videoResolution?: string
+  videoZoomPercent?: number
 }
 
 export type ExportLivePhotoItemsInput = {
@@ -293,6 +314,11 @@ export type RetryLivePhotoItemInput = {
   motionTemplate?: LivePhotoMotionTemplate
   replacementRegion?: Pick<LivePhotoReplacementRegion, 'x' | 'y' | 'width' | 'height'>
   retryMode?: 'auto' | 'manual_once'
+  /** 重试时换模型 / 时长（不传 = 沿用任务原来的） */
+  videoModelId?: string
+  videoDurationSec?: number
+  videoResolution?: string
+  videoZoomPercent?: number
 }
 
 export type ExportLivePhotoItemsResult = {

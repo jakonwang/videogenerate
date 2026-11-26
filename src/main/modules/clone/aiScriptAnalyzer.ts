@@ -773,7 +773,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
       apifox = await requestChat([])
     }
     if (!apifox.content) {
-      return fallbackAnalysisResult(input, `VectorEngine 閼存碍婀伴崚鍡樼€芥潻鏂挎礀娑撹櫣鈹栭妴淇籸ovider=${apifox.provider} model=${apifox.model}`)
+      return fallbackAnalysisResult(input, `AI666 閼存碍婀伴崚鍡樼€芥潻鏂挎礀娑撹櫣鈹栭妴淇籸ovider=${apifox.provider} model=${apifox.model}`)
     }
     try {
       const parsed = parseModelJsonPayload(apifox.content).parsed
@@ -786,7 +786,7 @@ export async function analyzeReferenceScriptWithGrs(input: AnalyzeInput): Promis
     } catch (e: any) {
       return fallbackAnalysisResult(
         input,
-        `VectorEngine 閼存碍婀伴崚鍡樼€界憴锝嗙€芥径杈Е閵嗕炕rovider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
+        `AI666 閼存碍婀伴崚鍡樼€界憴锝嗙€芥径杈Е閵嗕炕rovider=${apifox.provider} model=${apifox.model} endpointStyle=${apifox.endpointStyle} response=${cleanAiText(apifox.content).slice(0, 280)} reason=${String(e?.message ?? e)}`,
       )
     }
   }

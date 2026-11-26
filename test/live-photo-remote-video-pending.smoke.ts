@@ -51,9 +51,9 @@ async function main() {
       openaiApiKey: 'test-openai-key',
       openaiImageModel: 'gpt-image-1',
       videoProviderPrimary: 'apifox_hub',
-      videoApifoxHubProfile: 'vectorengine',
-      apifoxHubProfile: 'vectorengine',
-      vectorEngineHub: {
+      videoApifoxHubProfile: 'ai666',
+      apifoxHubProfile: 'ai666',
+      ai666Hub: {
         enabled: true,
         baseUrl: 'https://vector.example.com',
         apiKey: 'test-vector-key',
@@ -183,33 +183,19 @@ async function main() {
     assert.equal(remoteVideoSubmitCount, 1)
 
     const resumeRemote = await livePhotoService.resumePendingTasksOnStartup()
-    assert.equal(resumeRemote.itemIds.includes(created.id), false)
+    // v5.0.104 起：正在等远端结果的任务启动时会被接着查（见 live-photo-startup-resume-filter），
+    // 接着查只会查询，不会重新提交（下面断言提交次数仍为 1）
+    assert.equal(resumeRemote.itemIds.includes(created.id), true)
 
     await waitForItemCondition(
       created.id,
       () => remoteVideoQueryCount >= 1,
       12000,
     )
-    const resumedSnapshot = await livePhotoService.get(created.id)
-    const queryObserved = remoteVideoQueryCount >= 1
-
-    assert.ok(resumedSnapshot)
-    assert.equal(resumedSnapshot?.videoTaskId, remoteVideoTaskId)
-    assert.equal(resumedSnapshot.autoFlowStatus?.status, 'running')
-    assert.match(String(resumedSnapshot.autoFlowStatus?.lastError || ''), /\[remote_pending\]/)
-    assert.equal(remoteVideoSubmitCount, 1)
-    assert.ok(queryObserved)
+    // 接着查之后可能马上就拿到结果（任务完成后 videoTaskId 会清掉），所以这里不再卡中间状态：
+    // 只要求查过、而且没有重新提交
     assert.ok(remoteVideoQueryCount >= 1)
-
-    const fastFollowupObservedAt = Date.now()
-    const secondQueryObserved = await waitForItemCondition(
-      created.id,
-      () => remoteVideoQueryCount >= 2,
-      12000,
-    )
-
-    assert.ok(secondQueryObserved)
-    assert.ok(remoteVideoQueryCount >= 2)
+    assert.equal(remoteVideoSubmitCount, 1)
 
     const completedSnapshot = await waitForItemCondition(
       created.id,
@@ -220,7 +206,7 @@ async function main() {
     assert.equal(completedSnapshot.packagingStatus, 'completed')
     assert.ok(String(completedSnapshot.livePhotoVideoPath || '').trim().length > 0)
     assert.ok(remoteVideoDownloadCount >= 1)
-    assert.ok(Date.now() - fastFollowupObservedAt < 12000)
+    assert.equal(remoteVideoSubmitCount, 1, 'resume must query, never resubmit')
 
     const summaries = await livePhotoService.listSummaries({ filter: 'all' })
     const summary = summaries.items.find((item) => item.id === created.id)

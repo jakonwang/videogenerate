@@ -119,8 +119,10 @@ async function main() {
     await mkdir(assetsDir, { recursive: true })
     const productImage = path.join(assetsDir, 'product.jpg')
     const refImage = path.join(assetsDir, 'reference.jpg')
-    await writeFile(productImage, 'product-image', 'utf-8')
-    await writeFile(refImage, 'reference-image', 'utf-8')
+    // 真实图片：建任务时会先按参考图裁出场景，假文件 sharp 读不了
+    const sharp = (await import('sharp')).default
+    await sharp({ create: { width: 96, height: 128, channels: 3, background: '#d6c7a1' } }).jpeg().toFile(productImage)
+    await sharp({ create: { width: 96, height: 128, channels: 3, background: '#8aa0b8' } }).jpeg().toFile(refImage)
 
     const product = await productsRepoModule.productsRepo.upsert({
       name: 'Guard Product',
@@ -195,6 +197,8 @@ async function main() {
       qiniuUploadHost: 'https://upload.qiniup.com',
     } as any)
 
+    // 平台返回的图要是真图片：生成的局部图会被合成回原场景
+    const generatedPngBase64 = (await sharp({ create: { width: 96, height: 128, channels: 3, background: '#c9a96e' } }).png().toBuffer()).toString('base64')
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: any, init?: any) => {
       const url = String(input || '')
@@ -209,7 +213,7 @@ async function main() {
           JSON.stringify({
             data: [
               {
-                b64_json: Buffer.from('openai-image').toString('base64'),
+                b64_json: generatedPngBase64,
               },
             ],
           }),
@@ -221,7 +225,7 @@ async function main() {
           JSON.stringify({
             data: [
               {
-                b64_json: Buffer.from('vector-image').toString('base64'),
+                b64_json: generatedPngBase64,
               },
             ],
           }),

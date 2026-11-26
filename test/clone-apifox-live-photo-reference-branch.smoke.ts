@@ -172,15 +172,14 @@ async function main() {
     assert.match(String((caughtError as Error)?.message || caughtError || ''), /ffmpeg|Invalid data found/i)
     assert.ok(capturedCreateBody, 'Expected apifox live photo create request body')
     assert.equal(String(capturedCreateBody?.model || ''), 'veo_3_1-fl')
-    assert.equal(Number(capturedCreateBody?.duration || 0), 6)
-    assert.equal(Number(capturedCreateBody?.motion_strength || 0), 1)
-    assert.equal(Number(capturedCreateBody?.weight || 0), 1)
+    // 高瑞 Veo 按模型清单的格式发：时长固定 8 秒，不带文档里没有的字段
+    assert.deepEqual(Object.keys(capturedCreateBody).sort(), ['aspect_ratio', 'images', 'model', 'prompt', 'resolution'])
     assert.ok(Array.isArray(capturedCreateBody?.images), 'Expected images array for reference video path')
     assert.equal(capturedCreateBody.images.length, 1)
     assert.ok(String(capturedCreateBody.images[0] || '').includes('cdn.example.com'))
     assert.match(String(capturedCreateBody?.prompt || ''), /FRAME-TO-FRAME IDENTITY LOCK:/i)
     assert.match(String(capturedCreateBody?.prompt || ''), /extremely subtle near-static natural micro-movement/i)
-    assert.match(String(capturedCreateBody?.negative_prompt || ''), /product redesign/i)
+    assert.equal('negative_prompt' in capturedCreateBody, false)
 
     const debugLog = logs.find((line) => line.includes('[clone-debug] final-shot-video-prompts'))
     assert.ok(debugLog, 'Expected final-shot-video-prompts debug log')

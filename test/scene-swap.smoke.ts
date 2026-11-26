@@ -16,7 +16,7 @@ import { MANAGED_SETTINGS_KEY } from '../services/cloud/src/service'
 import { cosAuthorization, createMatting } from '../services/cloud/src/sceneSwap/matting'
 import { canvasFor, composeKeep, maskStats, normalizeSource, readMask } from '../services/cloud/src/sceneSwap/compose'
 import { createCloudClient } from '../src/shared/cloud/client'
-import { createDefaultManagedSettings, maskManagedSettings, mergeManagedSecrets, normalizeManagedSettings, stripManagedSecretsForClient, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
+import { createDefaultManagedSettings, maskManagedSettings, mergeManagedSecrets, normalizeManagedSettings, readManagedSecret, stripManagedSecretsForClient, toProxiedManagedSettings } from '../src/shared/cloud/managedSettings'
 import { SYNC_COLLECTIONS } from '../src/shared/cloud/sync'
 import { grsAspectRatio } from '../services/cloud/src/generate'
 import { productViewOf, styleGroupOf, tryonProducts, tryonShotsFor } from '../src/shared/sceneSwap'
@@ -126,6 +126,9 @@ async function main() {
     assert.equal(normalizeManagedSettings({ matting: { ...cfg, bucket: 'evil.com/' } }).matting.bucket, 'evilcom')
     assert.ok(!JSON.stringify(maskManagedSettings(saved)).includes('SECRET'))
     assert.deepEqual(mergeManagedSecrets(normalizeManagedSettings(maskManagedSettings(saved)), saved).matting, cfg)
+    assert.equal(readManagedSecret(saved, 'matting.secretKey'), cfg.secretKey, 'admin reveal reads the plain secret')
+    assert.equal(readManagedSecret(saved, 'platform.grsai'), saved.platforms.grsai.apiKey)
+    for (const bad of ['platform.evil', 'qiniu.bucket', 'enabled', '']) assert.equal(readManagedSecret(saved, bad), null, `no reveal for ${bad}`)
     for (const out of [stripManagedSecretsForClient(saved), toProxiedManagedSettings(saved, { cloudBaseUrl: 'https://x', token: 't' })]) assert.equal(out.matting.secretKey + out.matting.secretId, '')
   }
 
@@ -161,8 +164,8 @@ async function main() {
   try {
     const settings = createDefaultManagedSettings()
     settings.enabled = true
-    settings.platforms.vectorengine = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
-    settings.capabilities.image = { platform: 'vectorengine', model: 'gpt-image-2', quality: 'high' }
+    settings.platforms.ai666 = { apiKey: 'sk-ve', baseUrl: 'https://ve.example.com' }
+    settings.capabilities.image = { platform: 'ai666', model: 'gpt-image-2', quality: 'high' }
     app.repo.upsertConfig({ key: MANAGED_SETTINGS_KEY, value: settings, scope: 'private', description: '', updatedBy: null, now: Date.now() })
 
     const ids: Record<string, string> = {}

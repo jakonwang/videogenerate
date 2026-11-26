@@ -710,12 +710,11 @@ function wireIpc() {
         openaiImageQuality?: 'low' | 'medium' | 'high'
         imageProviderPrimary?: 'openai' | 'kling' | 'grsai' | 'apifox_hub'
         grsaiImageModel?: string
-        apifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
-        videoApifoxHubProfile?: 'ai666' | 'vectorengine' | 'xibapi' | 'gaorui'
-        imageApifoxHubProfile?: 'ai666' | 'vectorengine'
-        chatApifoxHubProfile?: 'ai666' | 'vectorengine'
+        apifoxHubProfile?: 'ai666' | 'xibapi' | 'gaorui'
+        videoApifoxHubProfile?: 'ai666' | 'xibapi' | 'gaorui'
+        imageApifoxHubProfile?: 'ai666'
+        chatApifoxHubProfile?: 'ai666'
         ai666Hub?: import('./modules/clone/types').ApifoxHubCredentials
-        vectorEngineHub?: import('./modules/clone/types').ApifoxHubCredentials
         xibapiHub?: import('./modules/clone/types').ApifoxHubCredentials
         gaoruiHub?: import('./modules/clone/types').ApifoxHubCredentials
         apifoxHub?: import('./modules/clone/types').ApifoxHubCredentials
@@ -781,7 +780,6 @@ function wireIpc() {
         imageApifoxHubProfile: normalizedProfiles.imageApifoxHubProfile,
         chatApifoxHubProfile: normalizedProfiles.chatApifoxHubProfile,
         ai666Hub: payload?.ai666Hub,
-        vectorEngineHub: payload?.vectorEngineHub,
         xibapiHub: payload?.xibapiHub,
         gaoruiHub: payload?.gaoruiHub,
         apifoxHub: payload?.apifoxHub,

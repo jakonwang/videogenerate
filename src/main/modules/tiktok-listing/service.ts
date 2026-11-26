@@ -145,7 +145,7 @@ function assertTiktokListingImageProviderReady(credentials: ModelCredentials) {
   if (credentials.allowMockWhenNoKey && !hasAnyImageProviderCredential(credentials)) return
   if (hasSelectedImageProviderCredential(credentials)) return
   const route = resolveTiktokListingGenerationConfig(credentials).image
-  if (route.provider === 'apifox_hub') throw new Error(`当前图片模型平台为 ${route.profile === 'ai666' ? 'AI666' : 'VectorEngine'}，但未配置对应图片 API Key`)
+  if (route.provider === 'apifox_hub') throw new Error(`当前图片模型平台未配置对应的图片 API Key`)
   if (route.provider === 'grsai') throw new Error('当前图片模型平台为 GRS.AI，但未配置 GRS.AI API Key')
   if (route.provider === 'kling') throw new Error('当前图片模型平台为 AtlasCloud，但未配置 AtlasCloud API Key')
   throw new Error('当前图片模型平台为 OpenAI，但未配置 OpenAI API Key')
@@ -155,7 +155,7 @@ function assertTiktokListingChatProviderReady(credentials: ModelCredentials) {
   const route = resolveTiktokListingGenerationConfig(credentials).chat
   if (route.provider === 'apifox_hub') {
     if (String(resolveApifoxHubCredentials(credentials, 'chat')?.apiKey || '').trim()) return
-    throw new Error(`当前对话模型平台为 ${route.profile === 'ai666' ? 'AI666' : 'VectorEngine'}，但未配置对应对话 API Key`)
+    throw new Error(`当前对话模型平台未配置对应的对话 API Key`)
   }
   if (String(credentials.grsaiApiKey || '').trim()) return
   throw new Error('当前对话模型平台为 GRS.AI，但未配置 GRS.AI API Key')
@@ -184,7 +184,6 @@ function buildStrictImageCredentials(credentials: ModelCredentials): ModelCreden
       openaiApiKey: undefined,
       klingApiKey: undefined,
       ai666Hub: clearHubApiKey(credentials.ai666Hub),
-      vectorEngineHub: clearHubApiKey(credentials.vectorEngineHub),
       apifoxHub: clearHubApiKey(credentials.apifoxHub),
     }
   }
@@ -195,7 +194,6 @@ function buildStrictImageCredentials(credentials: ModelCredentials): ModelCreden
       openaiApiKey: undefined,
       grsaiApiKey: undefined,
       ai666Hub: clearHubApiKey(credentials.ai666Hub),
-      vectorEngineHub: clearHubApiKey(credentials.vectorEngineHub),
       apifoxHub: clearHubApiKey(credentials.apifoxHub),
     }
   }
@@ -205,7 +203,6 @@ function buildStrictImageCredentials(credentials: ModelCredentials): ModelCreden
     klingApiKey: undefined,
     grsaiApiKey: undefined,
     ai666Hub: clearHubApiKey(credentials.ai666Hub),
-    vectorEngineHub: clearHubApiKey(credentials.vectorEngineHub),
     apifoxHub: clearHubApiKey(credentials.apifoxHub),
   }
 }

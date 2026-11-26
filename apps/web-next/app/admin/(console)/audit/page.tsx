@@ -20,6 +20,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'success' | 'danger' 
   'admin.config.update': { label: '修改配置', tone: 'warning' },
   'admin.config.delete': { label: '删除配置', tone: 'danger' },
   'admin.software.update': { label: '修改软件设置', tone: 'warning' },
+  'admin.software.reveal_secret': { label: '查看密钥', tone: 'warning' },
   'admin.userdata.view': { label: '查看用户数据', tone: 'violet' },
   'order.paid': { label: '订单到账', tone: 'success' },
   'redeem.use': { label: '使用兑换码', tone: 'success' },
