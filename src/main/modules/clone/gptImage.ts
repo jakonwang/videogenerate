@@ -512,7 +512,8 @@ async function postGrsImage(input: GenerateImageInput) {
 }
 
 async function generateProviderImage(input: GenerateImageInput) {
-  const providers = imageProviderCandidates(input.credentials)
+  // 只用选中的图片平台（没配 Key 才顺延到第一个能用的），失败直接报错，不再自动换平台
+  const providers = imageProviderCandidates(input.credentials).slice(0, 1)
   if (!providers.length) {
     return await postEditImage(input)
   }
@@ -559,10 +560,12 @@ async function generateProviderImageWithScope(
   if (isLivePhotoReplace && scopedRefs.length < 2) {
     throw new Error('Live Photo replacement requires both the base scene reference and the authoritative product reference image.')
   }
-  const providers =
+  // 只用选中的图片平台，失败直接报错，不再自动换平台
+  const providers = (
     isLivePhotoReplace
       ? imageProviderCandidatesForLivePhotoReplace(input.credentials)
       : imageProviderCandidates(input.credentials)
+  ).slice(0, 1)
   if (!providers.length) {
     if (isLivePhotoReplace) {
       throw new Error(
