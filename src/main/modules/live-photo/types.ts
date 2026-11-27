@@ -311,6 +311,12 @@ export type LivePhotoItem = {
   placement?: LivePhotoProductPlacement
   /** 停在「待确认摆放」：等用户在「调整摆放」里确认 */
   awaitingPlacement?: boolean
+  /** 融合一次出的几张图（见 integratePlacedProduct），用户挑一张再做视频 */
+  stillCandidates?: Array<{ path: string; drift?: number }>
+  /** 用户挑的那张（stillCandidates 的下标） */
+  pickedStillIndex?: number
+  /** 停在「待挑图」：等用户在几张融合图里挑一张 */
+  awaitingStillPick?: boolean
   sceneInteraction?: LivePhotoSceneInteraction
   generationAttempts?: LivePhotoGenerationAttempt[]
   cacheKey?: string

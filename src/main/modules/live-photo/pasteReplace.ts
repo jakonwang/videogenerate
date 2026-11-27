@@ -3,8 +3,8 @@
  *   1. AI 只擦掉参考图框里的旧商品（补成皮肤 / 背景）
  *   2. 腾讯云抠出真实商品（服务器代办，密钥不在本机）
  *   3. 按摆放（位置、大小、角度）把真实商品贴到擦好的图上 —— 大小、位置由程序决定，不交给 AI 猜
- *   4. Nano Banana 只做融合（穿戴关系、接触阴影、反光），提示词要求大小、位置、款式都不许变
- *   5. 只把商品附近贴回原图，其余像素保持原样
+ *   4. AI 以贴好的商品为定位，把商品真正画进场景（穿戴、手指遮挡、平躺），给多角度商品图当款式依据；一次出几张
+ *   5. 只把商品附近贴回原图，其余像素保持原样；用户从几张里挑一张再做视频（看图模型挑不准，2026-11-28 实测）
  *
  * 实测（2026-11-27）：只靠提示词限定大小，模型会把商品画大还会改款；先贴好再融合，大小、位置、款式都能保住。
  */
@@ -401,7 +401,7 @@ export function resolvePasteReplaceImageModel(credentials: ModelCredentials) {
 }
 
 /** 提交一张图到 GRS 并等结果（最多 6 分钟），下载到 outputPath */
-async function generateWithGrs(input: {
+export async function generateWithGrs(input: {
   credentials: ModelCredentials
   prompt: string
   imagePaths: string[]
@@ -488,32 +488,47 @@ function wearingInstructions(productType?: string) {
   return ['It is held, worn, or placed at that spot exactly like the original item was: keep the same kind of contact with fingers, body, or surface.']
 }
 
+/** 一次出几张让用户挑（2026-11-28 实验：6 条里每条 3 张中都有用户认可的一张；看图模型挑不准，所以交给人挑） */
+export const PASTE_STILL_CANDIDATES = 3
+
+function interactionInstruction(interactionMode?: string, productType?: string) {
+  const mode = String(interactionMode || '')
+  if (mode === 'worn') {
+    return /ear|耳/.test(String(productType || '').toLowerCase())
+      ? 'It must be WORN exactly like the original earring in Image 2: a hoop/huggie goes through the ear lobe piercing, its back half is hidden behind the lobe and it wraps around the lower edge of the lobe; the decorated front faces the camera.'
+      : `It must be WORN exactly like the original item in Image 2. ${wearingInstructions(productType).join(' ')}`
+  }
+  if (mode === 'held') return 'It must be HELD exactly like the original item in Image 2: the same fingers pinch it at the same contact points, fingertips and nails overlap and cover it where they touch, nothing floats.'
+  return 'It must be PLACED exactly like the original item in Image 2: lying on the same surface with the same tilt (if the original lies flat, the new one lies flat too, seen at the same angle), with a soft contact shadow.'
+}
+
 /**
- * 融合：把「摆放图」交给 AI，让商品看起来是真的戴着 / 拿着 / 放着；大小、位置、款式都不许变。
- * 结果只把商品附近贴回原图。
+ * 融合：贴好的商品只做定位（位置、大小），让 AI 把它真正画进场景——穿过耳垂、被手指捏住、平躺——
+ * 同时给原图（看原商品怎么戴 / 拿 / 放）和多角度商品图（款式唯一依据）。一次出几张，交给用户挑。
+ *
+ * 为什么不再「只让 AI 打光、再贴回真实像素」：那样商品永远是贴在表面的一张贴纸，手指压不到前面、耳圈穿不进耳垂、
+ * 掌心里的也立着（2026-11-28 测试集 23 条严格看几乎都不能发）。
+ * 每张结果只把商品附近（原商品框 + 新商品，往外扩一圈）贴回擦好的图，其余像素不动。
  */
-export async function harmonizePlacedProduct(input: {
+export async function integratePlacedProduct(input: {
   credentials: ModelCredentials
   referenceScenePath: string
   guidePath: string
-  /** 擦掉旧商品的整张图（融合结果贴回到它上面）和商品形状蒙版（见 renderPlacementGuide） */
   erasedScenePath: string
   productMaskPath: string
-  productImagePath: string
+  /** 商品图：第一张是抠图用的那张，后面是其它角度（款式依据，最多用 3 张） */
+  productViewPaths: string[]
   productType?: string
   productBounds: { left: number; top: number; width: number; height: number }
   region: LivePhotoReplacementRegion
-  /** 参考图里商品的状态（只记录；不再让 AI 重新摆姿势） */
   interactionMode?: string
-  /** 用户在「调整摆放」里手动设了侧倾 / 翻面：姿势以用户为准，AI 不再重新摆 */
-  poseLocked?: boolean
-  outputPath: string
+  outputDir: string
+  count?: number
 }) {
   await ensureSharp()
   const meta = await sharp(input.guidePath).metadata()
   const W = meta.width
   const H = meta.height
-  // 新商品和原商品框的并集（擦掉的旧商品也在里面）
   const region = { left: input.region.x * W, top: input.region.y * H, width: input.region.width * W, height: input.region.height * H }
   const left = Math.min(region.left, input.productBounds.left)
   const top = Math.min(region.top, input.productBounds.top)
@@ -522,107 +537,74 @@ export async function harmonizePlacedProduct(input: {
   const union = { left, top, width: right - left, height: bottom - top }
   // 交给 AI 的是商品周围一块正方形（至少画面短边的 45%）：AI 出 1:1 的图，缩回去不变形，贴回时不会错位
   const side = Math.round(Math.min(W, H, Math.max(Math.max(union.width, union.height) * 3, Math.min(W, H) * 0.45)))
-  const cx = union.left + union.width / 2
-  const cy = union.top + union.height / 2
   const crop = {
-    left: Math.round(Math.min(W - side, Math.max(0, cx - side / 2))),
-    top: Math.round(Math.min(H - side, Math.max(0, cy - side / 2))),
+    left: Math.round(Math.min(W - side, Math.max(0, union.left + union.width / 2 - side / 2))),
+    top: Math.round(Math.min(H - side, Math.max(0, union.top + union.height / 2 - side / 2))),
     width: side,
     height: side,
   }
-  const cropPath = input.outputPath.replace(/\.png$/i, '-crop.png')
-  const aiPath = input.outputPath.replace(/\.png$/i, '-ai.png')
-  await mkdir(dirname(cropPath), { recursive: true })
-  await sharp(input.guidePath).extract(crop).png().toFile(cropPath)
-  // 商品形状蒙版（同一块正方形范围），用来判断 AI 有没有改动商品以外的画面
+  await mkdir(input.outputDir, { recursive: true })
+  const stamp = Date.now()
+  const guideCrop = join(input.outputDir, `integrate-${stamp}-guide.png`)
+  const originalCrop = join(input.outputDir, `integrate-${stamp}-original.png`)
+  await sharp(input.guidePath).extract(crop).png().toFile(guideCrop)
+  await sharp(input.referenceScenePath).rotate().resize(W, H, { fit: 'fill' }).extract(crop).png().toFile(originalCrop)
   const cropMask = await sharp(input.productMaskPath).resize(W, H, { fit: 'fill' }).extract(crop).extractChannel(0).png().toBuffer()
-  // 不再让 AI 重新摆姿势（2026-11-28）：让 AI 画商品，款式、大小一定会走样。
-  // 商品的样子和位置全由程序贴好，AI 只补光影、接触阴影；侧面朝镜头这类贴不真的参考图在入口就拦掉（checkReferenceSuitability）
   const prompt = [
-    `Image 1 is a close-up photo where the real product (${String(input.productType || 'product').trim() || 'product'}) has been pasted in as a cut-out. Its SIZE, POSITION, ANGLE and DESIGN are all correct and final.`,
-    'Image 2 is the same product photographed alone, for reference only.',
-    ...wearingInstructions(input.productType),
-    ...(input.poseLocked ? ['The tilt, facing direction, and orientation of the product in Image 1 were set by hand and are correct: keep exactly that pose.'] : []),
-    'Make it look like it was really in this photo: add a soft contact shadow where it touches skin or the surface, match the scene light on its metal and stones (highlights, reflections, color temperature), and blend its outline naturally.',
-    'Do NOT move, rotate, re-pose, or redraw the product, and do not enlarge or shrink it. Do not change its shape, stones, or details. Do not add or remove pieces.',
-    'Keep everything else in Image 1 exactly the same: people, skin, hair, hands, background, lighting, framing, and crop.',
+    'Image 1 is a photo where the new product has been roughly pasted in as a flat cut-out: its POSITION and overall SIZE are right, but it does not look physically real.',
+    'Image 2 is the original photo of the same scene with the old item: it shows how the item is worn, held or placed.',
+    'Images 3 and after are the real new product from several angles: they are the only source of truth for its design.',
+    `Redraw the new product in Image 1 so it is physically real in the scene. ${interactionInstruction(input.interactionMode, input.productType)}`,
+    'Keep its design EXACTLY as in the product images: same shape, same number and layout of motifs and stones, same colored or enamel parts if present, same hoop or chain form, same metal color. Do not add, remove or change any part. Keep one piece or a pair exactly as in Image 1.',
+    'Keep the overall size and position as in Image 1, do not enlarge or shrink it.',
+    'Keep everything else exactly as in Image 1: skin, fingers, ear, hair, background, lighting, framing and crop.',
   ].join('\n')
-  // AI 偶尔会整张重画（换了手势、换了视角，2026-11-27 用户实测），贴回去就是一块完全不同的图。
-  // 商品以外的画面差太多就再来一次；两次都不行，就不用 AI 的结果，直接用贴好的商品图（商品和位置仍然正确）
-  let model = resolvePasteReplaceImageModel(input.credentials)
-  let aiCrop: Buffer | null = null
-  let lastDrift = 0
-  for (let attempt = 1; attempt <= 2 && !aiCrop; attempt += 1) {
-    const generated = await generateWithGrs({
-      credentials: input.credentials,
-      prompt,
-      imagePaths: [cropPath, input.productImagePath],
-      aspectRatio: '1:1',
-      outputPath: aiPath,
-      uploadKeyPrefix: 'grsai-input/live-photo/harmonize',
-    })
-    model = generated.model
-    const candidate = await sharp(aiPath).resize(side, side, { fit: 'fill' }).png().toBuffer()
-    lastDrift = await measureSceneDrift({ before: cropPath, after: candidate, productMask: cropMask })
-    if (lastDrift <= MAX_SCENE_DRIFT) aiCrop = candidate
-  }
-  const fellBack = !aiCrop
-  // AI 结果缩回正方形原大小，放回整张图的同一位置
-  if (!aiCrop) aiCrop = await sharp(cropPath).png().toBuffer()
-  const erased = await sharp(input.erasedScenePath).rotate().resize(W, H, { fit: 'fill' }).png().toBuffer()
-  const ai = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
-  // 只按商品的形状往外扩一圈贴回（接触阴影、穿孔都在这圈里），其余全用擦好的原图。
-  // AI 重画时整块会有轻微位移和色差，按方块贴回会看出一块补丁（2026-11-27 线上实测）
-  const productSize = Math.max(input.productBounds.width, input.productBounds.height)
-  const grow = Math.max(3, productSize * 0.25)
-  const expanded = await sharp(input.productMaskPath)
-    .resize(W, H, { fit: 'fill' })
+  const views = input.productViewPaths.filter((path) => path && existsSync(path)).slice(0, 3)
+  // 贴回的范围：原商品框和新商品的并集，往外扩一圈再羽化（AI 会把商品画得稍微挪一点、加阴影、改手指）
+  const grow = Math.max(4, Math.max(input.productBounds.width, input.productBounds.height) * 0.35)
+  const boxLeft = Math.max(0, Math.round(union.left - grow))
+  const boxTop = Math.max(0, Math.round(union.top - grow))
+  const boxW = Math.max(1, Math.min(W - boxLeft, Math.round(union.width + grow * 2)))
+  const boxH = Math.max(1, Math.min(H - boxTop, Math.round(union.height + grow * 2)))
+  const rect = await sharp({ create: { width: boxW, height: boxH, channels: 3, background: '#ffffff' } }).png().toBuffer()
+  const softMask = await sharp({ create: { width: W, height: H, channels: 3, background: '#000000' } })
+    .composite([{ input: rect, left: boxLeft, top: boxTop }])
+    .blur(Math.max(1.5, grow * 0.5))
     .extractChannel(0)
-    .blur(grow)
-    .linear(8, 0)
-    .extractChannel(0)
-    .png()
+    .raw()
     .toBuffer()
-  const softMask = await sharp(expanded).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
-  const overlay = await sharp(ai).removeAlpha().joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
-  const blended = await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).removeAlpha().png().toBuffer()
-  // 商品本身贴回真实像素：只取 AI 结果的「明暗、颜色变化」（低频），细节（钻、纹路、轮廓）全用真实商品
-  const restored = await restoreProductDetail({ blended, guidePath: input.guidePath, productMaskPath: input.productMaskPath, W, H, productSize })
-  await mkdir(dirname(input.outputPath), { recursive: true })
-  await sharp(restored, { raw: { width: W, height: H, channels: 3 } }).png().toFile(input.outputPath)
-  return { path: input.outputPath, model, fellBack, drift: Math.round(lastDrift * 10) / 10 }
-}
-
-/** AI 最多能把商品的颜色、明暗改多少（0~255）：超过这个就不是打光，而是在重画商品 */
-const MAX_LIGHTING_SHIFT = 48
-
-/**
- * 融合后把商品贴回真实像素：结果 = 真实商品 + (AI 结果的模糊 − 贴图的模糊)，只在商品形状里做。
- * 这样 AI 给的光影、色温都保留，商品的款式、钻、纹路、轮廓一点不变。
- * AI 稍微挪了位置也只会让光影偏一点，不会出现两个商品的重影；差得太多的地方按上限截住。
- */
-async function restoreProductDetail(input: { blended: Buffer; guidePath: string; productMaskPath: string; W: number; H: number; productSize: number }) {
-  const { W, H } = input
-  const radius = Math.max(1.5, input.productSize / 24)
-  const raw = (img: any) => img.resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer()
-  const blended = await raw(sharp(input.blended))
-  const blendedLow = await raw(sharp(input.blended).blur(radius))
-  const guide = await raw(sharp(input.guidePath))
-  const guideLow = await raw(sharp(input.guidePath).blur(radius))
-  // 商品形状往里收一点再羽化：边缘那一圈交给 AI 的融合，免得硬边
-  const mask = await sharp(input.productMaskPath).resize(W, H, { fit: 'fill' }).extractChannel(0).blur(Math.max(0.8, radius * 0.35)).raw().toBuffer()
-  const out = Buffer.from(blended)
-  for (let i = 0; i < W * H; i += 1) {
-    const m = mask[i] / 255
-    if (m <= 0.02) continue
-    for (let c = 0; c < 3; c += 1) {
-      const k = i * 3 + c
-      const shift = Math.max(-MAX_LIGHTING_SHIFT, Math.min(MAX_LIGHTING_SHIFT, blendedLow[k] - guideLow[k]))
-      const real = Math.max(0, Math.min(255, guide[k] + shift))
-      out[k] = Math.round(blended[k] * (1 - m) + real * m)
+  const erased = await sharp(input.erasedScenePath).rotate().resize(W, H, { fit: 'fill' }).removeAlpha().png().toBuffer()
+  let model = resolvePasteReplaceImageModel(input.credentials)
+  const count = Math.max(1, input.count ?? PASTE_STILL_CANDIDATES)
+  const results = await Promise.all(Array.from({ length: count }, async (_, index) => {
+    const aiPath = join(input.outputDir, `integrate-${stamp}-${index + 1}-ai.png`)
+    const outPath = join(input.outputDir, `integrate-${stamp}-${index + 1}.png`)
+    try {
+      const generated = await generateWithGrs({
+        credentials: input.credentials,
+        prompt,
+        imagePaths: [guideCrop, originalCrop, ...views],
+        aspectRatio: '1:1',
+        outputPath: aiPath,
+        uploadKeyPrefix: 'grsai-input/live-photo/integrate',
+      })
+      model = generated.model
+      const aiCrop = await sharp(aiPath).resize(side, side, { fit: 'fill' }).removeAlpha().png().toBuffer()
+      const drift = await measureSceneDrift({ before: guideCrop, after: aiCrop, productMask: cropMask })
+      const placed = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
+      const overlay = await sharp(placed).joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
+      await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(outPath)
+      return { path: outPath, drift: Math.round(drift * 10) / 10, error: '' }
+    } catch (error) {
+      console.warn('[live-photo] integrate candidate failed', index + 1, (error as Error)?.message || error)
+      return { path: '', drift: 0, error: String((error as Error)?.message || error) }
     }
-  }
-  return out
+  }))
+  const candidates = results.filter((r) => r.path).map(({ path, drift }) => ({ path, drift }))
+  if (!candidates.length) throw new Error(results[0]?.error || '融合失败，请重试')
+  // AI 把整块画面都改掉的排到后面（用户挑的时候先看正常的）
+  candidates.sort((a, b) => Number(a.drift > MAX_SCENE_DRIFT) - Number(b.drift > MAX_SCENE_DRIFT))
+  return { candidates, model, failed: results.length - candidates.length }
 }
 
 /** 商品以外的画面平均差多少（0~255）才算 AI 把整张图改掉了。正常融合在 10 以内，整张重画在 30 以上 */
@@ -862,6 +844,24 @@ export async function pickProductViewByAngle(input: {
   } catch {
     return null
   }
+}
+
+/**
+ * 六视图里哪几格能拿来贴：按生成提示词固定顺序是 正面、3/4 正面、侧面、背面、3/4 背面、细节。
+ * 背面两格看不到商品正面（钻、吊坠），卖货用不上，对话模型却常挑它（2026-11-27 实测 6 次挑了 2 次）；
+ * 侧面那格也不要：侧面朝镜头的参考图在入口就拦掉了，放进来只会被误挑，贴出来是一条细边（2026-11-28 测试集 30 条里 3 条）
+ */
+export function pasteUsableBoardViews(views: string[]) {
+  return views.length === 6 ? views.filter((_, index) => index !== 2 && index !== 3 && index !== 4) : views
+}
+
+/**
+ * 抠图保留一对还是只留一只：戴在身上（一只耳朵）一定只留一只。
+ * 挑图时看到参考图里「两件」可能是耳朵上的另一个耳钉、或者一朵花的几瓣，按一对贴就是两只挤在一只耳朵上（2026-11-28 测试集 2 条）
+ */
+export function resolveCutoutPair(pickedPair: boolean, interactionMode?: string) {
+  if (String(interactionMode || '') === 'worn') return false
+  return pickedPair
 }
 
 /** 有一对的候选里优先 3/4 正面（六视图第 2 格），其次正面（第 1 格），再其次商品原图 */

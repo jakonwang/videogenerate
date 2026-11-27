@@ -155,37 +155,68 @@ async function main() {
     const cutoutMeta = await sharp(placement.cutoutPath).metadata()
     assert.ok(cutoutMeta.hasAlpha, 'cutout has alpha')
 
-    // 3) 确认（放大到 150%、转 10 度）：融合一次，再生成视频
+    // 3) 确认（放大到 150%、转 10 度）：融合一次出 3 张，停在「待挑图」
     await livePhotoService.confirmPlacement({ id: created.id, placement: { ...placement.defaultPlacement, width: placement.defaultPlacement.width * 1.5, rotation: 10 } })
+    const picking: any = await waitFor('awaiting still pick', async () => {
+      const item: any = await livePhotoService.get(created.id)
+      if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
+      return item?.awaitingStillPick ? item : null
+    })
+    assert.equal(generateBodies.length, 4, 'erase reused, three integrate calls')
+    assert.ok(generateBodies[1].images.length >= 3, 'integrate sends the placed guide + original + product photos')
+    assert.match(generateBodies[1].prompt, /do not enlarge or shrink/)
+    assert.equal(picking.stillCandidates.length, 3)
+    assert.equal(videoPosts, 0, 'no video before a still is picked')
+    const stills: any = await livePhotoService.getStillCandidates({ id: created.id })
+    assert.equal(stills.candidates.length, 3)
+    for (const candidate of stills.candidates) {
+      const meta = await sharp(candidate.path).metadata()
+      assert.equal(meta.width, 300, 'candidate keeps the reference size')
+    }
+
+    // 4) 挑第 2 张：不再生成，直接做视频
+    await livePhotoService.pickStill({ id: created.id, index: 1 })
     const completed: any = await waitFor('completed', async () => {
       const item: any = await livePhotoService.get(created.id)
       if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
       return item?.packagingStatus === 'completed' ? item : null
     })
-    assert.equal(generateBodies.length, 2, 'erase reused, one harmonize call')
-    assert.equal(generateBodies[1].images.length, 2, 'harmonize sends the placed guide + product photo')
-    assert.match(generateBodies[1].prompt, /do not enlarge or shrink/)
-    assert.match(generateBodies[1].prompt, /ear lobe piercing/, 'earring wearing instructions')
+    assert.equal(generateBodies.length, 4, 'picking does not generate again')
     assert.equal(cutoutCalls, 1, 'cutout cached')
     assert.ok(completed.placement.confirmedAt)
+    assert.equal(completed.pickedStillIndex, 1)
     assert.ok(existsSync(completed.generatedStillPath), 'final still saved')
     const still = await sharp(completed.generatedStillPath).metadata()
     assert.equal(still.width, 300, 'still keeps the reference size')
     assert.equal(videoPosts, 1)
-    assert.ok(!completed.awaitingPlacement)
+    assert.ok(!completed.awaitingPlacement && !completed.awaitingStillPick)
 
-    // 4) 自动摆放：不停顿，抠图走缓存
+    // 5) 自动摆放：不等摆放，但仍等挑图；「都不行」重新出 3 张，挑完做视频，抠图走缓存
     const auto: any = await livePhotoService.createFromReference({ referenceImagePath: refImage, productId: product.id, motionTemplate: 'push_in', videoModelId: 'gaorui:veo_3_1-fl', videoZoomPercent: 0 } as any)
     assert.equal(auto.placementMode, 'auto')
+    const autoPicking: any = await waitFor('auto awaiting pick', async () => {
+      const item: any = await livePhotoService.get(auto.id)
+      if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
+      return item?.awaitingStillPick ? item : null
+    })
+    assert.equal(generateBodies.length, 8)
+    await livePhotoService.regenerateStills({ id: auto.id })
+    await waitFor('auto regenerated', async () => {
+      const item: any = await livePhotoService.get(auto.id)
+      if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
+      return item?.awaitingStillPick && item.stillCandidates?.[0]?.path !== autoPicking.stillCandidates[0].path ? item : null
+    })
+    assert.equal(generateBodies.length, 11, 'regenerate makes three new stills, erase reused')
+    await livePhotoService.pickStill({ id: auto.id, index: 0 })
     await waitFor('auto completed', async () => {
       const item: any = await livePhotoService.get(auto.id)
       if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
       return item?.packagingStatus === 'completed' ? item : null
     })
     assert.equal(cutoutCalls, 1, 'same product image is cut out only once')
-    assert.equal(generateBodies.length, 4)
+    assert.equal(generateBodies.length, 11)
 
-    // 5) 没登录（不能抠图）：新任务回到原来的方式
+    // 6) 没登录（不能抠图）：新任务回到原来的方式
     paste.setProductCutoutProvider(null)
     const legacy: any = await livePhotoService.enqueueReferenceItems({ referenceImagePath: refImage, productId: product.id } as any)
     assert.equal(legacy.replaceMode, undefined)

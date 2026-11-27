@@ -31,7 +31,10 @@ import {
   ensureProductCutout,
   eraseRegionProduct,
   checkReferenceSuitability,
-  harmonizePlacedProduct,
+  integratePlacedProduct,
+  PASTE_STILL_CANDIDATES,
+  pasteUsableBoardViews,
+  resolveCutoutPair,
   normalizeProductPlacement,
   pickProductViewByAngle,
   readImageSize,
@@ -4083,7 +4086,7 @@ async function materializeItem(input: {
 }
 
 /** 自动挑图的版本：2 = 六视图按分隔处识别 3×2 / 2×3（1 版按横竖猜，竖图的 3×2 板会切错）；3 = 不再给背面两格；4 = 先数件数，一对配一对的图 */
-const LIVE_PHOTO_CUTOUT_PICK_VERSION = 5
+const LIVE_PHOTO_CUTOUT_PICK_VERSION = 6
 
 /** 按角度挑图的候选：商品库里这个商品的原图 + 六视图分析板切出来的各个角度 */
 async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
@@ -4096,9 +4099,7 @@ async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePh
   const board = String(product.authoritativeProductReferencePath || '').trim()
   if (board && existsSync(board) && /analysis[-_]board/i.test(board)) {
     const views = await splitAnalysisBoard(board, join(livePhotoRoot(item.id), 'paste', 'views')).catch(() => [] as string[])
-    // 六视图按生成提示词固定顺序：正面、3/4 正面、侧面、背面、3/4 背面、细节。背面两格看不到商品正面（钻、吊坠），
-    // 卖货用不上，对话模型却常挑它（2026-11-27 实测 6 次挑了 2 次），直接不给它选
-    paths.push(...(views.length === 6 ? views.filter((_, index) => index !== 3 && index !== 4) : views))
+    paths.push(...pasteUsableBoardViews(views))
   }
   return paths.slice(0, 10)
 }
@@ -4200,7 +4201,7 @@ async function preparePasteReplacementInputs(input: {
       cutoutSourcePath: picked?.path ?? item.cutoutSourcePath,
       cutoutSourceChosenBy: 'auto',
       cutoutPickVersion: LIVE_PHOTO_CUTOUT_PICK_VERSION,
-      cutoutPair: picked ? picked.pair : undefined,
+      cutoutPair: picked ? resolveCutoutPair(picked.pair, item.sceneInteraction?.mode) : undefined,
       updatedAt: now(),
     })
   }
@@ -4227,8 +4228,8 @@ async function preparePasteReplacementInputs(input: {
 }
 
 /**
- * 贴真实商品（见 pasteReplace.ts）：擦除 → 抠图 → 按摆放贴上 → AI 融合 → 只把商品附近贴回原图。
- * 选了「生成前让我确认」且还没确认时，抛 [awaiting_placement] 停下来等用户。
+ * 贴真实商品（见 pasteReplace.ts）：擦除 → 抠图 → 按摆放贴上 → AI 把商品画进场景，一次出几张 → 用户挑一张 → 视频。
+ * 选了「生成前让我确认」且还没确认时，抛 [awaiting_placement] 停下来等用户；出好几张图后抛 [awaiting_still_pick] 等用户挑。
  */
 async function runPasteReplacement(input: {
   item: LivePhotoItem
@@ -4241,6 +4242,11 @@ async function runPasteReplacement(input: {
   if (item.placementMode === 'confirm' && !prepared.placement.confirmedAt) {
     throw new Error('[awaiting_placement] 等你确认商品摆放')
   }
+  // 已经挑好了：直接用挑的那张（重试、续跑都不再重新生成）
+  const candidates = (item.stillCandidates || []).filter((candidate) => candidate.path && existsSync(candidate.path))
+  const picked = typeof item.pickedStillIndex === 'number' ? item.stillCandidates?.[item.pickedStillIndex] : undefined
+  if (picked?.path && existsSync(picked.path)) return picked.path
+  if (candidates.length) throw new Error('[awaiting_still_pick] 等你挑一张图')
   const root = livePhotoRoot(item.id)
   const guidePath = join(root, 'paste', `guide-${now()}.png`)
   const guide = await renderPlacementGuide({
@@ -4250,32 +4256,37 @@ async function runPasteReplacement(input: {
     outputPath: guidePath,
   })
   item = await livePhotoRepo.upsert({
-    ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 商品已按摆放贴好，开始融合')]),
+    ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品已按摆放贴好，开始融合（一次出 ${PASTE_STILL_CANDIDATES} 张）`)]),
     updatedAt: now(),
   })
-  const harmonized = await harmonizePlacedProduct({
+  // 款式依据：抠图用的那张 + 其它角度（商品图、六视图正面 / 3/4 正面），最多 3 张
+  const views = [prepared.cutoutSourcePath, ...(await collectLivePhotoProductViews(item, input.product))]
+    .filter((path, index, all) => path && all.indexOf(path) === index)
+    .slice(0, 3)
+  const integrated = await integratePlacedProduct({
     credentials: input.credentials,
     referenceScenePath: input.referenceImagePath,
     guidePath,
     erasedScenePath: String(item.erasedScenePath),
     productMaskPath: guide.maskPath,
-    productImagePath: prepared.cutoutSourcePath,
+    productViewPaths: views,
     productType: input.product.type,
     productBounds: guide.bounds,
     region: prepared.region,
     interactionMode: item.sceneInteraction?.mode,
-    poseLocked: Boolean(prepared.placement.flip) || (prepared.placement.squash ?? 1) < 0.999,
-    outputPath: join(root, 'generated-still', `localized-replacement-paste-${now()}-${randomUUID()}.png`),
+    outputDir: join(root, 'generated-still'),
   })
   await livePhotoRepo.upsert({
     ...appendLivePhotoLogs(item, [
-      buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: harmonized.model, endpoint: '/v1/api/generate', cached: false }),
-      ...(harmonized.fellBack ? [buildLivePhotoLog(`[live-photo] 融合时 AI 把整张画面改掉了（差异 ${harmonized.drift}），两次都不行，改用直接贴好的商品图`, 'error')] : []),
+      buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: integrated.model, endpoint: '/v1/api/generate', cached: false }),
+      buildLivePhotoLog(`[live-photo] 融合出了 ${integrated.candidates.length} 张图${integrated.failed ? `（${integrated.failed} 张失败）` : ''}，等你挑一张`, 'success'),
     ]),
+    stillCandidates: integrated.candidates,
+    pickedStillIndex: undefined,
     awaitingPlacement: false,
     updatedAt: now(),
   })
-  return harmonized.path
+  throw new Error('[awaiting_still_pick] 等你挑一张图')
 }
 
 async function finalizeReferenceItem(input: {
@@ -4876,6 +4887,19 @@ async function runLivePhotoItemAutoFlow(
         updatedAt: now(),
       })
       throw new LivePhotoAutoFlowHandledError('Live Photo waiting for placement confirmation', false)
+    }
+    // 融合出了几张图：停下来等用户挑一张（不算失败、不计重试）
+    if (String(error?.message || '').includes('[awaiting_still_pick]')) {
+      await livePhotoRepo.upsert({
+        ...appendLivePhotoLogs(latestPersisted, [buildLivePhotoLog('[live-photo] 等待挑图')]),
+        awaitingStillPick: true,
+        packagingStatus: 'processing',
+        error: undefined,
+        autoFlowStatus: { ...current, status: 'idle', paused: true, currentStage: 'image_generation', failedStage: undefined, lastError: '' },
+        workflow: patchWorkflow(latestPersisted.workflow, 'image_generation', 'image_generation', 'idle'),
+        updatedAt: now(),
+      })
+      throw new LivePhotoAutoFlowHandledError('Live Photo waiting for the user to pick a still', false)
     }
     const currentStage = resolveLivePhotoFailureStage(
       latestPersisted,
@@ -6247,6 +6271,53 @@ export const livePhotoService = {
       ...appendLivePhotoLogs(existing, [buildLivePhotoLog(`[live-photo] 确认商品摆放：宽 ${(placement.width * 100).toFixed(1)}%，角度 ${Math.round(placement.rotation)}°`)]),
       placement: { ...placement, confirmedAt: now() },
       awaitingPlacement: false,
+      // 摆放变了：之前融合出的几张作废，重新出
+      stillCandidates: undefined,
+      pickedStillIndex: undefined,
+      awaitingStillPick: false,
+      updatedAt: now(),
+    })
+    return await this.retry({ id: existing.id, motionTemplate: input.motionTemplate, forceImageStage: true })
+  },
+
+  /** 「挑图」弹窗要的数据：融合出的几张图、原参考图 */
+  async getStillCandidates(input: { id: string }) {
+    const existing = await livePhotoRepo.get(String(input?.id || '').trim())
+    if (!existing) throw new Error('任务不存在')
+    const candidates = (existing.stillCandidates || []).map((candidate, index) => ({ index, path: candidate.path, ok: Boolean(candidate.path && existsSync(candidate.path)) }))
+    return {
+      referenceImagePath: resolveLivePhotoReferenceImagePath(existing) || '',
+      region: normalizeLivePhotoReplacementRegion(existing.replacementRegion) || null,
+      candidates: candidates.filter((candidate) => candidate.ok).map(({ index, path }) => ({ index, path })),
+      pickedIndex: typeof existing.pickedStillIndex === 'number' ? existing.pickedStillIndex : null,
+    }
+  },
+
+  /** 挑一张：记下挑的那张，从出图那步续跑（直接用挑的图，不再生成），接着做视频 */
+  async pickStill(input: { id: string; index: number; motionTemplate?: LivePhotoMotionTemplate }) {
+    const existing = await livePhotoRepo.get(String(input?.id || '').trim())
+    if (!existing) throw new Error('任务不存在')
+    const index = Math.round(Number(input?.index))
+    const candidate = existing.stillCandidates?.[index]
+    if (!candidate?.path || !existsSync(candidate.path)) throw new Error('这张图不在了，请重新生成')
+    await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(existing, [buildLivePhotoLog(`[live-photo] 挑了第 ${index + 1} 张图`)]),
+      pickedStillIndex: index,
+      awaitingStillPick: false,
+      updatedAt: now(),
+    })
+    return await this.retry({ id: existing.id, motionTemplate: input.motionTemplate, forceImageStage: true })
+  },
+
+  /** 几张都不满意：丢掉，重新融合出几张（擦图、抠图、摆放都复用） */
+  async regenerateStills(input: { id: string; motionTemplate?: LivePhotoMotionTemplate }) {
+    const existing = await livePhotoRepo.get(String(input?.id || '').trim())
+    if (!existing) throw new Error('任务不存在')
+    await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(existing, [buildLivePhotoLog('[live-photo] 几张都不满意，重新融合')]),
+      stillCandidates: undefined,
+      pickedStillIndex: undefined,
+      awaitingStillPick: false,
       updatedAt: now(),
     })
     return await this.retry({ id: existing.id, motionTemplate: input.motionTemplate, forceImageStage: true })

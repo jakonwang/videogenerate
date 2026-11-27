@@ -1401,6 +1401,11 @@ const api = {
     getPlacement: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:getPlacement', payload),
     confirmPlacement: (payload: { id: string; placement: { cx: number; cy: number; width: number; rotation: number; squash?: number; flip?: boolean }; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:confirmPlacement', payload),
+    getStillCandidates: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:getStillCandidates', payload),
+    pickStill: (payload: { id: string; index: number; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:pickStill', payload),
+    regenerateStills: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:regenerateStills', payload),
     pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
     resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:resumeAutoFlow', payload),

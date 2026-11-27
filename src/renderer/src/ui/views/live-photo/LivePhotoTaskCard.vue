@@ -7,6 +7,7 @@ import {
   FileImage,
   FileJson,
   FolderOpen,
+  Images,
   Logs,
   Move,
   MoreHorizontal,
@@ -26,7 +27,7 @@ import { useProgressText } from './useProgressText'
  * 底部只放一个当下最该点的按钮 + 详情，其余操作收进「更多」菜单。
  */
 export type LivePhotoCardAction =
-  | 'select' | 'details' | 'play' | 'retry' | 'retryImage' | 'continueVideo' | 'region' | 'placement' | 'resume' | 'pause'
+  | 'select' | 'details' | 'play' | 'retry' | 'retryImage' | 'continueVideo' | 'region' | 'placement' | 'pickStill' | 'resume' | 'pause'
   | 'logs' | 'subtitle' | 'revertSubtitle' | 'reveal' | 'metadata' | 'delete'
 
 export type LivePhotoCardCaps = {
@@ -38,6 +39,8 @@ export type LivePhotoCardCaps = {
   canRegion: boolean
   /** 贴真实商品：可以打开「调整摆放」 */
   canPlacement?: boolean
+  /** 贴真实商品：融合出了几张图，可以打开「挑图」 */
+  canPickStill?: boolean
   canRetryImage: boolean
   canContinueVideo: boolean
   subtitleBusy?: boolean
@@ -66,9 +69,10 @@ const tone = computed(() => {
   return ''
 })
 const pasteSteps = computed(() => (props.item.packagingStatus === 'completed' ? null : pasteReplaceSteps(props.item)))
-const stateText = computed(() => (props.item.awaitingPlacement ? '待确认摆放' : text.stateLabel(p.value)))
+const stateText = computed(() => (props.item.awaitingStillPick ? '待挑图' : props.item.awaitingPlacement ? '待确认摆放' : text.stateLabel(p.value)))
 const line = computed(() => {
   const progress = p.value
+  if (props.item.awaitingStillPick) return `已出 ${props.item.stillCandidates?.length || 0} 张图，挑一张满意的再做视频`
   if (props.item.awaitingPlacement) return '旧商品已擦掉、商品已抠好，确认摆放后开始融合'
   if (progress.failure) {
     const reason = text.failureLabel(progress)
@@ -91,6 +95,7 @@ const primary = computed<Array<{ action: LivePhotoCardAction; label: string; ico
       ...(props.caps.canRetryImage ? [{ action: 'retryImage' as const, label: t('lpTask.action.retryImage'), icon: RefreshCcw }] : []),
     ]
   }
+  if (props.item.awaitingStillPick && props.caps.canPickStill) return [{ action: 'pickStill', label: '挑图', icon: Images, strong: true }]
   if (props.item.awaitingPlacement && props.caps.canPlacement) return [{ action: 'placement', label: '调整摆放', icon: Move, strong: true }]
   if (progress.state === 'done' && props.caps.hasVideo) return [{ action: 'play', label: t('lpTask.action.play'), icon: Play, strong: true }]
   if (progress.next === 'region' && props.caps.canRegion) return [{ action: 'region', label: t('lpTask.action.region'), icon: ScanLine, strong: true }]

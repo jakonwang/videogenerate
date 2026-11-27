@@ -12,6 +12,7 @@ import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import LivePhotoTaskCard, { type LivePhotoCardAction, type LivePhotoCardCaps } from './live-photo/LivePhotoTaskCard.vue'
 import LivePhotoTaskDetail from './live-photo/LivePhotoTaskDetail.vue'
 import ProductPlacementDialog from './live-photo/ProductPlacementDialog.vue'
+import StillPickDialog from './live-photo/StillPickDialog.vue'
 import ChPager from './creator-hub/ChPager.vue'
 // The page brings its own stylesheets so the web version (which reuses this page) gets them too.
 import type { LivePhotoItem, LivePhotoQualityReport } from './live-photo/types'
@@ -372,6 +373,7 @@ const detailDialogItem = ref<LivePhotoItem | null>(null)
 const replacementRegionDialogOpen = ref(false)
 /** 贴真实商品：正在「调整摆放」的任务 */
 const placementDialogItem = ref<LivePhotoItem | null>(null)
+const stillPickDialogItem = ref<LivePhotoItem | null>(null)
 /** 商品摆放：auto = 和原商品一样大直接生成；confirm = 擦完、抠完先停下来让我调整（记在本机） */
 const PLACEMENT_MODE_STORAGE_KEY = 'vg.livePhoto.placementMode'
 const placementMode = ref<'auto' | 'confirm'>(readPlacementMode())
@@ -972,6 +974,7 @@ function cardCaps(item: LivePhotoItem): LivePhotoCardCaps {
     hasMetadata: Boolean(item.packagingMetadataBridgePath),
     canRegion: canCorrectReplacementRegion(item) && item.replaceMode !== 'paste',
     canPlacement: item.replaceMode === 'paste' && item.sourceType === 'reference_replace' && (Boolean(item.awaitingPlacement) || item.packagingStatus !== 'processing'),
+    canPickStill: item.replaceMode === 'paste' && Boolean(item.awaitingStillPick) && Boolean(item.stillCandidates?.length),
     canRetryImage: canRetryImageOnce(item),
     canContinueVideo: canContinueWithVideo(item),
     subtitleBusy: subtitleDialogBusy.value,
@@ -991,6 +994,9 @@ function onTaskAction(item: LivePhotoItem, action: LivePhotoCardAction) {
     case 'placement':
       placementDialogItem.value = item
       return
+    case 'pickStill':
+      stillPickDialogItem.value = item
+      return
     case 'resume': return void resumeItemAutoFlow(item)
     case 'pause': return void pauseItemAutoFlow(item)
     case 'logs': return void openRuntimeLogs(item)
@@ -1000,6 +1006,13 @@ function onTaskAction(item: LivePhotoItem, action: LivePhotoCardAction) {
     case 'metadata': return void openPath(item.packagingMetadataBridgePath)
     case 'delete': return void removeItem(item.id)
   }
+}
+
+function onStillPicked(updated: unknown, regenerated: boolean) {
+  stillPickDialogItem.value = null
+  if (updated && typeof updated === 'object') mergeLivePhotoItems([updated as LivePhotoItem])
+  notice.value = regenerated ? '正在重新融合，出好后再挑' : '已选好图，开始生成视频'
+  void refreshLibraryItems()
 }
 
 function onPlacementConfirmed(updated: unknown) {
@@ -2579,6 +2592,15 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       :preview-src="previewSrc"
       @close="placementDialogItem = null"
       @confirmed="onPlacementConfirmed"
+    />
+    <StillPickDialog
+      v-if="stillPickDialogItem"
+      :item-id="stillPickDialogItem.id"
+      :title="stillPickDialogItem.productSnapshot?.name"
+      :preview-src="previewSrc"
+      @close="stillPickDialogItem = null"
+      @picked="(updated) => onStillPicked(updated, false)"
+      @regenerated="(updated) => onStillPicked(updated, true)"
     />
     <div v-if="replacementRegionDialogOpen && replacementRegionDialogItem" class="replacement-region-dialog" @click.self="closeReplacementRegionEditor">
       <div class="replacement-region-dialog__panel">

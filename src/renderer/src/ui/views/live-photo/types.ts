@@ -20,6 +20,10 @@ export type LivePhotoItem = {
   productCutoutPath?: string
   placement?: { cx: number; cy: number; width: number; rotation: number; squash?: number; flip?: boolean; confirmedAt?: number }
   awaitingPlacement?: boolean
+  /** 融合一次出的几张图，等用户挑一张（见主进程 integratePlacedProduct） */
+  stillCandidates?: Array<{ path: string; drift?: number }>
+  pickedStillIndex?: number
+  awaitingStillPick?: boolean
   packagingStatus: 'draft' | 'processing' | 'completed' | 'failed'
   generatedStillPath?: string
   motionVideoPath?: string

@@ -85,10 +85,11 @@ export function pasteReplaceSteps(item: LivePhotoItem): Array<{ label: string; s
     Boolean(item.erasedScenePath),
     Boolean(item.productCutoutPath),
     Boolean(item.placement && (item.placementMode !== 'confirm' || item.placement.confirmedAt)),
-    Boolean(item.generatedStillPath),
+    Boolean(item.stillCandidates?.length) || Boolean(item.generatedStillPath),
+    typeof item.pickedStillIndex === 'number' || Boolean(item.generatedStillPath),
     Boolean(item.motionVideoPath) || item.packagingStatus === 'completed',
   ]
-  const labels = ['擦掉旧商品', '抠图', '摆放', '融合', '视频']
+  const labels = ['擦掉旧商品', '抠图', '摆放', '融合', '挑图', '视频']
   const active = done.indexOf(false)
   return labels.map((label, index) => ({ label, state: done[index] ? 'done' : index === active ? 'active' : 'todo' }))
 }
