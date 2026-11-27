@@ -651,8 +651,8 @@ export async function pickProductViewByAngle(input: {
           'Ignore design differences; judge only the viewing angle and pose. Prefer a candidate that shows the same number of pieces as Image 0 when angles are similar.',
           'The product is being sold, so its decorated front (stones, charm, logo) must stay visible: never pick a rear or back view unless Image 0 clearly shows the back of the item; between a tilted front view and a tilted rear view, pick the front one.',
           'Do not pick a close-up detail crop.',
-          'Also say whether Image 0 shows a pair (two pieces of the same item, e.g. two earrings) or a single piece.',
-          'Return JSON only: {"best": <candidate number 1..N>, "pair": true|false}',
+          'First COUNT how many pieces of the item are in Image 0 (look carefully: two earrings side by side, overlapping, or one behind the other count as 2).',
+          'Return JSON only: {"count": <1 or 2>, "best": <candidate number 1..N>}',
         ].join('\n'),
       },
       { type: 'text', text: 'Image 0:' },
@@ -679,7 +679,15 @@ export async function pickProductViewByAngle(input: {
         const parsed = JSON.parse(extractJsonObjectText(extractModelMessageContent(text)))
         const best = Math.round(Number(parsed?.best))
         if (!Number.isFinite(best) || best < 1 || best > input.candidatePaths.length) continue
-        return { path: input.candidatePaths[best - 1], pair: parsed?.pair === true, index: best }
+        const pair = Number(parsed?.count) >= 2 || parsed?.pair === true
+        // 原图是一对、挑的图却只有一只（比如侧面图）：一只会被拉大去填两只的位置。换成有一对的图
+        const counts = await Promise.all(input.candidatePaths.map((path) => countProductPieces(path).catch(() => 1)))
+        let index = best - 1
+        if (pair && counts[index] < 2) {
+          const pairIndex = counts.findIndex((count) => count >= 2)
+          if (pairIndex >= 0) index = preferredPairIndex(input.candidatePaths, counts) ?? pairIndex
+        }
+        return { path: input.candidatePaths[index], pair, index: index + 1 }
       } catch (error) {
         console.warn('[live-photo] pick product view failed', attempt, (error as Error)?.message || error)
       }
@@ -688,4 +696,86 @@ export async function pickProductViewByAngle(input: {
   } catch {
     return null
   }
+}
+
+/** 有一对的候选里优先 3/4 正面（六视图第 2 格），其次正面（第 1 格），再其次商品原图 */
+function preferredPairIndex(paths: string[], counts: number[]) {
+  const order = [/view-2.png$/i, /view-1.png$/i]
+  for (const re of order) {
+    const index = paths.findIndex((path, i) => re.test(path) && counts[i] >= 2)
+    if (index >= 0) return index
+  }
+  return undefined
+}
+
+/**
+ * 数商品图里有几件（白底、黑底都行）：按四角估背景色，和背景差得多的算商品，
+ * 数连在一起的大块；小块（不到最大块的 35%）是字、碎屑，不算。
+ */
+export async function countProductPieces(imagePath: string) {
+  await ensureSharp()
+  const size = 400
+  const { data, info } = await sharp(imagePath).rotate().flatten({ background: '#ffffff' }).resize(size, size, { fit: 'inside' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  const w = info.width
+  const h = info.height
+  const px = (x: number, y: number) => {
+    const i = (y * w + x) * 3
+    return [data[i], data[i + 1], data[i + 2]]
+  }
+  const corners = [px(1, 1), px(w - 2, 1), px(1, h - 2), px(w - 2, h - 2)]
+  const bg = [0, 1, 2].map((c) => corners.reduce((sum, p) => sum + p[c], 0) / corners.length)
+  const solid = new Uint8Array(w * h)
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const [r, g, b] = px(x, y)
+      if (Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]) > 60) solid[y * w + x] = 1
+    }
+  }
+  const seen = new Uint8Array(w * h)
+  const sizes: number[] = []
+  const stack: number[] = []
+  for (let start = 0; start < w * h; start += 1) {
+    if (!solid[start] || seen[start]) continue
+    let count = 0
+    seen[start] = 1
+    stack.push(start)
+    while (stack.length) {
+      const index = stack.pop()!
+      count += 1
+      const x = index % w
+      const y = (index - x) / w
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+          const next = ny * w + nx
+          if (solid[next] && !seen[next]) {
+            seen[next] = 1
+            stack.push(next)
+          }
+        }
+      }
+    }
+    sizes.push(count)
+  }
+  if (!sizes.length) return 0
+  const largest = Math.max(...sizes)
+  const blobs = sizes.filter((size) => size >= largest * 0.35).length
+  // 一对挨得很近时会连成一块：再按竖向空隙分段（商品图里一对通常左右并排）
+  const colFill = new Array(w).fill(0)
+  for (let x = 0; x < w; x += 1) for (let y = 0; y < h; y += 1) if (solid[y * w + x]) colFill[x] += 1
+  const runs: number[] = []
+  let run = 0
+  for (let x = 0; x < w; x += 1) {
+    if (colFill[x] > h * 0.01) run += 1
+    else if (run) {
+      runs.push(run)
+      run = 0
+    }
+  }
+  if (run) runs.push(run)
+  const widest = Math.max(0, ...runs)
+  const columns = runs.filter((value) => value >= widest * 0.35).length
+  return Math.max(blobs, columns)
 }

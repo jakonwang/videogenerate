@@ -4079,8 +4079,8 @@ async function materializeItem(input: {
   }
 }
 
-/** 自动挑图的版本：2 = 六视图按分隔处识别 3×2 / 2×3（1 版按横竖猜，竖图的 3×2 板会切错）；3 = 不再给背面两格 */
-const LIVE_PHOTO_CUTOUT_PICK_VERSION = 3
+/** 自动挑图的版本：2 = 六视图按分隔处识别 3×2 / 2×3（1 版按横竖猜，竖图的 3×2 板会切错）；3 = 不再给背面两格；4 = 先数件数，一对配一对的图 */
+const LIVE_PHOTO_CUTOUT_PICK_VERSION = 4
 
 /** 按角度挑图的候选：商品库里这个商品的原图 + 六视图分析板切出来的各个角度 */
 async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
