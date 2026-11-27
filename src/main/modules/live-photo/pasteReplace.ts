@@ -393,8 +393,8 @@ function wearingInstructions(productType?: string) {
     ]
   }
   if (/ring|戒/.test(type)) return ['It is a ring worn on the finger at that spot: the band wraps around the finger and the back of the band is hidden behind the finger.']
-  if (/neck|pendant|项链|吊坠/.test(type)) return ['It is a necklace worn at that spot: the chain lies on the skin and follows the neck and collarbone, the pendant hangs with gravity.']
-  if (/brace|bangle|手链|手镯/.test(type)) return ['It is a bracelet worn on the wrist at that spot: it wraps around the wrist and the back part is hidden behind the wrist.']
+  if (/neck|pendant|项链|吊坠/.test(type)) return ['It is a necklace worn at that spot: the chain lies on the skin and follows the neck and collarbone, the pendant hangs with gravity. Ignore how the chain is laid out in the product photo.']
+  if (/brace|bangle|手链|手镯/.test(type)) return ['It is a bracelet worn on the wrist at that spot: it wraps around the wrist and the back part is hidden behind the wrist. Loose parts (extender chain, tag, dangling charms) hang down with gravity and rest against the skin — they never stick up or float across the hand, even if the product photo shows them laid out differently.']
   return ['It is held, worn, or placed at that spot exactly like the original item was: keep the same kind of contact with fingers, body, or surface.']
 }
 

@@ -467,6 +467,7 @@ async function locateLivePhotoReplacementRegion(input: {
         '{"x":0,"y":0,"width":0,"height":0,"confidence":0,"interaction":{"mode":"held","confidence":0,"support":"","occlusion":""}}',
         'All coordinates must be normalized to the full image range from 0 to 1.',
         'The rectangle must tightly include the complete visible product and its contact point.',
+        ...locateFullSpanRules(input.product.type),
         'Do not include unrelated hands, face, body, clothing, or background unless required to include the product contact point.',
         'Classify interaction.mode as exactly one of: worn, held, placed, hanging, attached, none, unknown.',
         'Use held when fingers or a hand pinch, grip, support, or present the product without wearing it.',
@@ -538,10 +539,26 @@ function livePhotoLocateCachePath() {
   return join(getAppPaths().cacheDir, 'live-photo-locate.json')
 }
 
+/**
+ * 项链、手链这类「一整条」的商品：框要包住看得见的整条链子，不能只框吊坠。
+ * 否则擦除只擦掉吊坠，旧链子留在脖子上，换上去会出现两条链（2026-11-27 实测）。
+ */
+function locateFullSpanRules(productType?: string) {
+  const type = String(productType || '').toLowerCase()
+  if (/neck|pendant|chain|choker|项链|吊坠|锁骨/.test(type)) {
+    return ['This is a necklace: the rectangle must include the WHOLE visible necklace — the pendant AND the entire visible chain on both sides of the neck up to where it leaves the frame or goes behind the neck — not only the pendant.']
+  }
+  if (/brace|bangle|anklet|手链|手镯|脚链/.test(type)) {
+    return ['This is a bracelet: the rectangle must include the whole visible bracelet around the wrist, not only one charm.']
+  }
+  return []
+}
+
 async function buildLivePhotoLocateCacheKey(scenePath: string, productType: string) {
   try {
     const info = await stat(scenePath)
-    return createHash('sha1').update([scenePath, info.size, info.mtimeMs, productType].join('|')).digest('hex')
+    // v2：项链 / 手链框整条链子（规则变了，旧缓存的框只框了吊坠）
+    return createHash('sha1').update([scenePath, info.size, info.mtimeMs, productType, 'v2'].join('|')).digest('hex')
   } catch {
     return ''
   }
