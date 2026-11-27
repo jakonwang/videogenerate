@@ -149,7 +149,8 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     '/api/v1/client/product-cutout',
     async (ctx) => {
       if (!productCutout) throw new CloudError('BAD_REQUEST', '服务器没有开启抠图', 400)
-      return await productCutout.run(user(ctx).id, ctx.body)
+      // 放宽了大小限制的路由不会自动解析 JSON，要自己解析
+      return await productCutout.run(user(ctx).id, parseJsonBody(ctx.bodyBuffer))
     },
     { maxBodyBytes: 12 * 1024 * 1024 },
   )
