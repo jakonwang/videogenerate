@@ -564,8 +564,9 @@ export async function readImageSize(path: string) {
 /* ------------------------------------------------------------------ 按角度挑商品图 */
 
 /**
- * 把商品的六视图分析板切成单格（AI 生成，排版是 3×2 或 2×3 的网格，每格底部有英文标注）。
- * 底部切掉一截去掉标注文字。返回每格的文件路径。
+ * 把商品的六视图分析板切成单格。分析板是 AI 生成的，排版可能是 3 列 2 行，也可能是 2 列 3 行（和图片横竖无关，
+ * 2026-11-27 实测竖图也有 3×2 的），所以看格子之间的分隔处来判断：分隔处几乎没有商品像素。
+ * 每格上下各切掉一截去掉英文标注（标注在上面或下面都有）。返回每格的文件路径。
  */
 export async function splitAnalysisBoard(boardPath: string, outDir: string) {
   await ensureSharp()
@@ -573,22 +574,46 @@ export async function splitAnalysisBoard(boardPath: string, outDir: string) {
   const W = Number(meta.width || 0)
   const H = Number(meta.height || 0)
   if (!W || !H) return [] as string[]
-  const cols = W >= H ? 3 : 2
-  const rows = W >= H ? 2 : 3
+  const cols = await detectBoardColumns(boardPath)
+  const rows = cols === 3 ? 2 : 3
   const cellW = Math.floor(W / cols)
   const cellH = Math.floor(H / rows)
   await mkdir(outDir, { recursive: true })
   const out: string[] = []
   for (let r = 0; r < rows; r += 1) {
     for (let c = 0; c < cols; c += 1) {
-      const pad = Math.round(Math.min(cellW, cellH) * 0.03)
-      const panel = { left: c * cellW + pad, top: r * cellH + pad, width: cellW - pad * 2, height: Math.round(cellH * 0.84) - pad }
+      const padX = Math.round(cellW * 0.03)
+      const top = r * cellH + Math.round(cellH * 0.14)
+      const panel = { left: c * cellW + padX, top, width: cellW - padX * 2, height: Math.round(cellH * 0.72) }
       const file = join(outDir, `view-${r * cols + c + 1}.png`)
       await sharp(boardPath).rotate().extract(panel).png().toFile(file)
       out.push(file)
     }
   }
   return out
+}
+
+/** 分析板是 2 列还是 3 列：比较 1/2 处和 1/3、2/3 处那一条竖带里的「深色像素」比例，分隔处应该几乎是空白 */
+export async function detectBoardColumns(boardPath: string): Promise<2 | 3> {
+  await ensureSharp()
+  const width = 300
+  const { data, info } = await sharp(boardPath).rotate().resize(width, null).greyscale().raw().toBuffer({ resolveWithObject: true })
+  const ink = (x: number) => {
+    const band = 2
+    let dark = 0
+    let total = 0
+    for (let dx = -band; dx <= band; dx += 1) {
+      const col = Math.min(info.width - 1, Math.max(0, Math.round(x) + dx))
+      for (let y = 0; y < info.height; y += 1) {
+        total += 1
+        if (data[y * info.width + col] < 215) dark += 1
+      }
+    }
+    return dark / Math.max(1, total)
+  }
+  const two = ink(info.width / 2)
+  const three = (ink(info.width / 3) + ink((info.width * 2) / 3)) / 2
+  return three <= two ? 3 : 2
 }
 
 /**

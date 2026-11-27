@@ -4079,6 +4079,9 @@ async function materializeItem(input: {
   }
 }
 
+/** 自动挑图的版本：2 = 六视图按分隔处识别 3×2 / 2×3（1 版按横竖猜，竖图的 3×2 板会切错）；3 = 不再给背面两格 */
+const LIVE_PHOTO_CUTOUT_PICK_VERSION = 3
+
 /** 按角度挑图的候选：商品库里这个商品的原图 + 六视图分析板切出来的各个角度 */
 async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
   const paths: string[] = []
@@ -4090,7 +4093,9 @@ async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePh
   const board = String(product.authoritativeProductReferencePath || '').trim()
   if (board && existsSync(board) && /analysis[-_]board/i.test(board)) {
     const views = await splitAnalysisBoard(board, join(livePhotoRoot(item.id), 'paste', 'views')).catch(() => [] as string[])
-    paths.push(...views)
+    // 六视图按生成提示词固定顺序：正面、3/4 正面、侧面、背面、3/4 背面、细节。背面两格看不到商品正面（钻、吊坠），
+    // 卖货用不上，对话模型却常挑它（2026-11-27 实测 6 次挑了 2 次），直接不给它选
+    paths.push(...(views.length === 6 ? views.filter((_, index) => index !== 3 && index !== 4) : views))
   }
   return paths.slice(0, 10)
 }
@@ -4140,6 +4145,18 @@ async function preparePasteReplacementInputs(input: {
       updatedAt: now(),
     })
   }
+  // 自动挑的图如果是旧版切格挑出来的（六视图切错了格，会混进几只商品），作废重挑
+  if (item.cutoutSourceChosenBy === 'auto' && item.cutoutPickVersion !== LIVE_PHOTO_CUTOUT_PICK_VERSION) {
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 商品图是旧版自动挑的，重新按角度挑一次')]),
+      cutoutSourceChosenBy: undefined,
+      cutoutSourcePath: undefined,
+      cutoutPair: undefined,
+      productCutoutPath: undefined,
+      placement: undefined,
+      updatedAt: now(),
+    })
+  }
   // 没手动选抠图用的商品图：按参考图里原商品的角度，从商品图和六视图里挑最接近的一张（只挑一次）
   if ((!item.productCutoutPath || !existsSync(item.productCutoutPath)) && !item.cutoutSourceChosenBy) {
     const candidates = await collectLivePhotoProductViews(item, input.product)
@@ -4160,6 +4177,7 @@ async function preparePasteReplacementInputs(input: {
       ]),
       cutoutSourcePath: picked?.path ?? item.cutoutSourcePath,
       cutoutSourceChosenBy: 'auto',
+      cutoutPickVersion: LIVE_PHOTO_CUTOUT_PICK_VERSION,
       cutoutPair: picked ? picked.pair : undefined,
       updatedAt: now(),
     })

@@ -287,6 +287,8 @@ export type LivePhotoItem = {
   cutoutSourceChosenBy?: 'user' | 'auto'
   /** 参考图里原商品是一对还是一只（自动挑图时一起判断） */
   cutoutPair?: boolean
+  /** 自动挑图用的规则版本（规则改了，旧任务会重挑） */
+  cutoutPickVersion?: number
   productCutoutPath?: string
   erasedScenePath?: string
   erasedRegionRevision?: number
