@@ -148,11 +148,17 @@ export function videoModelDisplayName(spec: VideoModelSpec) {
   return `${spec.label} · ${VIDEO_CATALOG_PLATFORM_LABELS[spec.platform]}`
 }
 
-/** 后台的开关表 → 打开的模型 id。没设置过（undefined）= 用清单里的默认值 */
+/**
+ * 后台的开关表 → 打开的模型 id。
+ * 后台从没设置过（空表）= 用清单里的默认值；后台设置过 = 只有点亮的才打开，没点过的一律算关闭
+ * （否则后台只点了几个，别的平台的模型还会按默认全冒出来）。
+ */
 export function resolveEnabledVideoModelIds(switches: Record<string, boolean> | undefined | null): string[] {
+  const configured = Boolean(switches) && VIDEO_MODEL_CATALOG.some((item) => typeof switches?.[item.id] === 'boolean')
   return VIDEO_MODEL_CATALOG.filter((item) => {
     const value = switches?.[item.id]
-    return typeof value === 'boolean' ? value : item.defaultEnabled
+    if (typeof value === 'boolean') return value
+    return configured ? false : item.defaultEnabled
   }).map((item) => item.id)
 }
 

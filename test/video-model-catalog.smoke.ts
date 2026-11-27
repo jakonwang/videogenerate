@@ -129,6 +129,9 @@ async function main() {
   const switched = resolveEnabledVideoModelIds({ 'gaorui:kling-v2.6': false, 'gaorui:wan3.0': true })
   assert.ok(!switched.includes('gaorui:kling-v2.6'))
   assert.ok(switched.includes('gaorui:wan3.0'))
+  // 后台设置过：没点过的模型一律算关闭
+  assert.ok(!switched.includes('xibapi:veo_3_1-fast-fl'), 'unlisted models are off once configured')
+  assert.deepEqual(resolveEnabledVideoModelIds({ 'xibapi:veo_3_1-fast-fl': true }), ['xibapi:veo_3_1-fast-fl'])
 
   // 后台设置下发到客户端
   const { applyManagedSettings, normalizeManagedSettings } = await import('../src/shared/cloud/managedSettings')
@@ -182,7 +185,7 @@ async function main() {
     xibapiHub: { apiKey: '', baseUrl: 'https://5208.ai' },
     grsaiApiKey: 'sk-grs',
     grsaiHost: 'https://grsaiapi.com',
-    videoModelSwitches: { 'gaorui:kling-v2.1': false },
+    videoModelSwitches: { 'gaorui:kling-v2.1': false, 'gaorui:kling-v2.6': true },
   } as any
   const available = catalog.listAvailableCatalogVideoModels(credentials)
   assert.ok(available.models.some((item) => item.id === 'gaorui:kling-v2.6'))

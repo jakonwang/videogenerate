@@ -396,7 +396,8 @@ export function VideoModelMatrix({ form, setForm }: { form: ManagedSoftwareSetti
         ...form.capabilities,
         video: {
           ...video,
-          modelSwitches: { ...video.modelSwitches, [spec.id]: on },
+          // 每次都写完整的开关表：后台点过之后，没点亮的模型一律算关闭
+          modelSwitches: { ...Object.fromEntries(VIDEO_MODEL_CATALOG.map((item) => [item.id, enabled.has(item.id)])), [spec.id]: on },
           defaultModelId: !on && video.defaultModelId === spec.id ? '' : video.defaultModelId,
         },
       },
