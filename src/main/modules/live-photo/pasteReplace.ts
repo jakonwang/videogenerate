@@ -265,7 +265,18 @@ export async function renderPlacementGuide(input: {
   const composites = []
   for (const layer of layers) composites.push({ input: await layer.input, left: layer.left, top: layer.top })
   await sharp(input.erasedScenePath).composite(composites).png().toFile(input.outputPath)
-  return { bounds: { left: box.left, top: box.top, width: box.bw, height: box.bh } }
+  // 商品在整张图里的形状（黑底白图），融合后只把商品附近按这个形状贴回
+  const maskPath = input.outputPath.replace(/.png$/i, '-mask.png')
+  const alphaLayer = await sharp(product.data).extractChannel('alpha').toColourspace('b-w').png().toBuffer()
+  const maskLayers = clipLayers([{ input: alphaLayer, left, top, width: product.info.width, height: product.info.height }], scene.width, scene.height)
+  const maskComposites = []
+  for (const layer of maskLayers) maskComposites.push({ input: await layer.input, left: layer.left, top: layer.top })
+  await sharp({ create: { width: scene.width, height: scene.height, channels: 3, background: '#000000' } })
+    .composite(maskComposites)
+    .toColourspace('b-w')
+    .png()
+    .toFile(maskPath)
+  return { bounds: { left: box.left, top: box.top, width: box.bw, height: box.bh }, maskPath }
 }
 
 /** sharp 的 composite 不接受超出画布的图层：超出部分裁掉 */
@@ -345,82 +356,6 @@ async function generateWithGrs(input: {
 
 /* ------------------------------------------------------------------ 擦除 / 融合 / 贴回 */
 
-function featherComposite(input: { overlay: Buffer; bounds: { left: number; top: number; width: number; height: number }; feather: number }) {
-  const { left, top, width, height } = input.bounds
-  const alpha = Buffer.alloc(width * height)
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const edge = Math.min(x, y, width - 1 - x, height - 1 - y)
-      const t = Math.min(1, edge / Math.max(1, input.feather))
-      alpha[y * width + x] = Math.round(255 * t * t * (3 - 2 * t))
-    }
-  }
-  return sharp(input.overlay)
-    .extract({ left, top, width, height })
-    .removeAlpha()
-    .joinChannel(alpha, { raw: { width, height, channels: 1 } })
-    .png()
-    .toBuffer()
-}
-
-/**
- * 让 AI 结果在 bounds 范围里的平均颜色和原图一致（每个通道加一个偏移），exclude 范围（商品附近）不参与统计。
- * 返回整张调过色的 AI 图（PNG）。
- */
-async function matchPatchColor(input: {
-  base: Buffer
-  overlay: Buffer
-  bounds: { left: number; top: number; width: number; height: number }
-  exclude: { left: number; top: number; width: number; height: number }
-}) {
-  const region = { left: input.bounds.left, top: input.bounds.top, width: input.bounds.width, height: input.bounds.height }
-  const baseRaw = await sharp(input.base).removeAlpha().extract(region).raw().toBuffer()
-  const aiRaw = await sharp(input.overlay).removeAlpha().extract(region).raw().toBuffer()
-  const sums = [0, 0, 0, 0, 0, 0]
-  let count = 0
-  for (let y = 0; y < region.height; y += 1) {
-    for (let x = 0; x < region.width; x += 1) {
-      const gx = region.left + x
-      const gy = region.top + y
-      if (gx >= input.exclude.left && gx < input.exclude.left + input.exclude.width && gy >= input.exclude.top && gy < input.exclude.top + input.exclude.height) continue
-      const i = (y * region.width + x) * 3
-      for (let c = 0; c < 3; c += 1) {
-        sums[c] += baseRaw[i + c]
-        sums[3 + c] += aiRaw[i + c]
-      }
-      count += 1
-    }
-  }
-  if (count < 32) return input.overlay
-  const offsets = [0, 1, 2].map((c) => (sums[c] - sums[3 + c]) / count)
-  if (offsets.every((value) => Math.abs(value) < 0.5)) return input.overlay
-  // 只在贴回范围的边缘对色，越靠近商品越弱、商品本身完全不动（不然银色会被带偏色）
-  const { data, info } = await sharp(input.overlay).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-  const ex = input.exclude
-  const ramp = Math.max(4, Math.min(ex.width, ex.height) * 0.5)
-  for (let y = region.top; y < region.top + region.height; y += 1) {
-    for (let x = region.left; x < region.left + region.width; x += 1) {
-      const dx = x < ex.left ? ex.left - x : x >= ex.left + ex.width ? x - (ex.left + ex.width - 1) : 0
-      const dy = y < ex.top ? ex.top - y : y >= ex.top + ex.height ? y - (ex.top + ex.height - 1) : 0
-      const weight = Math.min(1, Math.hypot(dx, dy) / ramp)
-      if (weight <= 0) continue
-      const i = (y * info.width + x) * 3
-      for (let c = 0; c < 3; c += 1) data[i + c] = Math.max(0, Math.min(255, Math.round(data[i + c] + offsets[c] * weight)))
-    }
-  }
-  return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer()
-}
-
-function expandBounds(b: { left: number; top: number; width: number; height: number }, factor: number, minSide: number, W: number, H: number) {
-  const cx = b.left + b.width / 2
-  const cy = b.top + b.height / 2
-  const w = Math.min(W, Math.max(minSide, b.width * factor))
-  const h = Math.min(H, Math.max(minSide, b.height * factor))
-  const left = Math.round(Math.min(W - w, Math.max(0, cx - w / 2)))
-  const top = Math.round(Math.min(H - h, Math.max(0, cy - h / 2)))
-  return { left, top, width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) }
-}
-
 /**
  * 擦掉框里的旧商品：框附近一大块（至少画面短边的 45%）交给 AI，它看得到周围皮肤和光线；只把框附近贴回原图。
  */
@@ -471,6 +406,9 @@ export async function harmonizePlacedProduct(input: {
   credentials: ModelCredentials
   referenceScenePath: string
   guidePath: string
+  /** 擦掉旧商品的整张图（融合结果贴回到它上面）和商品形状蒙版（见 renderPlacementGuide） */
+  erasedScenePath: string
+  productMaskPath: string
   productImagePath: string
   productType?: string
   productBounds: { left: number; top: number; width: number; height: number }
@@ -518,26 +456,26 @@ export async function harmonizePlacedProduct(input: {
     outputPath: aiPath,
     uploadKeyPrefix: 'grsai-input/live-photo/harmonize',
   })
-  // AI 结果缩回正方形原大小，放回整张图的同一位置（其余用原图）
+  // AI 结果缩回正方形原大小，放回整张图的同一位置
   const aiCrop = await sharp(aiPath).resize(side, side, { fit: 'fill' }).png().toBuffer()
-  const base = await sharp(input.referenceScenePath).rotate().resize(W, H, { fit: 'fill' }).png().toBuffer()
-  const ai = await sharp(base).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).png().toBuffer()
-  // 贴回范围：并集放大一圈，且不超出交给 AI 的那块
-  const grown = expandBounds(union, 1.8, Math.min(W, H) * 0.1, W, H)
-  const boundsLeft = Math.max(crop.left, grown.left)
-  const boundsTop = Math.max(crop.top, grown.top)
-  const bounds = {
-    left: boundsLeft,
-    top: boundsTop,
-    width: Math.max(1, Math.min(crop.left + side, grown.left + grown.width) - boundsLeft),
-    height: Math.max(1, Math.min(crop.top + side, grown.top + grown.height) - boundsTop),
-  }
-  // AI 重画的亮度、色调会有轻微偏差：按商品周围的像素把颜色对回原图，否则贴回的范围会看出一块方形
-  const keepOut = expandBounds(union, 1.25, 0, W, H)
-  const matched = await matchPatchColor({ base, overlay: ai, bounds, exclude: keepOut })
-  const patch = await featherComposite({ overlay: matched, bounds, feather: Math.max(6, Math.min(bounds.width, bounds.height) * 0.3) })
+  const erased = await sharp(input.erasedScenePath).rotate().resize(W, H, { fit: 'fill' }).png().toBuffer()
+  const ai = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
+  // 只按商品的形状往外扩一圈贴回（接触阴影、穿孔都在这圈里），其余全用擦好的原图。
+  // AI 重画时整块会有轻微位移和色差，按方块贴回会看出一块补丁（2026-11-27 线上实测）
+  const productSize = Math.max(input.productBounds.width, input.productBounds.height)
+  const grow = Math.max(3, productSize * 0.25)
+  const expanded = await sharp(input.productMaskPath)
+    .resize(W, H, { fit: 'fill' })
+    .extractChannel(0)
+    .blur(grow)
+    .linear(8, 0)
+    .extractChannel(0)
+    .png()
+    .toBuffer()
+  const softMask = await sharp(expanded).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
+  const overlay = await sharp(ai).removeAlpha().joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
   await mkdir(dirname(input.outputPath), { recursive: true })
-  await sharp(base).composite([{ input: patch, left: bounds.left, top: bounds.top }]).png().toFile(input.outputPath)
+  await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(input.outputPath)
   return { path: input.outputPath, model }
 }
 

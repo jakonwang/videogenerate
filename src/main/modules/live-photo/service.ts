@@ -4156,6 +4156,8 @@ async function runPasteReplacement(input: {
     credentials: input.credentials,
     referenceScenePath: input.referenceImagePath,
     guidePath,
+    erasedScenePath: String(item.erasedScenePath),
+    productMaskPath: guide.maskPath,
     productImagePath: prepared.cutoutSourcePath,
     productType: input.product.type,
     productBounds: guide.bounds,

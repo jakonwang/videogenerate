@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { Move, RotateCcw, X } from 'lucide-vue-next'
+import { Maximize, Move, RotateCcw, X, ZoomIn } from 'lucide-vue-next'
 
 /**
  * 「调整摆放」：在擦掉旧商品的参考图上摆真实商品（拖动改位置、拖右下角或滑块改大小、滑块改角度）。
@@ -52,22 +52,52 @@ const heightRatio = computed(() => {
   if (!d) return 0
   return (draft.width * d.sceneWidth * (d.cutoutHeight / Math.max(1, d.cutoutWidth))) / Math.max(1, d.sceneHeight)
 })
+/**
+ * 显示范围（占整张图的比例）。默认放大看商品附近：商品在整张图里往往只有几十个像素，不放大没法摆。
+ */
+const zoomed = ref(true)
+const view = computed(() => {
+  const d = data.value
+  if (!d || !zoomed.value) return { x: 0, y: 0, w: 1, h: 1 }
+  const W = d.sceneWidth
+  const H = d.sceneHeight
+  const r = d.region
+  // 只按原商品的框和默认大小算，拖动、缩放时显示范围不跟着跳
+  const productPx = d.defaultPlacement.width * W * Math.max(1, d.cutoutHeight / Math.max(1, d.cutoutWidth))
+  const side = Math.min(W, H, Math.max(Math.max(r.width * W, r.height * H) * 6, productPx * 4, Math.min(W, H) * 0.3))
+  const cx = (r.x + r.width / 2) * W
+  const cy = (r.y + r.height / 2) * H
+  const left = Math.min(W - side, Math.max(0, cx - side / 2))
+  const top = Math.min(H - side, Math.max(0, cy - side / 2))
+  return { x: left / W, y: top / H, w: side / W, h: side / H }
+})
+/** 整张图坐标 → 显示范围里的百分比 */
+const vx = (x: number) => `${((x - view.value.x) / view.value.w) * 100}%`
+const vy = (y: number) => `${((y - view.value.y) / view.value.h) * 100}%`
+const sceneStyle = computed(() => ({
+  left: vx(0),
+  top: vy(0),
+  width: `${100 / view.value.w}%`,
+  height: `${100 / view.value.h}%`,
+}))
 const productStyle = computed(() => ({
-  left: `${(draft.cx - draft.width / 2) * 100}%`,
-  top: `${(draft.cy - heightRatio.value / 2) * 100}%`,
-  width: `${draft.width * 100}%`,
-  height: `${heightRatio.value * 100}%`,
+  left: vx(draft.cx - draft.width / 2),
+  top: vy(draft.cy - heightRatio.value / 2),
+  width: `${(draft.width / view.value.w) * 100}%`,
+  height: `${(heightRatio.value / view.value.h) * 100}%`,
   transform: `rotate(${draft.rotation}deg)`,
 }))
 const regionStyle = computed(() => {
   const r = data.value?.region
   if (!r) return {}
-  return { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.width * 100}%`, height: `${r.height * 100}%` }
+  return { left: vx(r.x), top: vy(r.y), width: `${(r.width / view.value.w) * 100}%`, height: `${(r.height / view.value.h) * 100}%` }
 })
 const stageStyle = computed(() => {
   const d = data.value
-  // 宽度按「高度不超过 66vh」算，保证显示比例和原图一致（拖动坐标才准）
-  return d ? { aspectRatio: `${d.sceneWidth} / ${d.sceneHeight}`, width: `min(100%, calc(66vh * ${(d.sceneWidth / Math.max(1, d.sceneHeight)).toFixed(4)}))` } : {}
+  if (!d) return {}
+  // 宽度按「高度不超过 66vh」算，显示比例和图一致（拖动坐标才准）
+  const ratio = (view.value.w * d.sceneWidth) / Math.max(1, view.value.h * d.sceneHeight)
+  return { aspectRatio: `${ratio.toFixed(4)}`, width: `min(100%, calc(66vh * ${ratio.toFixed(4)}))` }
 })
 
 const sizePercent = computed({
@@ -80,16 +110,23 @@ const sizePercent = computed({
 
 let drag: { mode: 'move' | 'resize'; startX: number; startY: number; start: Placement; startDist: number } | null = null
 
+/** 鼠标位置 → 整张图坐标；pxPerX / pxPerY：整张图坐标 1 对应屏幕多少像素 */
 function pointerRatio(event: PointerEvent) {
   const rect = stage.value!.getBoundingClientRect()
-  return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height, rect }
+  const v = view.value
+  return {
+    x: v.x + ((event.clientX - rect.left) / rect.width) * v.w,
+    y: v.y + ((event.clientY - rect.top) / rect.height) * v.h,
+    pxPerX: rect.width / v.w,
+    pxPerY: rect.height / v.h,
+  }
 }
 
 function beginDrag(event: PointerEvent, mode: 'move' | 'resize') {
   if (!stage.value || busy.value) return
   const point = pointerRatio(event)
-  const dx = (point.x - draft.cx) * point.rect.width
-  const dy = (point.y - draft.cy) * point.rect.height
+  const dx = (point.x - draft.cx) * point.pxPerX
+  const dy = (point.y - draft.cy) * point.pxPerY
   drag = { mode, startX: point.x, startY: point.y, start: { ...draft }, startDist: Math.max(4, Math.hypot(dx, dy)) }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
   window.addEventListener('pointermove', onDrag)
@@ -104,8 +141,8 @@ function onDrag(event: PointerEvent) {
     draft.cy = Math.min(1, Math.max(0, drag.start.cy + point.y - drag.startY))
     return
   }
-  const dx = (point.x - drag.start.cx) * point.rect.width
-  const dy = (point.y - drag.start.cy) * point.rect.height
+  const dx = (point.x - drag.start.cx) * point.pxPerX
+  const dy = (point.y - drag.start.cy) * point.pxPerY
   draft.width = Math.min(1, Math.max(0.005, drag.start.width * (Math.hypot(dx, dy) / drag.startDist)))
 }
 
@@ -136,7 +173,7 @@ async function confirm() {
 </script>
 
 <template>
-  <div class="ppd" data-testid="live-photo-placement-dialog" @click.self="!busy && emit('close')">
+  <div class="ppd vg-scope" data-testid="live-photo-placement-dialog" @click.self="!busy && emit('close')">
     <section class="ppd__panel" role="dialog" aria-modal="true" aria-label="调整商品摆放">
       <header class="ppd__head">
         <div>
@@ -152,7 +189,7 @@ async function confirm() {
       <div v-else class="ppd__body">
         <div class="ppd__stage-wrap">
           <div ref="stage" class="ppd__stage" :style="stageStyle">
-            <img class="ppd__scene" :src="previewSrc(data.erasedScenePath)" alt="" draggable="false" />
+            <img class="ppd__scene" :style="sceneStyle" :src="previewSrc(data.erasedScenePath)" alt="" draggable="false" />
             <span class="ppd__region" :style="regionStyle" title="原商品的位置" />
             <div class="ppd__product" :style="productStyle" data-testid="live-photo-placement-product" @pointerdown.prevent="beginDrag($event, 'move')">
               <img :src="previewSrc(data.cutoutPath)" alt="" draggable="false" />
@@ -163,6 +200,10 @@ async function confirm() {
 
         <aside class="ppd__side">
           <p class="ppd__tip"><Move :size="14" />拖动商品改位置，拖右下角改大小。虚线框是原商品的位置。</p>
+          <div class="ppd__view" role="group" aria-label="显示范围">
+            <button type="button" :class="{ 'is-on': zoomed }" @click="zoomed = true"><ZoomIn :size="13" />放大看</button>
+            <button type="button" :class="{ 'is-on': !zoomed }" @click="zoomed = false"><Maximize :size="13" />看全图</button>
+          </div>
 
           <label class="ppd__field">
             <span>大小 <em>{{ sizePercent }}%</em></span>
@@ -202,11 +243,14 @@ async function confirm() {
 .ppd__body { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr); gap: 18px; min-height: 0; }
 .ppd__stage-wrap { display: grid; place-items: center; min-width: 0; border-radius: 10px; background: var(--theme-panel-soft); padding: 8px; }
 .ppd__stage { position: relative; overflow: hidden; border-radius: 8px; user-select: none; touch-action: none; }
-.ppd__scene { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.ppd__scene { position: absolute; max-width: none; object-fit: fill; pointer-events: none; }
 .ppd__region { position: absolute; border: 1.5px dashed color-mix(in srgb, var(--vg-accent) 80%, transparent); border-radius: 4px; pointer-events: none; }
 .ppd__product { position: absolute; cursor: move; outline: 1px solid color-mix(in srgb, var(--vg-accent) 70%, transparent); outline-offset: 2px; transform-origin: center; }
 .ppd__product img { width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
-.ppd__handle { position: absolute; right: -7px; bottom: -7px; width: 12px; height: 12px; border: 1.5px solid var(--vg-accent); border-radius: 3px; background: var(--theme-panel); cursor: nwse-resize; }
+.ppd__handle { position: absolute; right: -5px; bottom: -5px; width: 9px; height: 9px; border: 1.5px solid var(--vg-accent); border-radius: 50%; background: transparent; cursor: nwse-resize; }
+.ppd__view { display: inline-flex; align-self: flex-start; padding: 2px; border: 1px solid var(--theme-border); border-radius: 8px; }
+.ppd__view button { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); font-size: 12px; cursor: pointer; }
+.ppd__view button.is-on { background: var(--vg-accent-soft); color: var(--vg-accent); }
 .ppd__side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ppd__tip { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--theme-text-secondary); }
 .ppd__tip svg { flex-shrink: 0; margin-top: 2px; color: var(--vg-accent); }
