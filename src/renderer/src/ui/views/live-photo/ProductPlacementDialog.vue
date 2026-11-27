@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { Maximize, Move, RotateCcw, X, ZoomIn } from 'lucide-vue-next'
+import { FlipHorizontal, Maximize, Move, RotateCcw, X, ZoomIn } from 'lucide-vue-next'
 
 /**
  * 「调整摆放」：在擦掉旧商品的参考图上摆真实商品（拖动改位置、拖右下角或滑块改大小、滑块改角度）。
  * 大小 100% = 和原商品一样大（主进程按原商品的框算好的默认摆放）。确认后从融合那步重做。
  */
-type Placement = { cx: number; cy: number; width: number; rotation: number }
+type Placement = { cx: number; cy: number; width: number; rotation: number; squash?: number; flip?: boolean }
 type PlacementData = {
   ready: true
   erasedScenePath: string
@@ -26,7 +26,7 @@ const emit = defineEmits<{ close: []; confirmed: [item: unknown] }>()
 const data = ref<PlacementData | null>(null)
 const loadError = ref('')
 const busy = ref(false)
-const draft = reactive<Placement>({ cx: 0.5, cy: 0.5, width: 0.1, rotation: 0 })
+const draft = reactive<Required<Placement>>({ cx: 0.5, cy: 0.5, width: 0.1, rotation: 0, squash: 1, flip: false })
 const stage = ref<HTMLElement | null>(null)
 
 async function load() {
@@ -39,7 +39,7 @@ async function load() {
       return
     }
     data.value = result as PlacementData
-    Object.assign(draft, { cx: result.placement.cx, cy: result.placement.cy, width: result.placement.width, rotation: result.placement.rotation || 0 })
+    Object.assign(draft, { cx: result.placement.cx, cy: result.placement.cy, width: result.placement.width, rotation: result.placement.rotation || 0, squash: result.placement.squash ?? 1, flip: Boolean(result.placement.flip) })
   } catch (error: any) {
     loadError.value = error?.message ?? String(error)
   }
@@ -85,7 +85,8 @@ const productStyle = computed(() => ({
   top: vy(draft.cy - heightRatio.value / 2),
   width: `${(draft.width / view.value.w) * 100}%`,
   height: `${(heightRatio.value / view.value.h) * 100}%`,
-  transform: `rotate(${draft.rotation}deg)`,
+  // 侧倾 = 横向压窄（高度不变），翻面 = 左右镜像；和主进程贴图的做法一致（先压窄、镜像，再旋转）
+  transform: `rotate(${draft.rotation}deg) scaleX(${draft.squash * (draft.flip ? -1 : 1)})`,
 }))
 const regionStyle = computed(() => {
   const r = data.value?.region
@@ -155,14 +156,14 @@ onBeforeUnmount(endDrag)
 function reset() {
   const d = data.value
   if (!d) return
-  Object.assign(draft, { ...d.defaultPlacement })
+  Object.assign(draft, { squash: 1, flip: false, ...d.defaultPlacement })
 }
 
 async function confirm() {
   if (!data.value || busy.value) return
   busy.value = true
   try {
-    const item = await (window as any).api.livePhoto.confirmPlacement({ id: props.itemId, placement: { ...draft } })
+    const item = await (window as any).api.livePhoto.confirmPlacement({ id: props.itemId, placement: { cx: draft.cx, cy: draft.cy, width: draft.width, rotation: draft.rotation, squash: draft.squash, flip: draft.flip } })
     emit('confirmed', item)
   } catch (error: any) {
     loadError.value = error?.message ?? String(error)
@@ -216,6 +217,14 @@ async function confirm() {
             <input v-model.number="draft.rotation" type="range" min="-90" max="90" step="1" />
           </label>
 
+          <label class="ppd__field">
+            <span>侧倾 <em>{{ Math.round(draft.squash * 100) }}%</em></span>
+            <input v-model.number="draft.squash" type="range" min="0.2" max="1" step="0.01" data-testid="live-photo-placement-squash" />
+            <small>往左拉，商品像侧过来、斜过来（适合手里捏着、侧躺的商品）</small>
+          </label>
+
+          <button class="vg-btn vg-btn--sm" type="button" :class="{ 'is-on': draft.flip }" :disabled="busy" data-testid="live-photo-placement-flip" @click="draft.flip = !draft.flip"><FlipHorizontal :size="13" />{{ draft.flip ? '已翻面（左右镜像）' : '翻面（左右镜像）' }}</button>
+
           <button class="vg-btn vg-btn--sm" type="button" :disabled="busy" @click="reset"><RotateCcw :size="13" />还原自动摆放</button>
 
           <p class="ppd__note">确认后会重新融合并生成视频，商品本身不会变样。</p>
@@ -258,6 +267,7 @@ async function confirm() {
 .ppd__field em { font-style: normal; color: var(--theme-text); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .ppd__field small { font-size: 11.5px; color: var(--theme-text-muted); }
 .ppd__field input[type='range'] { width: 100%; accent-color: var(--vg-accent); }
+.ppd__side .vg-btn.is-on { border-color: var(--vg-accent); color: var(--vg-accent); background: var(--vg-accent-soft); }
 .ppd__note { margin: auto 0 0; font-size: 12px; color: var(--theme-text-muted); }
 .ppd__actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 760px) { .ppd__body { grid-template-columns: 1fr; } }

@@ -79,6 +79,8 @@ async function main() {
     coverImagePath: productImage,
     canonicalSourcePath: productImage,
     canonicalSourceStatus: 'done',
+    // PRODUCT_BOARD：商品的六视图分析板（测试按角度挑商品图）
+    ...(process.env.PRODUCT_BOARD ? { analysisBoardPath: process.env.PRODUCT_BOARD, analysisBoardStatus: 'done' } : {}),
   } as any)
 
   const created: any = await livePhotoService.createFromReference({ referenceImagePath: reference, productId: product.id, motionTemplate: 'push_in', placementMode: 'auto' } as any)

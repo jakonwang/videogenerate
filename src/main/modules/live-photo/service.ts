@@ -32,7 +32,9 @@ import {
   eraseRegionProduct,
   harmonizePlacedProduct,
   normalizeProductPlacement,
+  pickProductViewByAngle,
   readImageSize,
+  splitAnalysisBoard,
   renderPlacementGuide,
 } from './pasteReplace'
 import { CATALOG_VIDEO_PROVIDER, listAvailableCatalogVideoModels, pickCatalogVideoModel, queryCatalogVideoTask, submitCatalogVideoTask } from '../clone/catalogVideo'
@@ -4077,6 +4079,22 @@ async function materializeItem(input: {
   }
 }
 
+/** 按角度挑图的候选：商品库里这个商品的原图 + 六视图分析板切出来的各个角度 */
+async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
+  const paths: string[] = []
+  const stored = item.productId ? (await productsRepo.list().catch(() => [])).find((entry) => entry.id === item.productId) : undefined
+  for (const path of [stored?.coverImagePath, ...((stored?.images || []).map((image) => image.filePath))]) {
+    const value = String(path || '').trim()
+    if (value && existsSync(value) && !paths.includes(value)) paths.push(value)
+  }
+  const board = String(product.authoritativeProductReferencePath || '').trim()
+  if (board && existsSync(board) && /analysis[-_]board/i.test(board)) {
+    const views = await splitAnalysisBoard(board, join(livePhotoRoot(item.id), 'paste', 'views')).catch(() => [] as string[])
+    paths.push(...views)
+  }
+  return paths.slice(0, 10)
+}
+
 /** 抠图用的商品图：任务里选的那张 > 商品主图 > 第一张商品图 */
 function resolveLivePhotoCutoutSourcePath(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
   const candidates = [item.cutoutSourcePath, product.coverImagePath, ...(product.imagePaths || [])]
@@ -4122,9 +4140,35 @@ async function preparePasteReplacementInputs(input: {
       updatedAt: now(),
     })
   }
+  // 没手动选抠图用的商品图：按参考图里原商品的角度，从商品图和六视图里挑最接近的一张（只挑一次）
+  if ((!item.productCutoutPath || !existsSync(item.productCutoutPath)) && !item.cutoutSourceChosenBy) {
+    const candidates = await collectLivePhotoProductViews(item, input.product)
+    const picked = await pickProductViewByAngle({
+      credentials: input.credentials,
+      referenceScenePath: input.referenceImagePath,
+      region,
+      candidatePaths: candidates,
+      workDir: join(root, 'paste'),
+    })
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [
+        buildLivePhotoLog(
+          picked
+            ? `[live-photo] 按原商品的角度选了第 ${picked.index} 张商品图（共 ${candidates.length} 张）：${basename(picked.path)}，${picked.pair ? '成对' : '单只'}`
+            : `[live-photo] 没能按角度挑商品图（候选 ${candidates.length} 张），用默认商品图`,
+        ),
+      ]),
+      cutoutSourcePath: picked?.path ?? item.cutoutSourcePath,
+      cutoutSourceChosenBy: 'auto',
+      cutoutPair: picked ? picked.pair : undefined,
+      updatedAt: now(),
+    })
+  }
   const cutoutSourcePath = resolveLivePhotoCutoutSourcePath(item, input.product)
   if (!item.productCutoutPath || !existsSync(item.productCutoutPath)) {
-    const cutout = await ensureProductCutout(cutoutSourcePath)
+    // 是一对还是一只：挑图时看过参考图就按它说的；否则拿着 / 放着（常常一对一起展示）保留成对，戴着只留一只
+    const keepPair = typeof item.cutoutPair === 'boolean' ? item.cutoutPair : ['held', 'placed', 'none'].includes(String(item.sceneInteraction?.mode || ''))
+    const cutout = await ensureProductCutout(cutoutSourcePath, { keepPair })
     item = await livePhotoRepo.upsert({
       ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品抠图完成：${basename(cutoutSourcePath)}`, 'success')]),
       productCutoutPath: cutout.path,
@@ -4179,11 +4223,14 @@ async function runPasteReplacement(input: {
     productType: input.product.type,
     productBounds: guide.bounds,
     region: prepared.region,
+    interactionMode: item.sceneInteraction?.mode,
+    poseLocked: Boolean(prepared.placement.flip) || (prepared.placement.squash ?? 1) < 0.999,
     outputPath: join(root, 'generated-still', `localized-replacement-paste-${now()}-${randomUUID()}.png`),
   })
   await livePhotoRepo.upsert({
     ...appendLivePhotoLogs(item, [
       buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: harmonized.model, endpoint: '/v1/api/generate', cached: false }),
+      ...(harmonized.fellBack ? [buildLivePhotoLog(`[live-photo] 融合时 AI 把整张画面改掉了（差异 ${harmonized.drift}），两次都不行，改用直接贴好的商品图`, 'error')] : []),
     ]),
     awaitingPlacement: false,
     updatedAt: now(),
@@ -5089,6 +5136,7 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
             replaceMode: 'paste' as const,
             placementMode: input.placementMode === 'confirm' ? ('confirm' as const) : ('auto' as const),
             cutoutSourcePath: String(input.cutoutSourcePath || '').trim() || undefined,
+            cutoutSourceChosenBy: String(input.cutoutSourcePath || '').trim() ? ('user' as const) : undefined,
           }
         : {}),
       packagingStatus: 'processing',

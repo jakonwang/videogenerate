@@ -87,6 +87,10 @@ export type LivePhotoProductPlacement = {
   cy: number
   width: number
   rotation: number
+  /** 侧倾：横向压窄的比例（0.2~1，不填 = 1），模拟商品侧过来、斜过来 */
+  squash?: number
+  /** 翻面：左右镜像 */
+  flip?: boolean
   confirmedAt?: number
 }
 
@@ -279,6 +283,10 @@ export type LivePhotoItem = {
   replaceMode?: LivePhotoReplaceMode
   placementMode?: LivePhotoPlacementMode
   cutoutSourcePath?: string
+  /** user = 创建时手动选的；auto = 按参考图里原商品的角度自动挑的（只挑一次） */
+  cutoutSourceChosenBy?: 'user' | 'auto'
+  /** 参考图里原商品是一对还是一只（自动挑图时一起判断） */
+  cutoutPair?: boolean
   productCutoutPath?: string
   erasedScenePath?: string
   erasedRegionRevision?: number

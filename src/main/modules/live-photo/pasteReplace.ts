@@ -18,6 +18,7 @@ import { toPublicUrlViaQiniu } from '../clone/qiniu'
 import { withUsageCharge } from '../clone/usageMeter'
 import type { LivePhotoProductPlacement, LivePhotoReplacementRegion } from './types'
 import { compositeLivePhotoReplacementCrop, prepareLivePhotoReplacementCrop } from './replacementRegion'
+import { extractJsonObjectText, extractModelMessageContent } from '../clone/aiResponse'
 
 let sharp: any
 async function ensureSharp() {
@@ -53,12 +54,15 @@ export function canUsePasteReplace(credentials: ModelCredentials) {
 /**
  * 抠出真实商品：返回透明背景、裁掉空白边的 PNG。同一张商品图只抠一次（按文件内容缓存）。
  */
-export async function ensureProductCutout(sourcePath: string): Promise<{ path: string; width: number; height: number }> {
+/**
+ * keepPair：参考图里商品是拿在手里 / 放着（常是一对）时保留成对；戴在身上（一只耳朵）时只留一只。
+ */
+export async function ensureProductCutout(sourcePath: string, options: { keepPair?: boolean } = {}): Promise<{ path: string; width: number; height: number }> {
   if (!cutoutProvider) throw new Error('[cutout_unavailable] 贴真实商品需要登录账号（抠图在服务器上完成）')
   await ensureSharp()
   const source = await readFile(sourcePath)
   // v2：成对的商品只留一只（规则变了，旧缓存不能再用）
-  const hash = createHash('sha1').update('v2:').update(source).digest('hex').slice(0, 20)
+  const hash = createHash('sha1').update(options.keepPair ? 'v2-pair:' : 'v2:').update(source).digest('hex').slice(0, 20)
   const output = join(getAppPaths().cacheDir, 'product-cutout', `${hash}.png`)
   if (existsSync(output)) {
     const meta = await sharp(output).metadata()
@@ -88,7 +92,7 @@ export async function ensureProductCutout(sourcePath: string): Promise<{ path: s
     if (maskRaw[i] > 128) opaque += 1
   }
   if (opaque < 16) throw new Error('抠图失败：没有找到商品，请换一张单只、背景干净的商品图')
-  keepSinglePiece(rgba, info.width, info.height)
+  if (!options.keepPair) keepSinglePiece(rgba, info.width, info.height)
   await mkdir(dirname(output), { recursive: true })
   const trimmed = await sharp(rgba, { raw: { width: info.width, height: info.height, channels: 4 } })
     .png()
@@ -209,14 +213,18 @@ export function normalizeProductPlacement(input: unknown): LivePhotoProductPlace
     cy: Math.min(1, Math.max(0, cy)),
     width: Math.min(1, Math.max(0.005, width)),
     rotation: Math.min(180, Math.max(-180, rotation)),
+    ...(Number.isFinite(num('squash')) && num('squash') < 0.999 ? { squash: Math.min(1, Math.max(0.2, num('squash'))) } : {}),
+    ...(value.flip === true ? { flip: true } : {}),
     ...(Number.isFinite(num('confirmedAt')) && num('confirmedAt') > 0 ? { confirmedAt: num('confirmedAt') } : {}),
   }
 }
 
 /** 商品贴上去后在图里占的范围（像素，含旋转后的外接框） */
 function placementPixelBounds(placement: LivePhotoProductPlacement, sceneW: number, sceneH: number, cutoutW: number, cutoutH: number) {
-  const w = placement.width * sceneW
-  const h = (w * cutoutH) / Math.max(1, cutoutW)
+  // width 是商品不侧倾时的宽度；侧倾（squash）只把横向压窄，高度不变
+  const fullW = placement.width * sceneW
+  const h = (fullW * cutoutH) / Math.max(1, cutoutW)
+  const w = fullW * (placement.squash ?? 1)
   const rad = (placement.rotation * Math.PI) / 180
   const bw = Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad))
   const bh = Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad))
@@ -234,8 +242,10 @@ export async function renderPlacementGuide(input: {
   const scene = await sharp(input.erasedScenePath).metadata()
   const cut = await sharp(input.cutoutPath).metadata()
   const box = placementPixelBounds(input.placement, scene.width, scene.height, cut.width, cut.height)
-  const product = await sharp(input.cutoutPath)
-    .resize(Math.max(1, Math.round(box.w)), Math.max(1, Math.round(box.h)), { kernel: 'lanczos3', fit: 'fill' })
+  let shaped = sharp(input.cutoutPath).resize(Math.max(1, Math.round(box.w)), Math.max(1, Math.round(box.h)), { kernel: 'lanczos3', fit: 'fill' })
+  // 翻面：左右镜像（商品图朝向和原商品相反时用）
+  if (input.placement.flip) shaped = sharp(await shaped.png().toBuffer()).flop()
+  const product = await sharp(await shaped.png().toBuffer())
     .rotate(input.placement.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer({ resolveWithObject: true })
@@ -266,7 +276,7 @@ export async function renderPlacementGuide(input: {
   for (const layer of layers) composites.push({ input: await layer.input, left: layer.left, top: layer.top })
   await sharp(input.erasedScenePath).composite(composites).png().toFile(input.outputPath)
   // 商品在整张图里的形状（黑底白图），融合后只把商品附近按这个形状贴回
-  const maskPath = input.outputPath.replace(/.png$/i, '-mask.png')
+  const maskPath = input.outputPath.replace(/\.png$/i, '-mask.png')
   const alphaLayer = await sharp(product.data).extractChannel('alpha').toColourspace('b-w').png().toBuffer()
   const maskLayers = clipLayers([{ input: alphaLayer, left, top, width: product.info.width, height: product.info.height }], scene.width, scene.height)
   const maskComposites = []
@@ -413,6 +423,10 @@ export async function harmonizePlacedProduct(input: {
   productType?: string
   productBounds: { left: number; top: number; width: number; height: number }
   region: LivePhotoReplacementRegion
+  /** 参考图里商品的状态：held / placed 时要让 AI 照原图的拿法重新摆姿势（商品图是正面照，直接贴上去是立着的，不合物理） */
+  interactionMode?: string
+  /** 用户在「调整摆放」里手动设了侧倾 / 翻面：姿势以用户为准，AI 不再重新摆 */
+  poseLocked?: boolean
   outputPath: string
 }) {
   await ensureSharp()
@@ -440,24 +454,55 @@ export async function harmonizePlacedProduct(input: {
   const aiPath = input.outputPath.replace(/\.png$/i, '-ai.png')
   await mkdir(dirname(cropPath), { recursive: true })
   await sharp(input.guidePath).extract(crop).png().toFile(cropPath)
-  const { model } = await generateWithGrs({
-    credentials: input.credentials,
-    prompt: [
+  // 商品形状蒙版（同一块正方形范围），用来判断 AI 有没有改动商品以外的画面
+  const cropMask = await sharp(input.productMaskPath).resize(W, H, { fit: 'fill' }).extract(crop).extractChannel(0).png().toBuffer()
+  const repose = !input.poseLocked && ['held', 'placed', 'none'].includes(String(input.interactionMode || ''))
+  const originalCropPath = input.outputPath.replace(/\.png$/i, '-original.png')
+  if (repose) {
+    await sharp(input.referenceScenePath).rotate().resize(W, H, { fit: 'fill' }).extract(crop).png().toFile(originalCropPath)
+  }
+  const prompt = repose ? [
+    `Image 1 is a close-up photo where the product (${String(input.productType || 'product').trim() || 'product'}) has been roughly pasted in as a flat, upright cut-out. Its overall SIZE and the spot are right, but its pose is NOT physically real.`,
+    'Image 2 is the same product photographed alone: use it only for the exact design.',
+    'Image 3 is the original photo of the same scene: it shows HOW the original item was held or placed (its tilt, which side faces the camera, which fingers pinch it, where it touches the skin or surface).',
+    'Re-pose the product from Image 2 so it is held or placed exactly like the original item in Image 3: same orientation and tilt, same contact points between the fingers or on the surface, correct occlusion where fingers cover it, soft contact shadow, and reflections that match the light. If Image 1 shows a pair, keep the pair and pose both pieces like the originals.',
+    'Keep the overall size like Image 1 — do not enlarge or shrink it.',
+    'Keep EXACTLY the same number of pieces as the original items in Image 3 (if Image 3 shows two earrings, output exactly two). Never add an extra piece.',
+    'The decorated front of the product (stones, charm) must stay visible to the camera.',
+    'Keep the design exactly as in Image 2: same shape, same stones and details, same color and material. Do not add or remove parts.',
+    'Keep the hand, fingers, background, lighting, framing, and crop exactly as in Image 1. Output the same scene as Image 1.',
+  ].join('\n') : [
       `Image 1 is a close-up photo where the product (${String(input.productType || 'product').trim() || 'product'}) has been roughly pasted in as a flat cut-out. Its SIZE and POSITION are correct, but it does not look worn yet.`,
       'Image 2 is the same product photographed alone: use it for the exact design.',
       ...wearingInstructions(input.productType),
+      ...(input.poseLocked ? ['The tilt, facing direction, and orientation of the product in Image 1 were set by hand and are correct: keep exactly that pose.'] : []),
       'Re-render the product so it looks physically real in this photo: correct 3D angle that follows the body, correct depth and occlusion (parts behind skin are hidden), soft contact shadow, and reflections that match the scene light. It must not look like a sticker on top of the photo.',
       'Keep the overall size the same as in Image 1 — do not enlarge or shrink it — and keep it attached at the same spot.',
       'Keep the design exactly as in Image 2: same shape, same stones and details, same color and material. Do not add or remove parts.',
       'Keep everything else in Image 1 exactly the same: people, skin, hair, hands, background, lighting, framing, and crop.',
-    ].join('\n'),
-    imagePaths: [cropPath, input.productImagePath],
-    aspectRatio: '1:1',
-    outputPath: aiPath,
-    uploadKeyPrefix: 'grsai-input/live-photo/harmonize',
-  })
+  ].join('\n')
+  // AI 偶尔会整张重画（换了手势、换了视角，2026-11-27 用户实测），贴回去就是一块完全不同的图。
+  // 商品以外的画面差太多就再来一次；两次都不行，就不用 AI 的结果，直接用贴好的商品图（商品和位置仍然正确）
+  let model = resolvePasteReplaceImageModel(input.credentials)
+  let aiCrop: Buffer | null = null
+  let lastDrift = 0
+  for (let attempt = 1; attempt <= 2 && !aiCrop; attempt += 1) {
+    const generated = await generateWithGrs({
+      credentials: input.credentials,
+      prompt,
+      imagePaths: repose ? [cropPath, input.productImagePath, originalCropPath] : [cropPath, input.productImagePath],
+      aspectRatio: '1:1',
+      outputPath: aiPath,
+      uploadKeyPrefix: 'grsai-input/live-photo/harmonize',
+    })
+    model = generated.model
+    const candidate = await sharp(aiPath).resize(side, side, { fit: 'fill' }).png().toBuffer()
+    lastDrift = await measureSceneDrift({ before: cropPath, after: candidate, productMask: cropMask })
+    if (lastDrift <= MAX_SCENE_DRIFT) aiCrop = candidate
+  }
+  const fellBack = !aiCrop
   // AI 结果缩回正方形原大小，放回整张图的同一位置
-  const aiCrop = await sharp(aiPath).resize(side, side, { fit: 'fill' }).png().toBuffer()
+  if (!aiCrop) aiCrop = await sharp(cropPath).png().toBuffer()
   const erased = await sharp(input.erasedScenePath).rotate().resize(W, H, { fit: 'fill' }).png().toBuffer()
   const ai = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
   // 只按商品的形状往外扩一圈贴回（接触阴影、穿孔都在这圈里），其余全用擦好的原图。
@@ -472,15 +517,150 @@ export async function harmonizePlacedProduct(input: {
     .extractChannel(0)
     .png()
     .toBuffer()
-  const softMask = await sharp(expanded).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
+  let maskForBlend = expanded
+  if (repose) {
+    // 重新摆姿势后商品的轮廓会变：原商品的位置（框）也一起贴回
+    const box = { left: Math.max(0, Math.round(region.left - grow)), top: Math.max(0, Math.round(region.top - grow)) }
+    const boxW = Math.max(1, Math.min(W - box.left, Math.round(region.width + grow * 2)))
+    const boxH = Math.max(1, Math.min(H - box.top, Math.round(region.height + grow * 2)))
+    const rect = await sharp({ create: { width: boxW, height: boxH, channels: 3, background: '#ffffff' } }).png().toBuffer()
+    maskForBlend = await sharp(expanded).composite([{ input: rect, left: box.left, top: box.top, blend: 'lighten' }]).extractChannel(0).png().toBuffer()
+  }
+  const softMask = await sharp(maskForBlend).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
   const overlay = await sharp(ai).removeAlpha().joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
   await mkdir(dirname(input.outputPath), { recursive: true })
   await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(input.outputPath)
-  return { path: input.outputPath, model }
+  return { path: input.outputPath, model, fellBack, drift: Math.round(lastDrift * 10) / 10 }
+}
+
+/** 商品以外的画面平均差多少（0~255）才算 AI 把整张图改掉了。正常融合在 10 以内，整张重画在 30 以上 */
+const MAX_SCENE_DRIFT = 18
+
+/**
+ * 比较融合前后（同一块正方形）商品以外的画面：商品形状往外扩一大圈的地方不算（那里本来就会有阴影、反光变化），
+ * 其余像素的平均差。缩到 256 再比，快也不受细小纹理影响。
+ */
+async function measureSceneDrift(input: { before: string | Buffer; after: Buffer; productMask: Buffer }) {
+  const size = 256
+  const a = await sharp(input.before).resize(size, size, { fit: 'fill' }).removeAlpha().raw().toBuffer()
+  const b = await sharp(input.after).resize(size, size, { fit: 'fill' }).removeAlpha().raw().toBuffer()
+  const mask = await sharp(input.productMask).resize(size, size, { fit: 'fill' }).blur(12).linear(10, 0).extractChannel(0).raw().toBuffer()
+  let sum = 0
+  let count = 0
+  for (let i = 0; i < size * size; i += 1) {
+    if (mask[i] > 8) continue
+    sum += (Math.abs(a[i * 3] - b[i * 3]) + Math.abs(a[i * 3 + 1] - b[i * 3 + 1]) + Math.abs(a[i * 3 + 2] - b[i * 3 + 2])) / 3
+    count += 1
+  }
+  return count ? sum / count : 0
 }
 
 export async function readImageSize(path: string) {
   await ensureSharp()
   const meta = await sharp(path).rotate().metadata()
   return { width: Number(meta.width || 0), height: Number(meta.height || 0) }
+}
+
+/* ------------------------------------------------------------------ 按角度挑商品图 */
+
+/**
+ * 把商品的六视图分析板切成单格（AI 生成，排版是 3×2 或 2×3 的网格，每格底部有英文标注）。
+ * 底部切掉一截去掉标注文字。返回每格的文件路径。
+ */
+export async function splitAnalysisBoard(boardPath: string, outDir: string) {
+  await ensureSharp()
+  const meta = await sharp(boardPath).rotate().metadata()
+  const W = Number(meta.width || 0)
+  const H = Number(meta.height || 0)
+  if (!W || !H) return [] as string[]
+  const cols = W >= H ? 3 : 2
+  const rows = W >= H ? 2 : 3
+  const cellW = Math.floor(W / cols)
+  const cellH = Math.floor(H / rows)
+  await mkdir(outDir, { recursive: true })
+  const out: string[] = []
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const pad = Math.round(Math.min(cellW, cellH) * 0.03)
+      const panel = { left: c * cellW + pad, top: r * cellH + pad, width: cellW - pad * 2, height: Math.round(cellH * 0.84) - pad }
+      const file = join(outDir, `view-${r * cols + c + 1}.png`)
+      await sharp(boardPath).rotate().extract(panel).png().toFile(file)
+      out.push(file)
+    }
+  }
+  return out
+}
+
+/**
+ * 看参考图里原商品是怎么摆的（哪一面朝镜头、斜着还是侧着、是一只还是一对），
+ * 从候选商品图里挑角度最接近的一张。商品图是正面照、原商品却侧着时，直接贴上去会「立着」不合物理。
+ * 一次对话模型看图调用；失败返回 null（用默认商品图）。
+ */
+export async function pickProductViewByAngle(input: {
+  credentials: ModelCredentials
+  referenceScenePath: string
+  region: LivePhotoReplacementRegion
+  candidatePaths: string[]
+  workDir: string
+}): Promise<{ path: string; pair: boolean; index: number } | null> {
+  const key = String(input.credentials.grsaiApiKey || '').trim()
+  if (!key || input.candidatePaths.length < 2) return null
+  await ensureSharp()
+  try {
+    const meta = await sharp(input.referenceScenePath).rotate().metadata()
+    const W = Number(meta.width || 0)
+    const H = Number(meta.height || 0)
+    const box = { x: input.region.x * W, y: input.region.y * H, w: input.region.width * W, h: input.region.height * H }
+    const side = Math.round(Math.min(W, H, Math.max(Math.max(box.w, box.h) * 2.2, Math.min(W, H) * 0.3)))
+    const left = Math.round(Math.min(W - side, Math.max(0, box.x + box.w / 2 - side / 2)))
+    const top = Math.round(Math.min(H - side, Math.max(0, box.y + box.h / 2 - side / 2)))
+    const sceneCrop = await sharp(input.referenceScenePath).rotate().extract({ left, top, width: side, height: side }).resize(448, 448).jpeg({ quality: 85 }).toBuffer()
+    const dataUrl = (buf: Buffer) => `data:image/jpeg;base64,${buf.toString('base64')}`
+    const content: any[] = [
+      {
+        type: 'text',
+        text: [
+          'Image 0 shows a product (jewelry or small item) as it appears in a photo: worn, held between fingers, or placed.',
+          `Images 1 to ${input.candidatePaths.length} are photos of a NEW product from different angles.`,
+          'Pick the candidate whose camera angle best matches how the item in Image 0 is oriented: which side faces the camera, whether it is seen from the front, tilted, from the side or edge-on, lying flat or standing.',
+          'Ignore design differences; judge only the viewing angle and pose. Prefer a candidate that shows the same number of pieces as Image 0 when angles are similar.',
+          'The product is being sold, so its decorated front (stones, charm, logo) must stay visible: never pick a rear or back view unless Image 0 clearly shows the back of the item; between a tilted front view and a tilted rear view, pick the front one.',
+          'Do not pick a close-up detail crop.',
+          'Also say whether Image 0 shows a pair (two pieces of the same item, e.g. two earrings) or a single piece.',
+          'Return JSON only: {"best": <candidate number 1..N>, "pair": true|false}',
+        ].join('\n'),
+      },
+      { type: 'text', text: 'Image 0:' },
+      { type: 'image_url', image_url: { url: dataUrl(sceneCrop) } },
+    ]
+    for (const [index, path] of input.candidatePaths.entries()) {
+      const thumb = await sharp(path).rotate().flatten({ background: '#ffffff' }).resize(288, 288, { fit: 'inside' }).jpeg({ quality: 82 }).toBuffer()
+      content.push({ type: 'text', text: `Candidate ${index + 1}:` })
+      content.push({ type: 'image_url', image_url: { url: dataUrl(thumb) } })
+    }
+    const host = grsHost(input.credentials)
+    const model = String(input.credentials.grsaiAnalysisModel || 'gemini-3.1-pro').trim() || 'gemini-3.1-pro'
+    // 对话模型看多张图比较慢，偶尔超时：最多试两次
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const res = await fetch(`${host}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, stream: false, temperature: 0, messages: [{ role: 'user', content }] }),
+          signal: AbortSignal.timeout(120_000),
+        })
+        const text = await res.text()
+        if (!res.ok) continue
+        const parsed = JSON.parse(extractJsonObjectText(extractModelMessageContent(text)))
+        const best = Math.round(Number(parsed?.best))
+        if (!Number.isFinite(best) || best < 1 || best > input.candidatePaths.length) continue
+        return { path: input.candidatePaths[best - 1], pair: parsed?.pair === true, index: best }
+      } catch (error) {
+        console.warn('[live-photo] pick product view failed', attempt, (error as Error)?.message || error)
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }

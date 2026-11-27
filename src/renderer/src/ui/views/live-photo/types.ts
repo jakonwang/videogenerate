@@ -18,7 +18,7 @@ export type LivePhotoItem = {
   placementMode?: 'auto' | 'confirm'
   erasedScenePath?: string
   productCutoutPath?: string
-  placement?: { cx: number; cy: number; width: number; rotation: number; confirmedAt?: number }
+  placement?: { cx: number; cy: number; width: number; rotation: number; squash?: number; flip?: boolean; confirmedAt?: number }
   awaitingPlacement?: boolean
   packagingStatus: 'draft' | 'processing' | 'completed' | 'failed'
   generatedStillPath?: string

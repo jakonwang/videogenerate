@@ -1399,7 +1399,7 @@ const api = {
     remove: (id: string) => ipcRenderer.invoke('plugin:livePhoto:remove', id),
     /** 贴真实商品：「调整摆放」弹窗的数据、确认摆放（从融合那步重做） */
     getPlacement: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:getPlacement', payload),
-    confirmPlacement: (payload: { id: string; placement: { cx: number; cy: number; width: number; rotation: number }; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+    confirmPlacement: (payload: { id: string; placement: { cx: number; cy: number; width: number; rotation: number; squash?: number; flip?: boolean }; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:confirmPlacement', payload),
     pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
     resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>

@@ -195,6 +195,17 @@ async function main() {
     assert.ok(Math.abs(def.width - 0.05) < 1e-9, 'height-limited: 100px tall box → 50px wide')
     assert.ok(Math.abs(def.cx - 0.5) < 1e-9 && Math.abs(def.cy - 0.45) < 1e-9)
 
+    // 8) 摆放的侧倾 / 翻面：保存下来，压窄后外接框变窄
+    const tilted = paste.normalizeProductPlacement({ cx: 0.5, cy: 0.5, width: 0.2, rotation: 0, squash: 0.5, flip: true })!
+    assert.equal(tilted.squash, 0.5)
+    assert.equal(tilted.flip, true)
+    assert.equal(paste.normalizeProductPlacement({ cx: 0.5, cy: 0.5, width: 0.2, rotation: 0, squash: 1 })!.squash, undefined, 'no squash stored when not tilted')
+    const guideDir = path.join(root, 'guide-check')
+    await mkdir(guideDir, { recursive: true })
+    const flat = await paste.renderPlacementGuide({ erasedScenePath: refImage, cutoutPath: placement.cutoutPath, placement: { cx: 0.5, cy: 0.5, width: 0.3, rotation: 0 }, outputPath: path.join(guideDir, 'flat.png') })
+    const squeezed = await paste.renderPlacementGuide({ erasedScenePath: refImage, cutoutPath: placement.cutoutPath, placement: tilted, outputPath: path.join(guideDir, 'tilted.png') })
+    assert.ok(squeezed.bounds.width < flat.bounds.width * 0.4, 'squash narrows the pasted product')
+
     // 7) 商品图是一对：只留一只；单只的不动
     const W = 300
     const H = 200

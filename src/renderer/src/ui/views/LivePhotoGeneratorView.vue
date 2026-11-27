@@ -465,9 +465,8 @@ const cutoutCandidates = computed(() => {
     .filter(Boolean)
   return Array.from(new Set(paths)).slice(0, 8)
 })
-const selectedCutoutSource = computed(() =>
-  cutoutCandidates.value.includes(cutoutSourcePath.value) ? cutoutSourcePath.value : cutoutCandidates.value[0] || '',
-)
+/** 手动选的抠图商品图；没选 = 让软件按参考图里原商品的角度自动挑（包括六视图里的各个角度） */
+const selectedCutoutSource = computed(() => (cutoutCandidates.value.includes(cutoutSourcePath.value) ? cutoutSourcePath.value : ''))
 const selectedProductAnalysisBoardRef = computed(() => String(selectedProduct.value?.analysisBoardPath || '').trim())
 const selectedProductLivePhotoRef = computed(() => {
   const analysisBoardRef = selectedProductAnalysisBoardRef.value
@@ -2148,9 +2147,10 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 <button type="button" :class="{ 'is-on': placementMode === 'auto' }" @click="setPlacementMode('auto')">自动（和原商品一样大）</button>
                 <button type="button" :class="{ 'is-on': placementMode === 'confirm' }" @click="setPlacementMode('confirm')">生成前让我确认</button>
               </div>
-              <div v-if="cutoutCandidates.length > 1" class="lp-cutout">
-                <small>抠图用这张（单只、白底最好）</small>
+              <div v-if="cutoutCandidates.length" class="lp-cutout">
+                <small>抠图用的商品图：默认按参考图里商品的角度自动挑，也可以指定一张</small>
                 <div class="lp-cutout__list">
+                  <button type="button" class="lp-cutout__item lp-cutout__auto" :class="{ 'is-on': !selectedCutoutSource }" @click="cutoutSourcePath = ''">自动</button>
                   <button
                     v-for="path in cutoutCandidates"
                     :key="path"
@@ -3765,6 +3765,7 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 .lp-cutout__list { display: flex; flex-wrap: wrap; gap: 6px; }
 .lp-cutout__item { width: 44px; height: 44px; padding: 0; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 8px; background: #fff; cursor: pointer; }
 .lp-cutout__item img { width: 100%; height: 100%; object-fit: contain; }
+.lp-cutout__auto { display: grid; place-items: center; font-size: 12px; color: var(--theme-text-secondary); background: var(--theme-panel-soft); }
 .lp-cutout__item.is-on { border-color: var(--vg-accent); box-shadow: 0 0 0 2px var(--vg-accent-soft); }
 .replacement-region-dialog {
   position: fixed;
