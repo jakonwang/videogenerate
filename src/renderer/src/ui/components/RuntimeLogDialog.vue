@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ScrollText, X } from 'lucide-vue-next'
 
 const { t: tr } = useI18n()
 
@@ -126,6 +127,30 @@ const categoryCountMap = computed(() => {
   return counts
 })
 
+// Only show categories that actually have logs, so the filter row isn't a wall of zeros.
+const visibleCategoryOptions = computed(() =>
+  categoryOptions.value.filter(
+    (option) => option.value === 'all' || option.value === activeCategory.value || categoryCountMap.value[option.value] > 0,
+  ),
+)
+const showFilters = computed(() => visibleCategoryOptions.value.length > 2)
+const errorCount = computed(() => categoryCountMap.value.error)
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeDialog()
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) window.addEventListener('keydown', handleKeydown)
+    else window.removeEventListener('keydown', handleKeydown)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
+
 function openDialog() {
   emit('update:modelValue', true)
 }
@@ -234,62 +259,66 @@ function formatRuntimeMessage(message: string) {
 
 <template>
   <button class="runtime-fab" type="button" @click="openDialog">
-    <span class="runtime-fab__dot" :class="{ active: visibleLogs.length > 0 }"></span>
+    <span class="runtime-fab__dot" :class="{ active: visibleLogs.length > 0, error: errorCount > 0 }"></span>
     <span>{{ resolvedFabLabel }}</span>
     <strong>{{ visibleLogs.length }}</strong>
   </button>
 
-  <div v-if="modelValue" class="runtime-dialog">
-    <button class="runtime-dialog__backdrop" type="button" @click="closeDialog"></button>
-    <div class="runtime-dialog__panel">
-      <div class="runtime-dialog__head">
-        <div>
-          <strong>{{ resolvedTitle }}</strong>
-          <p>{{ resolvedDescription }}</p>
-        </div>
-        <button class="runtime-dialog__close" type="button" @click="closeDialog">{{ tr('autoUi.k_6c14bd7f6f9e') }}</button>
-      </div>
-
-      <div class="runtime-summary">
-        <span class="runtime-summary__count">{{ countLabel }}</span>
-        <span v-if="hint" class="runtime-summary__hint">{{ hint }}</span>
-      </div>
-
-      <div class="runtime-filters">
-        <button
-          v-for="option in categoryOptions"
-          :key="option.value"
-          class="runtime-filter-chip"
-          :class="{ 'runtime-filter-chip--active': activeCategory === option.value }"
-          type="button"
-          @click="activeCategory = option.value"
-        >
-          <span>{{ option.label }}</span>
-          <strong>{{ categoryCountMap[option.value] }}</strong>
-        </button>
-      </div>
-
-      <div class="runtime-log-board">
-        <div v-if="visibleLogs.length" class="runtime-log-list">
-          <article v-for="item in visibleLogs" :key="item.id" class="runtime-log-card" :class="`runtime-log-card--${item.level}`">
-            <div class="runtime-log-card__meta">
-              <div class="runtime-log-card__badges">
-                <span class="runtime-log-card__badge">{{ resolveRuntimeAction(item) }}</span>
-                <span class="runtime-log-card__badge runtime-log-card__badge--level">{{ levelLabel(item.level) }}</span>
-              </div>
-              <time>{{ formatRuntimeTime(item.time) }}</time>
+  <Transition name="runtime-drawer">
+    <div v-if="modelValue" class="runtime-dialog" role="dialog" aria-modal="true">
+      <div class="runtime-dialog__backdrop" @click="closeDialog"></div>
+      <aside class="runtime-dialog__panel">
+        <header class="runtime-head">
+          <span class="runtime-head__icon"><ScrollText :size="18" /></span>
+          <div class="runtime-head__text">
+            <div class="runtime-head__title">
+              <strong>{{ resolvedTitle }}</strong>
+              <span class="runtime-head__count">{{ countLabel }}</span>
             </div>
-            <p>{{ formatRuntimeMessage(item.message) }}</p>
-          </article>
+            <p>{{ resolvedDescription }}</p>
+          </div>
+          <button class="runtime-head__close" type="button" :title="tr('autoUi.k_6c14bd7f6f9e')" @click="closeDialog">
+            <X :size="16" />
+          </button>
+        </header>
+
+        <nav v-if="showFilters" class="runtime-tabs">
+          <button
+            v-for="option in visibleCategoryOptions"
+            :key="option.value"
+            class="runtime-tab"
+            :class="{ 'runtime-tab--active': activeCategory === option.value, 'runtime-tab--error': option.value === 'error' }"
+            type="button"
+            @click="activeCategory = option.value"
+          >
+            {{ option.label }}
+            <span>{{ categoryCountMap[option.value] }}</span>
+          </button>
+        </nav>
+
+        <div class="runtime-body">
+          <ol v-if="visibleLogs.length" class="runtime-timeline">
+            <li v-for="item in visibleLogs" :key="item.id" class="runtime-row" :class="`runtime-row--${item.level}`">
+              <time>{{ formatRuntimeTime(item.time) }}</time>
+              <span class="runtime-row__dot"></span>
+              <div class="runtime-row__content">
+                <span class="runtime-row__tag">{{ resolveRuntimeAction(item) }}</span>
+                <p>{{ formatRuntimeMessage(item.message) }}</p>
+              </div>
+            </li>
+          </ol>
+
+          <div v-else class="runtime-empty">
+            <span class="runtime-empty__icon"><ScrollText :size="22" /></span>
+            <strong>{{ resolvedEmptyTitle }}</strong>
+            <p>{{ resolvedEmptyDescription }}</p>
+          </div>
         </div>
 
-        <div v-else class="runtime-empty">
-          <strong>{{ resolvedEmptyTitle }}</strong>
-          <p>{{ resolvedEmptyDescription }}</p>
-        </div>
-      </div>
+        <footer v-if="hint" class="runtime-foot">{{ hint }}</footer>
+      </aside>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -301,27 +330,34 @@ function formatRuntimeMessage(message: string) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 8px 0 14px;
   border: 1px solid var(--theme-border);
   border-radius: 999px;
   background: var(--theme-panel);
   box-shadow: var(--theme-shadow-float);
   color: var(--theme-text);
-  backdrop-filter: blur(14px);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.runtime-fab:hover {
+  border-color: var(--theme-accent);
 }
 
 .runtime-fab strong {
-  min-width: 22px;
-  height: 22px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
   background: var(--theme-accent-soft);
   color: var(--theme-control-selected-text);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
+  box-sizing: border-box;
 }
 
 .runtime-fab__dot {
@@ -329,267 +365,333 @@ function formatRuntimeMessage(message: string) {
   height: 8px;
   border-radius: 999px;
   background: var(--theme-text-muted);
-  box-shadow: 0 0 0 5px var(--theme-panel-soft);
 }
 
 .runtime-fab__dot.active {
   background: var(--theme-success-text);
-  box-shadow: 0 0 0 5px var(--theme-success-soft);
+  box-shadow: 0 0 0 4px var(--theme-success-soft);
 }
 
+.runtime-fab__dot.error {
+  background: var(--theme-danger-text);
+  box-shadow: 0 0 0 4px var(--theme-danger-soft);
+}
+
+/* Drawer */
 .runtime-dialog {
   position: fixed;
   inset: 0;
   z-index: 150;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .runtime-dialog__backdrop {
   position: absolute;
   inset: 0;
-  border: none;
-  background: var(--theme-overlay);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .runtime-dialog__panel {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  width: min(720px, calc(100vw - 40px));
-  height: min(720px, calc(100vh - 56px));
-  margin: 28px 20px 28px auto;
-  padding: 18px 18px 16px;
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100vw);
+  height: 100%;
+  border-left: 1px solid var(--theme-border);
   background: var(--theme-panel);
   box-shadow: var(--theme-shadow-dialog);
-  overflow: hidden;
 }
 
-.runtime-dialog__head {
+.runtime-drawer-enter-active,
+.runtime-drawer-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.runtime-drawer-enter-active .runtime-dialog__panel,
+.runtime-drawer-leave-active .runtime-dialog__panel {
+  transition: transform 0.22s ease;
+}
+
+.runtime-drawer-enter-from,
+.runtime-drawer-leave-to {
+  opacity: 0;
+}
+
+.runtime-drawer-enter-from .runtime-dialog__panel,
+.runtime-drawer-leave-to .runtime-dialog__panel {
+  transform: translateX(24px);
+}
+
+/* Header */
+.runtime-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 14px;
-}
-
-.runtime-dialog__head strong {
-  display: block;
-  color: var(--theme-text);
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.runtime-dialog__head p {
-  margin: 6px 0 0;
-  color: var(--theme-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.runtime-dialog__close {
-  min-width: 72px;
-  height: 36px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-control);
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.runtime-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--theme-border);
 }
 
-.runtime-summary__count {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--theme-border-control);
-  background: var(--theme-accent-soft);
-  color: var(--theme-control-selected-text);
-  font-weight: 700;
-}
-
-.runtime-summary__hint {
-  color: var(--theme-text-muted);
-}
-
-.runtime-filters {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-}
-
-.runtime-filter-chip {
+.runtime-head__icon {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 999px;
-  background: var(--theme-control);
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-}
-
-.runtime-filter-chip strong {
-  min-width: 18px;
-  color: inherit;
-  font-size: 11px;
-  font-weight: 800;
-  text-align: center;
-}
-
-.runtime-filter-chip--active {
-  border-color: var(--theme-accent);
-  background: var(--theme-control-selected);
-  color: var(--theme-control-selected-text);
-}
-
-.runtime-log-board {
-  min-height: 0;
-  height: 100%;
-  border: 1px solid var(--theme-border);
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
-  background: var(--theme-panel-soft);
-  overflow: hidden;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
 }
 
-.runtime-log-list {
-  display: grid;
-  gap: 10px;
-  height: 100%;
-  padding: 14px;
-  overflow: auto;
+.runtime-head__text {
+  flex: 1;
+  min-width: 0;
 }
 
-.runtime-log-card {
-  display: grid;
-  gap: 10px;
-  padding: 12px 13px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-panel);
-}
-
-.runtime-log-card--success {
-  border-color: var(--theme-success-text);
-  background: var(--theme-success-soft);
-}
-
-.runtime-log-card--error {
-  border-color: var(--theme-danger-text);
-  background: var(--theme-danger-soft);
-}
-
-.runtime-log-card--info {
-  border-color: var(--theme-border);
-}
-
-.runtime-log-card__meta {
+.runtime-head__title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
-.runtime-log-card__badges {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.runtime-log-card__meta time {
-  color: var(--theme-text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.runtime-log-card__badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--theme-panel-soft);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
+.runtime-head__title strong {
+  color: var(--theme-text);
+  font-size: 15px;
   font-weight: 700;
 }
 
-.runtime-log-card__badge--level {
-  background: var(--theme-accent-soft);
-  color: var(--theme-control-selected-text);
+.runtime-head__count {
+  color: var(--theme-text-muted);
+  font-size: 12px;
 }
 
-.runtime-log-card p {
+.runtime-head__text p {
+  margin: 4px 0 0;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.runtime-head__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+}
+
+.runtime-head__close:hover {
+  background: var(--theme-control);
+  color: var(--theme-text);
+}
+
+/* Category tabs */
+.runtime-tabs {
+  display: flex;
+  gap: 18px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--theme-border);
+  overflow-x: auto;
+}
+
+.runtime-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.runtime-tab span {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.runtime-tab:hover {
+  color: var(--theme-text);
+}
+
+.runtime-tab--active {
+  border-bottom-color: var(--theme-accent);
+  color: var(--theme-text);
+  font-weight: 600;
+}
+
+.runtime-tab--error span {
+  color: var(--theme-danger-text);
+  opacity: 1;
+}
+
+/* Timeline */
+.runtime-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.runtime-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 10px 18px 18px;
+}
+
+.runtime-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 14px minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 8px 0;
+}
+
+.runtime-row time {
+  padding-top: 2px;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-row__dot {
+  position: relative;
+  justify-self: center;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--theme-text-muted);
+  box-shadow: 0 0 0 3px var(--theme-panel);
+}
+
+/* vertical line connecting dots */
+.runtime-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(58px + 8px + 7px);
+  width: 1px;
+  background: color-mix(in srgb, var(--theme-text-muted) 35%, transparent);
+}
+
+.runtime-row:first-child::before {
+  top: 13px;
+}
+
+.runtime-row:last-child::before {
+  bottom: calc(100% - 13px);
+}
+
+.runtime-row--success .runtime-row__dot {
+  background: var(--theme-success-text);
+  box-shadow: 0 0 0 3px var(--theme-success-soft);
+}
+
+.runtime-row--error .runtime-row__dot {
+  background: var(--theme-danger-text);
+  box-shadow: 0 0 0 3px var(--theme-danger-soft);
+}
+
+.runtime-row__content {
+  min-width: 0;
+}
+
+.runtime-row__tag {
+  display: inline-block;
+  margin-bottom: 2px;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+}
+
+.runtime-row--error .runtime-row__tag {
+  color: var(--theme-danger-text);
+}
+
+.runtime-row--success .runtime-row__tag {
+  color: var(--theme-success-text);
+}
+
+.runtime-row p {
   margin: 0;
   color: var(--theme-text);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.55;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
+.runtime-row--error .runtime-row__content {
+  padding: 6px 10px;
+  margin: -4px 0;
+  border-left: 2px solid var(--theme-danger-text);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-danger-soft) 55%, transparent);
+}
+
+/* Empty */
 .runtime-empty {
-  display: grid;
-  place-content: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 100%;
-  padding: 24px;
+  padding: 32px 24px;
   text-align: center;
+}
+
+.runtime-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 6px;
+  border-radius: 14px;
+  background: var(--theme-panel-soft);
+  color: var(--theme-text-muted);
 }
 
 .runtime-empty strong {
   color: var(--theme-text);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .runtime-empty p {
   margin: 0;
   color: var(--theme-text-muted);
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.6;
+}
+
+.runtime-foot {
+  padding: 10px 18px;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-text-muted);
+  font-size: 11px;
 }
 
 @media (max-width: 1024px) {
   .runtime-fab {
     right: 14px;
     bottom: 16px;
-  }
-
-  .runtime-dialog__panel {
-    width: calc(100vw - 24px);
-    height: calc(100vh - 24px);
-    margin: 12px;
-    padding: 16px 14px 14px;
-  }
-
-  .runtime-dialog__head,
-  .runtime-summary {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>
