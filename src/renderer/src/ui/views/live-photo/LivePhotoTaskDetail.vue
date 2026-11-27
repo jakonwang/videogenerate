@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue'
-import { Captions, Check, ChevronDown, FileImage, FolderOpen, Logs, Play, RefreshCcw, ScanLine, X } from 'lucide-vue-next'
+import { Captions, Check, ChevronDown, FileImage, FolderOpen, Logs, Move, Play, RefreshCcw, ScanLine, X } from 'lucide-vue-next'
 import type { LivePhotoItem } from './types'
 import type { LivePhotoCardAction, LivePhotoCardCaps } from './LivePhotoTaskCard.vue'
 import { livePhotoProgress, useNow, type LpStepKey } from './progress'
@@ -65,6 +65,7 @@ const primary = computed<Array<{ action: LivePhotoCardAction; label: string; ico
   if (props.caps.canContinueVideo) list.push({ action: 'continueVideo', label: t('lpTask.action.continueVideo'), icon: Play, strong: true })
   if (props.caps.canRetryImage) list.push({ action: 'retryImage', label: t('lpTask.action.retryImage'), icon: RefreshCcw })
   if (list.length) return list
+  if (props.item.awaitingPlacement && props.caps.canPlacement) return [{ action: 'placement', label: '调整摆放', icon: Move, strong: true }]
   if (progress.state === 'done' && props.caps.hasVideo) {
     list.push({ action: 'play', label: t('lpTask.action.play'), icon: Play, strong: true })
     list.push({ action: 'subtitle', label: t('lpTask.action.subtitle'), icon: Captions })

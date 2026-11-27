@@ -1319,6 +1319,8 @@ export type ModelCredentials = {
   imageProviderPrimary?: ImageProviderName
   klingImageModel?: string
   grsaiImageModel?: string
+  /** 图生视频「贴真实商品」擦除和融合用的出图模型（GRS /v1/api/generate），默认 nano-banana-2.1 */
+  livePhotoReplaceImageModel?: string
   apifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
   videoApifoxHubProfile?: Exclude<PlatformProfile, 'grsai'>
   imageApifoxHubProfile?: ImagePlatformProfile

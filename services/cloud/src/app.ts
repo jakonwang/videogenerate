@@ -7,6 +7,7 @@ import { createCloudService } from './service'
 import { createSyncService } from './sync'
 import { createAiService } from './ai'
 import { createMatting, type Matting } from './sceneSwap/matting'
+import { createProductCutout } from './productCutout'
 import { dedupeUserFiles } from './dedupe'
 import { createSceneSwapService } from './sceneSwap/service'
 import { createGenerationService, type GenerationProviders } from './generate'
@@ -60,6 +61,8 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     fontsDir: config.fontsDir,
     providers: options.generationProviders,
   })
+  // 腾讯云抠图：AI 修图和图生视频「贴真实商品」共用一个（同一套并发控制）
+  const matting = options.matting ?? createMatting({ settings: () => service.readManagedSettings().matting, fetchImpl: options.fetchImpl })
   const sceneSwap = createSceneSwapService({
     db,
     now: options.now ?? Date.now,
@@ -72,7 +75,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     },
     assertConfigured: generation.assertImageConfigured,
     quota: { remaining: ai.quota.remaining, record: (userId, ok) => ai.quota.record(userId, 'scene-swap', ok) },
-    matting: options.matting ?? createMatting({ settings: () => service.readManagedSettings().matting, fetchImpl: options.fetchImpl }),
+    matting,
     renderImage: generation.renderImage,
     inspect: options.inspect ?? ai.inspect,
     concurrency: config.sceneSwapConcurrency,
@@ -119,7 +122,7 @@ export function createCloudApp(overrides: Partial<CloudConfig> = {}, options: { 
     genLog,
   })
   const adminData = createAdminDataService({ db, now: options.now ?? Date.now, sync, generation })
-  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap, adminData)
+  const handler = createCloudHttpHandler(config, service, sync, ai, generation, createRelay(), cloneEngine, aiProxy, sceneSwap, adminData, createProductCutout({ matting, dataDir: config.dataDir, now: options.now }))
   const server = http.createServer((req, res) => void handler(req, res))
 
   // Storage housekeeping: files no record points to are removed after CLOUD_ORPHAN_FILE_DAYS.

@@ -24,7 +24,17 @@ export type LivePhotoReplacementGeometry = {
   target: LivePhotoPixelBounds
   context: LivePhotoPixelBounds
   writeback: LivePhotoPixelBounds
+  /** 贴回时完全用 AI 结果的区域（框外留余量，新商品比框大也不会被渐变边缘吃掉） */
+  core?: LivePhotoPixelBounds
 }
+
+/**
+ * 交给 AI 的方图至少占画面短边的这个比例。框只标「放在哪」，
+ * AI 要看得到耳朵、脸、手指这些参照物，才能按商品真实比例画，而不是按框的大小去填。
+ */
+const MIN_CONTEXT_SHORT_SIDE_RATIO = 0.45
+/** 贴回区域至少占交给 AI 那张方图边长的比例 */
+const MIN_WRITEBACK_CONTEXT_RATIO = 0.55
 
 const MIN_REGION_SIZE = 0.01
 export const LIVE_PHOTO_AUTO_REGION_MIN_CONFIDENCE = 0.75
@@ -92,11 +102,12 @@ function expandedBounds(
   imageHeight: number,
   scale: number,
   square: boolean,
+  minSide = 0,
 ): LivePhotoPixelBounds {
   const centerX = target.left + target.width / 2
   const centerY = target.top + target.height / 2
-  let width = Math.max(1, target.width * scale)
-  let height = Math.max(1, target.height * scale)
+  let width = Math.max(1, target.width * scale, minSide)
+  let height = Math.max(1, target.height * scale, minSide)
   if (square) {
     const side = Math.min(Math.max(width, height), imageWidth, imageHeight)
     width = side
@@ -136,14 +147,20 @@ export function resolveLivePhotoReplacementGeometry(input: {
   const right = clamp(Math.ceil((normalized.x + normalized.width) * imageWidth), left + 1, imageWidth)
   const bottom = clamp(Math.ceil((normalized.y + normalized.height) * imageHeight), top + 1, imageHeight)
   const target = { left, top, width: right - left, height: bottom - top }
-  const context = expandedBounds(target, imageWidth, imageHeight, 3, true)
-  const writeback = intersectBounds(expandedBounds(target, imageWidth, imageHeight, 1.8, false), context)
+  const shortSide = Math.min(imageWidth, imageHeight)
+  const context = expandedBounds(target, imageWidth, imageHeight, 3, true, shortSide * MIN_CONTEXT_SHORT_SIDE_RATIO)
+  const writeback = intersectBounds(
+    expandedBounds(target, imageWidth, imageHeight, 2.4, false, context.width * MIN_WRITEBACK_CONTEXT_RATIO),
+    context,
+  )
+  const core = intersectBounds(expandedBounds(target, imageWidth, imageHeight, 1.6, false), writeback)
   return {
     imageWidth,
     imageHeight,
     target,
     context,
     writeback,
+    core,
   }
 }
 
@@ -216,7 +233,8 @@ export async function compositeLivePhotoReplacementCrop(input: {
 }) {
   await ensureSharp()
   try {
-    const { context, target, writeback } = input.geometry
+    const { context, writeback } = input.geometry
+    const target = input.geometry.core ?? input.geometry.target
     const relative = {
       left: writeback.left - context.left,
       top: writeback.top - context.top,
@@ -262,4 +280,43 @@ export async function compositeLivePhotoReplacementCrop(input: {
   } catch (error) {
     throw new Error(`Live Photo crop composite failed for ${input.generatedCropPath}: ${String((error as Error)?.message || error)}`)
   }
+}
+
+/**
+ * 给「位置和大小检查」用：原图和结果图按同一块区域裁出来，原图上画出框。
+ * 两张图同一视角、同一比例，AI 才好对比商品位置和大小。
+ */
+export async function prepareLivePhotoPlacementReviewCrops(input: {
+  scenePath: string
+  stillPath: string
+  region: LivePhotoReplacementRegion
+  sceneOutputPath: string
+  stillOutputPath: string
+}) {
+  await ensureSharp()
+  const metadata = await sharp(input.scenePath, { failOn: 'error' }).rotate().metadata()
+  if (!metadata.width || !metadata.height) throw new Error('scene dimensions are unavailable')
+  const geometry = resolveLivePhotoReplacementGeometry({ region: input.region, imageWidth: metadata.width, imageHeight: metadata.height })
+  const { context, target } = geometry
+  const stroke = Math.max(2, Math.round(context.width / 160))
+  const box = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${context.width}" height="${context.height}">` +
+      `<rect x="${target.left - context.left}" y="${target.top - context.top}" width="${target.width}" height="${target.height}" fill="none" stroke="#00e5ff" stroke-width="${stroke}"/>` +
+      `</svg>`,
+  )
+  await mkdir(dirname(input.sceneOutputPath), { recursive: true })
+  await sharp(input.scenePath, { failOn: 'error' })
+    .rotate()
+    .extract(context)
+    .composite([{ input: box, left: 0, top: 0 }])
+    .png()
+    .toFile(input.sceneOutputPath)
+  // 结果图可能被平台改了尺寸：先缩放到原图大小再裁同一块
+  await sharp(input.stillPath, { failOn: 'error' })
+    .rotate()
+    .resize(geometry.imageWidth, geometry.imageHeight, { fit: 'fill' })
+    .extract(context)
+    .png()
+    .toFile(input.stillOutputPath)
+  return geometry
 }

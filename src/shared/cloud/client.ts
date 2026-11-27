@@ -219,6 +219,8 @@ export function createCloudClient(options: CloudClientOptions) {
     getManagedSettings: (machineId: string) =>
       request<{ settings: ManagedSoftwareSettings | null; version: string; proxyToken: string | null }>('GET', `/api/v1/client/managed-settings${qs({ machineId })}`),
     /** 托管模式：向云端要七牛单次上传凭证（七牛 AK/SK 不下发到电脑） */
+    /** 图生视频「贴真实商品」：商品图（base64）→ 透明通道蒙版（黑白 PNG 的 base64），腾讯云抠图在服务器上 */
+    productCutout: (input: { image: string }) => request<{ mask: string }>('POST', '/api/v1/client/product-cutout', input),
     qiniuUploadGrant: (input: { machineId: string; fileName: string; keyPrefix?: string }) =>
       request<{ token: string; key: string; uploadHost: string; domain: string }>('POST', '/api/v1/client/qiniu-upload-grant', input),
     redeem: (code: string) => request<CloudRedeemResult>('POST', '/api/v1/redeem', { code }),

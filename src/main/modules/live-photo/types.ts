@@ -78,6 +78,22 @@ export type LivePhotoReplacementRegion = {
   updatedAt: number
 }
 
+/**
+ * 「贴真实商品」的摆放：中心点（占整张图的比例）、商品宽度（占整张图宽度的比例）、角度（度）。
+ * confirmedAt：用户在「调整摆放」里点过确认的时间；选了「生成前让我确认」时，没确认就停下来等。
+ */
+export type LivePhotoProductPlacement = {
+  cx: number
+  cy: number
+  width: number
+  rotation: number
+  confirmedAt?: number
+}
+
+/** 商品替换方式：paste = 贴真实商品再让 AI 融合（新任务默认）；不填 = 原来的 AI 直接画（旧任务） */
+export type LivePhotoReplaceMode = 'paste'
+export type LivePhotoPlacementMode = 'auto' | 'confirm'
+
 export type LivePhotoSceneInteractionMode = 'worn' | 'held' | 'placed' | 'hanging' | 'attached' | 'none' | 'unknown'
 
 export type LivePhotoSceneInteraction = {
@@ -259,6 +275,16 @@ export type LivePhotoItem = {
   promptHash?: string
   qualityReport?: LivePhotoQualityReport
   replacementRegion?: LivePhotoReplacementRegion
+  /** 贴真实商品（见 pasteReplace.ts）：替换方式、摆放方式、抠图用的商品图、中间产物和摆放 */
+  replaceMode?: LivePhotoReplaceMode
+  placementMode?: LivePhotoPlacementMode
+  cutoutSourcePath?: string
+  productCutoutPath?: string
+  erasedScenePath?: string
+  erasedRegionRevision?: number
+  placement?: LivePhotoProductPlacement
+  /** 停在「待确认摆放」：等用户在「调整摆放」里确认 */
+  awaitingPlacement?: boolean
   sceneInteraction?: LivePhotoSceneInteraction
   generationAttempts?: LivePhotoGenerationAttempt[]
   cacheKey?: string
@@ -291,6 +317,10 @@ export type CreateReferenceLivePhotoInput = {
   videoDurationSec?: number
   videoResolution?: string
   videoZoomPercent?: number
+  /** 商品摆放：auto = 和原商品一样大，直接生成；confirm = 擦完、抠完图先停下来让用户调整 */
+  placementMode?: LivePhotoPlacementMode
+  /** 抠图用的商品图（单只、白底最好）；不填用商品主图 */
+  cutoutSourcePath?: string
 }
 
 export type CreateCloneShotLivePhotosInput = {
@@ -314,6 +344,8 @@ export type RetryLivePhotoItemInput = {
   motionTemplate?: LivePhotoMotionTemplate
   replacementRegion?: Pick<LivePhotoReplacementRegion, 'x' | 'y' | 'width' | 'height'>
   retryMode?: 'auto' | 'manual_once'
+  /** 一定从出图那步重做（例如改了商品摆放），不只重做视频 */
+  forceImageStage?: boolean
   /** 重试时换模型 / 时长（不传 = 沿用任务原来的） */
   videoModelId?: string
   videoDurationSec?: number

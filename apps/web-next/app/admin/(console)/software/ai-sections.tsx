@@ -16,7 +16,7 @@ import {
   type ManagedSoftwareSettings,
 } from '@shared/cloud/managedSettings'
 import { adminClient } from '@/lib/admin-client'
-import { CHAT_MODEL_OPTIONS, IMAGE_MODEL_OPTIONS, PLATFORM_DISPLAY_NAMES, type ModelOption } from '@shared/aiModels'
+import { CHAT_MODEL_OPTIONS, IMAGE_MODEL_OPTIONS, PLATFORM_DISPLAY_NAMES, REPLACE_IMAGE_MODEL_OPTIONS, type ModelOption } from '@shared/aiModels'
 import { CAPABILITY_PLATFORM_OPTIONS, type PlatformProfile } from '@shared/platformSettings'
 import {
   VIDEO_CATALOG_PLATFORM_LABELS,
@@ -314,6 +314,25 @@ export function DefaultModelsSection({ form, setForm }: { form: ManagedSoftwareS
             </button>
           ))}
         </div>
+        </div>
+
+        <div className="ai-defaults__row">
+        <span className="ai-defaults__label">商品替换（贴图融合）</span>
+        <ModelSelect
+          className="ai-defaults__select"
+          value={caps.image.replaceModel}
+          onChange={(next) => setCap('image', { replaceModel: next })}
+          emptyItem={{ value: '', label: '默认（Nano Banana 2.1）', kind: 'default' }}
+          groups={[
+            {
+              key: 'grsai',
+              title: PLATFORM_DISPLAY_NAMES.grsai,
+              ready: Boolean(form.platforms.grsai.apiKey),
+              items: REPLACE_IMAGE_MODEL_OPTIONS.map((option) => ({ value: option.model, label: option.label })),
+            },
+          ]}
+        />
+        <span className="ai-defaults__hint">图生视频擦掉旧商品、融合真实商品用，走 GRS.AI</span>
         </div>
 
         <div className="ai-defaults__row">

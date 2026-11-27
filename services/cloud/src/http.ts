@@ -13,6 +13,7 @@ import { SYNC_MAX_FILE_BYTES } from '../../../src/shared/cloud/sync'
 import { CloudError, badRequest } from './security'
 import type { AiProxy } from './aiProxy'
 import type { SceneSwapService } from './sceneSwap/service'
+import type { ProductCutoutService } from './productCutout'
 
 const MAX_BODY_BYTES = 1024 * 1024
 
@@ -111,7 +112,7 @@ function clientIp(req: http.IncomingMessage, trustProxy: boolean): string {
   return String(req.socket.remoteAddress || '').slice(0, 64)
 }
 
-export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy, sceneSwap?: SceneSwapService, adminData?: AdminDataService) {
+export function createCloudHttpHandler(config: CloudConfig, service: CloudService, sync: SyncService, ai: AiService, generation: GenerationService, relay: RelayService = createRelay(), cloneEngine?: CloneEngine, aiProxy?: AiProxy, sceneSwap?: SceneSwapService, adminData?: AdminDataService, productCutout?: ProductCutoutService) {
   const routes: Array<{ method: string; pattern: RegExp; keys: string[]; handler: Handler; options: RouteOptions }> = []
 
   function route(method: string, path: string, handler: Handler, options: RouteOptions = {}) {
@@ -142,6 +143,16 @@ export function createCloudHttpHandler(config: CloudConfig, service: CloudServic
     return service.clientManagedSettings(auth.user, String(ctx.url.searchParams.get('machineId') || ''), auth.tokenHash)
   })
   route('POST', '/api/v1/client/qiniu-upload-grant', (ctx) => service.qiniuUploadGrant(user(ctx), String(ctx.body.machineId || ''), ctx.body))
+  // 图生视频「贴真实商品」：腾讯云抠图（密钥只在服务器），返回透明通道蒙版
+  route(
+    'POST',
+    '/api/v1/client/product-cutout',
+    async (ctx) => {
+      if (!productCutout) throw new CloudError('BAD_REQUEST', '服务器没有开启抠图', 400)
+      return await productCutout.run(user(ctx).id, ctx.body)
+    },
+    { maxBodyBytes: 12 * 1024 * 1024 },
+  )
 
   /* ---------------------------------------------------------------- 账号 */
   route('POST', '/api/v1/auth/register', (ctx) => service.register(ctx.body as any, ctx.ip))

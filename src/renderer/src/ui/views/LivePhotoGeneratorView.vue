@@ -11,6 +11,7 @@ import UiModelSelect, { type UiModelSelectGroup } from '../components/UiModelSel
 import RuntimeLogDialog from '../components/RuntimeLogDialog.vue'
 import LivePhotoTaskCard, { type LivePhotoCardAction, type LivePhotoCardCaps } from './live-photo/LivePhotoTaskCard.vue'
 import LivePhotoTaskDetail from './live-photo/LivePhotoTaskDetail.vue'
+import ProductPlacementDialog from './live-photo/ProductPlacementDialog.vue'
 import ChPager from './creator-hub/ChPager.vue'
 // The page brings its own stylesheets so the web version (which reuses this page) gets them too.
 import type { LivePhotoItem, LivePhotoQualityReport } from './live-photo/types'
@@ -369,6 +370,28 @@ const runtimeDialogTitle = ref('')
 const detailDialogOpen = ref(false)
 const detailDialogItem = ref<LivePhotoItem | null>(null)
 const replacementRegionDialogOpen = ref(false)
+/** 贴真实商品：正在「调整摆放」的任务 */
+const placementDialogItem = ref<LivePhotoItem | null>(null)
+/** 商品摆放：auto = 和原商品一样大直接生成；confirm = 擦完、抠完先停下来让我调整（记在本机） */
+const PLACEMENT_MODE_STORAGE_KEY = 'vg.livePhoto.placementMode'
+const placementMode = ref<'auto' | 'confirm'>(readPlacementMode())
+function readPlacementMode(): 'auto' | 'confirm' {
+  try {
+    return localStorage.getItem(PLACEMENT_MODE_STORAGE_KEY) === 'confirm' ? 'confirm' : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+function setPlacementMode(value: 'auto' | 'confirm') {
+  placementMode.value = value
+  try {
+    localStorage.setItem(PLACEMENT_MODE_STORAGE_KEY, value)
+  } catch {
+    // 存不了就只在这次有效
+  }
+}
+/** 抠图用的商品图：默认商品主图；商品有多张图时可以换一张（单只、白底最好） */
+const cutoutSourcePath = ref('')
 const replacementRegionDialogItem = ref<LivePhotoItem | null>(null)
 const replacementRegionStage = ref<HTMLElement | null>(null)
 const replacementRegionBusy = ref(false)
@@ -434,6 +457,17 @@ const qualityOptions = computed(() => [
 ] as const)
 
 const selectedProduct = computed(() => products.value.find((item) => item.id === selectedProductId.value) || null)
+const cutoutCandidates = computed(() => {
+  const product = selectedProduct.value
+  if (!product) return [] as string[]
+  const paths = [product.coverImagePath, ...(product.images || []).map((image) => image.filePath)]
+    .map((path) => String(path || '').trim())
+    .filter(Boolean)
+  return Array.from(new Set(paths)).slice(0, 8)
+})
+const selectedCutoutSource = computed(() =>
+  cutoutCandidates.value.includes(cutoutSourcePath.value) ? cutoutSourcePath.value : cutoutCandidates.value[0] || '',
+)
 const selectedProductAnalysisBoardRef = computed(() => String(selectedProduct.value?.analysisBoardPath || '').trim())
 const selectedProductLivePhotoRef = computed(() => {
   const analysisBoardRef = selectedProductAnalysisBoardRef.value
@@ -937,7 +971,8 @@ function cardCaps(item: LivePhotoItem): LivePhotoCardCaps {
     hasSubtitle: itemHasSubtitle(item),
     hasAppliedSubtitle: itemHasAppliedSubtitle(item),
     hasMetadata: Boolean(item.packagingMetadataBridgePath),
-    canRegion: canCorrectReplacementRegion(item),
+    canRegion: canCorrectReplacementRegion(item) && item.replaceMode !== 'paste',
+    canPlacement: item.replaceMode === 'paste' && item.sourceType === 'reference_replace' && (Boolean(item.awaitingPlacement) || item.packagingStatus !== 'processing'),
     canRetryImage: canRetryImageOnce(item),
     canContinueVideo: canContinueWithVideo(item),
     subtitleBusy: subtitleDialogBusy.value,
@@ -954,6 +989,9 @@ function onTaskAction(item: LivePhotoItem, action: LivePhotoCardAction) {
     case 'retryImage': return void retryItem(item)
     case 'continueVideo': return void continueWithVideo(item)
     case 'region': return void openReplacementRegionEditor(item)
+    case 'placement':
+      placementDialogItem.value = item
+      return
     case 'resume': return void resumeItemAutoFlow(item)
     case 'pause': return void pauseItemAutoFlow(item)
     case 'logs': return void openRuntimeLogs(item)
@@ -963,6 +1001,13 @@ function onTaskAction(item: LivePhotoItem, action: LivePhotoCardAction) {
     case 'metadata': return void openPath(item.packagingMetadataBridgePath)
     case 'delete': return void removeItem(item.id)
   }
+}
+
+function onPlacementConfirmed(updated: unknown) {
+  placementDialogItem.value = null
+  if (updated && typeof updated === 'object') mergeLivePhotoItems([updated as LivePhotoItem])
+  notice.value = '摆放已确认，开始融合并生成视频'
+  void refreshLibraryItems()
 }
 
 function openTaskDetail(item: LivePhotoItem) {
@@ -1487,6 +1532,8 @@ async function createReferenceItem() {
     ))]
     const selectedProductIdSnapshot = selectedProductId.value
     const videoChoiceSnapshot = videoChoicePayload()
+    const placementModeSnapshot = placementMode.value
+    const cutoutSourceSnapshot = selectedCutoutSource.value
     notice.value =
       existingPaths.length > 1
         ? `${uiText.value.referenceCreatedPrefix} ${existingPaths.length} ${uiText.value.referenceCreatedSuffix}`
@@ -1512,6 +1559,8 @@ async function createReferenceItem() {
         productId: selectedProductIdSnapshot,
         motionTemplate: livePhotoSettings.value.referenceMotionTemplate,
         ...videoChoiceSnapshot,
+        placementMode: placementModeSnapshot,
+        cutoutSourcePath: cutoutSourceSnapshot || undefined,
       })
       const createdItems = (Array.isArray(created) ? created : [created]).filter(Boolean) as LivePhotoItem[]
       mergeLivePhotoItems(createdItems)
@@ -2090,6 +2139,32 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
                 </div>
               </div>
             </div>
+            <div v-if="!styleReference" class="lp-field" data-testid="live-photo-placement-mode">
+              <div class="lp-field__label">
+                <span>商品摆放</span>
+                <small>贴真实商品图，商品不会变样；每个任务约多 0.1 元</small>
+              </div>
+              <div class="lp-seg" role="group" aria-label="商品摆放">
+                <button type="button" :class="{ 'is-on': placementMode === 'auto' }" @click="setPlacementMode('auto')">自动（和原商品一样大）</button>
+                <button type="button" :class="{ 'is-on': placementMode === 'confirm' }" @click="setPlacementMode('confirm')">生成前让我确认</button>
+              </div>
+              <div v-if="cutoutCandidates.length > 1" class="lp-cutout">
+                <small>抠图用这张（单只、白底最好）</small>
+                <div class="lp-cutout__list">
+                  <button
+                    v-for="path in cutoutCandidates"
+                    :key="path"
+                    type="button"
+                    class="lp-cutout__item"
+                    :class="{ 'is-on': path === selectedCutoutSource }"
+                    :title="fileNameOf(path)"
+                    @click="cutoutSourcePath = path"
+                  >
+                    <img :src="previewSrc(path)" alt="" loading="lazy" decoding="async" />
+                  </button>
+                </div>
+              </div>
+            </div>
 
             <div class="lp-field" data-testid="live-photo-video-model">
               <div class="lp-field__label">
@@ -2497,6 +2572,14 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
       </template>
     </SubtitleStudioDialog>
 
+    <ProductPlacementDialog
+      v-if="placementDialogItem"
+      :item-id="placementDialogItem.id"
+      :title="placementDialogItem.productSnapshot?.name"
+      :preview-src="previewSrc"
+      @close="placementDialogItem = null"
+      @confirmed="onPlacementConfirmed"
+    />
     <div v-if="replacementRegionDialogOpen && replacementRegionDialogItem" class="replacement-region-dialog" @click.self="closeReplacementRegionEditor">
       <div class="replacement-region-dialog__panel">
         <div class="replacement-region-dialog__head">
@@ -3677,6 +3760,12 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
 }
 .live-console-row__action--play { background: color-mix(in srgb, var(--theme-tone-blue) 14%, transparent); }
 .live-console-row__action--danger { color: var(--theme-tone-red); }
+.lp-cutout { display: grid; gap: 6px; margin-top: 8px; }
+.lp-cutout small { font-size: 11.5px; color: var(--theme-text-muted); }
+.lp-cutout__list { display: flex; flex-wrap: wrap; gap: 6px; }
+.lp-cutout__item { width: 44px; height: 44px; padding: 0; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 8px; background: #fff; cursor: pointer; }
+.lp-cutout__item img { width: 100%; height: 100%; object-fit: contain; }
+.lp-cutout__item.is-on { border-color: var(--vg-accent); box-shadow: 0 0 0 2px var(--vg-accent-soft); }
 .replacement-region-dialog {
   position: fixed;
   inset: var(--app-titlebar-height, 62px) 0 0;

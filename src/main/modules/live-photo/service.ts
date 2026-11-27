@@ -25,6 +25,16 @@ import { resolveApifoxHubCredentials } from '../clone/apifoxProfile'
 import { generateImage as generateApifoxImage } from '../clone/unifiedImage'
 import { Ai666TaskTimeoutError, createVideoTask, queryAsyncTask, syncRemoteTaskResult } from '../clone/unifiedVideo'
 import { createTiktokZoomedLastFrame } from '../tiktok-creative-studio/imageAspect'
+import {
+  canUsePasteReplace,
+  defaultProductPlacement,
+  ensureProductCutout,
+  eraseRegionProduct,
+  harmonizePlacedProduct,
+  normalizeProductPlacement,
+  readImageSize,
+  renderPlacementGuide,
+} from './pasteReplace'
 import { CATALOG_VIDEO_PROVIDER, listAvailableCatalogVideoModels, pickCatalogVideoModel, queryCatalogVideoTask, submitCatalogVideoTask } from '../clone/catalogVideo'
 import { extractJsonObjectText, extractModelMessageContent } from '../clone/aiResponse'
 import { canUseMockGeneration } from '../clone/mockPolicy'
@@ -50,6 +60,7 @@ import {
   compositeLivePhotoReplacementCrop,
   normalizeAutoLocatedLivePhotoReplacementRegion,
   normalizeLivePhotoReplacementRegion,
+  prepareLivePhotoPlacementReviewCrops,
   prepareLivePhotoReplacementCrop,
 } from './replacementRegion'
 import {
@@ -99,6 +110,7 @@ type LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs: typeof analyzeProductStructureWithGrs
   reviewReferenceReplacementStillStrict: typeof reviewReferenceReplacementStillStrict
   reviewReferenceReplacementStillVisual: typeof reviewReferenceReplacementStillVisual
+  reviewLivePhotoReplacementPlacement: typeof reviewLivePhotoReplacementPlacement
   /** 下载重试间隔（测试里设短一点） */
   downloadRetryDelaysMs?: number[]
 }
@@ -164,6 +176,7 @@ const livePhotoDeps: LivePhotoServiceDependencies = {
   analyzeProductStructureWithGrs,
   reviewReferenceReplacementStillStrict,
   reviewReferenceReplacementStillVisual,
+  reviewLivePhotoReplacementPlacement,
 }
 
 const LIVE_PHOTO_AUTO_FLOW_CONCURRENCY = 2
@@ -1953,12 +1966,149 @@ async function validateReferenceReplacementStill(input: {
   }
 }
 
+type LivePhotoPlacementReview = {
+  skipped: boolean
+  placement: 'pass' | 'fail'
+  scale: 'pass' | 'too_large' | 'too_small'
+  reason: string
+}
+
+/**
+ * 替换图的位置和大小检查（一次对话模型视觉调用）。
+ * 原图（画了框）和结果图按同一块区域裁出来给 AI 对比：框只代表「放在哪」，
+ * 商品大小按商品真实比例对照耳朵、手指等参照物判断，不按框的大小。
+ * 没 Key、请求失败、解析失败都算跳过，不挡流程。
+ */
+export async function reviewLivePhotoReplacementPlacement(input: {
+  item: LivePhotoItem
+  product: LivePhotoProductSnapshot
+  scenePath: string
+  stillPath: string
+}): Promise<LivePhotoPlacementReview> {
+  const skipped = (reason: string): LivePhotoPlacementReview => ({ skipped: true, placement: 'pass', scale: 'pass', reason })
+  const region = normalizeLivePhotoReplacementRegion(input.item.replacementRegion)
+  const productRefPath = resolveAuthoritativeProductReferencePath(input.product)
+  if (!region || !productRefPath || !existsSync(productRefPath) || !existsSync(input.scenePath) || !existsSync(input.stillPath)) {
+    return skipped('missing_inputs')
+  }
+  const credentials = await cloneRepo.getCredentials()
+  const key = String(credentials.grsaiApiKey || '').trim()
+  if (!key) return skipped('missing_grsai_api_key')
+  const host = String(credentials.grsaiHost || 'https://grsaiapi.com').trim().replace(/\/+$/, '') || 'https://grsaiapi.com'
+  const model = String(credentials.grsaiAnalysisModel || 'gemini-3.1-pro').trim() || 'gemini-3.1-pro'
+  const reviewDir = join(livePhotoRoot(input.item.id), 'placement-review')
+  const stamp = `${Date.now()}-${randomUUID().slice(0, 8)}`
+  const sceneCrop = join(reviewDir, `scene-${stamp}.png`)
+  const stillCrop = join(reviewDir, `still-${stamp}.png`)
+  try {
+    await prepareLivePhotoPlacementReviewCrops({ scenePath: input.scenePath, stillPath: input.stillPath, region, sceneOutputPath: sceneCrop, stillOutputPath: stillCrop })
+    const content = [
+      {
+        type: 'text',
+        text: [
+          'You check a product replacement for placement and size only. Ignore color, style, and small detail differences.',
+          'Image 1 = the original scene crop. The cyan rectangle marks where the ORIGINAL product sits. The rectangle shows position only, not the size the new product should have.',
+          'Image 2 = the new product that should now be in the scene.',
+          'Image 3 = the same crop of the result after replacement (no rectangle).',
+          'placement: "pass" if the new product in Image 3 sits on the same contact point as the original product (same piercing, finger, or support point). "fail" if it moved to another spot, floats, or is missing.',
+          'scale: judge the new product size against nearby body or scene anchors in Image 3 (ear lobe height, ear rim, finger width, wrist, neck), using the real-world proportion of the product in Image 2.',
+          'scale: "too_large" if clearly bigger than this product would really look, "too_small" if clearly smaller, otherwise "pass". Do NOT require it to match the rectangle size: a small product inside a big rectangle is correct.',
+          'Only fail when the problem is obvious to a normal viewer.',
+          'Return JSON only: {"placement":"pass","scale":"pass","reason":""}',
+          `Product category: ${String(input.product.type || 'general').trim() || 'general'}. Product name: ${String(input.product.name || '').trim()}.`,
+        ].join('\n'),
+      },
+      { type: 'image_url', image_url: { url: await imageDataUrl(sceneCrop) } },
+      { type: 'image_url', image_url: { url: await imageDataUrl(productRefPath) } },
+      { type: 'image_url', image_url: { url: await imageDataUrl(stillCrop) } },
+    ]
+    const res = await fetch(`${host}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: 'You are a precise JSON-only placement reviewer.' },
+          { role: 'user', content },
+        ],
+      }),
+      signal: AbortSignal.timeout(LIVE_PHOTO_LOCATE_TIMEOUT_MS),
+    })
+    const text = await res.text()
+    if (!res.ok) return skipped(`http_${res.status}`)
+    const parsed = JSON.parse(extractJsonObjectText(extractModelMessageContent(text)))
+    const placement = String(parsed?.placement || '').trim().toLowerCase() === 'fail' ? 'fail' : 'pass'
+    const rawScale = String(parsed?.scale || '').trim().toLowerCase()
+    const scale = rawScale === 'too_large' || rawScale === 'too_small' ? rawScale : 'pass'
+    return { skipped: false, placement, scale, reason: String(parsed?.reason || '').trim().slice(0, 300) }
+  } catch (error) {
+    return skipped(`error: ${String((error as Error)?.message || error).slice(0, 200)}`)
+  } finally {
+    await rm(reviewDir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+/** 替换图检查最多触发一次自动重画：已经重画过的直接放行，不让任务卡死在这一步 */
+const LIVE_PHOTO_PLACEMENT_REVIEW_MAX_IMAGE_RETRIES = 1
+
 async function validateGeneratedStillWithPipeline(input: {
   item: LivePhotoItem
   product: LivePhotoProductSnapshot
   scenePath: string
   stillPath: string
 }): Promise<LivePhotoQualityReport> {
+  const startedAt = Date.now()
+  // 贴真实商品：位置、大小由程序摆好，不再让 AI 检查（检查本身也不稳定）
+  if (input.item.replaceMode === 'paste') {
+    return {
+      checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+      mode: 'remote_fallback',
+      decision: 'pass',
+      score: 1,
+      threshold: 1,
+      retryFloor: 0,
+      components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
+      hardFailures: [],
+      notes: ['quality_checker_skipped', 'paste_replace'],
+      durationMs: 0,
+      checkedAt: now(),
+    } satisfies LivePhotoQualityReport
+  }
+  // 测试里换掉了出图、又没换掉这个检查时，不去真请求
+  const skipInTests = livePhotoDeps.reviewLivePhotoReplacementPlacement === reviewLivePhotoReplacementPlacement
+    && livePhotoDeps.generateGptShotFrameImage !== generateGptShotFrameImage
+  const status = input.item.autoFlowStatus
+  const imageRetries = Number(status?.imageRetryCount || 0)
+  // 只有失败后确定会自动重画时才检查（手动单次重试、重试次数设为 0 时检查不通过会直接判失败）
+  const canAutoRetry = resolveLivePhotoImageRetryFailure({ retryCount: imageRetries, retryLimit: status?.retryLimit ?? LIVE_PHOTO_IMAGE_RETRY_LIMIT, retryMode: status?.imageRetryMode }).shouldRetry
+  let placementNote = 'placement_review:not_run'
+  if (!skipInTests && canAutoRetry && imageRetries < LIVE_PHOTO_PLACEMENT_REVIEW_MAX_IMAGE_RETRIES) {
+    const review = await livePhotoDeps.reviewLivePhotoReplacementPlacement(input)
+    placementNote = review.skipped
+      ? `placement_review:skipped ${review.reason}`
+      : `placement_review:placement=${review.placement} scale=${review.scale}${review.reason ? ` ${review.reason}` : ''}`
+    const hardFailures = [
+      ...(review.placement === 'fail' ? ['visual_check_failed:placement'] : []),
+      ...(review.scale !== 'pass' ? [`visual_check_failed:scale ${review.scale}`] : []),
+    ]
+    if (!review.skipped && hardFailures.length) {
+      return {
+        checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
+        mode: 'remote_fallback',
+        decision: 'retry',
+        score: 0,
+        threshold: 1,
+        retryFloor: 0,
+        components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
+        hardFailures: review.reason ? [...hardFailures, review.reason] : hardFailures,
+        notes: ['placement_review_failed'],
+        durationMs: Date.now() - startedAt,
+        checkedAt: now(),
+      } satisfies LivePhotoQualityReport
+    }
+  }
   return {
     checkerVersion: LIVE_PHOTO_QUALITY_CHECKER_VERSION,
     mode: 'remote_fallback',
@@ -1968,7 +2118,7 @@ async function validateGeneratedStillWithPipeline(input: {
     retryFloor: 0,
     components: { clip: 0, dinov2: 0, orb: 0, ssim: 0, scenePreservation: 1, textConsistency: 1 },
     hardFailures: [],
-    notes: ['quality_checker_skipped'],
+    notes: ['quality_checker_skipped', placementNote],
     fallbackReason: 'quality_checker_skipped',
     durationMs: 0,
     checkedAt: now(),
@@ -2247,7 +2397,7 @@ async function reviewReferenceReplacementStillVisual(input: {
   }
 }
 
-function buildReferenceReplacementPrompt(_input: {
+export function buildReferenceReplacementPrompt(_input: {
   product: LivePhotoProductSnapshot
   productReferenceImagePaths: string[]
   referenceImagePath: string
@@ -2270,6 +2420,10 @@ function buildReferenceReplacementPrompt(_input: {
     '- Then place the product from Image 2 into the same physical anchor position.',
     '- Do not use Image 1 to infer, complete, or reconstruct any product geometry.',
     '- Do not blend the original product with the replacement product, even when both products are in the same category.',
+    '- The original product in Image 1 only marks WHERE the replacement goes. It does not define how big the replacement is.',
+    '- Size the Image 2 product by its real-world proportion against nearby body or scene anchors in Image 1 (ear lobe, ear rim, fingers, wrist, neck, table edge), not by the footprint of the original product.',
+    '- Do not stretch or shrink the replacement to fill the original product footprint. A smaller product stays small; a larger product may extend beyond it.',
+    '- Keep the replacement centered on the same contact point as the original product (the same piercing, finger, or support point).',
   ]
   if (strategy === 'erase_first') {
     executionRules.push(
@@ -2639,6 +2793,15 @@ function buildLivePhotoRetryGuidance(item: LivePhotoItem, product?: LivePhotoPro
   }
   if (reason.includes('scale') || reason.includes('oversized') || reason.includes('too large') || reason.includes('larger than')) {
     guidance.add('Keep the same anchor in Image 1 but correct the product scale to look natural for the selected product.')
+  }
+  if (reason.includes('too_large')) {
+    guidance.add('The previous result made the product too large. Render it smaller, at its real-world size relative to the ear, fingers, or other nearby anchors.')
+  }
+  if (reason.includes('too_small')) {
+    guidance.add('The previous result made the product too small. Render it larger, at its real-world size relative to the ear, fingers, or other nearby anchors.')
+  }
+  if (reason.includes('placement')) {
+    guidance.add('Place the product exactly on the same contact point as the original product in Image 1 (same piercing, finger, or support point). Do not move it elsewhere.')
   }
   if (reason.includes('scene_interaction') || reason.includes('worn instead of held') || reason.includes('held instead of worn')) {
     guidance.add('Restore the exact physical interaction from Image 1. Do not change whether the product is worn, held, placed, hanging, or attached.')
@@ -3017,13 +3180,12 @@ async function submitReferenceReplacementStillTask(input: {
           urls,
         })
         if (created.directUrl) {
-          const directPath = await generateReferenceReplacementStill({
-            ...input,
-            strategyOverride: replacementStrategy,
-          })
+          // 平台直接给了图：下载这张就行，别再生成一次（会多扣一次费）
+          const stillPath = join(stillDir, `reference_replace_${Date.now()}_${randomUUID()}.png`)
+          await downloadUrlToFile({ url: created.directUrl, filePath: stillPath })
           return {
             mode: 'direct' as const,
-            stillPath: directPath.stillPath,
+            stillPath,
             provider,
             model: created.model,
             productReferenceImagePaths: payload.productReferenceImagePaths,
@@ -3073,7 +3235,11 @@ async function submitReferenceReplacementStillTask(input: {
       return null
     },
   }))
-  adapters.push({
+  // 只用选中的那一个图片平台：选中的是 grsai / apifox_hub 就只走上面那个，失败直接报错，
+  // 不再自动换别的平台；选中的是 openai 等其它平台（或测试替身）才走通用生成。
+  const selected = providers[0]
+  if (selected !== 'grsai' && selected !== 'apifox_hub') adapters.splice(0, adapters.length)
+  if (!adapters.length) adapters.push({
     provider: resolveImagePreviewProvider(credentials),
     submit: async () => {
       const generated = await generateReferenceReplacementStill({
@@ -3894,6 +4060,118 @@ async function materializeItem(input: {
   }
 }
 
+/** 抠图用的商品图：任务里选的那张 > 商品主图 > 第一张商品图 */
+function resolveLivePhotoCutoutSourcePath(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
+  const candidates = [item.cutoutSourcePath, product.coverImagePath, ...(product.imagePaths || [])]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+  const found = candidates.find((value) => existsSync(value))
+  if (!found) throw new Error('找不到商品图，没法抠图。请先在商品库给这个商品上传一张单只、白底的商品图')
+  return found
+}
+
+/** 擦除 + 抠图（贴真实商品的前两步），做过的不重做；框改过（revision 变了）就重新擦、摆放回到默认 */
+async function preparePasteReplacementInputs(input: {
+  item: LivePhotoItem
+  product: LivePhotoProductSnapshot
+  referenceImagePath: string
+  credentials: ModelCredentials
+}) {
+  let item = input.item
+  const region = normalizeLivePhotoReplacementRegion(item.replacementRegion)
+  if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
+  const root = livePhotoRoot(item.id)
+  const erasedReady = Boolean(item.erasedScenePath && existsSync(item.erasedScenePath) && item.erasedRegionRevision === region.revision)
+  if (!erasedReady) {
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 贴真实商品：擦掉参考图里的旧商品')]),
+      updatedAt: now(),
+    })
+    const erased = await eraseRegionProduct({
+      credentials: input.credentials,
+      scenePath: input.referenceImagePath,
+      region,
+      outputPath: join(root, 'paste', `erased-r${region.revision}-${now()}.png`),
+    })
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [
+        buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: erased.model, endpoint: '/v1/api/generate', cached: false }),
+        buildLivePhotoLog('[live-photo] 旧商品已擦掉', 'success'),
+      ]),
+      erasedScenePath: erased.path,
+      erasedRegionRevision: region.revision,
+      // 框变了：之前的摆放作废，回到默认
+      placement: item.erasedRegionRevision === undefined || item.erasedRegionRevision === region.revision ? item.placement : undefined,
+      updatedAt: now(),
+    })
+  }
+  const cutoutSourcePath = resolveLivePhotoCutoutSourcePath(item, input.product)
+  if (!item.productCutoutPath || !existsSync(item.productCutoutPath)) {
+    const cutout = await ensureProductCutout(cutoutSourcePath)
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品抠图完成：${basename(cutoutSourcePath)}`, 'success')]),
+      productCutoutPath: cutout.path,
+      updatedAt: now(),
+    })
+  }
+  const scene = await readImageSize(String(item.erasedScenePath))
+  const cutout = await readImageSize(String(item.productCutoutPath))
+  const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height })
+  let placement = normalizeProductPlacement(item.placement)
+  if (!placement) {
+    placement = defaultPlacement
+    item = await livePhotoRepo.upsert({ ...item, placement, updatedAt: now() })
+  }
+  return { item, region, cutoutSourcePath, scene, cutout, placement, defaultPlacement }
+}
+
+/**
+ * 贴真实商品（见 pasteReplace.ts）：擦除 → 抠图 → 按摆放贴上 → AI 融合 → 只把商品附近贴回原图。
+ * 选了「生成前让我确认」且还没确认时，抛 [awaiting_placement] 停下来等用户。
+ */
+async function runPasteReplacement(input: {
+  item: LivePhotoItem
+  product: LivePhotoProductSnapshot
+  referenceImagePath: string
+  credentials: ModelCredentials
+}) {
+  const prepared = await preparePasteReplacementInputs(input)
+  let item = prepared.item
+  if (item.placementMode === 'confirm' && !prepared.placement.confirmedAt) {
+    throw new Error('[awaiting_placement] 等你确认商品摆放')
+  }
+  const root = livePhotoRoot(item.id)
+  const guidePath = join(root, 'paste', `guide-${now()}.png`)
+  const guide = await renderPlacementGuide({
+    erasedScenePath: String(item.erasedScenePath),
+    cutoutPath: String(item.productCutoutPath),
+    placement: prepared.placement,
+    outputPath: guidePath,
+  })
+  item = await livePhotoRepo.upsert({
+    ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 商品已按摆放贴好，开始融合')]),
+    updatedAt: now(),
+  })
+  const harmonized = await harmonizePlacedProduct({
+    credentials: input.credentials,
+    referenceScenePath: input.referenceImagePath,
+    guidePath,
+    productImagePath: prepared.cutoutSourcePath,
+    productType: input.product.type,
+    productBounds: guide.bounds,
+    region: prepared.region,
+    outputPath: join(root, 'generated-still', `localized-replacement-paste-${now()}-${randomUUID()}.png`),
+  })
+  await livePhotoRepo.upsert({
+    ...appendLivePhotoLogs(item, [
+      buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: harmonized.model, endpoint: '/v1/api/generate', cached: false }),
+    ]),
+    awaitingPlacement: false,
+    updatedAt: now(),
+  })
+  return harmonized.path
+}
+
 async function finalizeReferenceItem(input: {
   item: LivePhotoItem
   product: LivePhotoProductSnapshot
@@ -4086,6 +4364,14 @@ async function finalizeReferenceItem(input: {
     strategy: replacementStrategy,
     sceneInteraction: input.item.sceneInteraction,
   })
+  const existingStill = String(input.item.generatedStillPath || '').trim()
+  if (!generated && input.item.replaceMode === 'paste' && !(existingStill && existsSync(existingStill))) {
+    generated = {
+      stillPath: await runPasteReplacement({ item: input.item, product: input.product, referenceImagePath: input.referenceImagePath, credentials }),
+      productReferenceImagePaths: input.product.imagePaths,
+    }
+    input.item = (await livePhotoRepo.get(input.item.id)) || input.item
+  }
   if (!generated && String(input.item.generatedStillPath || '').trim() && existsSync(String(input.item.generatedStillPath || '').trim())) {
     generated = {
       stillPath: String(input.item.generatedStillPath || '').trim(),
@@ -4203,7 +4489,7 @@ async function finalizeReferenceItem(input: {
     ...appendLivePhotoLogs(input.item, [
       ...autoFlowLogs,
       buildLivePhotoLog(`[live-photo] image_generation completed: ${generated.stillPath}`, 'success'),
-      buildLivePhotoLog(`[live-photo] image validation passed: score=${qualityReport?.score ?? 0}`, 'success'),
+      buildLivePhotoLog(`[live-photo] image validation passed: score=${qualityReport?.score ?? 0} ${(qualityReport?.notes ?? []).filter((note) => note.startsWith('placement_review')).join(' ')}`.trim(), 'success'),
       buildLivePhotoLog('[live-photo] stage video_generation started'),
     ]),
     generatedStillPath: generated.stillPath,
@@ -4472,6 +4758,19 @@ async function runLivePhotoItemAutoFlow(
   } catch (error: any) {
     const latestPersisted = (await livePhotoRepo.get(itemId)) || latest
     const current = ensureAutoFlowStatus(latestPersisted)
+    // 「生成前让我确认」：擦好、抠好图后停下来，等用户在「调整摆放」里确认（不算失败、不计重试）
+    if (String(error?.message || '').includes('[awaiting_placement]')) {
+      await livePhotoRepo.upsert({
+        ...appendLivePhotoLogs(latestPersisted, [buildLivePhotoLog('[live-photo] 等待确认商品摆放')]),
+        awaitingPlacement: true,
+        packagingStatus: 'processing',
+        error: undefined,
+        autoFlowStatus: { ...current, status: 'idle', paused: true, currentStage: 'image_generation', failedStage: undefined, lastError: '' },
+        workflow: patchWorkflow(latestPersisted.workflow, 'image_generation', 'image_generation', 'idle'),
+        updatedAt: now(),
+      })
+      throw new LivePhotoAutoFlowHandledError('Live Photo waiting for placement confirmation', false)
+    }
     const currentStage = resolveLivePhotoFailureStage(
       latestPersisted,
       latestPersisted.workflow?.currentStep || current.currentStage || 'queued',
@@ -4765,6 +5064,14 @@ async function createReferenceProcessingItems(input: CreateReferenceLivePhotoInp
       referenceImagePath,
       styleReference,
       ...videoChoice,
+      // 贴真实商品：能抠图（已登录）且有 GRS.AI 时默认用；否则走原来的 AI 直接画
+      ...(canUsePasteReplace(credentials)
+        ? {
+            replaceMode: 'paste' as const,
+            placementMode: input.placementMode === 'confirm' ? ('confirm' as const) : ('auto' as const),
+            cutoutSourcePath: String(input.cutoutSourcePath || '').trim() || undefined,
+          }
+        : {}),
       packagingStatus: 'processing',
       promptPreview: buildReferencePromptPreview({ product, referenceImagePath }),
       imagePromptPreview: imagePromptPreview,
@@ -5094,6 +5401,7 @@ export const livePhotoService = {
     if (input.analyzeProductStructureWithGrs) livePhotoDeps.analyzeProductStructureWithGrs = input.analyzeProductStructureWithGrs
     if (input.reviewReferenceReplacementStillStrict) livePhotoDeps.reviewReferenceReplacementStillStrict = input.reviewReferenceReplacementStillStrict
     if (input.reviewReferenceReplacementStillVisual) livePhotoDeps.reviewReferenceReplacementStillVisual = input.reviewReferenceReplacementStillVisual
+    if (input.reviewLivePhotoReplacementPlacement) livePhotoDeps.reviewLivePhotoReplacementPlacement = input.reviewLivePhotoReplacementPlacement
     if (input.downloadRetryDelaysMs) livePhotoDeps.downloadRetryDelaysMs = input.downloadRetryDelaysMs
   },
 
@@ -5105,6 +5413,7 @@ export const livePhotoService = {
     livePhotoDeps.analyzeProductStructureWithGrs = analyzeProductStructureWithGrs
     livePhotoDeps.reviewReferenceReplacementStillStrict = reviewReferenceReplacementStillStrict
     livePhotoDeps.reviewReferenceReplacementStillVisual = reviewReferenceReplacementStillVisual
+    livePhotoDeps.reviewLivePhotoReplacementPlacement = reviewLivePhotoReplacementPlacement
     livePhotoDeps.downloadRetryDelaysMs = undefined
     clearLivePhotoPendingTimers()
     livePhotoAutoFlowScheduled.clear()
@@ -5609,6 +5918,7 @@ export const livePhotoService = {
     })
     const videoStageCandidate = Boolean(
       !manualReplacementRegion &&
+      !input.forceImageStage &&
       persistedStage === 'video' &&
       preservedStillPath &&
       existsSync(preservedStillPath) &&
@@ -5786,6 +6096,53 @@ export const livePhotoService = {
       { bypassCooldown: true },
     )
     return (await livePhotoRepo.get(processingItem.id)) || processingItem
+  },
+
+  /**
+   * 「调整摆放」弹窗要的数据：擦好旧商品的参考图、抠好的商品、当前摆放和默认摆放（大小 100% = 和原商品一样大）。
+   * 擦除、抠图还没做完时 ready=false。
+   */
+  async getPlacement(input: { id: string }) {
+    const existing = await livePhotoRepo.get(String(input?.id || '').trim())
+    if (!existing) throw new Error('任务不存在')
+    if (existing.replaceMode !== 'paste') throw new Error('这个任务不是「贴真实商品」方式生成的，不能调整摆放')
+    const region = normalizeLivePhotoReplacementRegion(existing.replacementRegion)
+    const erased = String(existing.erasedScenePath || '').trim()
+    const cutoutPath = String(existing.productCutoutPath || '').trim()
+    if (!region || !erased || !existsSync(erased) || !cutoutPath || !existsSync(cutoutPath)) {
+      return { ready: false as const, message: '还在擦除旧商品、抠图，稍等一下再调整' }
+    }
+    const scene = await readImageSize(erased)
+    const cutout = await readImageSize(cutoutPath)
+    const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height })
+    return {
+      ready: true as const,
+      erasedScenePath: erased,
+      cutoutPath,
+      sceneWidth: scene.width,
+      sceneHeight: scene.height,
+      cutoutWidth: cutout.width,
+      cutoutHeight: cutout.height,
+      region: { x: region.x, y: region.y, width: region.width, height: region.height },
+      placement: normalizeProductPlacement(existing.placement) ?? defaultPlacement,
+      defaultPlacement,
+    }
+  },
+
+  /** 确认摆放：记下摆放，从出图那步重做（融合 → 视频）。擦除和抠图结果复用，不重复扣费 */
+  async confirmPlacement(input: { id: string; placement: unknown; motionTemplate?: LivePhotoMotionTemplate }) {
+    const existing = await livePhotoRepo.get(String(input?.id || '').trim())
+    if (!existing) throw new Error('任务不存在')
+    if (existing.replaceMode !== 'paste') throw new Error('这个任务不是「贴真实商品」方式生成的，不能调整摆放')
+    const placement = normalizeProductPlacement(input.placement)
+    if (!placement) throw new Error('摆放数据不对，请重新调整')
+    await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(existing, [buildLivePhotoLog(`[live-photo] 确认商品摆放：宽 ${(placement.width * 100).toFixed(1)}%，角度 ${Math.round(placement.rotation)}°`)]),
+      placement: { ...placement, confirmedAt: now() },
+      awaitingPlacement: false,
+      updatedAt: now(),
+    })
+    return await this.retry({ id: existing.id, motionTemplate: input.motionTemplate, forceImageStage: true })
   },
 
   async resumePendingTasksOnStartup() {

@@ -180,6 +180,7 @@ export function normalizeCredentials(parsed: any): ModelCredentials {
     replicateApiToken: String(parsed?.replicateApiToken ?? '').trim() || undefined,
     imageProviderPrimary: normalizedImageProviderPrimary,
     grsaiImageModel: String(parsed?.grsaiImageModel ?? '').trim() || 'gpt-image-2',
+    livePhotoReplaceImageModel: String(parsed?.livePhotoReplaceImageModel ?? '').trim() || undefined,
     apifoxHubProfile: profile,
     videoApifoxHubProfile: persistedVideoProfile,
     imageApifoxHubProfile: persistedImageProfile,

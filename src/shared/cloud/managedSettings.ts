@@ -22,7 +22,8 @@ export type ManagedSoftwareSettings = {
      * modelSwitches / defaultModelId：图生视频的模型清单开关和默认模型（清单 id，见 src/shared/videoModels.ts）。
      */
     video: { platform: PlatformProfile; model: string; modelSwitches: Record<string, boolean>; defaultModelId: string }
-    image: { platform: ImagePlatformProfile; model: string; quality: 'low' | 'medium' | 'high' }
+    /** replaceModel：图生视频「贴真实商品」擦除、融合用的出图模型（GRS.AI，默认 nano-banana-2.1） */
+    image: { platform: ImagePlatformProfile; model: string; quality: 'low' | 'medium' | 'high'; replaceModel: string }
     chat: { platform: ChatPlatformProfile; model: string }
   }
   qiniu: { accessKey: string; secretKey: string; bucket: string; domain: string; uploadHost: string; prefix: string }
@@ -82,7 +83,7 @@ export function createDefaultManagedSettings(): ManagedSoftwareSettings {
     tikhubApiKey: '',
     capabilities: {
       video: { platform: 'grsai', model: '', modelSwitches: {}, defaultModelId: '' },
-      image: { platform: 'grsai', model: '', quality: 'high' },
+      image: { platform: 'grsai', model: '', quality: 'high', replaceModel: '' },
       chat: { platform: 'grsai', model: '' },
     },
     qiniu: { accessKey: '', secretKey: '', bucket: '', domain: '', uploadHost: '', prefix: '' },
@@ -126,7 +127,7 @@ export function normalizeManagedSettings(input: unknown): ManagedSoftwareSetting
         modelSwitches: normalizeVideoModelSwitches(cap.video?.modelSwitches),
         defaultModelId: findVideoModelSpec(cap.video?.defaultModelId)?.id ?? '',
       },
-      image: { platform: imagePlatform, model: str(cap.image?.model, 120), quality },
+      image: { platform: imagePlatform, model: str(cap.image?.model, 120), quality, replaceModel: str(cap.image?.replaceModel, 120) },
       chat: { platform: chatPlatform, model: str(cap.chat?.model, 120) },
     },
     qiniu: {
@@ -204,6 +205,7 @@ export type LocalModelCredentials = {
   qiniuPrefix?: string
   grsaiVideoModel?: string
   grsaiImageModel?: string
+  livePhotoReplaceImageModel?: string
   grsaiAnalysisModel?: string
   openaiImageQuality?: 'low' | 'medium' | 'high'
   videoProviderPrimary?: string
@@ -283,6 +285,7 @@ export function applyManagedSettings(current: LocalModelCredentials, managed: Ma
   // 图片
   const image = managed.capabilities.image
   next.openaiImageQuality = image.quality
+  next.livePhotoReplaceImageModel = image.replaceModel || undefined
   if (image.platform === 'grsai') {
     next.imageProviderPrimary = 'grsai'
     if (image.model) next.grsaiImageModel = image.model

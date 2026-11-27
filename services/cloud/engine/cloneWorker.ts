@@ -191,6 +191,9 @@ async function init(message: InitMessage) {
     import('../../../src/main/modules/video-parser-download/tikhub'),
   ])
   setQiniuUploadGrantProvider((input) => askQiniuGrant(input))
+  // 图生视频「贴真实商品」：抠图走云端接口（引擎用的是这个用户的会话）
+  const { setProductCutoutProvider } = await import('../../../src/main/modules/live-photo/pasteReplace')
+  setProductCutoutProvider((input) => client.productCutout(input))
   setTikhubBaseUrlOverride(`${message.baseUrl.replace(/\/+$/, '')}${AI_PROXY_PATH}/tikhub`)
   sync.setCloudSyncMode('clone-engine')
   sync.setCloudSyncSessionSource(() => ({ client, userId: message.userId, canWrite: true }))

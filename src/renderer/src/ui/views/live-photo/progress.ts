@@ -75,6 +75,23 @@ function failureKind(item: LivePhotoItem, reason: string): LpFailureKind {
   return 'other'
 }
 
+/**
+ * 贴真实商品的细分步骤（擦除 → 抠图 → 摆放 → 融合 → 视频），按任务里已有的结果推出来；不是这种任务返回 null。
+ */
+export function pasteReplaceSteps(item: LivePhotoItem): Array<{ label: string; state: 'done' | 'active' | 'todo' }> | null {
+  if (item.replaceMode !== 'paste' || item.sourceType !== 'reference_replace') return null
+  const done = [
+    Boolean(item.erasedScenePath),
+    Boolean(item.productCutoutPath),
+    Boolean(item.placement && (item.placementMode !== 'confirm' || item.placement.confirmedAt)),
+    Boolean(item.generatedStillPath),
+    Boolean(item.motionVideoPath) || item.packagingStatus === 'completed',
+  ]
+  const labels = ['擦掉旧商品', '抠图', '摆放', '融合', '视频']
+  const active = done.indexOf(false)
+  return labels.map((label, index) => ({ label, state: done[index] ? 'done' : index === active ? 'active' : 'todo' }))
+}
+
 export function livePhotoProgress(item: LivePhotoItem): LivePhotoProgress {
   const auto = item.autoFlowStatus
   const reason = String(item.error || auto?.lastError || '').trim()

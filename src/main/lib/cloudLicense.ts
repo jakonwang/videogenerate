@@ -18,6 +18,7 @@ import type { CloudDevice, CloudEntitlement, CloudFeature, CloudPayChannel, Clou
 import { AI_PROXY_PATH, applyManagedSettings, SECRET_MASK_PREFIX, toProxiedManagedSettings, type LocalModelCredentials, type ManagedSoftwareSettings } from '../../shared/cloud/managedSettings'
 import { decryptRuntimeString, encryptRuntimeString } from './runtimeCrypto'
 import { setQiniuUploadGrantProvider } from '../modules/clone/qiniu'
+import { setProductCutoutProvider } from '../modules/live-photo/pasteReplace'
 import { setTikhubBaseUrlOverride } from '../modules/video-parser-download/tikhub'
 
 declare const __VG_LICENSE_MODE__: string | undefined
@@ -280,9 +281,15 @@ export function overlayManagedCredentials(payload: Record<string, unknown>): Rec
 function installManagedProxyHooks(active: boolean) {
   if (!active) {
     setQiniuUploadGrantProvider(null)
+    setProductCutoutProvider(null)
     setTikhubBaseUrlOverride(null)
     return
   }
+  // 图生视频「贴真实商品」的抠图：腾讯云密钥只在服务器，商品图发到云端抠
+  setProductCutoutProvider(async (input) => {
+    if (!state?.sessionToken) throw new Error('请先登录账号再使用贴真实商品')
+    return await client.productCutout(input)
+  })
   setQiniuUploadGrantProvider(async (input) => {
     if (!state?.sessionToken) throw new Error('请先登录账号再上传素材')
     return await client.qiniuUploadGrant({ machineId: getMachineId(), fileName: input.fileName, keyPrefix: input.keyPrefix })

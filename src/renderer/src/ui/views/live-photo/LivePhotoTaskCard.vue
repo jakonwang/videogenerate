@@ -8,6 +8,7 @@ import {
   FileJson,
   FolderOpen,
   Logs,
+  Move,
   MoreHorizontal,
   Pause,
   Play,
@@ -17,7 +18,7 @@ import {
   Undo2,
 } from 'lucide-vue-next'
 import type { LivePhotoItem } from './types'
-import { livePhotoProgress, useNow } from './progress'
+import { livePhotoProgress, pasteReplaceSteps, useNow } from './progress'
 import { useProgressText } from './useProgressText'
 
 /**
@@ -25,7 +26,7 @@ import { useProgressText } from './useProgressText'
  * 底部只放一个当下最该点的按钮 + 详情，其余操作收进「更多」菜单。
  */
 export type LivePhotoCardAction =
-  | 'select' | 'details' | 'play' | 'retry' | 'retryImage' | 'continueVideo' | 'region' | 'resume' | 'pause'
+  | 'select' | 'details' | 'play' | 'retry' | 'retryImage' | 'continueVideo' | 'region' | 'placement' | 'resume' | 'pause'
   | 'logs' | 'subtitle' | 'revertSubtitle' | 'reveal' | 'metadata' | 'delete'
 
 export type LivePhotoCardCaps = {
@@ -35,6 +36,8 @@ export type LivePhotoCardCaps = {
   hasAppliedSubtitle: boolean
   hasMetadata: boolean
   canRegion: boolean
+  /** 贴真实商品：可以打开「调整摆放」 */
+  canPlacement?: boolean
   canRetryImage: boolean
   canContinueVideo: boolean
   subtitleBusy?: boolean
@@ -62,8 +65,11 @@ const tone = computed(() => {
   if (state === 'running' || state === 'waiting') return 'is-run'
   return ''
 })
+const pasteSteps = computed(() => (props.item.packagingStatus === 'completed' ? null : pasteReplaceSteps(props.item)))
+const stateText = computed(() => (props.item.awaitingPlacement ? '待确认摆放' : text.stateLabel(p.value)))
 const line = computed(() => {
   const progress = p.value
+  if (props.item.awaitingPlacement) return '旧商品已擦掉、商品已抠好，确认摆放后开始融合'
   if (progress.failure) {
     const reason = text.failureLabel(progress)
     return progress.state === 'retrying' ? `${reason} · ${text.nextLabel(progress)}` : reason
@@ -85,6 +91,7 @@ const primary = computed<Array<{ action: LivePhotoCardAction; label: string; ico
       ...(props.caps.canRetryImage ? [{ action: 'retryImage' as const, label: t('lpTask.action.retryImage'), icon: RefreshCcw }] : []),
     ]
   }
+  if (props.item.awaitingPlacement && props.caps.canPlacement) return [{ action: 'placement', label: '调整摆放', icon: Move, strong: true }]
   if (progress.state === 'done' && props.caps.hasVideo) return [{ action: 'play', label: t('lpTask.action.play'), icon: Play, strong: true }]
   if (progress.next === 'region' && props.caps.canRegion) return [{ action: 'region', label: t('lpTask.action.region'), icon: ScanLine, strong: true }]
   if (progress.state === 'paused') return [{ action: 'resume', label: t('lpTask.action.resume'), icon: Play, strong: true }]
@@ -101,6 +108,7 @@ const menu = computed(() =>
     { action: 'revertSubtitle' as const, label: t('lpTask.action.revertSubtitle'), icon: Undo2, show: props.caps.hasAppliedSubtitle, disabled: props.caps.subtitleBusy },
     { action: 'reveal' as const, label: t('lpTask.action.reveal'), icon: FolderOpen, show: props.caps.hasVideo, testid: `live-photo-reveal-${props.item.id}` },
     { action: 'metadata' as const, label: t('lpTask.action.metadata'), icon: FileJson, show: props.caps.hasMetadata, testid: `live-photo-metadata-${props.item.id}` },
+    { action: 'placement' as const, label: '调整摆放', icon: Move, show: Boolean(props.caps.canPlacement) && !primary.value.some((x) => x.action === 'placement'), testid: `live-photo-placement-${props.item.id}` },
     { action: 'region' as const, label: t('lpTask.action.region'), icon: ScanLine, show: props.caps.canRegion && !primary.value.some((x) => x.action === 'region'), testid: `live-photo-region-${props.item.id}` },
     { action: 'retry' as const, label: t('lpTask.action.regenerate'), icon: RefreshCcw, show: !primary.value.some((x) => x.action === 'retry'), disabled: processing.value, testid: `live-photo-retry-${props.item.id}` },
     {
@@ -144,11 +152,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <div class="lpc__body">
       <div class="lpc__head">
         <h3 :title="title">{{ title }}</h3>
-        <span class="lpc__state"><i />{{ text.stateLabel(p) }}</span>
+        <span class="lpc__state"><i />{{ stateText }}</span>
       </div>
       <p class="lpc__sub" :title="sub">{{ sub }}</p>
       <ol class="lpc__steps" :aria-label="p.steps.map((s) => t(`lpTask.step.${s.key}`)).join(' → ')">
         <li v-for="step in p.steps" :key="step.key" :class="`is-${step.state}`" :title="t(`lpTask.step.${step.key}`)" />
+      </ol>
+      <ol v-if="pasteSteps" class="lpc__paste" aria-label="贴真实商品进度">
+        <li v-for="step in pasteSteps" :key="step.label" :class="`is-${step.state}`">{{ step.label }}</li>
       </ol>
       <p class="lpc__line" :class="{ 'is-err': p.failure && p.state === 'failed', 'is-warn': p.failure && p.state !== 'failed' }" :title="p.failure?.detail || line">
         <AlertTriangle v-if="p.failure" :size="12" /><Clock3 v-else :size="12" />
@@ -221,6 +232,12 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 .is-warn .lpc__steps li.is-failed { background: var(--vg-amber); }
 @keyframes lpc-flow { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
+.lpc__paste { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 0; padding: 0; list-style: none; font-size: 11px; color: var(--theme-text-muted); }
+.lpc__paste li { display: inline-flex; align-items: center; gap: 4px; }
+.lpc__paste li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--theme-divider); }
+.lpc__paste li.is-done::before { background: var(--vg-accent); }
+.lpc__paste li.is-active { color: var(--theme-text); font-weight: 600; }
+.lpc__paste li.is-active::before { background: var(--vg-blue); }
 .lpc__line { display: flex; align-items: center; gap: 5px; min-width: 0; margin: 0; font-size: 11.5px; color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; }
 .lpc__line svg { flex-shrink: 0; color: var(--theme-text-muted); }
 .lpc__line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

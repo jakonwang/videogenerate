@@ -41,6 +41,17 @@ export const IMAGE_MODEL_OPTIONS: ModelOption[] = [
   { platform: 'gaorui', model: 'gpt-image-2.6-sunburst-sync', label: 'GPT Image 2.6 Sunburst' },
 ]
 
+/**
+ * 图生视频「贴真实商品」擦除和融合用的出图模型（只走 GRS.AI 的 /v1/api/generate）。
+ * 2026-11-27 实测：同一张参考图 + 商品图，Nano Banana 商品画得完整、款式对；GPT Image 2.6 会丢结构。
+ */
+export const REPLACE_IMAGE_MODEL_OPTIONS: ModelOption[] = [
+  { platform: 'grsai', model: 'nano-banana-2.1', label: 'Nano Banana 2.1（推荐）' },
+  { platform: 'grsai', model: 'nano-banana-pro', label: 'Nano Banana Pro（更慢、更贵）' },
+  { platform: 'grsai', model: 'nano-banana-2', label: 'Nano Banana 2' },
+  { platform: 'grsai', model: 'gpt-image-2.6', label: 'GPT Image 2.6' },
+]
+
 export const CHAT_MODEL_OPTIONS: ModelOption[] = [
   { platform: 'grsai', model: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
   { platform: 'grsai', model: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },

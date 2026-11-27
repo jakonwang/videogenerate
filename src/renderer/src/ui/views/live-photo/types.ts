@@ -13,6 +13,13 @@ export type LivePhotoItem = {
     imagePaths: string[]
   }
   referenceImagePath?: string
+  /** 贴真实商品（见主进程 live-photo/pasteReplace.ts） */
+  replaceMode?: 'paste'
+  placementMode?: 'auto' | 'confirm'
+  erasedScenePath?: string
+  productCutoutPath?: string
+  placement?: { cx: number; cy: number; width: number; rotation: number; confirmedAt?: number }
+  awaitingPlacement?: boolean
   packagingStatus: 'draft' | 'processing' | 'completed' | 'failed'
   generatedStillPath?: string
   motionVideoPath?: string

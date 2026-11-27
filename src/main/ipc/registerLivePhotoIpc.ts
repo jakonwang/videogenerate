@@ -71,6 +71,8 @@ export function registerLivePhotoIpc(ipcMain: IpcMain) {
     ) => await livePhotoService.exportItems(payload),
   )
   ipcMain.handle('plugin:livePhoto:remove', async (_e, id: string) => await livePhotoService.remove(id))
+  ipcMain.handle('plugin:livePhoto:getPlacement', async (_e, payload: { id: string }) => await livePhotoService.getPlacement(payload))
+  ipcMain.handle('plugin:livePhoto:confirmPlacement', async (_e, payload) => await livePhotoService.confirmPlacement(payload))
   ipcMain.handle('plugin:livePhoto:pauseAutoFlow', async (_e, payload: { id: string }) => await livePhotoService.pauseAutoFlow(payload))
   ipcMain.handle(
     'plugin:livePhoto:resumeAutoFlow',

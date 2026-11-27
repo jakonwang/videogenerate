@@ -1293,7 +1293,7 @@ const api = {
     updatePromptVersion: (payload: { id: string; name: string; prompt: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:updatePromptVersion', payload),
     activatePromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:activatePromptVersion', payload),
     rollbackPromptVersion: (payload: { id: string; kind?: 'image' | 'video' }) => ipcRenderer.invoke('plugin:livePhoto:rollbackPromptVersion', payload),
-    enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
+    enqueueReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number; placementMode?: 'auto' | 'confirm'; cutoutSourcePath?: string }) =>
       ipcRenderer.invoke('plugin:livePhoto:enqueueReference', payload),
     startReference: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:startReference', payload),
@@ -1301,7 +1301,7 @@ const api = {
       ipcRenderer.invoke('plugin:livePhoto:enqueueClone', payload),
     startClone: (payload: { ids: string[]; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:startClone', payload),
-    createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
+    createFromReference: (payload: { referenceImagePath?: string; referenceImagePaths?: string[]; productId: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway'; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number; placementMode?: 'auto' | 'confirm'; cutoutSourcePath?: string }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromReference', payload),
     createFromStyleReference: (payload: { styleReferenceId: string; productIds: string[]; videoModelId?: string; videoDurationSec?: number; videoResolution?: string; videoZoomPercent?: number }) =>
       ipcRenderer.invoke('plugin:livePhoto:createFromStyleReference', payload),
@@ -1397,6 +1397,10 @@ const api = {
     }) => ipcRenderer.invoke('plugin:livePhoto:exportItems', payload),
     sendItemsToFeishu: (payload: { ids: string[] }) => ipcRenderer.invoke('plugin:livePhoto:sendItemsToFeishu', payload),
     remove: (id: string) => ipcRenderer.invoke('plugin:livePhoto:remove', id),
+    /** 贴真实商品：「调整摆放」弹窗的数据、确认摆放（从融合那步重做） */
+    getPlacement: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:getPlacement', payload),
+    confirmPlacement: (payload: { id: string; placement: { cx: number; cy: number; width: number; rotation: number }; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
+      ipcRenderer.invoke('plugin:livePhoto:confirmPlacement', payload),
     pauseAutoFlow: (payload: { id: string }) => ipcRenderer.invoke('plugin:livePhoto:pauseAutoFlow', payload),
     resumeAutoFlow: (payload: { id: string; motionTemplate?: 'push_in' | 'push_out' | 'ambient_sway' }) =>
       ipcRenderer.invoke('plugin:livePhoto:resumeAutoFlow', payload),
