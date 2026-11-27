@@ -192,7 +192,26 @@ async function main() {
 
     // 6) 默认摆放的计算：按长边塞进原商品的框
     const def = paste.defaultProductPlacement({ region: { x: 0.4, y: 0.4, width: 0.2, height: 0.1 }, sceneWidth: 1000, sceneHeight: 1000, cutoutWidth: 50, cutoutHeight: 100 })
-    assert.ok(Math.abs(def.width - 0.05) < 1e-9, 'height-limited: 100px tall box → 50px wide')
+    assert.ok(Math.abs(def.width - 0.05) < 1e-9, 'facing the camera: fits inside the box (100px tall box → 50px wide)')
+    // 平躺（框被压扁）：按没被压扁的长边对齐是 200px，最多放大到塞进框的 1.6 倍 → 80px
+    const flatDef = paste.defaultProductPlacement({ region: { x: 0.4, y: 0.4, width: 0.2, height: 0.1 }, sceneWidth: 1000, sceneHeight: 1000, cutoutWidth: 50, cutoutHeight: 100, foreshortened: true })
+    assert.ok(Math.abs(flatDef.width - 0.08) < 1e-9, 'foreshortened box: match the long side, capped at 1.6× fit-inside')
+    const same = paste.defaultProductPlacement({ region: { x: 0.4, y: 0.4, width: 0.2, height: 0.1 }, sceneWidth: 1000, sceneHeight: 1000, cutoutWidth: 100, cutoutHeight: 50 })
+    assert.ok(Math.abs(same.width - 0.2) < 1e-9, 'same aspect: fills the box exactly')
+    {
+      // 一对里一只被抠成半透明：补成不透明，另一只和边缘不动
+      const W2 = 40
+      const H2 = 10
+      const rgba = Buffer.alloc(W2 * H2 * 4)
+      for (let y = 2; y < 8; y += 1) {
+        for (let x = 2; x < 12; x += 1) rgba[(y * W2 + x) * 4 + 3] = 255
+        for (let x = 22; x < 32; x += 1) rgba[(y * W2 + x) * 4 + 3] = 140
+      }
+      assert.equal(paste.strengthenWeakPieces(rgba, W2, H2), 1)
+      assert.equal(rgba[(5 * W2 + 25) * 4 + 3], 255, 'weak piece becomes opaque')
+      assert.equal(rgba[(5 * W2 + 5) * 4 + 3], 255, 'solid piece untouched')
+      assert.equal(rgba[(0 * W2 + 0) * 4 + 3], 0, 'background stays transparent')
+    }
     assert.ok(Math.abs(def.cx - 0.5) < 1e-9 && Math.abs(def.cy - 0.45) < 1e-9)
 
     // 8) 摆放的侧倾 / 翻面：保存下来，压窄后外接框变窄

@@ -201,6 +201,20 @@ export type LivePhotoSubtitleOverlay = {
   appliedAt: number
 }
 
+export type LivePhotoProductViewKind = 'front' | 'tilted' | 'flat' | 'edge_on' | 'back' | 'unknown'
+
+export type LivePhotoProductViewCheck = {
+  view: LivePhotoProductViewKind
+  /** 原商品在参考图里的长边（像素） */
+  sizePx: number
+  suitable: boolean
+  /** 不能换时给用户看的原因 */
+  reason?: string
+  /** 按哪个框看的（框改了要重看） */
+  regionRevision?: number
+  checkedAt: number
+}
+
 export type LivePhotoItem = {
   id: string
   usageStatus?: 'unused' | 'used'
@@ -289,6 +303,8 @@ export type LivePhotoItem = {
   cutoutPair?: boolean
   /** 自动挑图用的规则版本（规则改了，旧任务会重挑） */
   cutoutPickVersion?: number
+  /** 擦图前看过：参考图里原商品朝哪边、多大，能不能贴真实商品（见 checkReferenceSuitability） */
+  productViewCheck?: LivePhotoProductViewCheck
   productCutoutPath?: string
   erasedScenePath?: string
   erasedRegionRevision?: number

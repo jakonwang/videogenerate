@@ -12,7 +12,7 @@ export type LpStepKey = (typeof LP_STEPS)[number]
 export type LpPhase = 'queued' | LpStepKey | 'done'
 export type LpStepState = 'done' | 'active' | 'failed' | 'todo'
 export type LpState = 'running' | 'waiting' | 'paused' | 'retrying' | 'failed' | 'done' | 'draft'
-export type LpFailureKind = 'locate' | 'region' | 'image_quality' | 'image' | 'video' | 'timeout' | 'other'
+export type LpFailureKind = 'locate' | 'region' | 'reference' | 'image_quality' | 'image' | 'video' | 'timeout' | 'other'
 export type LpNext = 'auto' | 'retry' | 'region' | 'resume' | 'play' | 'decide' | 'none'
 
 export type LpModelCall = { step: string; provider: string; model: string; endpoint: string; cached: boolean; at: number }
@@ -68,6 +68,7 @@ export function cleanReason(text: string) {
 function failureKind(item: LivePhotoItem, reason: string): LpFailureKind {
   if (reason.includes('[locate_failed]')) return 'locate'
   if (reason.includes('[replacement_region_required]')) return 'region'
+  if (reason.includes('[reference_unsuitable]')) return 'reference'
   if (reason.includes('[image_validation_failed]')) return 'image_quality'
   if (item.autoFlowStatus?.failedStage === 'video' || /video/i.test(String(item.workflow?.currentStep || '')) && !reason.includes('[retryable_remote]')) return 'video'
   if (reason.includes('[retryable_timeout]') || /timed out|timeout/i.test(reason)) return 'timeout'

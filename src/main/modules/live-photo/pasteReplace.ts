@@ -16,7 +16,7 @@ import { getAppPaths } from '../../lib/paths'
 import type { ModelCredentials } from '../clone/types'
 import { toPublicUrlViaQiniu } from '../clone/qiniu'
 import { withUsageCharge } from '../clone/usageMeter'
-import type { LivePhotoProductPlacement, LivePhotoReplacementRegion } from './types'
+import type { LivePhotoProductPlacement, LivePhotoProductViewCheck, LivePhotoProductViewKind, LivePhotoReplacementRegion } from './types'
 import { compositeLivePhotoReplacementCrop, prepareLivePhotoReplacementCrop } from './replacementRegion'
 import { extractJsonObjectText, extractModelMessageContent } from '../clone/aiResponse'
 
@@ -61,8 +61,8 @@ export async function ensureProductCutout(sourcePath: string, options: { keepPai
   if (!cutoutProvider) throw new Error('[cutout_unavailable] 贴真实商品需要登录账号（抠图在服务器上完成）')
   await ensureSharp()
   const source = await readFile(sourcePath)
-  // v2：成对的商品只留一只（规则变了，旧缓存不能再用）
-  const hash = createHash('sha1').update(options.keepPair ? 'v2-pair:' : 'v2:').update(source).digest('hex').slice(0, 20)
+  // v3：半透明的那一块补成不透明（规则变了，旧缓存不能再用）
+  const hash = createHash('sha1').update(options.keepPair ? 'v3-pair:' : 'v3:').update(source).digest('hex').slice(0, 20)
   const output = join(getAppPaths().cacheDir, 'product-cutout', `${hash}.png`)
   if (existsSync(output)) {
     const meta = await sharp(output).metadata()
@@ -92,6 +92,7 @@ export async function ensureProductCutout(sourcePath: string, options: { keepPai
     if (maskRaw[i] > 128) opaque += 1
   }
   if (opaque < 16) throw new Error('抠图失败：没有找到商品，请换一张单只、背景干净的商品图')
+  strengthenWeakPieces(rgba, info.width, info.height)
   if (!options.keepPair) keepSinglePiece(rgba, info.width, info.height)
   await mkdir(dirname(output), { recursive: true })
   const trimmed = await sharp(rgba, { raw: { width: info.width, height: info.height, channels: 4 } })
@@ -100,6 +101,78 @@ export async function ensureProductCutout(sourcePath: string, options: { keepPai
   await sharp(trimmed).trim({ threshold: 1 }).png().toFile(output)
   const meta = await sharp(output).metadata()
   return { path: output, width: meta.width, height: meta.height }
+}
+
+/** 按 8 邻域给「看得见」的像素（透明度 > threshold）分块，返回每个像素的块号（0 = 背景）和块数 */
+function labelPieces(rgba: Buffer, width: number, height: number, threshold: number) {
+  const label = new Int32Array(width * height)
+  const stack: number[] = []
+  let count = 0
+  for (let start = 0; start < width * height; start += 1) {
+    if (label[start] || rgba[start * 4 + 3] <= threshold) continue
+    count += 1
+    label[start] = count
+    stack.push(start)
+    while (stack.length) {
+      const index = stack.pop()!
+      const x = index % width
+      const y = (index - x) / width
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+          const next = ny * width + nx
+          if (!label[next] && rgba[next * 4 + 3] > threshold) {
+            label[next] = count
+            stack.push(next)
+          }
+        }
+      }
+    }
+  }
+  return { label, count }
+}
+
+/**
+ * 腾讯云抠一对商品时，常把其中一只给成半透明（2026-11-28 A-36：右边那只平均不透明度只有 56%），
+ * 贴上去会透出底下的手指。按块看：块内部的透明度明显不到 255，就把整块按比例拉满，边缘的柔和过渡还在。
+ * 直接改 rgba 的透明通道；返回补了几块。
+ */
+export function strengthenWeakPieces(rgba: Buffer, width: number, height: number) {
+  const { label, count } = labelPieces(rgba, width, height, 24)
+  if (!count) return 0
+  const histograms = Array.from({ length: count + 1 }, () => new Uint32Array(256))
+  for (let i = 0; i < width * height; i += 1) {
+    if (label[i]) histograms[label[i]][rgba[i * 4 + 3]] += 1
+  }
+  // 每块取透明度的 85 分位当「内部」的透明度：边缘那圈柔和像素不影响判断
+  const gain = new Float32Array(count + 1)
+  let fixed = 0
+  for (let id = 1; id <= count; id += 1) {
+    const hist = histograms[id]
+    let total = 0
+    for (let a = 0; a < 256; a += 1) total += hist[a]
+    if (total < 16) continue
+    let seen = 0
+    let p85 = 255
+    for (let a = 0; a < 256; a += 1) {
+      seen += hist[a]
+      if (seen >= total * 0.85) {
+        p85 = a
+        break
+      }
+    }
+    if (p85 >= 235 || p85 < 48) continue
+    gain[id] = 255 / p85
+    fixed += 1
+  }
+  if (!fixed) return 0
+  for (let i = 0; i < width * height; i += 1) {
+    const g = gain[label[i]]
+    if (g) rgba[i * 4 + 3] = Math.min(255, Math.round(rgba[i * 4 + 3] * g))
+  }
+  return fixed
 }
 
 /**
@@ -187,10 +260,17 @@ export function defaultProductPlacement(input: {
   sceneHeight: number
   cutoutWidth: number
   cutoutHeight: number
+  /** 参考图里原商品被透视压扁了（平躺、侧着，见 checkReferenceSuitability） */
+  foreshortened?: boolean
 }): LivePhotoProductPlacement {
   const boxW = input.region.width * input.sceneWidth
   const boxH = input.region.height * input.sceneHeight
-  const scale = Math.min(boxW / Math.max(1, input.cutoutWidth), boxH / Math.max(1, input.cutoutHeight))
+  const fitInside = Math.min(boxW / Math.max(1, input.cutoutWidth), boxH / Math.max(1, input.cutoutHeight))
+  // 原商品平躺、侧着时，框在一个方向上被透视压扁了，另一个方向才是真实大小：按「没被压扁的那条边」对齐，
+  // 塞进框会把新商品缩到原来的 37%~79%（2026-11-28 A-36 实测）。最多比塞进框大 1.6 倍，防止框画歪时贴得太大。
+  // 正对镜头时框没被压扁，仍然塞进框（一对耳环摆得比原来松，按长边对齐会贴得太大，同日实测）
+  const matchLongSide = Math.max(boxW / Math.max(1, input.cutoutWidth), boxH / Math.max(1, input.cutoutHeight))
+  const scale = input.foreshortened ? Math.min(matchLongSide, fitInside * 1.6) : fitInside
   return {
     cx: input.region.x + input.region.width / 2,
     cy: input.region.y + input.region.height / 2,
@@ -423,7 +503,7 @@ export async function harmonizePlacedProduct(input: {
   productType?: string
   productBounds: { left: number; top: number; width: number; height: number }
   region: LivePhotoReplacementRegion
-  /** 参考图里商品的状态：held / placed 时要让 AI 照原图的拿法重新摆姿势（商品图是正面照，直接贴上去是立着的，不合物理） */
+  /** 参考图里商品的状态（只记录；不再让 AI 重新摆姿势） */
   interactionMode?: string
   /** 用户在「调整摆放」里手动设了侧倾 / 翻面：姿势以用户为准，AI 不再重新摆 */
   poseLocked?: boolean
@@ -456,30 +536,16 @@ export async function harmonizePlacedProduct(input: {
   await sharp(input.guidePath).extract(crop).png().toFile(cropPath)
   // 商品形状蒙版（同一块正方形范围），用来判断 AI 有没有改动商品以外的画面
   const cropMask = await sharp(input.productMaskPath).resize(W, H, { fit: 'fill' }).extract(crop).extractChannel(0).png().toBuffer()
-  const repose = !input.poseLocked && ['held', 'placed', 'none'].includes(String(input.interactionMode || ''))
-  const originalCropPath = input.outputPath.replace(/\.png$/i, '-original.png')
-  if (repose) {
-    await sharp(input.referenceScenePath).rotate().resize(W, H, { fit: 'fill' }).extract(crop).png().toFile(originalCropPath)
-  }
-  const prompt = repose ? [
-    `Image 1 is a close-up photo where the product (${String(input.productType || 'product').trim() || 'product'}) has been roughly pasted in as a flat, upright cut-out. Its overall SIZE and the spot are right, but its pose is NOT physically real.`,
-    'Image 2 is the same product photographed alone: use it only for the exact design.',
-    'Image 3 is the original photo of the same scene: it shows HOW the original item was held or placed (its tilt, which side faces the camera, which fingers pinch it, where it touches the skin or surface).',
-    'Re-pose the product from Image 2 so it is held or placed exactly like the original item in Image 3: same orientation and tilt, same contact points between the fingers or on the surface, correct occlusion where fingers cover it, soft contact shadow, and reflections that match the light. If Image 1 shows a pair, keep the pair and pose both pieces like the originals.',
-    'Keep the overall size like Image 1 — do not enlarge or shrink it.',
-    'Keep EXACTLY the same number of pieces as the original items in Image 3 (if Image 3 shows two earrings, output exactly two). Never add an extra piece.',
-    'The decorated front of the product (stones, charm) must stay visible to the camera.',
-    'Keep the design exactly as in Image 2: same shape, same stones and details, same color and material. Do not add or remove parts.',
-    'Keep the hand, fingers, background, lighting, framing, and crop exactly as in Image 1. Output the same scene as Image 1.',
-  ].join('\n') : [
-      `Image 1 is a close-up photo where the product (${String(input.productType || 'product').trim() || 'product'}) has been roughly pasted in as a flat cut-out. Its SIZE and POSITION are correct, but it does not look worn yet.`,
-      'Image 2 is the same product photographed alone: use it for the exact design.',
-      ...wearingInstructions(input.productType),
-      ...(input.poseLocked ? ['The tilt, facing direction, and orientation of the product in Image 1 were set by hand and are correct: keep exactly that pose.'] : []),
-      'Re-render the product so it looks physically real in this photo: correct 3D angle that follows the body, correct depth and occlusion (parts behind skin are hidden), soft contact shadow, and reflections that match the scene light. It must not look like a sticker on top of the photo.',
-      'Keep the overall size the same as in Image 1 — do not enlarge or shrink it — and keep it attached at the same spot.',
-      'Keep the design exactly as in Image 2: same shape, same stones and details, same color and material. Do not add or remove parts.',
-      'Keep everything else in Image 1 exactly the same: people, skin, hair, hands, background, lighting, framing, and crop.',
+  // 不再让 AI 重新摆姿势（2026-11-28）：让 AI 画商品，款式、大小一定会走样。
+  // 商品的样子和位置全由程序贴好，AI 只补光影、接触阴影；侧面朝镜头这类贴不真的参考图在入口就拦掉（checkReferenceSuitability）
+  const prompt = [
+    `Image 1 is a close-up photo where the real product (${String(input.productType || 'product').trim() || 'product'}) has been pasted in as a cut-out. Its SIZE, POSITION, ANGLE and DESIGN are all correct and final.`,
+    'Image 2 is the same product photographed alone, for reference only.',
+    ...wearingInstructions(input.productType),
+    ...(input.poseLocked ? ['The tilt, facing direction, and orientation of the product in Image 1 were set by hand and are correct: keep exactly that pose.'] : []),
+    'Make it look like it was really in this photo: add a soft contact shadow where it touches skin or the surface, match the scene light on its metal and stones (highlights, reflections, color temperature), and blend its outline naturally.',
+    'Do NOT move, rotate, re-pose, or redraw the product, and do not enlarge or shrink it. Do not change its shape, stones, or details. Do not add or remove pieces.',
+    'Keep everything else in Image 1 exactly the same: people, skin, hair, hands, background, lighting, framing, and crop.',
   ].join('\n')
   // AI 偶尔会整张重画（换了手势、换了视角，2026-11-27 用户实测），贴回去就是一块完全不同的图。
   // 商品以外的画面差太多就再来一次；两次都不行，就不用 AI 的结果，直接用贴好的商品图（商品和位置仍然正确）
@@ -490,7 +556,7 @@ export async function harmonizePlacedProduct(input: {
     const generated = await generateWithGrs({
       credentials: input.credentials,
       prompt,
-      imagePaths: repose ? [cropPath, input.productImagePath, originalCropPath] : [cropPath, input.productImagePath],
+      imagePaths: [cropPath, input.productImagePath],
       aspectRatio: '1:1',
       outputPath: aiPath,
       uploadKeyPrefix: 'grsai-input/live-photo/harmonize',
@@ -517,20 +583,46 @@ export async function harmonizePlacedProduct(input: {
     .extractChannel(0)
     .png()
     .toBuffer()
-  let maskForBlend = expanded
-  if (repose) {
-    // 重新摆姿势后商品的轮廓会变：原商品的位置（框）也一起贴回
-    const box = { left: Math.max(0, Math.round(region.left - grow)), top: Math.max(0, Math.round(region.top - grow)) }
-    const boxW = Math.max(1, Math.min(W - box.left, Math.round(region.width + grow * 2)))
-    const boxH = Math.max(1, Math.min(H - box.top, Math.round(region.height + grow * 2)))
-    const rect = await sharp({ create: { width: boxW, height: boxH, channels: 3, background: '#ffffff' } }).png().toBuffer()
-    maskForBlend = await sharp(expanded).composite([{ input: rect, left: box.left, top: box.top, blend: 'lighten' }]).extractChannel(0).png().toBuffer()
-  }
-  const softMask = await sharp(maskForBlend).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
+  const softMask = await sharp(expanded).blur(Math.max(1.5, grow * 0.6)).extractChannel(0).raw().toBuffer()
   const overlay = await sharp(ai).removeAlpha().joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
+  const blended = await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).removeAlpha().png().toBuffer()
+  // 商品本身贴回真实像素：只取 AI 结果的「明暗、颜色变化」（低频），细节（钻、纹路、轮廓）全用真实商品
+  const restored = await restoreProductDetail({ blended, guidePath: input.guidePath, productMaskPath: input.productMaskPath, W, H, productSize })
   await mkdir(dirname(input.outputPath), { recursive: true })
-  await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(input.outputPath)
+  await sharp(restored, { raw: { width: W, height: H, channels: 3 } }).png().toFile(input.outputPath)
   return { path: input.outputPath, model, fellBack, drift: Math.round(lastDrift * 10) / 10 }
+}
+
+/** AI 最多能把商品的颜色、明暗改多少（0~255）：超过这个就不是打光，而是在重画商品 */
+const MAX_LIGHTING_SHIFT = 48
+
+/**
+ * 融合后把商品贴回真实像素：结果 = 真实商品 + (AI 结果的模糊 − 贴图的模糊)，只在商品形状里做。
+ * 这样 AI 给的光影、色温都保留，商品的款式、钻、纹路、轮廓一点不变。
+ * AI 稍微挪了位置也只会让光影偏一点，不会出现两个商品的重影；差得太多的地方按上限截住。
+ */
+async function restoreProductDetail(input: { blended: Buffer; guidePath: string; productMaskPath: string; W: number; H: number; productSize: number }) {
+  const { W, H } = input
+  const radius = Math.max(1.5, input.productSize / 24)
+  const raw = (img: any) => img.resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer()
+  const blended = await raw(sharp(input.blended))
+  const blendedLow = await raw(sharp(input.blended).blur(radius))
+  const guide = await raw(sharp(input.guidePath))
+  const guideLow = await raw(sharp(input.guidePath).blur(radius))
+  // 商品形状往里收一点再羽化：边缘那一圈交给 AI 的融合，免得硬边
+  const mask = await sharp(input.productMaskPath).resize(W, H, { fit: 'fill' }).extractChannel(0).blur(Math.max(0.8, radius * 0.35)).raw().toBuffer()
+  const out = Buffer.from(blended)
+  for (let i = 0; i < W * H; i += 1) {
+    const m = mask[i] / 255
+    if (m <= 0.02) continue
+    for (let c = 0; c < 3; c += 1) {
+      const k = i * 3 + c
+      const shift = Math.max(-MAX_LIGHTING_SHIFT, Math.min(MAX_LIGHTING_SHIFT, blendedLow[k] - guideLow[k]))
+      const real = Math.max(0, Math.min(255, guide[k] + shift))
+      out[k] = Math.round(blended[k] * (1 - m) + real * m)
+    }
+  }
+  return out
 }
 
 /** 商品以外的画面平均差多少（0~255）才算 AI 把整张图改掉了。正常融合在 10 以内，整张重画在 30 以上 */
@@ -559,6 +651,80 @@ export async function readImageSize(path: string) {
   await ensureSharp()
   const meta = await sharp(path).rotate().metadata()
   return { width: Number(meta.width || 0), height: Number(meta.height || 0) }
+}
+
+/* ------------------------------------------------------------------ 参考图能不能换 */
+
+/** 原商品长边不到这么多像素，贴上去看不清款式（2026-11-27 实测 20 多像素不行） */
+const MIN_PRODUCT_SIZE_PX = 48
+
+/**
+ * 贴真实商品只在「商品正面或斜着朝镜头」时做得真：商品图是正面照，贴上去就是正面。
+ * 原商品侧面朝镜头（手指捏着细边）、背面朝镜头时，正面照贴上去像一张立着的贴纸，
+ * 只能让 AI 重新摆姿势，又回到 AI 画商品会变样的老问题（2026-11-28 A-36 四张参考图里三张是这样）。
+ * 在擦图（花钱）之前先看一眼，不合适就直接告诉用户换参考图。看图失败时放行（不因为检查本身挡住任务）。
+ */
+export async function checkReferenceSuitability(input: {
+  credentials: ModelCredentials
+  referenceScenePath: string
+  region: LivePhotoReplacementRegion
+  productType?: string
+}): Promise<LivePhotoProductViewCheck> {
+  await ensureSharp()
+  const meta = await sharp(input.referenceScenePath).rotate().metadata()
+  const W = Number(meta.width || 0)
+  const H = Number(meta.height || 0)
+  const box = { x: input.region.x * W, y: input.region.y * H, w: input.region.width * W, h: input.region.height * H }
+  const sizePx = Math.round(Math.max(box.w, box.h))
+  const base = { sizePx, checkedAt: Date.now() }
+  if (sizePx < MIN_PRODUCT_SIZE_PX) {
+    return { ...base, view: 'unknown', suitable: false, reason: `参考图里的商品太小（只有约 ${sizePx} 像素），贴上去看不清款式，请换一张商品拍得更大的参考图` }
+  }
+  const key = String(input.credentials.grsaiApiKey || '').trim()
+  if (!key) return { ...base, view: 'unknown', suitable: true }
+  try {
+    const side = Math.round(Math.min(W, H, Math.max(Math.max(box.w, box.h) * 2.2, Math.min(W, H) * 0.3)))
+    const left = Math.round(Math.min(W - side, Math.max(0, box.x + box.w / 2 - side / 2)))
+    const top = Math.round(Math.min(H - side, Math.max(0, box.y + box.h / 2 - side / 2)))
+    const crop = await sharp(input.referenceScenePath).rotate().extract({ left, top, width: side, height: side }).resize(512, 512).jpeg({ quality: 85 }).toBuffer()
+    // 直接问「正面 / 斜 / 侧面」，同一张手指捏着侧边的图三次里会有两次说「斜着」（2026-11-28 实测）。
+    // 改成先让它比较商品在图里的宽和高、再选朝向：同一张图三次结果都一致
+    const text = [
+      `The image shows a ${String(input.productType || 'product').trim() || 'product'} (jewelry or a small item) in a photo: worn, held, or placed. Look at the most visible piece.`,
+      'Compare its apparent WIDTH (left to right) with its apparent HEIGHT (top to bottom) as drawn in the image. A hoop or ring seen straight on is about as wide as tall; seen from the side it is much narrower than tall (or much flatter than wide if lying down).',
+      'Then choose how it faces the camera: camera (its front face is toward the camera, straight or somewhat turned), sideways (seen from the side or edge: you mainly see its band or side profile), lying (lying flat on a surface, seen from above at an angle), back (its back or rear side faces the camera).',
+      'Return JSON only: {"width_to_height":0.0,"facing":"camera|sideways|lying|back"}',
+    ].join('\n')
+    const res = await fetch(`${grsHost(input.credentials)}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: String(input.credentials.grsaiAnalysisModel || 'gemini-3.1-pro').trim() || 'gemini-3.1-pro',
+        stream: false,
+        temperature: 0,
+        messages: [{ role: 'user', content: [{ type: 'text', text }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${crop.toString('base64')}` } }] }],
+      }),
+      signal: AbortSignal.timeout(90_000),
+    })
+    const body = await res.text()
+    if (!res.ok) {
+      console.warn('[live-photo] reference suitability check HTTP', res.status, body.slice(0, 200))
+      return { ...base, view: 'unknown', suitable: true }
+    }
+    const parsed = JSON.parse(extractJsonObjectText(extractModelMessageContent(body)))
+    const facing = String(parsed?.facing || '').trim().toLowerCase()
+    const view: LivePhotoProductViewKind = facing === 'camera' ? 'front' : facing === 'lying' ? 'flat' : facing === 'sideways' ? 'edge_on' : facing === 'back' ? 'back' : 'unknown'
+    if (view === 'edge_on') {
+      return { ...base, view, suitable: false, reason: '参考图里的商品是侧面朝镜头（只看得到细边），换成正面的真实商品做不出真实效果，请换一张商品正面或斜着朝镜头的参考图' }
+    }
+    if (view === 'back') {
+      return { ...base, view, suitable: false, reason: '参考图里的商品是背面朝镜头，换上去看不到新商品的款式，请换一张商品正面朝镜头的参考图' }
+    }
+    return { ...base, view, suitable: true }
+  } catch (error) {
+    console.warn('[live-photo] reference suitability check failed', (error as Error)?.message || error)
+    return { ...base, view: 'unknown', suitable: true }
+  }
 }
 
 /* ------------------------------------------------------------------ 按角度挑商品图 */

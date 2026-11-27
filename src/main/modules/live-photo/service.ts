@@ -30,6 +30,7 @@ import {
   defaultProductPlacement,
   ensureProductCutout,
   eraseRegionProduct,
+  checkReferenceSuitability,
   harmonizePlacedProduct,
   normalizeProductPlacement,
   pickProductViewByAngle,
@@ -275,7 +276,7 @@ function normalizeLivePhotoFailureReason(reason: string, stage?: LivePhotoWorkfl
     const label = stage === 'video_generation' ? '视频任务已提交，正在等待远端结果。' : '图片任务已提交，正在等待远端结果。'
     return remoteTaskId ? `[remote_pending] ${label}taskId=${remoteTaskId}` : `[remote_pending] ${label}`
   }
-  if (text.includes('[locate_failed]') || text.includes('[replacement_region_required]')) return text
+  if (text.includes('[locate_failed]') || text.includes('[replacement_region_required]') || text.includes('[reference_unsuitable]')) return text
   const imageStage = stage === 'image_generation' || stage === 'image_validation'
   if (stage === 'image_validation' && isRetryableLivePhotoReviewLoadError(text)) {
     return '[remote_pending] Image validation review service is overloaded and may still recover automatically.'
@@ -3950,6 +3951,8 @@ async function restoreCompletedMaterializedItem(item: LivePhotoItem, logMessage:
 function shouldForceTerminalLivePhotoFailure(stage: LivePhotoWorkflowStep, reason: string) {
   if (String(reason || '').includes('[remote_pending]')) return false
   if (String(reason || '').includes('[replacement_region_required]')) return true
+  // 参考图本身不合适，重试也一样：直接停，让用户换图
+  if (String(reason || '').includes('[reference_unsuitable]')) return true
   return stage === 'video_generation'
 }
 
@@ -4080,7 +4083,7 @@ async function materializeItem(input: {
 }
 
 /** 自动挑图的版本：2 = 六视图按分隔处识别 3×2 / 2×3（1 版按横竖猜，竖图的 3×2 板会切错）；3 = 不再给背面两格；4 = 先数件数，一对配一对的图 */
-const LIVE_PHOTO_CUTOUT_PICK_VERSION = 4
+const LIVE_PHOTO_CUTOUT_PICK_VERSION = 5
 
 /** 按角度挑图的候选：商品库里这个商品的原图 + 六视图分析板切出来的各个角度 */
 async function collectLivePhotoProductViews(item: LivePhotoItem, product: LivePhotoProductSnapshot) {
@@ -4121,6 +4124,25 @@ async function preparePasteReplacementInputs(input: {
   const region = normalizeLivePhotoReplacementRegion(item.replacementRegion)
   if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
   const root = livePhotoRoot(item.id)
+  // 擦图（花钱）前先看参考图能不能贴：侧面、背面朝镜头或商品太小的，直接让用户换参考图（同一个框只看一次）
+  if (item.productViewCheck?.regionRevision !== region.revision) {
+    const check = await checkReferenceSuitability({
+      credentials: input.credentials,
+      referenceScenePath: input.referenceImagePath,
+      region,
+      productType: input.product.type,
+    })
+    item = await livePhotoRepo.upsert({
+      ...appendLivePhotoLogs(item, [
+        buildLivePhotoLog(`[live-photo] 参考图检查：商品朝向=${check.view}，大小约 ${check.sizePx} 像素，${check.suitable ? '可以贴真实商品' : '不适合'}`, check.suitable ? 'info' : 'error'),
+      ]),
+      productViewCheck: { ...check, regionRevision: region.revision },
+      updatedAt: now(),
+    })
+  }
+  if (item.productViewCheck && !item.productViewCheck.suitable) {
+    throw new Error(`[reference_unsuitable] ${item.productViewCheck.reason || '这张参考图不适合贴真实商品，请换一张商品正面朝镜头的参考图'}`)
+  }
   const erasedReady = Boolean(item.erasedScenePath && existsSync(item.erasedScenePath) && item.erasedRegionRevision === region.revision)
   if (!erasedReady) {
     item = await livePhotoRepo.upsert({
@@ -4195,7 +4217,7 @@ async function preparePasteReplacementInputs(input: {
   }
   const scene = await readImageSize(String(item.erasedScenePath))
   const cutout = await readImageSize(String(item.productCutoutPath))
-  const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height })
+  const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height, foreshortened: item.productViewCheck?.view === 'flat' })
   let placement = normalizeProductPlacement(item.placement)
   if (!placement) {
     placement = defaultPlacement
@@ -6199,7 +6221,7 @@ export const livePhotoService = {
     }
     const scene = await readImageSize(erased)
     const cutout = await readImageSize(cutoutPath)
-    const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height })
+    const defaultPlacement = defaultProductPlacement({ region, sceneWidth: scene.width, sceneHeight: scene.height, cutoutWidth: cutout.width, cutoutHeight: cutout.height, foreshortened: existing.productViewCheck?.view === 'flat' })
     return {
       ready: true as const,
       erasedScenePath: erased,
