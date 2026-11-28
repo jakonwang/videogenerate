@@ -3894,6 +3894,18 @@ function readExistingMaterializedArtifacts(itemId: string) {
   }
 }
 
+/**
+ * 删旧的成品文件。Windows 上正在软件里播放的视频是锁着的，删不掉会让整个重做失败
+ * （2026-11-28 用户连点 5 次「换一张图重做」都没反应），这里多试几次，还删不掉就跳过——后面会写新文件覆盖。
+ */
+async function removeLivePhotoArtifact(path: string) {
+  try {
+    await rm(path, { force: true, maxRetries: 5, retryDelay: 200 })
+  } catch (error) {
+    console.warn('[live-photo] could not remove old artifact, keeping it', path, (error as Error)?.message || error)
+  }
+}
+
 async function clearMaterializedArtifactsForImageRetry(itemId: string) {
   const root = livePhotoRoot(itemId)
   await Promise.all(
@@ -3907,7 +3919,7 @@ async function clearMaterializedArtifactsForImageRetry(itemId: string) {
       'live-photo.json',
       'motion.mp4',
       'motion.mov',
-    ].map((fileName) => rm(join(root, fileName), { force: true })),
+    ].map((fileName) => removeLivePhotoArtifact(join(root, fileName))),
   )
 }
 
@@ -3922,7 +3934,7 @@ async function clearMaterializedArtifactsForVideoRetry(itemId: string) {
       'live-photo.json',
       'motion.mp4',
       'motion.mov',
-    ].map((fileName) => rm(join(root, fileName), { force: true })),
+    ].map((fileName) => removeLivePhotoArtifact(join(root, fileName))),
   )
 }
 
@@ -6309,6 +6321,8 @@ export const livePhotoService = {
     const index = Math.round(Number(input?.index))
     const candidate = existing.stillCandidates?.[index]
     if (!candidate?.path || !existsSync(candidate.path)) throw new Error('这张图不在了，请重新生成')
+    // 已经在用这张图重做了：连点不再重复提交
+    if (existing.pickedStillIndex === index && !existing.awaitingStillPick && existing.packagingStatus === 'processing') return existing
     await livePhotoRepo.upsert({
       ...appendLivePhotoLogs(existing, [buildLivePhotoLog(`[live-photo] 挑了第 ${index + 1} 张图`)]),
       pickedStillIndex: index,

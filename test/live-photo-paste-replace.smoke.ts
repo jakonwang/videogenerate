@@ -193,6 +193,18 @@ async function main() {
     assert.equal(videoPosts, 1)
     assert.ok(!completed.awaitingPlacement && !completed.awaitingStillPick)
 
+    // 4b) 做完视频后换一张图重做：不再融合，用新挑的图重做视频
+    const repicked: any = await livePhotoService.pickStill({ id: created.id, index: 2 })
+    assert.equal(repicked.packagingStatus, 'processing', 'repick on a finished task restarts it')
+    const redone: any = await waitFor('repick completed', async () => {
+      const item: any = await livePhotoService.get(created.id)
+      if (item?.packagingStatus === 'failed') throw new Error(`failed: ${item.error}`)
+      return item?.packagingStatus === 'completed' && item.pickedStillIndex === 2 ? item : null
+    })
+    assert.equal(generateBodies.length, 4, 'repick does not generate stills again')
+    assert.equal(videoPosts, 2, 'repick makes a new video')
+    assert.ok(existsSync(redone.generatedStillPath))
+
     // 5) 自动摆放：不等摆放，但仍等挑图；「都不行」重新出 3 张，挑完做视频，抠图走缓存
     const auto: any = await livePhotoService.createFromReference({ referenceImagePath: refImage, productId: product.id, motionTemplate: 'push_in', videoModelId: 'gaorui:veo_3_1-fl', videoZoomPercent: 0 } as any)
     assert.equal(auto.placementMode, 'auto')
