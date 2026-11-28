@@ -34,7 +34,7 @@ export const RELAY_MODULES = {
     channel: 'plugin:museCreative:',
     only: [
       'listAccountSummaries', 'listJobs', 'getJob', 'createJobs', 'retryJob', 'dismissJob', 'collectJob', 'cancelJob', 'cancelQueuedJobs', 'removeJobs',
-      'approveImages', 'redoImage', 'setQueuePaused', 'setQueueConcurrency', 'saveSettings', 'addSubtitles', 'revertSubtitles',
+      'approveImages', 'redoImage', 'getStillCandidates', 'pickStill', 'regenerateStills', 'setQueuePaused', 'setQueueConcurrency', 'saveSettings', 'addSubtitles', 'revertSubtitles',
       'listPrompts', 'updatePrompt', 'copyPrompt', 'activatePrompt', 'rollbackPrompt',
     ],
   },

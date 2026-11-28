@@ -47,7 +47,7 @@ async function main() {
     // Muse accounts (proxy, login) stay on the computer; new account methods are closed by default.
     const { relayAllows } = await import('../src/shared/cloud/relay')
     for (const method of ['listAccounts', 'createAccount', 'updateAccount', 'importCookies', 'login', 'testAccount', 'queryQuota', 'exportJobs', 'anythingNew']) assert.equal(relayAllows('museCreative', method), false, method)
-    for (const method of ['listAccountSummaries', 'listJobs', 'createJobs', 'approveImages', 'redoImage']) assert.equal(relayAllows('museCreative', method), true, method)
+    for (const method of ['listAccountSummaries', 'listJobs', 'createJobs', 'approveImages', 'redoImage', 'getStillCandidates', 'pickStill', 'regenerateStills']) assert.equal(relayAllows('museCreative', method), true, method)
 
     // the computer's handlers: same functions the desktop page calls over IPC
     const seen: unknown[] = []
