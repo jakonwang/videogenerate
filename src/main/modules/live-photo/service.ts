@@ -2903,6 +2903,11 @@ async function bindPreparedLivePhotoReplacementInputs(input: {
   }
 }
 
+export function isFullSceneLivePhotoStill(path: string) {
+  const name = basename(String(path || ''))
+  return name.startsWith('localized-replacement-') || name.startsWith('integrate-')
+}
+
 async function finalizeGeneratedLivePhotoReplacement(input: {
   item: LivePhotoItem
   scenePath: string
@@ -2910,7 +2915,9 @@ async function finalizeGeneratedLivePhotoReplacement(input: {
   outputRoot?: string
 }) {
   if (livePhotoDeps.generateGptShotFrameImage !== generateGptShotFrameImage) return input.generatedCropPath
-  if (basename(input.generatedCropPath).startsWith('localized-replacement-')) return input.generatedCropPath
+  // 已经是整张场景图的不要再贴回框里：局部贴回过的，和贴图融合的候选图（integrate-*，挑中的那张直接做视频）。
+  // 2026-11-28 5.0.181 漏了 integrate-，挑中的整张图被缩小塞进商品框，视频里出现图中图。
+  if (isFullSceneLivePhotoStill(input.generatedCropPath)) return input.generatedCropPath
   const region = normalizeLivePhotoReplacementRegion(input.item.replacementRegion)
   if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
   const root = input.outputRoot || livePhotoRoot(input.item.id)

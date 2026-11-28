@@ -974,7 +974,8 @@ function cardCaps(item: LivePhotoItem): LivePhotoCardCaps {
     hasMetadata: Boolean(item.packagingMetadataBridgePath),
     canRegion: canCorrectReplacementRegion(item) && item.replaceMode !== 'paste',
     canPlacement: item.replaceMode === 'paste' && item.sourceType === 'reference_replace' && (Boolean(item.awaitingPlacement) || item.packagingStatus !== 'processing'),
-    canPickStill: item.replaceMode === 'paste' && Boolean(item.awaitingStillPick) && Boolean(item.stillCandidates?.length),
+    // 出过候选图就能挑（做完视频后也能换一张重做，5.0.181 图中图的任务靠这个救回来）
+    canPickStill: item.replaceMode === 'paste' && Boolean(item.stillCandidates?.length) && (Boolean(item.awaitingStillPick) || item.packagingStatus !== 'processing'),
     canRetryImage: canRetryImageOnce(item),
     canContinueVideo: canContinueWithVideo(item),
     subtitleBusy: subtitleDialogBusy.value,

@@ -113,6 +113,7 @@ const menu = computed(() =>
     { action: 'revertSubtitle' as const, label: t('lpTask.action.revertSubtitle'), icon: Undo2, show: props.caps.hasAppliedSubtitle, disabled: props.caps.subtitleBusy },
     { action: 'reveal' as const, label: t('lpTask.action.reveal'), icon: FolderOpen, show: props.caps.hasVideo, testid: `live-photo-reveal-${props.item.id}` },
     { action: 'metadata' as const, label: t('lpTask.action.metadata'), icon: FileJson, show: props.caps.hasMetadata, testid: `live-photo-metadata-${props.item.id}` },
+    { action: 'pickStill' as const, label: '换一张图重做', icon: Images, show: Boolean(props.caps.canPickStill) && !primary.value.some((x) => x.action === 'pickStill'), testid: `live-photo-pick-still-${props.item.id}` },
     { action: 'placement' as const, label: '调整摆放', icon: Move, show: Boolean(props.caps.canPlacement) && !primary.value.some((x) => x.action === 'placement'), testid: `live-photo-placement-${props.item.id}` },
     { action: 'region' as const, label: t('lpTask.action.region'), icon: ScanLine, show: props.caps.canRegion && !primary.value.some((x) => x.action === 'region'), testid: `live-photo-region-${props.item.id}` },
     { action: 'retry' as const, label: t('lpTask.action.regenerate'), icon: RefreshCcw, show: !primary.value.some((x) => x.action === 'retry'), disabled: processing.value, testid: `live-photo-retry-${props.item.id}` },

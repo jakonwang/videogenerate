@@ -18,7 +18,7 @@ async function main() {
   const { cloneRepo } = await import('../src/main/modules/clone/repo')
   const cloneSqliteModule = await import('../src/main/modules/clone/sqlite')
   const livePhotoSqliteModule = await import('../src/main/modules/live-photo/sqlite')
-  const { livePhotoService } = await import('../src/main/modules/live-photo/service')
+  const { livePhotoService, isFullSceneLivePhotoStill } = await import('../src/main/modules/live-photo/service')
   const paste = await import('../src/main/modules/live-photo/pasteReplace')
 
   async function waitFor<T>(label: string, read: () => Promise<T | null | undefined | false>, timeoutMs = 20000): Promise<T> {
@@ -172,6 +172,8 @@ async function main() {
     for (const candidate of stills.candidates) {
       const meta = await sharp(candidate.path).metadata()
       assert.equal(meta.width, 300, 'candidate keeps the reference size')
+      // 挑中的整张图不能再被当成局部图贴回商品框（5.0.181 出现过图中图）
+      assert.ok(isFullSceneLivePhotoStill(candidate.path), `candidate is treated as a full scene: ${candidate.path}`)
     }
 
     // 4) 挑第 2 张：不再生成，直接做视频
