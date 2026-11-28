@@ -88,6 +88,8 @@ type LivePhotoSettings = {
   qualityPassThreshold?: number
   qualityRetryFloor?: number
   retryLimit?: number
+  /** 贴真实商品一次出几张图让你挑（图生视频、tk创意室、Muse创意室共用） */
+  pasteStillCount?: number
   updatedAt: number
 }
 
@@ -439,6 +441,7 @@ const livePhotoSettings = ref<LivePhotoSettings>({
   qualityPassThreshold: 0.88,
   qualityRetryFloor: 0.65,
   retryLimit: 2,
+  pasteStillCount: 3,
   updatedAt: 0,
 })
 
@@ -1079,6 +1082,7 @@ async function saveLivePhotoSettings(closeRetrySettings = false) {
       qualityPassThreshold: livePhotoSettings.value.qualityPassThreshold,
       qualityRetryFloor: livePhotoSettings.value.qualityRetryFloor,
       retryLimit: livePhotoSettings.value.retryLimit,
+      pasteStillCount: Math.max(1, Math.min(6, Math.floor(Number(livePhotoSettings.value.pasteStillCount) || 3))),
       updatedAt: livePhotoSettings.value.updatedAt,
     }
     const next = await window.api.livePhoto.saveSettings(settingsSnapshot)
@@ -2503,6 +2507,16 @@ watch([unboundMaterialOptions, materialPickerPageSize], () => {
           <div class="live-photo-retry-settings-input">
             <input v-model.number="livePhotoSettings.retryLimit" type="number" min="0" max="20" step="1" inputmode="numeric" />
             <span>{{ t('livePhoto.workspace.retryAttemptUnit') }}</span>
+          </div>
+        </label>
+        <label class="live-photo-retry-settings-field">
+          <div>
+            <span>贴真实商品每次出几张图</span>
+            <small>出好后让你挑一张再做视频，1–6 张，每张约 0.06 元。tk创意室、Muse创意室也按这个</small>
+          </div>
+          <div class="live-photo-retry-settings-input">
+            <input v-model.number="livePhotoSettings.pasteStillCount" data-testid="live-photo-paste-still-count" type="number" min="1" max="6" step="1" inputmode="numeric" />
+            <span>张</span>
           </div>
         </label>
         <div class="live-subtitle-dialog__actions live-photo-retry-settings-actions">

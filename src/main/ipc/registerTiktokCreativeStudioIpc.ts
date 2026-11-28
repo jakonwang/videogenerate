@@ -42,6 +42,9 @@ export function registerTiktokCreativeStudioIpc(ipcMain: IpcMain, getWindow: () 
       replacementRegion?: { x: number; y: number; width: number; height: number }
     }) => await tiktokCreativeStudioService.retryShot(payload),
   )
+  ipcMain.handle('plugin:tiktokCreative:getStillCandidates', async (_e, payload) => await tiktokCreativeStudioService.getStillCandidates(payload))
+  ipcMain.handle('plugin:tiktokCreative:pickStill', async (_e, payload) => await tiktokCreativeStudioService.pickStill(payload))
+  ipcMain.handle('plugin:tiktokCreative:regenerateStills', async (_e, payload) => await tiktokCreativeStudioService.regenerateStills(payload))
   ipcMain.handle('plugin:tiktokCreative:continueWithVideo', async (_e, payload) => await tiktokCreativeStudioService.continueWithVideo(payload))
   ipcMain.handle('plugin:tiktokCreative:exportItems', async (_e, payload) => await tiktokCreativeStudioService.exportItems(payload))
   ipcMain.handle('plugin:tiktokCreative:removeShot', async (_e, payload) => await tiktokCreativeStudioService.removeShot(payload))

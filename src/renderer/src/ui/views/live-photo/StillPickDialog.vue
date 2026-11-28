@@ -15,7 +15,19 @@ type StillData = {
   pickedIndex: number | null
 }
 
-const props = defineProps<{ itemId: string; title?: string; previewSrc: (path?: string) => string }>()
+/** 不传就是图生视频的任务；tk创意室 / Muse创意室传自己的接口 */
+export type StillPickSource = {
+  load: () => Promise<StillData>
+  pick: (index: number) => Promise<unknown>
+  regenerate: () => Promise<unknown>
+}
+
+const props = defineProps<{ itemId: string; title?: string; previewSrc: (path?: string) => string; source?: StillPickSource }>()
+const api = () => props.source ?? {
+  load: () => (window as any).api.livePhoto.getStillCandidates({ id: props.itemId }) as Promise<StillData>,
+  pick: (index: number) => (window as any).api.livePhoto.pickStill({ id: props.itemId, index }),
+  regenerate: () => (window as any).api.livePhoto.regenerateStills({ id: props.itemId }),
+}
 const emit = defineEmits<{ close: []; picked: [item: unknown]; regenerated: [item: unknown] }>()
 
 const data = ref<StillData | null>(null)
@@ -30,7 +42,7 @@ async function load() {
   data.value = null
   loadError.value = ''
   try {
-    const result = (await (window as any).api.livePhoto.getStillCandidates({ id: props.itemId })) as StillData
+    const result = await api().load()
     if (!result?.candidates?.length) {
       loadError.value = '图已经不在了，请点「都不行，重新生成」'
       data.value = result
@@ -73,7 +85,7 @@ async function confirm() {
   if (selected.value === null || busy.value) return
   busy.value = true
   try {
-    const item = await (window as any).api.livePhoto.pickStill({ id: props.itemId, index: selected.value })
+    const item = await api().pick(selected.value)
     emit('picked', item)
   } catch (error: any) {
     loadError.value = error?.message ?? String(error)
@@ -86,7 +98,7 @@ async function regenerate() {
   if (busy.value) return
   busy.value = true
   try {
-    const item = await (window as any).api.livePhoto.regenerateStills({ id: props.itemId })
+    const item = await api().regenerate()
     emit('regenerated', item)
   } catch (error: any) {
     loadError.value = error?.message ?? String(error)

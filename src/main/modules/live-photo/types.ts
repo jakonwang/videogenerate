@@ -405,6 +405,8 @@ export type LivePhotoSettings = {
   qualityPassThreshold?: number
   qualityRetryFloor?: number
   retryLimit?: number
+  /** 贴真实商品一次出几张图让用户挑（1–6，默认 3） */
+  pasteStillCount?: number
   updatedAt: number
 }
 

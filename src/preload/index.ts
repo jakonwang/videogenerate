@@ -1178,6 +1178,9 @@ const api = {
     dismissJob: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:dismissJob', id),
     approveImages: (ids: string[]): Promise<{ done: number }> => ipcRenderer.invoke('plugin:museCreative:approveImages', ids),
     redoImage: (payload: { id: string; region?: { x: number; y: number; width: number; height: number }; closing?: boolean }): Promise<void> => ipcRenderer.invoke('plugin:museCreative:redoImage', payload),
+    getStillCandidates: (id: string) => ipcRenderer.invoke('plugin:museCreative:getStillCandidates', id),
+    pickStill: (payload: { id: string; index: number }): Promise<void> => ipcRenderer.invoke('plugin:museCreative:pickStill', payload),
+    regenerateStills: (id: string): Promise<void> => ipcRenderer.invoke('plugin:museCreative:regenerateStills', id),
     saveSettings: (payload: Partial<MuseSettings>): Promise<MuseSettings> => ipcRenderer.invoke('plugin:museCreative:saveSettings', payload),
     listPrompts: (kind: MusePromptKind): Promise<MusePromptVersion[]> => ipcRenderer.invoke('plugin:museCreative:listPrompts', kind),
     updatePrompt: (payload: { id: string; name?: string; prompt: string }): Promise<MusePromptVersion> => ipcRenderer.invoke('plugin:museCreative:updatePrompt', payload),
@@ -1228,6 +1231,9 @@ const api = {
       replacementRegion?: { x: number; y: number; width: number; height: number }
       retryMode?: 'auto' | 'manual_once'
     }) => ipcRenderer.invoke('plugin:tiktokCreative:retryShot', payload),
+    getStillCandidates: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:getStillCandidates', payload),
+    pickStill: (payload: { id: string; shotId: string; index: number }) => ipcRenderer.invoke('plugin:tiktokCreative:pickStill', payload),
+    regenerateStills: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:regenerateStills', payload),
     continueWithVideo: (payload: { id: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:continueWithVideo', payload),
     exportItems: (payload: { taskId: string; shotIds: string[]; outputDir: string }) => ipcRenderer.invoke('plugin:tiktokCreative:exportItems', payload),
     removeShot: (payload: { taskId: string; shotId: string }) => ipcRenderer.invoke('plugin:tiktokCreative:removeShot', payload),

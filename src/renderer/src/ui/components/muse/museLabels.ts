@@ -40,6 +40,7 @@ export function museJobState(job: MuseJob) {
 
 function jobState(job: MuseJob) {
   if (job.status === 'swapping' && !job.image?.submitting && !job.image?.waiting) return { label: '等待换图', tone: '' }
+  if (job.status === 'image_review' && job.image?.awaitingPick) return { label: '待挑图', tone: 'ts-state--warn' }
   if (job.status === 'image_review' && !job.preparedImagePath) return { label: '换图失败', tone: 'ts-state--err' }
   if (job.status === 'running') return { label: JOB_STAGE[job.stage], tone: 'ts-state--run' }
   if (job.status === 'queued' && job.collect) return { label: '等待找回', tone: '' }

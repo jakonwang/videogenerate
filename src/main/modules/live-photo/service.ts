@@ -4135,16 +4135,27 @@ function resolveLivePhotoCutoutSourcePath(item: LivePhotoItem, product: LivePhot
 }
 
 /** 擦除 + 抠图（贴真实商品的前两步），做过的不重做；框改过（revision 变了）就重新擦、摆放回到默认 */
+/** 外部流程（tk创意室 / Muse创意室）跑贴真实商品时不进图生视频的任务库：用自己的保存方式和目录 */
+type PasteReplacementStore = { save?: (item: LivePhotoItem) => Promise<LivePhotoItem>; root?: string; /** 不按设置，固定出几张 */ stillCount?: number }
+
+/** 贴真实商品一次出几张图让用户挑（图生视频设置里改，tk创意室 / Muse创意室共用），默认 3 */
+export async function resolvePasteStillCount() {
+  const settings = await livePhotoRepo.getSettings().catch(() => undefined)
+  const value = Math.floor(Number(settings?.pasteStillCount))
+  return Number.isFinite(value) && value >= 1 ? Math.min(6, value) : PASTE_STILL_CANDIDATES
+}
+
 async function preparePasteReplacementInputs(input: {
   item: LivePhotoItem
   product: LivePhotoProductSnapshot
   referenceImagePath: string
   credentials: ModelCredentials
-}) {
+} & PasteReplacementStore) {
+  const save = input.save ?? ((next: LivePhotoItem) => livePhotoRepo.upsert(next))
   let item = input.item
   const region = normalizeLivePhotoReplacementRegion(item.replacementRegion)
   if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
-  const root = livePhotoRoot(item.id)
+  const root = input.root ?? livePhotoRoot(item.id)
   // 擦图（花钱）前先看参考图：商品太小的直接让用户换参考图（同一个框只看一次；朝向只记录不拦）
   if (item.productViewCheck?.regionRevision !== region.revision) {
     const check = await checkReferenceSuitability({
@@ -4153,7 +4164,7 @@ async function preparePasteReplacementInputs(input: {
       region,
       productType: input.product.type,
     })
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [
         buildLivePhotoLog(`[live-photo] 参考图检查：商品朝向=${check.view}，大小约 ${check.sizePx} 像素，${check.sizePx >= MIN_PRODUCT_SIZE_PX ? '可以' : '太小，不适合'}`, check.sizePx >= MIN_PRODUCT_SIZE_PX ? 'info' : 'error'),
       ]),
@@ -4167,7 +4178,7 @@ async function preparePasteReplacementInputs(input: {
   }
   const erasedReady = Boolean(item.erasedScenePath && existsSync(item.erasedScenePath) && item.erasedRegionRevision === region.revision)
   if (!erasedReady) {
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 贴真实商品：擦掉参考图里的旧商品')]),
       updatedAt: now(),
     })
@@ -4177,7 +4188,7 @@ async function preparePasteReplacementInputs(input: {
       region,
       outputPath: join(root, 'paste', `erased-r${region.revision}-${now()}.png`),
     })
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [
         buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: erased.model, endpoint: '/v1/api/generate', cached: false }),
         buildLivePhotoLog('[live-photo] 旧商品已擦掉', 'success'),
@@ -4191,7 +4202,7 @@ async function preparePasteReplacementInputs(input: {
   }
   // 自动挑的图如果是旧版切格挑出来的（六视图切错了格，会混进几只商品），作废重挑
   if (item.cutoutSourceChosenBy === 'auto' && item.cutoutPickVersion !== LIVE_PHOTO_CUTOUT_PICK_VERSION) {
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [buildLivePhotoLog('[live-photo] 商品图是旧版自动挑的，重新按角度挑一次')]),
       cutoutSourceChosenBy: undefined,
       cutoutSourcePath: undefined,
@@ -4211,7 +4222,7 @@ async function preparePasteReplacementInputs(input: {
       candidatePaths: candidates,
       workDir: join(root, 'paste'),
     })
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [
         buildLivePhotoLog(
           picked
@@ -4231,7 +4242,7 @@ async function preparePasteReplacementInputs(input: {
     // 是一对还是一只：挑图时看过参考图就按它说的；否则拿着 / 放着（常常一对一起展示）保留成对，戴着只留一只
     const keepPair = typeof item.cutoutPair === 'boolean' ? item.cutoutPair : ['held', 'placed', 'none'].includes(String(item.sceneInteraction?.mode || ''))
     const cutout = await ensureProductCutout(cutoutSourcePath, { keepPair })
-    item = await livePhotoRepo.upsert({
+    item = await save({
       ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品抠图完成：${basename(cutoutSourcePath)}`, 'success')]),
       productCutoutPath: cutout.path,
       updatedAt: now(),
@@ -4243,7 +4254,7 @@ async function preparePasteReplacementInputs(input: {
   let placement = normalizeProductPlacement(item.placement)
   if (!placement) {
     placement = defaultPlacement
-    item = await livePhotoRepo.upsert({ ...item, placement, updatedAt: now() })
+    item = await save({ ...item, placement, updatedAt: now() })
   }
   return { item, region, cutoutSourcePath, scene, cutout, placement, defaultPlacement }
 }
@@ -4257,7 +4268,8 @@ async function runPasteReplacement(input: {
   product: LivePhotoProductSnapshot
   referenceImagePath: string
   credentials: ModelCredentials
-}) {
+} & PasteReplacementStore) {
+  const save = input.save ?? ((next: LivePhotoItem) => livePhotoRepo.upsert(next))
   const prepared = await preparePasteReplacementInputs(input)
   let item = prepared.item
   if (item.placementMode === 'confirm' && !prepared.placement.confirmedAt) {
@@ -4268,7 +4280,7 @@ async function runPasteReplacement(input: {
   const picked = typeof item.pickedStillIndex === 'number' ? item.stillCandidates?.[item.pickedStillIndex] : undefined
   if (picked?.path && existsSync(picked.path)) return picked.path
   if (candidates.length) throw new Error('[awaiting_still_pick] 等你挑一张图')
-  const root = livePhotoRoot(item.id)
+  const root = input.root ?? livePhotoRoot(item.id)
   const guidePath = join(root, 'paste', `guide-${now()}.png`)
   const guide = await renderPlacementGuide({
     erasedScenePath: String(item.erasedScenePath),
@@ -4276,8 +4288,9 @@ async function runPasteReplacement(input: {
     placement: prepared.placement,
     outputPath: guidePath,
   })
-  item = await livePhotoRepo.upsert({
-    ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品已按摆放贴好，开始融合（一次出 ${PASTE_STILL_CANDIDATES} 张）`)]),
+  const count = input.stillCount ?? (await resolvePasteStillCount())
+  item = await save({
+    ...appendLivePhotoLogs(item, [buildLivePhotoLog(`[live-photo] 商品已按摆放贴好，开始融合（一次出 ${count} 张）`)]),
     updatedAt: now(),
   })
   // 款式依据：抠图用的那张 + 其它角度（商品图、六视图正面 / 3/4 正面），最多 3 张
@@ -4296,8 +4309,9 @@ async function runPasteReplacement(input: {
     region: prepared.region,
     interactionMode: item.sceneInteraction?.mode,
     outputDir: join(root, 'generated-still'),
+    count,
   })
-  await livePhotoRepo.upsert({
+  await save({
     ...appendLivePhotoLogs(item, [
       buildLivePhotoModelCallLog({ step: 'image_generation', provider: 'grsai', model: integrated.model, endpoint: '/v1/api/generate', cached: false }),
       buildLivePhotoLog(`[live-photo] 融合出了 ${integrated.candidates.length} 张图${integrated.failed ? `（${integrated.failed} 张失败）` : ''}，等你挑一张`, 'success'),
@@ -5284,6 +5298,43 @@ export type ExternalReferenceImagePreparationState = {
   imageTaskModel?: string
   imageTaskBaseUrl?: string
   imageTaskEndpointStyle?: string
+  /** 贴真实商品（tk创意室 / Muse创意室和图生视频同一套）：中间产物和出的几张图 */
+  replaceMode?: LivePhotoItem['replaceMode']
+  productViewCheck?: LivePhotoItem['productViewCheck']
+  erasedScenePath?: string
+  erasedRegionRevision?: number
+  cutoutSourcePath?: string
+  cutoutSourceChosenBy?: LivePhotoItem['cutoutSourceChosenBy']
+  cutoutPickVersion?: number
+  cutoutPair?: boolean
+  productCutoutPath?: string
+  placement?: LivePhotoItem['placement']
+  stillCandidates?: LivePhotoItem['stillCandidates']
+  pickedStillIndex?: number
+}
+
+const EXTERNAL_PASTE_STATE_KEYS = [
+  'replaceMode', 'productViewCheck', 'erasedScenePath', 'erasedRegionRevision', 'cutoutSourcePath', 'cutoutSourceChosenBy',
+  'cutoutPickVersion', 'cutoutPair', 'productCutoutPath', 'placement', 'stillCandidates', 'pickedStillIndex',
+] as const
+
+/** 外部流程出的几张图（还在的），给挑图弹窗用 */
+export function listExternalReferenceStills(state?: ExternalReferenceImagePreparationState) {
+  return (state?.stillCandidates || [])
+    .map((candidate, index) => ({ index, path: String(candidate?.path || '') }))
+    .filter((candidate) => candidate.path && existsSync(candidate.path))
+}
+
+/** 用户挑了第 index 张：之后再跑出图函数就直接用这张 */
+export function pickExternalReferenceStill(state: ExternalReferenceImagePreparationState | undefined, index: number): ExternalReferenceImagePreparationState {
+  const candidate = state?.stillCandidates?.[index]
+  if (!candidate?.path || !existsSync(candidate.path)) throw new Error('这张图已经不在了，请重新生成')
+  return { ...state, pickedStillIndex: index, generatedStillPath: undefined, qualityReport: undefined }
+}
+
+/** 「都不行，重新生成」：作废这几张，摆放和抠图保留，下次重新融合 */
+export function resetExternalReferenceStills(state?: ExternalReferenceImagePreparationState): ExternalReferenceImagePreparationState {
+  return { ...state, stillCandidates: undefined, pickedStillIndex: undefined, generatedStillPath: undefined, qualityReport: undefined }
 }
 
 export async function prepareReferenceImageForExternalWorkflow(input: {
@@ -5299,7 +5350,17 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     promptHash: string
   }
   qualityCheckerEnabled?: boolean
-}) {
+  /** 贴真实商品出了几张图时不停下来等人挑，直接用第一张（只出 1 张）：尾帧换图用 */
+  autoPickStill?: boolean
+}): Promise<{
+  pending: boolean
+  preparedImagePath: string
+  failed?: boolean
+  error?: string
+  /** 贴真实商品出了几张图，等用户挑（挑完用 pickExternalReferenceStill 记下，再调一次本函数） */
+  awaitingStillPick?: boolean
+  state: ExternalReferenceImagePreparationState
+}> {
   const timestamp = now()
   const product = input.state?.productSnapshot || await buildProductSnapshot(String(input.productId || '').trim())
   const credentials = await cloneRepo.getCredentials()
@@ -5333,6 +5394,11 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     imageTaskModel: input.state?.imageTaskModel,
     imageTaskBaseUrl: input.state?.imageTaskBaseUrl,
     imageTaskEndpointStyle: input.state?.imageTaskEndpointStyle,
+    ...Object.fromEntries(EXTERNAL_PASTE_STATE_KEYS.map((key) => [key, input.state?.[key]])),
+    // 新任务：能抠图（已登录）且有 GRS.AI 就贴真实商品；已经按老办法提交过的任务继续老办法
+    replaceMode: input.state?.replaceMode
+      || (!input.state?.imageTaskId && !input.state?.generatedStillPath && canUsePasteReplace(credentials) ? 'paste' : undefined),
+    placementMode: 'auto',
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -5353,8 +5419,9 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
     imageTaskModel: current.imageTaskModel,
     imageTaskBaseUrl: current.imageTaskBaseUrl,
     imageTaskEndpointStyle: current.imageTaskEndpointStyle,
+    ...Object.fromEntries(EXTERNAL_PASTE_STATE_KEYS.map((key) => [key, current[key]])),
   })
-  if (item.generatedStillPath && existsSync(item.generatedStillPath) && (input.qualityCheckerEnabled === false || item.qualityReport?.decision === 'pass')) {
+  if (item.generatedStillPath && existsSync(item.generatedStillPath) && (input.qualityCheckerEnabled === false || item.qualityReport?.decision === 'pass' || item.replaceMode === 'paste')) {
     return { pending: false, preparedImagePath: item.generatedStillPath, state: toState(item) }
   }
   if (!item.replacementRegion || !item.sceneInteraction) {
@@ -5385,6 +5452,22 @@ export async function prepareReferenceImageForExternalWorkflow(input: {
       const located = await locateLivePhotoReplacementRegion({ item, product, scenePath: input.referenceImagePath })
       item = { ...item, replacementRegion: located.region, sceneInteraction: located.sceneInteraction, updatedAt: now() }
     }
+  }
+  if (item.replaceMode === 'paste') {
+    let latest = item
+    const save = async (next: LivePhotoItem) => (latest = next)
+    let stillPath = ''
+    try {
+      stillPath = await runPasteReplacement({ item, product, referenceImagePath: input.referenceImagePath, credentials, save, root: input.outputRoot, stillCount: input.autoPickStill ? 1 : undefined })
+    } catch (error: any) {
+      if (!String(error?.message || '').includes('[awaiting_still_pick]')) throw error
+      const first = latest.stillCandidates?.find((candidate) => candidate?.path && existsSync(candidate.path))
+      if (!input.autoPickStill || !first) return { pending: false, awaitingStillPick: true, preparedImagePath: '', state: toState(latest) }
+      latest = { ...latest, pickedStillIndex: latest.stillCandidates!.indexOf(first) }
+      stillPath = first.path
+    }
+    item = { ...latest, generatedStillPath: stillPath, qualityReport: undefined, updatedAt: now() }
+    return { pending: false, preparedImagePath: stillPath, failed: false, error: undefined, state: toState(item) }
   }
   let generatedPath = ''
   if (item.imageTaskId) {

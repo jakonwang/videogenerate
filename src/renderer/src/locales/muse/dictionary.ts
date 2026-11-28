@@ -260,6 +260,8 @@ Muse创意室|Muse Creative|Muse Creative
 关闭后按画面中央区域替换，可在确认时手动框选。|When off, the centre is replaced; you can mark a region during review.|Khi tắt sẽ thay vùng giữa ảnh, có thể khoanh tay khi duyệt.
 进行中|Active|Đang chạy
 待确认换图|Swap to review|Chờ duyệt ảnh
+待挑图|Pick an image|Chờ chọn ảnh
+挑图|Pick image|Chọn ảnh
 完成|Done|Xong
 未加字幕|No subtitles|Chưa phụ đề
 未导出|Not exported|Chưa xuất

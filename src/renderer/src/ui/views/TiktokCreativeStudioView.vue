@@ -8,6 +8,7 @@ import BatchDeleteDialog from "../components/BatchDeleteDialog.vue";
 import ProductSelectDialog from "../components/ProductSelectDialog.vue";
 import StyleReferenceCard, { type StyleReference } from "../components/StyleReferenceCard.vue";
 import RuntimeLogDialog from "../components/RuntimeLogDialog.vue";
+import StillPickDialog, { type StillPickSource } from "./live-photo/StillPickDialog.vue";
 import PublishMatrixAccountsDialog from "../components/publish-matrix/PublishMatrixAccountsDialog.vue";
 import PublishMatrixDistributeDialog from "../components/publish-matrix/PublishMatrixDistributeDialog.vue";
 import PublishLocalizeDialog from "../components/publish-matrix/PublishLocalizeDialog.vue";
@@ -60,6 +61,7 @@ import {
   Play,
   RefreshCcw,
   ScanLine,
+  Images,
   Search,
   Send,
   Settings,
@@ -173,6 +175,7 @@ type Shot = {
   imageRetryLimit?: number;
   imageRetryMode?: 'auto' | 'manual_once';
   imageValidationBypassed?: boolean;
+  awaitingStillPick?: boolean;
   accountId?: string;
   officialTaskId?: string;
   officialVideoId?: string;
@@ -1274,6 +1277,7 @@ function toPlainPublisherTags(value: any) {
 function statusLabel(shot: Shot) {
   if (shot.status === "completed") return tr("autoUi.k_e99b48a29bdf");
   if (shot.status === "failed") return tr("autoUi.k_3e3c8068bb0e");
+  if (shot.awaitingStillPick) return "待挑图";
   if (shot.lastError?.includes("[image_retry_exhausted]"))
     return tr("autoUi.k_5b6a2e788b38");
   if (shot.remoteStatus === "paused_auth") return tr("autoUi.k_507c5e3e12fd");
@@ -1292,7 +1296,7 @@ function statusTone(shot: Shot) {
     ? "status-completed"
     : shot.status === "failed"
       ? "status-failed"
-      : shot.remoteStatus?.startsWith("paused")
+      : shot.remoteStatus?.startsWith("paused") || shot.awaitingStillPick
         ? "status-paused"
         : "status-processing";
 }
@@ -1719,6 +1723,24 @@ async function moveAccount(account: Account, direction: -1 | 1) {
   });
   await refresh(true);
 }
+/** 贴真实商品出了几张图：挑一张再做视频 */
+const stillPickTarget = ref<{ task: Task; shot: Shot } | null>(null);
+const stillPickSource = computed<StillPickSource | undefined>(() => {
+  const target = stillPickTarget.value;
+  if (!target) return undefined;
+  const payload = { id: target.task.id, shotId: target.shot.shotId };
+  return {
+    load: () => window.api.tiktokCreative.getStillCandidates(payload),
+    pick: (index: number) => window.api.tiktokCreative.pickStill({ ...payload, index }),
+    regenerate: () => window.api.tiktokCreative.regenerateStills(payload),
+  };
+});
+async function onStillPicked(regenerated: boolean) {
+  stillPickTarget.value = null;
+  notice.value = regenerated ? "正在重新生成，好了会再让你挑" : "已选好，开始做视频";
+  await refresh();
+}
+
 async function retryShot(task: Task, shot: Shot) {
   await window.api.tiktokCreative.retryShot({
     id: task.id,
@@ -5680,7 +5702,8 @@ onBeforeUnmount(() => {
               <div class="ts-item__meta"><Clock3 :size="12" />{{ formatTime(shot.createdAt) }}</div>
               <div class="ts-item__meta" :title="shot.referenceImagePath || shot.imagePath"><FileImage :size="12" />{{ fileName(shot.referenceImagePath || shot.imagePath) }}</div>
               <div v-if="shot.lastError" class="ts-item__error" :title="shot.lastError"><AlertTriangle :size="12" /><span>{{ shot.lastError }}</span></div>
-              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot) || shot.awaitingStillPick" class="image-retry-decision ts-decision">
+                <button v-if="shot.awaitingStillPick" class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click.stop="stillPickTarget = { task, shot }"><Images :size="13" />挑图</button>
                 <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
                 <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
               </div>
@@ -5730,7 +5753,8 @@ onBeforeUnmount(() => {
             <span class="ts-row__num">{{ qualityScore(shot) }}</span>
             <span class="ts-row__time">{{ formatTime(shot.createdAt) }}</span>
             <div class="ts-row__actions">
-              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot)" class="image-retry-decision ts-decision">
+              <div v-if="canContinueWithVideo(shot) || canRetryImageOnce(shot) || shot.awaitingStillPick" class="image-retry-decision ts-decision">
+                <button v-if="shot.awaitingStillPick" class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click.stop="stillPickTarget = { task, shot }"><Images :size="13" />挑图</button>
                 <button v-if="canRetryImageOnce(shot)" class="vg-btn vg-btn--sm" :title="tr('autoUi.k_031c7e12ddae')" type="button" @click.stop="retryShot(task, shot)"><RefreshCcw :size="13" />{{ tr('autoUi.k_031c7e12ddae') }}</button>
                 <button v-if="canContinueWithVideo(shot)" class="vg-btn vg-btn--sm vg-btn--primary" :title="tr('tiktokCreative.retry.continueWithVideo')" type="button" @click.stop="continueWithVideo(task, shot)"><Play :size="13" />{{ tr('tiktokCreative.retry.continueWithVideoShort') }}</button>
               </div>
@@ -6391,6 +6415,16 @@ onBeforeUnmount(() => {
       :selected-ids="styleProductIds"
       @close="styleProductPickerOpen = false"
       @select-many="styleProductIds = $event"
+    />
+    <StillPickDialog
+      v-if="stillPickTarget && stillPickSource"
+      :item-id="`${stillPickTarget.task.id}-${stillPickTarget.shot.shotId}`"
+      :title="`镜头 ${stillPickTarget.shot.shotIndex + 1}`"
+      :preview-src="previewSrc"
+      :source="stillPickSource"
+      @close="stillPickTarget = null"
+      @picked="onStillPicked(false)"
+      @regenerated="onStillPicked(true)"
     />
     <RuntimeLogDialog
       v-if="runtimeTask"

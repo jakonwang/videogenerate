@@ -3,7 +3,7 @@
 import { m } from '../components/muse/museText'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
-  AlertTriangle, Captions, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, FileImage, LayoutGrid, Logs, ScanLine, SendHorizontal, FolderOpen, Grid2x2, ImagePlus, KeyRound, List,
+  AlertTriangle, Captions, Check, Images, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, FileImage, LayoutGrid, Logs, ScanLine, SendHorizontal, FolderOpen, Grid2x2, ImagePlus, KeyRound, List,
   LoaderCircle, Package, Pause, Play, Plus, RefreshCcw, RotateCcw, ShieldCheck, Sparkles, Square, Trash2, X,
 } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
@@ -11,6 +11,7 @@ import { openAssetLibraryPicker } from '@/lib/assetLibraryPicker'
 import SubtitleStudioDialog, { type SubtitleDialogSubmit } from '../components/subtitle/SubtitleStudioDialog.vue'
 import StyleReferenceCard, { type StyleReference } from '../components/StyleReferenceCard.vue'
 import MuseImageReviewDialog from '../components/muse/MuseImageReviewDialog.vue'
+import StillPickDialog, { type StillPickSource } from './live-photo/StillPickDialog.vue'
 import MuseMaterialDialog from '../components/muse/MuseMaterialDialog.vue'
 import MusePromptCard from '../components/muse/MusePromptCard.vue'
 import MuseDetailDialog from '../components/muse/MuseDetailDialog.vue'
@@ -264,6 +265,23 @@ const approve = (jobs: MuseJob[]) => {
       selectedIds.value = []
     },
   }
+}
+
+/** 贴真实商品出了几张图：挑一张再发给 Muse */
+const stillPickId = ref('')
+const stillPickJob = computed(() => jobById(stillPickId.value))
+const stillPickSource = computed<StillPickSource | undefined>(() => {
+  const id = stillPickId.value
+  if (!id) return undefined
+  return {
+    load: () => api.getStillCandidates(id),
+    pick: (index: number) => api.pickStill({ id, index }),
+    regenerate: () => api.regenerateStills(id),
+  }
+})
+async function onStillPicked() {
+  stillPickId.value = ''
+  await refresh()
 }
 
 const redoImage = (region: { x: number; y: number; width: number; height: number } | undefined, closing: boolean) => act(async () => {
@@ -628,7 +646,8 @@ onBeforeUnmount(() => clearInterval(timer))
               <div class="ts-item__meta"><Clock3 :size="12" />{{ time(job.createdAt) }}</div>
               <div v-if="timing(job)" class="ts-item__meta">{{ m('发出后：') }}{{ timing(job) }}</div>
               <div v-if="job.error" class="ts-item__error" :title="m(job.error)"><AlertTriangle :size="12" /><span>{{ m(job.error) }}</span></div>
-              <div v-if="job.status === 'image_review'" class="ts-decision"><button class="vg-btn vg-btn--sm vg-btn--primary" type="button" data-testid="muse-open-review" @click="reviewId = job.id"><ScanLine :size="13" />{{ job.preparedImagePath ? m('确认换图') : m('处理换图') }}</button></div>
+              <div v-if="job.status === 'image_review' && job.image?.awaitingPick" class="ts-decision"><button class="vg-btn vg-btn--sm vg-btn--primary" type="button" data-testid="muse-open-still-pick" @click="stillPickId = job.id"><Images :size="13" />{{ m('挑图') }}</button></div>
+              <div v-else-if="job.status === 'image_review'" class="ts-decision"><button class="vg-btn vg-btn--sm vg-btn--primary" type="button" data-testid="muse-open-review" @click="reviewId = job.id"><ScanLine :size="13" />{{ job.preparedImagePath ? m('确认换图') : m('处理换图') }}</button></div>
               <div v-if="job.status === 'needs_review'" class="ts-decision">
                 <button v-if="job.threadPath" class="vg-btn vg-btn--sm vg-btn--primary" type="button" @click="act(() => api.collectJob(job.id))"><RefreshCcw :size="13" />{{ m('找回') }}</button>
                 <button class="vg-btn vg-btn--sm" type="button" @click="askDismiss(job)">{{ m('没有结果') }}</button>
@@ -660,6 +679,16 @@ onBeforeUnmount(() => clearInterval(timer))
     <MuseAccountDialog :open="accountsOpen" :accounts="accounts" :encryption-available="encryptionAvailable" :remote="remote" @close="accountsOpen = false" @changed="accountsChanged" />
     <ProductSelectDialog :open="productOpen" :products="products" :selected-id="form.productId" :multiple="Boolean(styleReference)" :selected-ids="styleProductIds" @close="productOpen = false" @select="pickProduct" @select-many="pickStyleProducts" />
     <MuseMaterialDialog :open="materialsOpen" @close="materialsOpen = false" @pick="addImages" />
+    <StillPickDialog
+      v-if="stillPickId && stillPickSource"
+      :item-id="stillPickId"
+      :title="stillPickJob ? jobTitle(stillPickJob) : ''"
+      :preview-src="previewSrc"
+      :source="stillPickSource"
+      @close="stillPickId = ''"
+      @picked="onStillPicked"
+      @regenerated="onStillPicked"
+    />
     <MuseImageReviewDialog :job="reviewing" :title="reviewing ? jobTitle(reviewing) : ''" :busy="working" @close="reviewId = ''" @approve="reviewing && approve([reviewing])" @redo="redoImage" />
 
     <div v-if="settingsOpen" class="vg-scope vg-backdrop" @click.self="settingsOpen = false">

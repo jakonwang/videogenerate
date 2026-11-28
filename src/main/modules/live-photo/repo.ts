@@ -45,6 +45,7 @@ function defaultSettings(): LivePhotoSettings {
     qualityPassThreshold: 0.88,
     qualityRetryFloor: 0.65,
     retryLimit: 2,
+    pasteStillCount: 3,
     updatedAt: Date.now(),
   }
 }
@@ -234,6 +235,7 @@ export const livePhotoRepo = {
       qualityPassThreshold: Math.max(0.5, Math.min(1, Number(input.qualityPassThreshold ?? current.qualityPassThreshold ?? 0.88))),
       qualityRetryFloor: Math.max(0, Math.min(0.95, Number(input.qualityRetryFloor ?? current.qualityRetryFloor ?? 0.65))),
       retryLimit: Math.max(0, Math.min(20, Math.floor(Number(input.retryLimit ?? current.retryLimit ?? 2) || 0))),
+      pasteStillCount: Math.max(1, Math.min(6, Math.floor(Number(input.pasteStillCount ?? current.pasteStillCount ?? 3) || 3))),
       updatedAt: Date.now(),
     }
     await ensureLivePhotoSqliteReady()

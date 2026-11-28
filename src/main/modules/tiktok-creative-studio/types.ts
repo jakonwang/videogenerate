@@ -76,6 +76,8 @@ export type TiktokCreativeShotTask = {
   imageRetryLimit?: number
   imageRetryMode?: 'auto' | 'manual_once'
   imageValidationBypassed?: boolean
+  /** 贴真实商品出了几张图，等用户挑一张 */
+  awaitingStillPick?: boolean
   accountId?: string
   officialTaskId?: string
   officialVideoId?: string

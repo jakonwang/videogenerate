@@ -15,7 +15,16 @@ export type MusePrepareImage = (input: {
   state?: Record<string, unknown>
   promptVersion: { id: string; version: number; prompt: string }
   autoLocate: boolean
-}) => Promise<{ pending: boolean; preparedImagePath?: string; failed?: boolean; error?: string; state: Record<string, unknown> }>
+  /** 贴真实商品出几张时不等人挑，直接用第一张（尾帧用） */
+  autoPickStill?: boolean
+}) => Promise<{ pending: boolean; preparedImagePath?: string; failed?: boolean; error?: string; awaitingStillPick?: boolean; state: Record<string, unknown> }>
+
+type StillCandidate = { path?: string }
+/** 贴真实商品出的几张图（还在的） */
+function listStills(state?: Record<string, unknown>) {
+  const list = Array.isArray(state?.stillCandidates) ? (state!.stillCandidates as StillCandidate[]) : []
+  return list.map((candidate, index) => ({ index, path: String(candidate?.path || '') })).filter((candidate) => candidate.path && existsSync(candidate.path))
+}
 
 /** `[code] detail` → the detail in Chinese where it is a known case. */
 export function friendlyImageError(error: unknown) {
@@ -119,8 +128,21 @@ export function createMuseImages(options: {
         state: stateOf(image),
         promptVersion: { id: image.promptVersionId || 'muse-image', version: image.promptVersion || 1, prompt: image.prompt },
         autoLocate: image.autoLocate,
+        autoPickStill: closing,
       })
       if (result.failed) throw new Error(result.error || '换图失败')
+      // 贴真实商品出了几张图：停在待确认，等用户挑一张
+      if (result.awaitingStillPick) {
+        const count = listStills(result.state).length
+        await finish((current) => ({
+          status: 'image_review',
+          stage: 'preparing',
+          error: undefined,
+          preparedImagePath: undefined,
+          image: { ...current.image!, state: result.state, awaitingPick: true, picked: false, retryCount: 0, submitting: false, waiting: false, polls: 0 },
+        }), `换图出了 ${count} 张，等你挑一张`, 'success')
+        return
+      }
       if (result.pending || !result.preparedImagePath) {
         const polls = (image.polls ?? 0) + 1
         dueAt.set(id, Date.now() + timing.pollMs)
@@ -134,14 +156,16 @@ export function createMuseImages(options: {
       if (!existsSync(result.preparedImagePath)) throw new Error('换图文件不存在')
       const region = result.state.replacementRegion as MuseRegion | undefined
       const more = !closing && needsClosing(job)
+      // 挑过图就等于确认过了
+      const review = image.review && !image.picked
       const moved = await finish((current) => ({
-        status: more ? 'swapping' : current.image!.review ? 'image_review' : 'queued',
+        status: more ? 'swapping' : review ? 'image_review' : 'queued',
         stage: 'preparing',
         ...(closing ? { preparedLastFramePath: result.preparedImagePath } : { preparedImagePath: result.preparedImagePath }),
         error: undefined,
         image: { ...current.image!, ...withState(result.state), ...(closing ? { lastRegion: region, lastFailed: undefined } : { region }), retryCount: 0, submitting: false, waiting: false, polls: 0, attempts: (current.image!.attempts ?? 0) + 1 },
-      }), image.review && !more ? `${label}完成，等待确认` : `${label}完成`, 'success')
-      if (moved && !more && !image.review) options.onQueued()
+      }), review && !more ? `${label}完成，等待确认` : `${label}完成`, 'success')
+      if (moved && !more && !review) options.onQueued()
     } catch (error) {
       const message = friendlyImageError(error)
       const needsRegion = /replacement_region_required|locate_failed/.test(String(error instanceof Error ? error.message : error))
@@ -189,6 +213,41 @@ export function createMuseImages(options: {
       return { done }
     },
 
+    /** 挑图弹窗：贴真实商品出的几张图 */
+    async stills(id: string) {
+      const job = await options.get(id)
+      const state = job.image?.state
+      const region = (state?.replacementRegion ?? job.image?.region) as MuseRegion | undefined
+      return {
+        referenceImagePath: job.imagePath,
+        region: region ? { x: region.x, y: region.y, width: region.width, height: region.height } : null,
+        candidates: listStills(state),
+        pickedIndex: typeof state?.pickedStillIndex === 'number' ? (state.pickedStillIndex as number) : null,
+      }
+    },
+
+    /** 挑了一张（regenerate=true 时是「都不行，重新生成」）：改出图状态后重新换图 */
+    async pickStill(input: { id: string; index?: number; regenerate?: boolean }) {
+      const job = await options.get(input.id)
+      if (job.status !== 'image_review' || !job.image?.awaitingPick) throw new Error('这个任务现在不用挑图')
+      const state = { ...(job.image.state || {}) }
+      if (input.regenerate) {
+        Object.assign(state, { stillCandidates: undefined, pickedStillIndex: undefined, generatedStillPath: undefined, qualityReport: undefined })
+      } else {
+        const index = Math.floor(Number(input.index))
+        if (!listStills(state).some((candidate) => candidate.index === index)) throw new Error('这张图已经不在了，请重新生成')
+        Object.assign(state, { pickedStillIndex: index, generatedStillPath: undefined, qualityReport: undefined })
+      }
+      await options.patch(input.id, (current) => (current.status !== 'image_review' ? {} : {
+        status: 'swapping',
+        error: undefined,
+        preparedImagePath: undefined,
+        image: { ...current.image!, runId: randomUUID(), state, awaitingPick: false, picked: !input.regenerate, retryCount: 0, polls: 0, submitting: false, waiting: false },
+      }), input.regenerate ? '几张图都不行，重新生成' : `挑了第 ${Math.floor(Number(input.index)) + 1} 张图`)
+      dueAt.delete(input.id)
+      schedule(0)
+    },
+
     /** Paid: submits a new swap, optionally for a region drawn by the user. */
     async redo(input: { id: string; region?: { x: number; y: number; width: number; height: number }; closing?: boolean }) {
       const job = await options.get(input.id)
@@ -209,7 +268,7 @@ export function createMuseImages(options: {
         status: 'swapping',
         error: undefined,
         ...(closing ? { preparedLastFramePath: undefined } : { preparedImagePath: undefined }),
-        image: { ...current.image!, runId: randomUUID(), ...(closing ? { lastState: state, lastRegion: state.replacementRegion as MuseRegion | undefined, lastFailed: undefined } : { state, region: state.replacementRegion as MuseRegion | undefined }), retryCount: 0, polls: 0, submitting: false, waiting: false },
+        image: { ...current.image!, runId: randomUUID(), awaitingPick: false, picked: false, ...(closing ? { lastState: state, lastRegion: state.replacementRegion as MuseRegion | undefined, lastFailed: undefined } : { state, region: state.replacementRegion as MuseRegion | undefined }), retryCount: 0, polls: 0, submitting: false, waiting: false },
       }), input.region ? '按框选区域重新换图' : '重新换图')
       dueAt.delete(input.id)
       schedule(0)

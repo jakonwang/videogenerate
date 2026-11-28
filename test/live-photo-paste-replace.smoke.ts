@@ -44,7 +44,7 @@ async function main() {
 
   // 抠图（服务器代办）：返回商品方块的蒙版
   let cutoutCalls = 0
-  paste.setProductCutoutProvider(async (input) => {
+  const fakeCutout = async (input: { image: string }) => {
     cutoutCalls += 1
     const meta = await sharp(Buffer.from(input.image, 'base64')).metadata()
     const mask = await sharp({ create: { width: meta.width!, height: meta.height!, channels: 3, background: '#000000' } })
@@ -52,7 +52,8 @@ async function main() {
       .png()
       .toBuffer()
     return { mask: mask.toString('base64') }
-  })
+  }
+  paste.setProductCutoutProvider(fakeCutout)
 
   livePhotoService.setTestDependencies({
     runFfmpeg: async (input: { args: string[] }) => {
@@ -284,6 +285,46 @@ async function main() {
     fill(single, 20, 40, 110, 160)
     fill(single, 280, 10, 284, 14)
     assert.equal(paste.keepSinglePiece(single, W, H), false, 'a single product with a speck is left alone')
+
+    // 9) tk创意室 / Muse创意室共用的出图函数：也贴真实商品，出几张按设置（这里 2 张），挑完再用；不进图生视频任务库
+    {
+      const { prepareReferenceImageForExternalWorkflow, listExternalReferenceStills, pickExternalReferenceStill, resetExternalReferenceStills } = await import('../src/main/modules/live-photo/service')
+      paste.setProductCutoutProvider(fakeCutout)
+      const saved = await livePhotoService.saveSettings({ pasteStillCount: 2 })
+      assert.equal(saved.pasteStillCount, 2)
+      const before = (await livePhotoService.list()).length
+      const externalRoot = path.join(root, 'external-shot')
+      const callsBefore = generateBodies.length
+      const run = (state?: any, autoPickStill?: boolean) => prepareReferenceImageForExternalWorkflow({
+        workflowId: 'tk-task-shot-1',
+        referenceImagePath: refImage,
+        productId: product.id,
+        outputRoot: externalRoot,
+        state,
+        qualityCheckerEnabled: false,
+        autoPickStill,
+      })
+      const first = await run()
+      assert.equal(first.awaitingStillPick, true, 'external workflow stops for a pick')
+      assert.equal(first.state.replaceMode, 'paste')
+      assert.equal(listExternalReferenceStills(first.state).length, 2, 'candidate count follows the setting')
+      assert.ok(listExternalReferenceStills(first.state).every((c) => c.path.startsWith(externalRoot)), 'files stay in the workflow folder')
+      assert.equal(generateBodies.length - callsBefore, 3, 'one erase + two integrations')
+      assert.equal((await livePhotoService.list()).length, before, 'no 图生视频 task is created')
+      const again = await run(first.state)
+      assert.equal(again.awaitingStillPick, true, 'still waiting, nothing paid again')
+      assert.equal(generateBodies.length - callsBefore, 3)
+      const picked = await run(pickExternalReferenceStill(first.state, 1))
+      assert.equal(picked.awaitingStillPick, undefined)
+      assert.equal(picked.preparedImagePath, first.state.stillCandidates![1].path, 'uses the picked still as is (full scene)')
+      const regenerated = await run(resetExternalReferenceStills(picked.state))
+      assert.equal(regenerated.awaitingStillPick, true)
+      assert.equal(generateBodies.length - callsBefore, 5, 'regenerate: no new erase, two new integrations')
+      const closing = await run(undefined, true)
+      assert.ok(closing.preparedImagePath && existsSync(closing.preparedImagePath), 'closing frame: takes the first one without waiting')
+      assert.equal(listExternalReferenceStills(closing.state).length, 1, 'closing frame only makes one')
+      await livePhotoService.saveSettings({ pasteStillCount: 3 })
+    }
 
     console.log('live photo paste replace smoke test passed')
   } finally {

@@ -400,7 +400,7 @@ export function createMuseJobs(options: {
         const swap = job.image && !job.preparedImagePath
         // A clone shot waiting for this video gets it after a successful retry too.
         const clone = job.clone?.autoReplace ? { ...job.clone, status: 'waiting' as const, error: undefined } : job.clone
-        return { clone, status: swap ? 'swapping' : 'queued', ...(swap ? { image: { ...job.image!, runId: randomUUID(), retryCount: 0, polls: 0, submitting: false, waiting: false, state: undefined, lastState: undefined, lastFailed: undefined } } : {}), stage: 'preparing', submitted: false, collect: false, threadPath: undefined, attempts: 0, quotaSwitches: 0, error: undefined, timeline: undefined }
+        return { clone, status: swap ? 'swapping' : 'queued', ...(swap ? { image: { ...job.image!, runId: randomUUID(), retryCount: 0, polls: 0, submitting: false, waiting: false, state: undefined, lastState: undefined, lastFailed: undefined, awaitingPick: false, picked: false } } : {}), stage: 'preparing', submitted: false, collect: false, threadPath: undefined, attempts: 0, quotaSwitches: 0, error: undefined, timeline: undefined }
       }, '手动重试')
       nextAt.delete(id)
       schedule(0)

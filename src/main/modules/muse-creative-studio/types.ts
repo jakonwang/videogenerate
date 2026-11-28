@@ -59,6 +59,10 @@ export type MuseImage = {
   lastRegion?: MuseRegion
   /** No closing frame could be made: the opening frame zoomed in is used instead. */
   lastFailed?: boolean
+  /** 贴真实商品出了几张图，等用户挑一张 */
+  awaitingPick?: boolean
+  /** 用户挑过图了：换好后不用再确认一次 */
+  picked?: boolean
 }
 
 export type MusePromptKind = 'image' | 'video'

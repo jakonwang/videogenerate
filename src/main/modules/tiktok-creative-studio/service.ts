@@ -7,7 +7,7 @@ import { getAppPaths } from '../../lib/paths'
 import { onTiktokCreativeTaskChanged, tiktokCreativeStudioRepo } from './repo'
 import { tiktokCreativeAccounts } from './accounts'
 import { TiktokOfficialClient } from './officialClient'
-import { prepareReferenceImageForExternalWorkflow } from '../live-photo/service'
+import { listExternalReferenceStills, pickExternalReferenceStill, prepareReferenceImageForExternalWorkflow, resetExternalReferenceStills } from '../live-photo/service'
 import { hashLivePhotoPrompt } from '../live-photo/promptVersions'
 import { normalizeLivePhotoReplacementRegion } from '../live-photo/replacementRegion'
 import { productsRepo } from '../products/repo'
@@ -236,6 +236,35 @@ async function resolveClosingFramePath(input: { taskId: string; shotId: string; 
 
 function taskCreditCost(durationSec: number) {
   return durationSec >= 10 ? 10 : 5
+}
+
+/** 挑图 / 重新生成：改出图状态后重新排队（视频已经提交的镜头不能改） */
+async function updateStillChoice(
+  input: { id: string; shotId: string },
+  apply: (state: TiktokCreativeShotTask['imagePreparation']) => TiktokCreativeShotTask['imagePreparation'],
+  message: string,
+) {
+  const task = await tiktokCreativeStudioRepo.get(String(input.id || '').trim())
+  const shotId = String(input.shotId || '').trim()
+  const shot = task?.shots.find((item) => item.shotId === shotId)
+  if (!task || !shot) throw new Error('镜头不存在')
+  if (shot.officialTaskId) throw new Error('这个镜头已经提交视频了，不能再换图')
+  const nextState = apply(shot.imagePreparation)
+  const updated = await tiktokCreativeStudioRepo.upsert(updateShot(task, shotId, (current) => ({
+    ...current,
+    imagePreparation: nextState,
+    awaitingStillPick: false,
+    preparedImagePath: undefined,
+    firstFramePath: undefined,
+    lastFramePath: undefined,
+    status: 'running',
+    remoteStatus: 'queued',
+    lastError: undefined,
+    updatedAt: now(),
+    logs: [...(current.logs || []), buildLog(message)].slice(-200),
+  })))
+  scheduleShot(updated.id, shotId)
+  return updated
 }
 
 function shotKey(taskId: string, shotId: string) {
@@ -727,6 +756,18 @@ async function processReferenceShot(taskId: string, shotId: string) {
       status: 'running',
       updatedAt: now(),
     }))
+    // 贴真实商品出了几张图：停下来等用户挑（挑完 pickStill 会重新排队）
+    if (prepared.awaitingStillPick) {
+      const count = listExternalReferenceStills(prepared.state).length
+      await persistShot(taskId, shotId, (current) => ({
+        ...current,
+        awaitingStillPick: true,
+        lastError: undefined,
+        updatedAt: now(),
+        logs: current.awaitingStillPick ? current.logs : [...(current.logs || []), buildLog(`[tiktok-creative] 贴真实商品出了 ${count} 张图，等你挑一张`, 'success')].slice(-200),
+      }))
+      return
+    }
     if (prepared.failed) {
       const retryCount = Math.max(0, Number(shot.imageRetryCount || 0) || 0)
       const qualityDecision = prepared.state.qualityReport?.decision
@@ -779,6 +820,8 @@ async function processReferenceShot(taskId: string, shotId: string) {
         state: shot.lastFramePreparation,
         promptVersion,
         qualityCheckerEnabled,
+        // 尾帧不再让人挑：贴真实商品只出 1 张直接用
+        autoPickStill: true,
       })
       await persistShot(taskId, shotId, (current) => ({
         ...current,
@@ -1208,7 +1251,10 @@ export const tiktokCreativeStudioService = {
             imageTaskModel: undefined,
             imageTaskBaseUrl: undefined,
             imageTaskEndpointStyle: undefined,
+            // 框改了：之前出的几张图、摆放都作废
+            ...(manualReplacementRegion ? { stillCandidates: undefined, pickedStillIndex: undefined, placement: undefined } : {}),
           },
+      awaitingStillPick: shot.officialTaskId ? shot.awaitingStillPick : false,
       preparedImagePath: shot.officialTaskId ? shot.preparedImagePath : undefined,
       firstFramePath: shot.officialTaskId ? shot.firstFramePath : undefined,
       lastFramePath: shot.officialTaskId ? shot.lastFramePath : undefined,
@@ -1233,6 +1279,31 @@ export const tiktokCreativeStudioService = {
     })))
     scheduleShot(updated.id, shotId)
     return updated
+  },
+
+  /** 挑图弹窗：贴真实商品出的几张图 */
+  async getStillCandidates(input: { id: string; shotId: string }) {
+    const task = await tiktokCreativeStudioRepo.get(String(input.id || '').trim())
+    const shot = task?.shots.find((item) => item.shotId === String(input.shotId || '').trim())
+    if (!task || !shot) throw new Error('镜头不存在')
+    const state = shot.imagePreparation
+    const region = state?.replacementRegion
+    return {
+      referenceImagePath: shot.referenceImagePath || shot.imagePath,
+      region: region ? { x: region.x, y: region.y, width: region.width, height: region.height } : null,
+      candidates: listExternalReferenceStills(state),
+      pickedIndex: typeof state?.pickedStillIndex === 'number' ? state.pickedStillIndex : null,
+    }
+  },
+
+  /** 用挑的那张做视频 */
+  async pickStill(input: { id: string; shotId: string; index: number }) {
+    return await updateStillChoice(input, (state) => pickExternalReferenceStill(state, Math.floor(Number(input.index))), `[tiktok-creative] 挑了第 ${Math.floor(Number(input.index)) + 1} 张图，开始做视频`)
+  },
+
+  /** 「都不行，重新生成」：重新融合几张（摆放、抠图保留） */
+  async regenerateStills(input: { id: string; shotId: string }) {
+    return await updateStillChoice(input, (state) => resetExternalReferenceStills(state), '[tiktok-creative] 几张图都不行，重新生成')
   },
 
   async continueWithVideo(input: { id: string; shotId: string }) {
