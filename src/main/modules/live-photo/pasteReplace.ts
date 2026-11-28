@@ -576,34 +576,43 @@ export async function integratePlacedProduct(input: {
   const erased = await sharp(input.erasedScenePath).rotate().resize(W, H, { fit: 'fill' }).removeAlpha().png().toBuffer()
   let model = resolvePasteReplaceImageModel(input.credentials)
   const count = Math.max(1, input.count ?? PASTE_STILL_CANDIDATES)
+  // AI 偶尔会回一张完全不同的图（换了人、换了背景），贴回去是一块方补丁：这种重画一次，还不行就不给用户看
   const results = await Promise.all(Array.from({ length: count }, async (_, index) => {
-    const aiPath = join(input.outputDir, `integrate-${stamp}-${index + 1}-ai.png`)
-    const outPath = join(input.outputDir, `integrate-${stamp}-${index + 1}.png`)
-    try {
-      const generated = await generateWithGrs({
-        credentials: input.credentials,
-        prompt,
-        imagePaths: [guideCrop, originalCrop, ...views],
-        aspectRatio: '1:1',
-        outputPath: aiPath,
-        uploadKeyPrefix: 'grsai-input/live-photo/integrate',
-      })
-      model = generated.model
-      const aiCrop = await sharp(aiPath).resize(side, side, { fit: 'fill' }).removeAlpha().png().toBuffer()
-      const drift = await measureSceneDrift({ before: guideCrop, after: aiCrop, productMask: cropMask })
-      const placed = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
-      const overlay = await sharp(placed).joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
-      await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(outPath)
-      return { path: outPath, drift: Math.round(drift * 10) / 10, error: '' }
-    } catch (error) {
-      console.warn('[live-photo] integrate candidate failed', index + 1, (error as Error)?.message || error)
-      return { path: '', drift: 0, error: String((error as Error)?.message || error) }
+    let lastError = ''
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const suffix = attempt === 1 ? `${index + 1}` : `${index + 1}-r${attempt}`
+      const aiPath = join(input.outputDir, `integrate-${stamp}-${suffix}-ai.png`)
+      const outPath = join(input.outputDir, `integrate-${stamp}-${suffix}.png`)
+      try {
+        const generated = await generateWithGrs({
+          credentials: input.credentials,
+          prompt,
+          imagePaths: [guideCrop, originalCrop, ...views],
+          aspectRatio: '1:1',
+          outputPath: aiPath,
+          uploadKeyPrefix: 'grsai-input/live-photo/integrate',
+        })
+        model = generated.model
+        const aiCrop = await sharp(aiPath).resize(side, side, { fit: 'fill' }).removeAlpha().png().toBuffer()
+        const drift = Math.round((await measureSceneDrift({ before: guideCrop, after: aiCrop, productMask: cropMask })) * 10) / 10
+        if (drift > MAX_SCENE_DRIFT) {
+          console.warn('[live-photo] integrate candidate changed the scene, retrying', index + 1, attempt, drift)
+          lastError = `AI 把整块画面改掉了（变化 ${drift}）`
+          continue
+        }
+        const placed = await sharp(erased).composite([{ input: aiCrop, left: crop.left, top: crop.top }]).removeAlpha().png().toBuffer()
+        const overlay = await sharp(placed).joinChannel(softMask, { raw: { width: W, height: H, channels: 1 } }).png().toBuffer()
+        await sharp(erased).composite([{ input: overlay, left: 0, top: 0 }]).png().toFile(outPath)
+        return { path: outPath, drift, error: '' }
+      } catch (error) {
+        console.warn('[live-photo] integrate candidate failed', index + 1, attempt, (error as Error)?.message || error)
+        lastError = String((error as Error)?.message || error)
+      }
     }
+    return { path: '', drift: 0, error: lastError }
   }))
   const candidates = results.filter((r) => r.path).map(({ path, drift }) => ({ path, drift }))
   if (!candidates.length) throw new Error(results[0]?.error || '融合失败，请重试')
-  // AI 把整块画面都改掉的排到后面（用户挑的时候先看正常的）
-  candidates.sort((a, b) => Number(a.drift > MAX_SCENE_DRIFT) - Number(b.drift > MAX_SCENE_DRIFT))
   return { candidates, model, failed: results.length - candidates.length }
 }
 
@@ -638,13 +647,12 @@ export async function readImageSize(path: string) {
 /* ------------------------------------------------------------------ 参考图能不能换 */
 
 /** 原商品长边不到这么多像素，贴上去看不清款式（2026-11-27 实测 20 多像素不行） */
-const MIN_PRODUCT_SIZE_PX = 48
+export const MIN_PRODUCT_SIZE_PX = 48
 
 /**
- * 贴真实商品只在「商品正面或斜着朝镜头」时做得真：商品图是正面照，贴上去就是正面。
- * 原商品侧面朝镜头（手指捏着细边）、背面朝镜头时，正面照贴上去像一张立着的贴纸，
- * 只能让 AI 重新摆姿势，又回到 AI 画商品会变样的老问题（2026-11-28 A-36 四张参考图里三张是这样）。
- * 在擦图（花钱）之前先看一眼，不合适就直接告诉用户换参考图。看图失败时放行（不因为检查本身挡住任务）。
+ * 擦图（花钱）前看一眼参考图：只有原商品太小（看不清款式）才拦下让用户换图。
+ * 商品朝向（正面 / 侧面 / 平躺 / 背面）只记录，平躺时摆放按长边定大小；不再因为侧面、背面拦任务——
+ * 融合阶段 AI 会照原图的戴法 / 拿法把商品重新画进去。看图失败时放行。
  */
 export async function checkReferenceSuitability(input: {
   credentials: ModelCredentials
@@ -696,12 +704,8 @@ export async function checkReferenceSuitability(input: {
     const parsed = JSON.parse(extractJsonObjectText(extractModelMessageContent(body)))
     const facing = String(parsed?.facing || '').trim().toLowerCase()
     const view: LivePhotoProductViewKind = facing === 'camera' ? 'front' : facing === 'lying' ? 'flat' : facing === 'sideways' ? 'edge_on' : facing === 'back' ? 'back' : 'unknown'
-    if (view === 'edge_on') {
-      return { ...base, view, suitable: false, reason: '参考图里的商品是侧面朝镜头（只看得到细边），换成正面的真实商品做不出真实效果，请换一张商品正面或斜着朝镜头的参考图' }
-    }
-    if (view === 'back') {
-      return { ...base, view, suitable: false, reason: '参考图里的商品是背面朝镜头，换上去看不到新商品的款式，请换一张商品正面朝镜头的参考图' }
-    }
+    // 侧面、背面朝镜头只记下来不拦：融合会让 AI 按原图的戴法 / 拿法重新画商品，
+    // 戴在耳朵上的耳圈、手指捏着的耳圈本来就多半是侧面（2026-11-28 线上 8 条里 5 条被误拦）
     return { ...base, view, suitable: true }
   } catch (error) {
     console.warn('[live-photo] reference suitability check failed', (error as Error)?.message || error)

@@ -31,6 +31,7 @@ import {
   ensureProductCutout,
   eraseRegionProduct,
   checkReferenceSuitability,
+  MIN_PRODUCT_SIZE_PX,
   integratePlacedProduct,
   PASTE_STILL_CANDIDATES,
   pasteUsableBoardViews,
@@ -4125,7 +4126,7 @@ async function preparePasteReplacementInputs(input: {
   const region = normalizeLivePhotoReplacementRegion(item.replacementRegion)
   if (!region) throw new Error('[replacement_region_required] Select the replacement region before image generation.')
   const root = livePhotoRoot(item.id)
-  // 擦图（花钱）前先看参考图能不能贴：侧面、背面朝镜头或商品太小的，直接让用户换参考图（同一个框只看一次）
+  // 擦图（花钱）前先看参考图：商品太小的直接让用户换参考图（同一个框只看一次；朝向只记录不拦）
   if (item.productViewCheck?.regionRevision !== region.revision) {
     const check = await checkReferenceSuitability({
       credentials: input.credentials,
@@ -4135,13 +4136,14 @@ async function preparePasteReplacementInputs(input: {
     })
     item = await livePhotoRepo.upsert({
       ...appendLivePhotoLogs(item, [
-        buildLivePhotoLog(`[live-photo] 参考图检查：商品朝向=${check.view}，大小约 ${check.sizePx} 像素，${check.suitable ? '可以贴真实商品' : '不适合'}`, check.suitable ? 'info' : 'error'),
+        buildLivePhotoLog(`[live-photo] 参考图检查：商品朝向=${check.view}，大小约 ${check.sizePx} 像素，${check.sizePx >= MIN_PRODUCT_SIZE_PX ? '可以' : '太小，不适合'}`, check.sizePx >= MIN_PRODUCT_SIZE_PX ? 'info' : 'error'),
       ]),
       productViewCheck: { ...check, regionRevision: region.revision },
       updatedAt: now(),
     })
   }
-  if (item.productViewCheck && !item.productViewCheck.suitable) {
+  // 按大小判断而不是看存下来的 suitable：旧版本把侧面朝镜头也记成了不合适，这样重试就能继续
+  if (item.productViewCheck && Number(item.productViewCheck.sizePx) < MIN_PRODUCT_SIZE_PX) {
     throw new Error(`[reference_unsuitable] ${item.productViewCheck.reason || '这张参考图不适合贴真实商品，请换一张商品正面朝镜头的参考图'}`)
   }
   const erasedReady = Boolean(item.erasedScenePath && existsSync(item.erasedScenePath) && item.erasedRegionRevision === region.revision)
